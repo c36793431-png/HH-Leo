@@ -48,3 +48,25 @@ export async function getPortalConfig(): Promise<PortalConfig> {
       DEFAULTS.educationPreview,
   };
 }
+
+export interface InstallerInfo {
+  blobUrl: string;
+  filename: string;
+  version: string;
+  uploadedAt: string;
+}
+
+export async function getInstallerInfo(): Promise<InstallerInfo | null> {
+  const result = await pool.query<{ value: unknown }>(
+    "select value from portal_config where key = 'installer'"
+  );
+  return (result.rows[0]?.value as InstallerInfo | undefined) ?? null;
+}
+
+export async function setInstallerInfo(info: InstallerInfo): Promise<void> {
+  await pool.query(
+    `insert into portal_config (key, value, updated_at) values ('installer', $1, now())
+     on conflict (key) do update set value = excluded.value, updated_at = now()`,
+    [JSON.stringify(info)]
+  );
+}
