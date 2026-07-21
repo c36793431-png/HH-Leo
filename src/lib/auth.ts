@@ -5,6 +5,24 @@ import PostgresAdapter from "@auth/pg-adapter";
 import { pool } from "./db";
 import { verifyTelegramLogin, type TelegramLoginPayload } from "./telegram-auth";
 import { claimPendingLicense } from "./licenses";
+import { sendTelegramMessage } from "./telegram-bot";
+import { getPortalConfig } from "./portal-config";
+
+async function sendWelcomeDm(telegramUserId: number, displayName: string) {
+  try {
+    const config = await getPortalConfig();
+    await sendTelegramMessage(
+      telegramUserId,
+      `Welcome to Horizon HFT, ${displayName}!\n\n` +
+        `Community: ${config.telegramChannelUrl}\n` +
+        `Free Users group: ${config.communityGroupUrl}\n\n` +
+        `Log in any time at horizonhft.com to see pricing and docs.`
+    );
+  } catch (err) {
+    // Signup must succeed even if the DM fails (e.g. bot not yet started by user).
+    console.error("sendWelcomeDm failed", err);
+  }
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PostgresAdapter(pool),
@@ -53,6 +71,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           );
           user = inserted.rows[0];
           await claimPendingLicense({ userId: user.id, telegramUserId: payload.id });
+          await sendWelcomeDm(payload.id, user.display_name);
         }
 
         return {
