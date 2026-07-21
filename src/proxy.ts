@@ -3,8 +3,11 @@ import { NextResponse } from "next/server";
 
 export default auth((req) => {
   if (req.nextUrl.pathname.startsWith("/admin")) {
-    if (req.auth?.user?.role !== "admin") {
+    if (!req.auth?.user) {
       return NextResponse.redirect(new URL("/login", req.nextUrl));
+    }
+    if (req.auth.user.role !== "admin") {
+      return new NextResponse("Forbidden", { status: 403 });
     }
   }
 });
