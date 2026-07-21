@@ -67,14 +67,35 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
 export async function extendLicense(licenseId: string, extendDays: number): Promise<void> {
   await pool.query(
     `update licenses
-     set expires_at = greatest(expires_at, now()) + ($2 || ' days')::interval
+     set expires_at = greatest(expires_at, now()) + ($2 || ' days')::interval,
+         lifecycle_state = null
      where id = $1`,
     [licenseId, extendDays]
   );
 }
 
 export async function revokeLicense(licenseId: string): Promise<void> {
-  await pool.query(`update licenses set status = 'revoked' where id = $1`, [licenseId]);
+  await pool.query(
+    `update licenses set status = 'revoked', lifecycle_state = 'expired_processed' where id = $1`,
+    [licenseId]
+  );
+}
+
+export interface GroupTarget {
+  userId: string;
+  telegramUserId: string | null;
+  email: string | null;
+}
+
+/** Fresh-read lookup for group-membership actions — never trust the JWT session for telegram_user_id, it can go stale after a Link Telegram flow. */
+export async function getGroupTarget(userId: string): Promise<GroupTarget | null> {
+  const result = await pool.query<{ id: string; telegram_user_id: string | null; email: string | null }>(
+    "select id, telegram_user_id, email from users where id = $1",
+    [userId]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return { userId: row.id, telegramUserId: row.telegram_user_id, email: row.email };
 }
 
 export interface ClientRow {
