@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser } from "@/lib/licenses";
+import { isPaidUser, getActiveLicenseForUser } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { SignOutButton } from "@/components/sign-out-button";
+import { DownloadButton } from "@/components/download-button";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -12,6 +13,7 @@ export default async function DashboardPage() {
     isPaidUser(session.user.id).catch(() => false),
     getPortalConfig(),
   ]);
+  const license = paid ? await getActiveLicenseForUser(session.user.id).catch(() => null) : null;
 
   return (
     <main className="flex flex-1 flex-col px-4 py-10 sm:px-10">
@@ -85,9 +87,20 @@ export default async function DashboardPage() {
         <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6 sm:col-span-2">
           <h2 className="text-sm font-medium text-zinc-400">Paid member area</h2>
           {paid ? (
-            <p className="mt-3 text-sm text-zinc-300">
-              Your license, downloads, and full docs will appear here (Phase 3).
-            </p>
+            <div className="mt-3 space-y-4">
+              <div>
+                <p className="text-xs text-zinc-500">License key</p>
+                <p className="mt-1 font-mono text-sm text-emerald-300">
+                  {license?.licenseKey ?? "—"}
+                </p>
+                {license && (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Expires {new Date(license.expiresAt).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+              <DownloadButton />
+            </div>
           ) : (
             <div className="mt-3">
               {/* Placeholder copy only — no real license/download data is fetched for unpaid sessions. */}
