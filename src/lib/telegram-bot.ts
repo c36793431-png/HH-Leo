@@ -37,3 +37,45 @@ export async function getBotUsername(): Promise<string | null> {
     return null;
   }
 }
+
+async function callTelegramApi(method: string, body: Record<string, unknown>): Promise<boolean> {
+  const res = await fetch(`${API_ROOT}/bot${botToken()}/${method}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    console.error(`${method} failed`, await res.text());
+    return false;
+  }
+  return true;
+}
+
+/** Single-use invite link — bots cannot add members directly, so this is the only join path (hard Bot API limit). */
+export async function createChatInviteLink(chatId: string, name?: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_ROOT}/bot${botToken()}/createChatInviteLink`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, member_limit: 1, name }),
+    });
+    if (!res.ok) {
+      console.error("createChatInviteLink failed", await res.text());
+      return null;
+    }
+    const data = await res.json();
+    return data?.result?.invite_link ?? null;
+  } catch (err) {
+    console.error("createChatInviteLink failed", err);
+    return null;
+  }
+}
+
+export async function banChatMember(chatId: string, userId: number | string): Promise<boolean> {
+  return callTelegramApi("banChatMember", { chat_id: chatId, user_id: userId });
+}
+
+/** onlyIfBanned avoids erroring when a member was never actually banned (e.g. already left). */
+export async function unbanChatMember(chatId: string, userId: number | string): Promise<boolean> {
+  return callTelegramApi("unbanChatMember", { chat_id: chatId, user_id: userId, only_if_banned: true });
+}

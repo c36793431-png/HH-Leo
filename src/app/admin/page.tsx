@@ -8,6 +8,8 @@ import {
   revokeLicenseAction,
   resendWelcomeAction,
   uploadInstallerAction,
+  resendGroupInviteAction,
+  forceRemoveGroupAction,
 } from "./actions";
 
 export default async function AdminPage() {
@@ -129,6 +131,7 @@ export default async function AdminPage() {
                         <>
                           <form action={extendLicenseAction}>
                             <input type="hidden" name="licenseId" value={c.licenseId} />
+                            <input type="hidden" name="userId" value={c.userId} />
                             <input type="hidden" name="days" value="30" />
                             <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300">
                               Extend 30d
@@ -136,6 +139,7 @@ export default async function AdminPage() {
                           </form>
                           <form action={revokeLicenseAction}>
                             <input type="hidden" name="licenseId" value={c.licenseId} />
+                            <input type="hidden" name="userId" value={c.userId} />
                             <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">
                               Revoke
                             </button>
@@ -148,6 +152,22 @@ export default async function AdminPage() {
                           Resend welcome
                         </button>
                       </form>
+                      {c.paid && (
+                        <>
+                          <form action={resendGroupInviteAction}>
+                            <input type="hidden" name="userId" value={c.userId} />
+                            <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300">
+                              Resend invite link
+                            </button>
+                          </form>
+                          <form action={forceRemoveGroupAction}>
+                            <input type="hidden" name="userId" value={c.userId} />
+                            <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">
+                              Force remove
+                            </button>
+                          </form>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

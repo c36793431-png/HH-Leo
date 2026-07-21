@@ -2,16 +2,27 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isPaidUser, getActiveLicenseForUser } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
+import { pool } from "@/lib/db";
+import { getBotUsername } from "@/lib/telegram-bot";
 import { SignOutButton } from "@/components/sign-out-button";
 import { DownloadButton } from "@/components/download-button";
+import { LinkTelegramButton } from "@/components/link-telegram-button";
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [paid, config] = await Promise.all([
+  const [paid, config, telegramLinked, botUsername] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
     getPortalConfig(),
+    pool
+      .query<{ telegram_user_id: string | null }>(
+        "select telegram_user_id from users where id = $1",
+        [session.user.id]
+      )
+      .then((r) => r.rows[0]?.telegram_user_id !== null && r.rows[0]?.telegram_user_id !== undefined)
+      .catch(() => false),
+    getBotUsername(),
   ]);
   const license = paid ? await getActiveLicenseForUser(session.user.id).catch(() => null) : null;
 
@@ -100,6 +111,20 @@ export default async function DashboardPage() {
                 )}
               </div>
               <DownloadButton />
+              {!telegramLinked && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+                  <p className="text-sm text-amber-300">
+                    Link your Telegram account to receive your Paid Users Group invite.
+                  </p>
+                  {botUsername ? (
+                    <div className="mt-3">
+                      <LinkTelegramButton botUsername={botUsername} />
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-zinc-500">Telegram linking unavailable — bot not configured.</p>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="mt-3">

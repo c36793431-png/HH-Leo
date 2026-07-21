@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
-import { issueLicense, extendLicense, revokeLicense, listClients } from "@/lib/licenses";
+import { issueLicense, extendLicense, revokeLicense, listClients, getGroupTarget } from "@/lib/licenses";
+import { sendPaidGroupInvite, removeFromPaidGroup } from "@/lib/group-membership";
 import { logAdminAction } from "@/lib/admin";
 import { notifyUser } from "@/lib/notify";
 import { getPortalConfig, setInstallerInfo } from "@/lib/portal-config";
@@ -36,6 +37,8 @@ export async function issueLicenseAction(formData: FormData) {
       "Your Horizon HFT license is ready",
       `Your license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
     );
+    const target = await getGroupTarget(userId);
+    if (target) await sendPaidGroupInvite(target);
   }
 
   revalidatePath("/admin");
@@ -44,17 +47,49 @@ export async function issueLicenseAction(formData: FormData) {
 export async function extendLicenseAction(formData: FormData) {
   const session = await requireAdmin();
   const licenseId = formData.get("licenseId") as string;
+  const userId = (formData.get("userId") as string | null) || undefined;
   const days = Number(formData.get("days") ?? 30);
   await extendLicense(licenseId, days);
   await logAdminAction(session.user.id, "extend_license", null, { licenseId, days });
+
+  if (userId) {
+    const target = await getGroupTarget(userId);
+    if (target) await sendPaidGroupInvite(target);
+  }
+
   revalidatePath("/admin");
 }
 
 export async function revokeLicenseAction(formData: FormData) {
   const session = await requireAdmin();
   const licenseId = formData.get("licenseId") as string;
+  const userId = (formData.get("userId") as string | null) || undefined;
   await revokeLicense(licenseId);
   await logAdminAction(session.user.id, "revoke_license", null, { licenseId });
+
+  if (userId) {
+    const target = await getGroupTarget(userId);
+    if (target?.telegramUserId) await removeFromPaidGroup(target.telegramUserId);
+  }
+
+  revalidatePath("/admin");
+}
+
+export async function resendGroupInviteAction(formData: FormData) {
+  const session = await requireAdmin();
+  const userId = formData.get("userId") as string;
+  const target = await getGroupTarget(userId);
+  const result = target ? await sendPaidGroupInvite(target) : { sent: false as const, reason: "invite_link_failed" as const };
+  await logAdminAction(session.user.id, "resend_group_invite", userId, result);
+  revalidatePath("/admin");
+}
+
+export async function forceRemoveGroupAction(formData: FormData) {
+  const session = await requireAdmin();
+  const userId = formData.get("userId") as string;
+  const target = await getGroupTarget(userId);
+  if (target?.telegramUserId) await removeFromPaidGroup(target.telegramUserId);
+  await logAdminAction(session.user.id, "force_remove_group", userId, null);
   revalidatePath("/admin");
 }
 
