@@ -27,13 +27,21 @@ let cachedUsername: string | null = null;
 
 export async function getBotUsername(): Promise<string | null> {
   if (cachedUsername) return cachedUsername;
+  const token = process.env.HORIZON_PORTAL_BOT_TOKEN;
+  console.log(
+    `getBotUsername: token ${token ? `present (len=${token.length}, prefix=${token.slice(0, 6)}...)` : "MISSING"}`
+  );
   try {
     const res = await fetch(`${API_ROOT}/bot${botToken()}/getMe`, { cache: "force-cache" });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`getBotUsername: getMe returned ${res.status}`, await res.text());
+      return null;
+    }
     const data = await res.json();
     cachedUsername = data?.result?.username ?? null;
     return cachedUsername;
-  } catch {
+  } catch (err) {
+    console.error("getBotUsername failed", err);
     return null;
   }
 }

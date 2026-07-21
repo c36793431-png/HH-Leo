@@ -27,6 +27,7 @@ async function sendWelcomeDm(telegramUserId: number, displayName: string) {
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PostgresAdapter(pool),
   session: { strategy: "jwt" },
+  trustHost: true,
   providers: [
     Credentials({
       id: "telegram",
