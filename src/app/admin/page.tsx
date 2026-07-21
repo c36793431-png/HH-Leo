@@ -11,6 +11,7 @@ import {
   resendGroupInviteAction,
   forceRemoveGroupAction,
 } from "./actions";
+import { Logo } from "@/components/logo";
 
 export default async function AdminPage() {
   const session = await auth();
@@ -22,8 +23,13 @@ export default async function AdminPage() {
   return (
     <main className="flex flex-1 flex-col px-4 py-10 sm:px-10">
       <header className="mb-8">
-        <h1 className="text-lg font-semibold text-zinc-50">Admin — Horizon HFT Portal</h1>
-        <p className="text-sm text-zinc-400">Client management, licensing, downloads</p>
+        <div className="flex items-center gap-3">
+          <Logo size="nav" />
+          <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+            Admin
+          </span>
+        </div>
+        <p className="mt-2 text-sm text-zinc-400">Client management, licensing, downloads</p>
       </header>
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">

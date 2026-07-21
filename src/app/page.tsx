@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { Logo } from "@/components/logo";
 
 export default async function Home() {
   const session = await auth();
@@ -7,7 +8,7 @@ export default async function Home() {
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4 text-center">
-      <h1 className="text-3xl font-semibold text-zinc-50">Horizon HFT Portal</h1>
+      <Logo size="hero" />
       <p className="max-w-md text-sm text-zinc-400">
         Arbitrage execution software, licenses, and updates for Horizon HFT clients.
       </p>
