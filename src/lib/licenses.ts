@@ -11,6 +11,17 @@ interface ClaimArgs {
  * email or Telegram ID. WHERE user_id IS NULL makes concurrent claims lose
  * harmlessly (spec: Pre-provision + claim).
  */
+/** Canonical paid-state check — licenses table is the single source of truth, computed at read time. */
+export async function isPaidUser(userId: string): Promise<boolean> {
+  const result = await pool.query(
+    `select 1 from licenses
+     where user_id = $1 and status = 'active' and expires_at > now()
+     limit 1`,
+    [userId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function claimPendingLicense({ userId, email, telegramUserId }: ClaimArgs) {
   if (email) {
     await pool.query(
