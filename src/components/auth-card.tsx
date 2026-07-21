@@ -4,9 +4,20 @@ import { EmailLoginForm } from "./email-login-form";
 interface AuthCardProps {
   mode: "login" | "signup";
   botUsername: string | null;
+  error?: string;
 }
 
-export function AuthCard({ mode, botUsername }: AuthCardProps) {
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  CredentialsSignin: "Sign-in link expired or invalid — please try again.",
+  OAuthCallback: "Authentication provider error — please try again.",
+  Verification: "That sign-in link has expired or was already used — please request a new one.",
+};
+
+function authErrorMessage(code: string): string {
+  return AUTH_ERROR_MESSAGES[code] ?? "Something went wrong signing you in — please try again.";
+}
+
+export function AuthCard({ mode, botUsername, error }: AuthCardProps) {
   const heading =
     mode === "login" ? "Log in to Horizon HFT" : "Create your Horizon HFT account";
   const sub =
@@ -19,6 +30,11 @@ export function AuthCard({ mode, botUsername }: AuthCardProps) {
       <h1 className="text-xl font-semibold text-zinc-50">{heading}</h1>
       <p className="mt-1 text-sm text-zinc-400">{sub}</p>
 
+      {error && (
+        <p className="mt-4 rounded-md border border-red-900/50 bg-red-950/40 px-3 py-2 text-sm text-red-400">
+          {authErrorMessage(error)}
+        </p>
+      )}
       <div className="mt-6 flex flex-col items-center gap-4">
         {botUsername ? (
           <TelegramLoginButton botUsername={botUsername} redirectTo="/dashboard" />
