@@ -45,13 +45,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const botToken = process.env.HORIZON_PORTAL_BOT_TOKEN;
         if (!botToken) throw new Error("HORIZON_PORTAL_BOT_TOKEN not configured");
 
+        // redirectTo is a NextAuth routing param, not part of what Telegram signed —
+        // it must be excluded from the HMAC payload or verification always fails.
+        const rawFields = { ...(raw as Record<string, unknown>) };
+        delete rawFields.redirectTo;
+        const telegramFields = rawFields;
+
         const payload = {
-          ...raw,
-          id: Number(raw.id),
-          auth_date: Number(raw.auth_date),
+          ...telegramFields,
+          id: Number(telegramFields.id),
+          auth_date: Number(telegramFields.auth_date),
         } as TelegramLoginPayload;
 
-        if (!verifyTelegramLogin(payload, botToken)) return null;
+        if (!verifyTelegramLogin(payload, botToken)) {
+          console.error("[telegram-authorize] HMAC verification failed", {
+            payloadKeys: Object.keys(payload),
+            auth_date_age_sec: Math.floor(Date.now() / 1000) - payload.auth_date,
+          });
+          return null;
+        }
 
         const existing = await pool.query(
           `select id, email, telegram_user_id, telegram_username, display_name, role
