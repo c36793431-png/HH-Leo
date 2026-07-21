@@ -99,6 +99,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
+        session.user.id = token.sub as string;
         session.user.role = (token.role as string) ?? "user";
         session.user.telegramUserId = token.telegramUserId as string | undefined;
       }
