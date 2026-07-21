@@ -7,6 +7,7 @@ import { getBotUsername } from "@/lib/telegram-bot";
 import { SignOutButton } from "@/components/sign-out-button";
 import { DownloadButton } from "@/components/download-button";
 import { LinkTelegramButton } from "@/components/link-telegram-button";
+import { Logo } from "@/components/logo";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -30,8 +31,8 @@ export default async function DashboardPage() {
     <main className="flex flex-1 flex-col px-4 py-10 sm:px-10">
       <header className="mb-10 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-50">Horizon HFT Portal</h1>
-          <p className="text-sm text-zinc-400">
+          <Logo size="nav" />
+          <p className="mt-2 text-sm text-zinc-400">
             Welcome, {session.user.name ?? session.user.email ?? "trader"}
           </p>
         </div>
