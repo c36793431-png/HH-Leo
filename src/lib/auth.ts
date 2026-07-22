@@ -45,16 +45,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const botToken = process.env.HORIZON_PORTAL_BOT_TOKEN;
         if (!botToken) throw new Error("HORIZON_PORTAL_BOT_TOKEN not configured");
 
-        // redirectTo is a NextAuth routing param, not part of what Telegram signed —
-        // it must be excluded from the HMAC payload or verification always fails.
-        const rawFields = { ...(raw as Record<string, unknown>) };
-        delete rawFields.redirectTo;
-        const telegramFields = rawFields;
-
+        // Telegram widget signs ONLY these fields. Anything else (csrfToken,
+        // callbackUrl, redirectTo, future NextAuth internals) must not enter
+        // the HMAC payload or verification always fails.
+        const r = raw as Record<string, unknown>;
         const payload = {
-          ...telegramFields,
-          id: Number(telegramFields.id),
-          auth_date: Number(telegramFields.auth_date),
+          id: Number(r.id),
+          first_name: r.first_name,
+          ...(r.last_name ? { last_name: r.last_name } : {}),
+          ...(r.username ? { username: r.username } : {}),
+          ...(r.photo_url ? { photo_url: r.photo_url } : {}),
+          auth_date: Number(r.auth_date),
+          hash: r.hash,
         } as TelegramLoginPayload;
 
         if (!verifyTelegramLogin(payload, botToken)) {
