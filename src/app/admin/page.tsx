@@ -89,6 +89,15 @@ export default async function AdminPage() {
             <label className="block text-xs text-zinc-500">Installer file</label>
             <input name="file" type="file" required className="mt-1 text-sm text-zinc-300" />
           </div>
+          <div>
+            <label className="block text-xs text-zinc-500">Changelog</label>
+            <textarea
+              name="changelog"
+              rows={2}
+              placeholder="What changed in this build"
+              className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
+            />
+          </div>
           <button
             type="submit"
             className="rounded-md bg-emerald-500/90 px-3 py-1.5 text-sm font-medium text-black hover:bg-emerald-400"

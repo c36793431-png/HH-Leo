@@ -53,6 +53,7 @@ export interface InstallerInfo {
   blobUrl: string;
   filename: string;
   version: string;
+  changelog?: string;
   uploadedAt: string;
 }
 
