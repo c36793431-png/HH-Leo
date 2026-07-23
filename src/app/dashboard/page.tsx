@@ -5,6 +5,7 @@ import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
 import { getBotUsername } from "@/lib/telegram-bot";
 import { SignOutButton } from "@/components/sign-out-button";
+import Link from "next/link";
 import { DownloadButton } from "@/components/download-button";
 import { LinkTelegramButton } from "@/components/link-telegram-button";
 import { Logo } from "@/components/logo";
@@ -112,6 +113,11 @@ export default async function DashboardPage() {
                 )}
               </div>
               <DownloadButton />
+              <p className="text-sm">
+                <Link href="/downloads" className="text-cyan-400 hover:text-cyan-300 hover:underline">
+                  View downloads &amp; changelog
+                </Link>
+              </p>
               {!telegramLinked && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
                   <p className="text-sm text-amber-300">

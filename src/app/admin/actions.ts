@@ -113,6 +113,7 @@ export async function uploadInstallerAction(formData: FormData) {
   const session = await requireAdmin();
   const file = formData.get("file");
   const version = formData.get("version");
+  const changelog = (formData.get("changelog") as string | null) || undefined;
   if (!(file instanceof File) || typeof version !== "string" || !version) {
     throw new Error("file and version are required");
   }
@@ -122,6 +123,7 @@ export async function uploadInstallerAction(formData: FormData) {
     blobUrl: blob.url,
     filename: file.name,
     version,
+    changelog,
     uploadedAt: new Date().toISOString(),
   });
   await logAdminAction(session.user.id, "upload_installer", null, { version, filename: file.name });
