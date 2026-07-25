@@ -16,7 +16,7 @@ const DEFAULTS: PortalConfig = {
   educationPreview: [
     {
       title: "Getting started with arbitrage execution",
-      summary: "How Horizon's 4 core strategies identify and act on cross-venue spreads.",
+      summary: "How Horizon's 5 core strategies identify and act on cross-venue spreads.",
     },
     {
       title: "Connecting MT4/MT5/NinjaTrader 8",
