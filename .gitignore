@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local-only signing/secret material (also covered by *.pem, belt-and-suspenders)
+.secrets/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
