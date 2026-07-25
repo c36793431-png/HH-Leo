@@ -9,6 +9,7 @@ import Link from "next/link";
 import { DownloadButton } from "@/components/download-button";
 import { LinkTelegramButton } from "@/components/link-telegram-button";
 import { Logo } from "@/components/logo";
+import { UserAvatar } from "@/components/user-avatar";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -33,15 +34,21 @@ export default async function DashboardPage() {
       <header className="mb-10 flex items-center justify-between">
         <div>
           <Logo size="nav" />
-          <p className="mt-2 text-sm text-zinc-400">
-            Welcome, {session.user.name ?? session.user.email ?? "trader"}
-          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <UserAvatar
+              name={session.user.name ?? session.user.email ?? "trader"}
+              imageUrl={session.user.image}
+            />
+            <p className="text-sm text-zinc-400">
+              Welcome, {session.user.name ?? session.user.email ?? "trader"}
+            </p>
+          </div>
         </div>
         <SignOutButton />
       </header>
 
       <div className="grid gap-6 sm:grid-cols-2">
-        <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+        <section className="rounded-xl border border-cyan-500/30 bg-zinc-950/60 p-6 shadow-[0_0_20px_-8px_rgba(34,211,238,0.35)]">
           <h2 className="text-sm font-medium text-cyan-400">Community</h2>
           <ul className="mt-3 space-y-2 text-sm text-zinc-300">
             <li>
@@ -77,7 +84,7 @@ export default async function DashboardPage() {
           </ul>
         </section>
 
-        <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+        <section className="rounded-xl border border-cyan-500/30 bg-zinc-950/60 p-6 shadow-[0_0_20px_-8px_rgba(34,211,238,0.35)]">
           <h2 className="text-sm font-medium text-emerald-400">Pricing</h2>
           <p className="mt-3 text-sm text-zinc-300">{config.pricingDisplay}</p>
           <p className="mt-2 text-xs text-zinc-500">
@@ -85,7 +92,7 @@ export default async function DashboardPage() {
           </p>
         </section>
 
-        <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6 sm:col-span-2">
+        <section className="rounded-xl border border-cyan-500/30 bg-zinc-950/60 p-6 shadow-[0_0_20px_-8px_rgba(34,211,238,0.35)] sm:col-span-2">
           <h2 className="text-sm font-medium text-blue-400">Educational content</h2>
           <ul className="mt-3 space-y-3">
             {config.educationPreview.map((doc) => (

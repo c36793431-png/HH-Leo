@@ -68,7 +68,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         const existing = await pool.query(
-          `select id, email, telegram_user_id, telegram_username, display_name, role
+          `select id, email, telegram_user_id, telegram_username, display_name, role, image
            from users where telegram_user_id = $1`,
           [payload.id]
         );
@@ -79,20 +79,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .filter(Boolean)
             .join(" ") || payload.username || `tg_${payload.id}`;
           const inserted = await pool.query(
-            `insert into users (telegram_user_id, telegram_username, display_name)
-             values ($1, $2, $3)
-             returning id, email, telegram_user_id, telegram_username, display_name, role`,
-            [payload.id, payload.username ?? null, displayName]
+            `insert into users (telegram_user_id, telegram_username, display_name, image)
+             values ($1, $2, $3, $4)
+             returning id, email, telegram_user_id, telegram_username, display_name, role, image`,
+            [payload.id, payload.username ?? null, displayName, payload.photo_url ?? null]
           );
           user = inserted.rows[0];
           await claimPendingLicense({ userId: user.id, telegramUserId: payload.id });
           await sendWelcomeDm(payload.id, user.display_name);
+        } else if (payload.photo_url && payload.photo_url !== user.image) {
+          const updated = await pool.query(
+            `update users set image = $1, updated_at = now() where id = $2 returning image`,
+            [payload.photo_url, user.id]
+          );
+          user.image = updated.rows[0].image;
         }
 
         return {
           id: user.id,
           email: user.email,
           name: user.display_name,
+          image: user.image,
           telegramUserId: String(user.telegram_user_id),
           role: user.role,
         };
