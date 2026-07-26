@@ -17,9 +17,20 @@ import crypto from "crypto";
  * canonicalization. Do not treat this as final until that lands. See followup list.
  */
 
-/** Deterministic JSON: keys sorted at every level so the signed bytes are reproducible client-side. */
+/**
+ * Deterministic JSON: keys sorted at every level so the signed bytes are reproducible
+ * client-side.
+ *
+ * The JSON round-trip on the way in is load-bearing, not defensive tidying. sortDeep()
+ * walks own enumerable keys, and a Date has none — it is typeof "object" with an empty
+ * key set, so it collapsed to {}. The server signed {"expires_at":{}} while the client
+ * received an ISO string, making verification impossible for every client. Serialising
+ * first means we always sign exactly the bytes the client can reconstruct from the
+ * response body, for Date and for anything else carrying a toJSON().
+ * Regression: /v1/validate returned an unverifiable signature until 2026-07-26.
+ */
 export function canonicalize(value: unknown): string {
-  return JSON.stringify(sortDeep(value));
+  return JSON.stringify(sortDeep(JSON.parse(JSON.stringify(value))));
 }
 
 function sortDeep(value: unknown): unknown {

@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   // one breaks every deployed client, since the signature covers the whole object.
   const payload = {
     status: result.status,
-    expires_at: result.expiresAt,
+    expires_at: result.expiresAt ? result.expiresAt.toISOString() : null,
     server_time: new Date().toISOString(),
     version: currentVersion,
   };
