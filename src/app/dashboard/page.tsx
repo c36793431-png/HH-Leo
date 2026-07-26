@@ -55,7 +55,7 @@ export default async function DashboardPage() {
           telegramChannelUrl={config.telegramChannelUrl}
         />
 
-        <section className="rounded-xl border border-cyan-500/30 bg-zinc-950/60 p-6 shadow-[0_0_20px_-8px_rgba(34,211,238,0.35)]">
+        <section className="rounded-xl border border-cyan-500/60 bg-zinc-950/60 p-6 shadow-[0_0_20px_-6px_rgba(34,211,238,0.5)]">
           <h2 className="text-sm font-medium text-cyan-400">Community</h2>
           <ul className="mt-3 space-y-2 text-sm text-zinc-300">
             <li>
@@ -91,7 +91,7 @@ export default async function DashboardPage() {
           </ul>
         </section>
 
-        <section className="rounded-xl border border-cyan-500/30 bg-zinc-950/60 p-6 shadow-[0_0_20px_-8px_rgba(34,211,238,0.35)]">
+        <section className="rounded-xl border border-cyan-500/60 bg-zinc-950/60 p-6 shadow-[0_0_20px_-6px_rgba(34,211,238,0.5)]">
           <h2 className="text-sm font-medium text-emerald-400">Pricing</h2>
           <p className="mt-3 text-sm text-zinc-300">{config.pricingDisplay}</p>
           <p className="mt-2 text-xs text-zinc-500">
@@ -99,7 +99,7 @@ export default async function DashboardPage() {
           </p>
         </section>
 
-        <section className="rounded-xl border border-cyan-500/30 bg-zinc-950/60 p-6 shadow-[0_0_20px_-8px_rgba(34,211,238,0.35)] sm:col-span-2">
+        <section className="rounded-xl border border-cyan-500/60 bg-zinc-950/60 p-6 shadow-[0_0_20px_-6px_rgba(34,211,238,0.5)] sm:col-span-2">
           <h2 className="text-sm font-medium text-blue-400">Educational content</h2>
           <ul className="mt-3 space-y-3">
             {config.educationPreview.map((doc) => (

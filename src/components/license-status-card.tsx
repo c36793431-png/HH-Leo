@@ -29,7 +29,7 @@ export function LicenseStatusCard({
   const badge = getBadge(license);
 
   return (
-    <section className="rounded-xl border border-cyan-500/30 bg-zinc-950/60 p-6 shadow-[0_0_20px_-8px_rgba(34,211,238,0.35)] sm:col-span-2">
+    <section className="rounded-xl border border-cyan-500/60 bg-zinc-950/60 p-6 shadow-[0_0_20px_-6px_rgba(34,211,238,0.5)] sm:col-span-2">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-cyan-400">License status</h2>
         <span
