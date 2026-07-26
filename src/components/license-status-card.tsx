@@ -43,7 +43,9 @@ export function LicenseStatusCard({
         <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
           <div>
             <p className="text-xs text-zinc-500">License key</p>
-            <p className="mt-1 font-mono text-emerald-300">{license.licenseKey}</p>
+            <p className={`mt-1 font-mono ${badge.color === "green" ? "text-emerald-300" : "text-red-400"}`}>
+              {license.licenseKey}
+            </p>
           </div>
           <div>
             <p className="text-xs text-zinc-500">Tier</p>
