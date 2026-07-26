@@ -1,4 +1,31 @@
 import { pool } from "./db";
+import { ADMIN_USERS_PANEL_EMAIL } from "./admin-users-panel";
+
+/**
+ * All admin_actions callers gate on isAdminUsersPanelEmail() first, so the acting
+ * admin's email is always ADMIN_USERS_PANEL_EMAIL. Their session.user.id (JWT sub)
+ * can nonetheless point at a users row that no longer exists (stale session, or a
+ * row that was recreated under a new id) — insert-on-conflict against admin_actions'
+ * FK would then 500. Resolve to a real users.id, preferring the email match (source
+ * of truth) over the possibly-stale session id, backfilling only if neither exists.
+ */
+async function resolveAdminUserId(sessionUserId: string): Promise<string> {
+  const byId = await pool.query("select id from users where id = $1", [sessionUserId]);
+  if (byId.rowCount) return sessionUserId;
+
+  const byEmail = await pool.query("select id from users where email = $1", [
+    ADMIN_USERS_PANEL_EMAIL,
+  ]);
+  if (byEmail.rowCount) return byEmail.rows[0].id;
+
+  const inserted = await pool.query(
+    `insert into users (id, email, display_name, role)
+     values ($1, $2, $2, 'admin')
+     returning id`,
+    [sessionUserId, ADMIN_USERS_PANEL_EMAIL]
+  );
+  return inserted.rows[0].id;
+}
 
 export async function logAdminAction(
   adminUserId: string,
@@ -7,11 +34,12 @@ export async function logAdminAction(
   details?: unknown,
   targetLicenseId?: string | null
 ): Promise<void> {
+  const resolvedAdminUserId = await resolveAdminUserId(adminUserId);
   await pool.query(
     `insert into admin_actions (admin_user_id, action_type, target_user_id, target_license_id, details_json)
      values ($1, $2, $3, $4, $5)`,
     [
-      adminUserId,
+      resolvedAdminUserId,
       actionType,
       targetUserId ?? null,
       targetLicenseId ?? null,
