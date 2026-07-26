@@ -1,6 +1,5 @@
 import type { LicenseDetail } from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { selfExpireNowAction, selfExtend30Action, selfRevokeAction } from "@/app/dashboard/actions";
 
 const EXPIRING_SOON_MS = 24 * 60 * 60 * 1000;
 
@@ -22,11 +21,9 @@ function getBadge(license: LicenseDetail | null): { label: string; color: keyof 
 
 export function LicenseStatusCard({
   license,
-  showSelfTestActions,
   telegramChannelUrl,
 }: {
   license: LicenseDetail | null;
-  showSelfTestActions: boolean;
   telegramChannelUrl: string;
 }) {
   const badge = getBadge(license);
@@ -83,32 +80,6 @@ export function LicenseStatusCard({
           >
             Reach out on Telegram to get a license
           </a>
-        </div>
-      )}
-
-      {license && showSelfTestActions && (
-        <div className="mt-5 border-t border-zinc-800 pt-4">
-          <p className="mb-2 text-xs uppercase tracking-wide text-zinc-600">Test controls</p>
-          <div className="flex flex-wrap gap-2">
-            <form action={selfExpireNowAction}>
-              <input type="hidden" name="licenseId" value={license.id} />
-              <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-amber-500 hover:text-amber-300">
-                Trigger expire now
-              </button>
-            </form>
-            <form action={selfExtend30Action}>
-              <input type="hidden" name="licenseId" value={license.id} />
-              <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300">
-                Extend by 30 days
-              </button>
-            </form>
-            <form action={selfRevokeAction}>
-              <input type="hidden" name="licenseId" value={license.id} />
-              <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">
-                Revoke
-              </button>
-            </form>
-          </div>
         </div>
       )}
     </section>

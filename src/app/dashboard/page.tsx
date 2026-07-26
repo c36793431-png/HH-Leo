@@ -12,9 +12,6 @@ import { Logo } from "@/components/logo";
 import { UserAvatar } from "@/components/user-avatar";
 import { LicenseStatusCard } from "@/components/license-status-card";
 
-/** Same hardcoded gate as dashboard/actions.ts — keep in sync until a real admin role lands. */
-const SELF_TEST_USER_ID = "94529d89-ae75-4df5-a15f-1f8a004509d1";
-
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -55,7 +52,6 @@ export default async function DashboardPage() {
       <div className="grid gap-6 sm:grid-cols-2">
         <LicenseStatusCard
           license={licenseDetail}
-          showSelfTestActions={session.user.id === SELF_TEST_USER_ID}
           telegramChannelUrl={config.telegramChannelUrl}
         />
 

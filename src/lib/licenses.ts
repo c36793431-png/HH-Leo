@@ -226,6 +226,51 @@ export async function getLicenseForUser(userId: string): Promise<LicenseDetail |
   };
 }
 
+export interface AdminUserRow {
+  userId: string;
+  email: string | null;
+  telegramUsername: string | null;
+  joinedAt: Date;
+  licenseId: string | null;
+  licenseKey: string | null;
+  status: string | null;
+  expiresAt: Date | null;
+  tier: string | null;
+  hardwareId: string | null;
+  lastVerifiedAt: Date | null;
+}
+
+/** /admin/users source of truth: every user joined to their most recent license, regardless of role or paid state. */
+export async function listAllUsersWithLicenses(): Promise<AdminUserRow[]> {
+  const result = await pool.query(`
+    select u.id as user_id, u.email, u.telegram_username, u.created_at,
+           l.id as license_id, l.license_key, l.status, l.expires_at, l.tier,
+           l.hardware_id, l.last_verified_at
+    from users u
+    left join lateral (
+      select id, license_key, status, expires_at, tier, hardware_id, last_verified_at
+      from licenses
+      where user_id = u.id
+      order by issued_at desc
+      limit 1
+    ) l on true
+    order by u.created_at desc
+  `);
+  return result.rows.map((r) => ({
+    userId: r.user_id,
+    email: r.email,
+    telegramUsername: r.telegram_username,
+    joinedAt: r.created_at,
+    licenseId: r.license_id,
+    licenseKey: r.license_key,
+    status: r.status,
+    expiresAt: r.expires_at,
+    tier: r.tier,
+    hardwareId: r.hardware_id,
+    lastVerifiedAt: r.last_verified_at,
+  }));
+}
+
 /** Masks all but the last 4 characters — used wherever an admin views another user's key. Owners viewing their own key see it in full. */
 export function maskLicenseKey(key: string): string {
   const last4 = key.slice(-4);
