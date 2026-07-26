@@ -199,6 +199,7 @@ export interface LicenseDetail {
   licenseKey: string;
   status: string;
   tier: string;
+  issuedAt: Date;
   expiresAt: Date;
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
@@ -207,7 +208,7 @@ export interface LicenseDetail {
 /** Dashboard widget lookup — unlike getActiveLicenseForUser, returns the latest license regardless of status/expiry so the UI can render EXPIRED/REVOKED states. */
 export async function getLicenseForUser(userId: string): Promise<LicenseDetail | null> {
   const result = await pool.query(
-    `select id, license_key, status, tier, expires_at, hardware_id, last_verified_at
+    `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at
      from licenses where user_id = $1
      order by issued_at desc
      limit 1`,
@@ -220,6 +221,7 @@ export async function getLicenseForUser(userId: string): Promise<LicenseDetail |
     licenseKey: row.license_key,
     status: row.status,
     tier: row.tier,
+    issuedAt: row.issued_at,
     expiresAt: row.expires_at,
     hardwareId: row.hardware_id,
     lastVerifiedAt: row.last_verified_at,

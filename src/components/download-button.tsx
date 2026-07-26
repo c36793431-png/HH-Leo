@@ -26,12 +26,7 @@ export function DownloadButton() {
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={loading}
-        className="rounded-md bg-cyan-500/90 px-3 py-1.5 text-sm font-medium text-black hover:bg-cyan-400 disabled:opacity-50"
-      >
+      <button type="button" onClick={handleClick} disabled={loading} className="btn primary sm">
         {loading ? "Preparing…" : "Download installer"}
       </button>
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}

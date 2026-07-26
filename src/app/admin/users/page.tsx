@@ -87,7 +87,7 @@ export default async function AdminUsersPage({
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   return (
-    <main className="flex flex-1 flex-col px-4 py-10 sm:px-10">
+    <div className="flex flex-1 flex-col">
       <header className="mb-8">
         <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
           Admin · Users
@@ -314,6 +314,6 @@ export default async function AdminUsersPage({
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }

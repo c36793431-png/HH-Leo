@@ -20,7 +20,7 @@ export default async function AdminUserDetailPage({
   if (!user) notFound();
 
   return (
-    <main className="flex flex-1 flex-col gap-6 px-4 py-10 sm:px-10">
+    <div className="flex flex-1 flex-col gap-6">
       <header>
         <Link href="/admin/users" className="text-xs text-zinc-500 hover:text-zinc-300 hover:underline">
           ← Back to Users
@@ -204,6 +204,6 @@ export default async function AdminUserDetailPage({
           </table>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

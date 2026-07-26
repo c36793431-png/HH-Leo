@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isPaidUser, getActiveLicenseForUser } from "@/lib/licenses";
 import { getInstallerInfo } from "@/lib/portal-config";
 import { DownloadButton } from "@/components/download-button";
-import { Logo } from "@/components/logo";
+import { PortalShell } from "@/components/portal/portal-shell";
+import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 
 const PLACEHOLDER_VERSION = "1.0.0";
 const PLACEHOLDER_CHANGELOG = "Release notes will appear here once the current build is published.";
@@ -21,66 +21,80 @@ export default async function DownloadsPage() {
     getInstallerInfo().catch(() => null),
   ]);
 
+  const isAdmin = isAdminUsersPanelEmail(session.user.email);
   const version = installer?.version ?? PLACEHOLDER_VERSION;
   const changelog = installer?.changelog ?? PLACEHOLDER_CHANGELOG;
+  const userName = session.user.name ?? session.user.email ?? "trader";
+  const userEmail = session.user.email ?? "";
 
   return (
-    <main className="flex flex-1 flex-col px-4 py-10 sm:px-10">
-      <header className="mb-10 flex items-center justify-between">
-        <div>
-          <Logo size="nav" />
-          <p className="mt-2 text-sm text-zinc-400">Downloads</p>
-        </div>
-        <Link href="/dashboard" className="text-sm text-zinc-400 hover:text-cyan-300 hover:underline">
-          Back to dashboard
-        </Link>
-      </header>
-
-      <div className="grid gap-6 sm:grid-cols-2">
-        <section className="rounded-xl border border-cyan-500/60 bg-zinc-950/60 p-6 shadow-[0_0_20px_-6px_rgba(34,211,238,0.5)]">
-          <h2 className="text-sm font-medium text-cyan-400">Latest build</h2>
-          <p className="mt-3 font-mono text-sm text-emerald-300">v{version}</p>
-          {installer ? (
-            <p className="mt-1 text-xs text-zinc-500">
-              {installer.filename} · uploaded {new Date(installer.uploadedAt).toLocaleDateString()}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-zinc-500">
-              No downloads yet — once you grab the terminal installer, your version history shows up here.
-            </p>
-          )}
-          <div className="mt-4">
+    <PortalShell tier={isAdmin ? "admin" : "paid"} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+      <div className="grid g2">
+        <div className="card">
+          <div className="chead">
+            <span className="ic">▤</span>
+            <h3>Latest build</h3>
+            <span className="cap">v{version}</span>
+          </div>
+          <div className="rows">
+            <div className="rw">
+              <div className="ricon">⤓</div>
+              <div className="rmeta">
+                <b>Horizon Terminal — Windows</b>
+                <span>SHA256 verified</span>
+              </div>
+              <span className="ver">v{version}</span>
+            </div>
+            <div className="rw">
+              <div className="ricon">⤓</div>
+              <div className="rmeta">
+                <b>Horizon Terminal — macOS</b>
+                <span>Notarised</span>
+              </div>
+              <span className="ver">v{version}</span>
+            </div>
+          </div>
+          <div style={{ marginTop: 14 }}>
             {installer ? (
               <DownloadButton />
             ) : (
-              <button
-                type="button"
-                disabled
-                title="Build not yet published"
-                className="cursor-not-allowed rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-500"
-              >
+              <button type="button" disabled title="Build not yet published" className="btn primary sm">
                 Download installer
               </button>
             )}
           </div>
-        </section>
+          {installer && (
+            <p style={{ marginTop: 10, fontSize: 12, color: "var(--hz-ink-3)" }}>
+              {installer.filename} · uploaded {new Date(installer.uploadedAt).toLocaleDateString()}
+            </p>
+          )}
+        </div>
 
-        <section className="rounded-xl border border-cyan-500/60 bg-zinc-950/60 p-6 shadow-[0_0_20px_-6px_rgba(34,211,238,0.5)]">
-          <h2 className="text-sm font-medium text-blue-400">Changelog</h2>
-          <p className="mt-3 whitespace-pre-line text-sm text-zinc-300">{changelog}</p>
-        </section>
+        <div className="card">
+          <div className="chead">
+            <span className="ic">≡</span>
+            <h3>Changelog</h3>
+          </div>
+          <p style={{ fontSize: 13, color: "var(--hz-ink-2)", whiteSpace: "pre-line", lineHeight: 1.6 }}>{changelog}</p>
+        </div>
 
-        <section className="rounded-xl border border-cyan-500/60 bg-zinc-950/60 p-6 shadow-[0_0_20px_-6px_rgba(34,211,238,0.5)] sm:col-span-2">
-          <h2 className="text-sm font-medium text-zinc-400">Your license</h2>
-          <p className="mt-1 text-xs text-zinc-500">License key</p>
-          <p className="mt-1 font-mono text-sm text-emerald-300">{license?.licenseKey ?? "—"}</p>
+        <div className="card full">
+          <div className="chead">
+            <span className="ic">◐</span>
+            <h3>Your license</h3>
+          </div>
+          <div className="keyrow">
+            <span className="k">{license?.licenseKey ?? "—"}</span>
+          </div>
           {license && (
-            <p className="mt-1 text-xs text-zinc-500">
+            <p style={{ marginTop: 10, fontSize: 12, color: "var(--hz-ink-3)" }}>
               Expires {new Date(license.expiresAt).toLocaleDateString()}
             </p>
           )}
-        </section>
+        </div>
       </div>
-    </main>
+
+      <div className="foot">HORIZON HFT · customer portal</div>
+    </PortalShell>
   );
 }

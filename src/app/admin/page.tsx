@@ -14,7 +14,7 @@ export default async function AdminPage() {
   const [clients, installer] = await Promise.all([listClients(), getInstallerInfo()]);
 
   return (
-    <main className="flex flex-1 flex-col px-4 py-10 sm:px-10">
+    <div className="flex flex-1 flex-col">
       <header className="mb-8">
         <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
           Admin · Overview
@@ -198,6 +198,6 @@ export default async function AdminPage() {
           </table>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

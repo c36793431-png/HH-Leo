@@ -1,0 +1,332 @@
+/* Horizon HFT Portal — shell design system, ported from Iris's mockups
+   (mockups/horizon-portal/{free,paid,admin}-dashboard.html) 1:1.
+   Scoped under .portal-shell so it can't leak into /login, /signup. */
+
+:root {
+  --hz-bg: #05070b;
+  --hz-bg-1: #080c13;
+  --hz-panel: #0a1019;
+  --hz-panel-2: #0d141f;
+  --hz-raise: #111a27;
+  --hz-cyan: #2de2e6;
+  --hz-cyan-500: #06b6d4;
+  --hz-teal: #14b8a6;
+  --hz-lime: #b4ff3a;
+  --hz-card-line: rgba(6, 182, 212, 0.6);
+  --hz-line: rgba(45, 226, 230, 0.16);
+  --hz-line-soft: rgba(218, 244, 245, 0.07);
+  --hz-zinc: #27272a;
+  --hz-zinc-line: #3f3f46;
+  --hz-zinc-ink: #a1a1aa;
+  --hz-ink: #daf4f5;
+  --hz-ink-2: #8fb0b7;
+  --hz-ink-3: #546e74;
+  --hz-ink-4: #3a5157;
+  --hz-ok: #37f5a0;
+  --hz-warn: #ffc24b;
+  --hz-bad: #ff5c7a;
+  --hz-info: #6fa8ff;
+  --hz-grey: #8a9ba0;
+  --hz-sans: var(--font-inter), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --hz-disp: var(--font-saira), "Saira Condensed", var(--hz-sans);
+  --hz-mono: var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --sbw: 264px;
+}
+
+.portal-shell {
+  color: var(--hz-ink);
+  font-family: var(--hz-sans);
+  -webkit-font-smoothing: antialiased;
+}
+.portal-shell a { color: inherit; text-decoration: none; }
+
+.portal-shell .app { display: grid; grid-template-columns: var(--sbw) 1fr; min-height: 100vh; background: var(--hz-bg); }
+
+/* ---- SIDEBAR ---- */
+.portal-shell .sidebar {
+  position: sticky; top: 0; height: 100vh;
+  background: linear-gradient(180deg, #0a121c, #06090f);
+  border-right: 1px solid var(--hz-line-soft);
+  display: flex; flex-direction: column; z-index: 40;
+}
+.portal-shell .brand { display: flex; align-items: center; gap: 12px; padding: 22px 22px 20px; }
+.portal-shell .brand .glyph {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--hz-cyan), #0b6e78);
+  display: flex; align-items: center; justify-content: center;
+  color: #02171a; font-family: var(--hz-disp); font-weight: 800; font-size: 22px;
+  box-shadow: 0 4px 18px rgba(45, 226, 230, 0.35);
+}
+.portal-shell .brand .txt { font-family: var(--hz-disp); font-weight: 800; font-size: 22px; letter-spacing: 0.04em; line-height: 1; }
+.portal-shell .brand .txt small { display: block; font-family: var(--hz-sans); font-weight: 600; font-size: 10px; letter-spacing: 0.32em; color: var(--hz-cyan); margin-top: 3px; }
+
+.portal-shell .nav { flex: 1; overflow-y: auto; padding: 6px 14px; }
+.portal-shell .nav .grp { font-size: 10px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hz-ink-4); padding: 16px 12px 8px; }
+.portal-shell .nav a {
+  display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px;
+  color: var(--hz-ink-2); font-size: 14px; font-weight: 500; position: relative; margin-bottom: 2px;
+  transition: background 0.12s, color 0.12s;
+}
+.portal-shell .nav a .ic { width: 18px; height: 18px; flex: 0 0 18px; opacity: 0.85; display: inline-flex; align-items: center; justify-content: center; }
+.portal-shell .nav a:hover { background: rgba(45, 226, 230, 0.07); color: var(--hz-ink); }
+.portal-shell .nav a.on { background: rgba(45, 226, 230, 0.12); color: var(--hz-cyan); }
+.portal-shell .nav a.on::before {
+  content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px;
+  background: var(--hz-cyan); box-shadow: 0 0 12px var(--hz-cyan);
+}
+.portal-shell .nav a .pill {
+  margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+  background: rgba(45, 226, 230, 0.14); color: var(--hz-cyan); border-radius: 999px; padding: 2px 7px; text-transform: uppercase;
+}
+.portal-shell .nav a.locked { color: var(--hz-ink-3); }
+.portal-shell .nav a.locked:hover { background: rgba(138, 155, 160, 0.06); }
+.portal-shell .nav a .lock { margin-left: auto; font-size: 12px; opacity: 0.7; }
+
+.portal-shell .admin-block { margin: 8px 4px 4px; padding-top: 12px; border-top: 1px solid var(--hz-zinc-line); }
+.portal-shell .admin-block .grp { color: var(--hz-zinc-ink); display: flex; align-items: center; gap: 7px; }
+.portal-shell .admin-block .grp .shield { color: var(--hz-warn); }
+.portal-shell .admin-block a { color: var(--hz-zinc-ink); }
+.portal-shell .admin-block a .ic { opacity: 0.9; }
+.portal-shell .admin-block a:hover { background: rgba(161, 161, 170, 0.08); color: #e4e4e7; }
+.portal-shell .admin-block a.on { background: rgba(161, 161, 170, 0.12); color: #f4f4f5; }
+.portal-shell .admin-block a.on::before { background: var(--hz-zinc-ink); box-shadow: none; }
+
+.portal-shell .side-foot { padding: 14px; border-top: 1px solid var(--hz-line-soft); }
+.portal-shell .acct { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 10px; }
+.portal-shell button.acct { width: 100%; border: none; background: transparent; cursor: pointer; text-align: left; }
+.portal-shell .acct:hover { background: rgba(45, 226, 230, 0.06); }
+.portal-shell .acct .av {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, #123, #0a1622); border: 1px solid var(--hz-line);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--hz-disp); font-weight: 700; color: var(--hz-cyan); font-size: 15px; flex: 0 0 34px;
+}
+.portal-shell .acct.admin-acct .av { background: linear-gradient(135deg, #2a2118, #1a140a); border-color: rgba(255, 194, 75, 0.4); color: var(--hz-warn); }
+.portal-shell .acct .who { line-height: 1.3; min-width: 0; }
+.portal-shell .acct .who b { display: block; font-size: 13px; font-weight: 600; color: var(--hz-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-shell .acct .who span { font-size: 11px; color: var(--hz-ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; max-width: 120px; }
+.portal-shell .acct .tier {
+  margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px;
+  background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); border: 1px solid rgba(138, 155, 160, 0.3);
+}
+.portal-shell .acct .tier.paid { background: rgba(55, 245, 160, 0.14); color: var(--hz-ok); border-color: rgba(55, 245, 160, 0.34); }
+.portal-shell .acct .tier.admin { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: rgba(255, 194, 75, 0.36); }
+
+/* ---- MAIN ---- */
+.portal-shell .main {
+  min-width: 0; display: flex; flex-direction: column;
+  background: radial-gradient(120% 60% at 80% -10%, #0a1622 0%, rgba(5, 7, 11, 0) 55%), var(--hz-bg);
+}
+.portal-shell .topbar {
+  height: 68px; flex: 0 0 68px; display: flex; align-items: center; gap: 16px; padding: 0 28px;
+  border-bottom: 1px solid var(--hz-line-soft); position: sticky; top: 0;
+  background: rgba(5, 7, 11, 0.82); backdrop-filter: blur(12px); z-index: 30;
+}
+.portal-shell .burger {
+  display: none; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--hz-line);
+  background: var(--hz-panel); color: var(--hz-ink); align-items: center; justify-content: center;
+  cursor: pointer; font-size: 18px;
+}
+.portal-shell .topbar h1 { font-family: var(--hz-disp); font-weight: 700; font-size: 26px; letter-spacing: 0.02em; }
+.portal-shell .topbar .crumb { font-size: 12px; color: var(--hz-ink-3); font-family: var(--hz-mono); }
+.portal-shell .topbar .sp { flex: 1; }
+.portal-shell .topbar .adminchip {
+  display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--hz-warn);
+  border: 1px solid rgba(255, 194, 75, 0.34); background: rgba(255, 194, 75, 0.08); border-radius: 999px; padding: 6px 13px;
+  white-space: nowrap;
+}
+.portal-shell .topbar .tconn { display: flex; align-items: center; gap: 8px; font-family: var(--hz-mono); font-size: 12px; color: var(--hz-ink-2); }
+.portal-shell .topbar .tconn .d { width: 8px; height: 8px; border-radius: 50%; background: var(--hz-ok); box-shadow: 0 0 10px var(--hz-ok); }
+.portal-shell .content { flex: 1; overflow-y: auto; padding: 26px 28px 60px; max-width: 1160px; width: 100%; margin: 0 auto; }
+
+/* ---- BANNERS ---- */
+.portal-shell .banner { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 12px; margin-bottom: 22px; font-size: 14px; flex-wrap: wrap; }
+.portal-shell .banner.grey { background: rgba(138, 155, 160, 0.08); border: 1px solid rgba(138, 155, 160, 0.28); color: var(--hz-ink-2); }
+.portal-shell .banner.warn { background: rgba(255, 194, 75, 0.08); border: 1px solid rgba(255, 194, 75, 0.34); color: var(--hz-ink); }
+.portal-shell .banner.ok { background: rgba(55, 245, 160, 0.07); border: 1px solid rgba(55, 245, 160, 0.3); color: var(--hz-ink); }
+.portal-shell .banner .bic { font-size: 18px; }
+.portal-shell .banner b { color: var(--hz-ink); }
+.portal-shell .banner .baction { margin-left: auto; font-weight: 600; color: var(--hz-cyan); white-space: nowrap; }
+.portal-shell .banner.warn .baction { color: var(--hz-warn); }
+
+/* ---- UPGRADE HERO ---- */
+.portal-shell .hero {
+  position: relative; overflow: hidden; border-radius: 16px; padding: 26px 28px; margin-bottom: 24px;
+  background: linear-gradient(120deg, rgba(6, 182, 212, 0.16), rgba(20, 184, 166, 0.06) 60%, transparent), var(--hz-panel);
+  border: 1px solid var(--hz-card-line); box-shadow: 0 0 40px rgba(6, 182, 212, 0.1);
+}
+.portal-shell .hero::after {
+  content: ""; position: absolute; right: -40px; top: -40px; width: 240px; height: 240px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(45, 226, 230, 0.22), transparent 70%); pointer-events: none;
+}
+.portal-shell .hero .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: var(--hz-cyan); }
+.portal-shell .hero h2 { font-family: var(--hz-disp); font-weight: 800; font-size: 32px; line-height: 1.05; margin: 8px 0 8px; max-width: 600px; }
+.portal-shell .hero p { color: var(--hz-ink-2); font-size: 14px; max-width: 560px; line-height: 1.5; }
+.portal-shell .hero .row { display: flex; align-items: center; gap: 14px; margin-top: 18px; flex-wrap: wrap; }
+.portal-shell .hero .note { font-family: var(--hz-mono); font-size: 12px; color: var(--hz-ink-3); }
+
+/* ---- BUTTONS ---- */
+.portal-shell .btn { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: 14px; border-radius: 11px; padding: 12px 20px; cursor: pointer; border: 1px solid transparent; }
+.portal-shell .btn.sm { padding: 8px 14px; font-size: 13px; border-radius: 9px; }
+.portal-shell .btn.primary { background: linear-gradient(135deg, var(--hz-cyan), var(--hz-teal)); color: #02171a; box-shadow: 0 6px 22px rgba(45, 226, 230, 0.3); }
+.portal-shell .btn.ghost { background: transparent; border-color: var(--hz-card-line); color: var(--hz-cyan); }
+.portal-shell .btn.tg { background: rgba(45, 226, 230, 0.1); border-color: var(--hz-card-line); color: var(--hz-cyan); }
+.portal-shell .btn.amber { background: rgba(255, 194, 75, 0.9); color: #1a0f00; }
+.portal-shell .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---- GRID + CARDS ---- */
+.portal-shell .grid { display: grid; gap: 18px; }
+.portal-shell .g2 { grid-template-columns: 1fr 1fr; }
+.portal-shell .card { background: var(--hz-panel); border: 1px solid var(--hz-card-line); border-radius: 14px; padding: 20px; }
+.portal-shell .card.plain { border-color: var(--hz-line-soft); }
+.portal-shell .card.admincard { border-color: var(--hz-zinc-line); background: linear-gradient(180deg, rgba(39, 39, 42, 0.28), var(--hz-panel)); }
+.portal-shell .card .chead { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.portal-shell .card .chead h3 { font-family: var(--hz-disp); font-weight: 700; font-size: 19px; letter-spacing: 0.02em; }
+.portal-shell .card .chead .cap { font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--hz-ink-3); margin-left: auto; }
+.portal-shell .card .chead .ic { width: 20px; height: 20px; color: var(--hz-cyan); display: inline-flex; align-items: center; justify-content: center; }
+.portal-shell .card.admincard .chead .ic { color: var(--hz-warn); }
+.portal-shell .full { grid-column: 1 / -1; }
+
+/* license widget — FREE (none) */
+.portal-shell .lic-free { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.portal-shell .lic-badge {
+  display: inline-flex; align-items: center; gap: 9px; font-weight: 700; font-size: 13px; letter-spacing: 0.06em;
+  padding: 8px 15px; border-radius: 999px; background: rgba(138, 155, 160, 0.12); border: 1px solid rgba(138, 155, 160, 0.34);
+  color: var(--hz-grey); text-transform: uppercase;
+}
+.portal-shell .lic-badge .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--hz-grey); }
+.portal-shell .lic-free .txt { flex: 1; min-width: 200px; }
+.portal-shell .lic-free .txt b { font-size: 15px; }
+.portal-shell .lic-free .txt p { color: var(--hz-ink-2); font-size: 13px; margin-top: 4px; }
+
+/* license widget — ACTIVE (paid/admin) */
+.portal-shell .lic-active { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
+.portal-shell .ring {
+  width: 96px; height: 96px; flex: 0 0 96px; border-radius: 50%; display: grid; place-items: center;
+  background: conic-gradient(var(--hz-ok) calc(var(--pct, 100) * 1%), rgba(55, 245, 160, 0.12) 0);
+  position: relative;
+}
+.portal-shell .ring::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--hz-panel); }
+.portal-shell .ring .rin { position: relative; text-align: center; line-height: 1; }
+.portal-shell .ring .rin b { font-family: var(--hz-disp); font-weight: 800; font-size: 30px; color: var(--hz-ok); }
+.portal-shell .ring .rin span { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--hz-ink-3); display: block; margin-top: 2px; }
+.portal-shell .lic-active .body { flex: 1; min-width: 220px; }
+.portal-shell .lic-active .badge-ok {
+  display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 6px 13px; border-radius: 999px; background: rgba(55, 245, 160, 0.12); border: 1px solid rgba(55, 245, 160, 0.36); color: var(--hz-ok);
+}
+.portal-shell .lic-active .badge-ok.expired { background: rgba(138, 155, 160, 0.12); border-color: rgba(138, 155, 160, 0.34); color: var(--hz-grey); }
+.portal-shell .lic-active .badge-ok .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hz-ok); box-shadow: 0 0 8px var(--hz-ok); }
+.portal-shell .lic-active .body h3 { font-family: var(--hz-disp); font-weight: 700; font-size: 22px; margin: 12px 0 4px; }
+.portal-shell .lic-active .body p { color: var(--hz-ink-2); font-size: 13px; }
+.portal-shell .keyrow {
+  display: flex; align-items: center; gap: 10px; margin-top: 14px; background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft);
+  border-radius: 10px; padding: 10px 13px; font-family: var(--hz-mono); font-size: 13px; color: var(--hz-ink); max-width: 420px;
+}
+.portal-shell .keyrow .k { letter-spacing: 0.06em; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-shell .keyrow .copy { color: var(--hz-cyan); font-weight: 600; cursor: pointer; font-family: var(--hz-sans); font-size: 12px; background: none; border: none; padding: 0; }
+.portal-shell .metrics { display: flex; gap: 24px; margin-left: auto; }
+.portal-shell .metrics .m { text-align: right; }
+.portal-shell .metrics .m b { font-family: var(--hz-disp); font-weight: 700; font-size: 24px; display: block; color: var(--hz-ink); }
+.portal-shell .metrics .m span { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--hz-ink-3); }
+
+/* ---- ROWS / LISTS ---- */
+.portal-shell .rows { display: flex; flex-direction: column; gap: 2px; }
+.portal-shell .rw { display: flex; align-items: center; gap: 13px; padding: 13px 12px; border-radius: 10px; }
+.portal-shell a.rw:hover, .portal-shell button.rw:hover { background: rgba(45, 226, 230, 0.05); }
+.portal-shell button.rw { border: none; background: transparent; width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.portal-shell .rw .ricon {
+  width: 36px; height: 36px; flex: 0 0 36px; border-radius: 9px; background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft);
+  display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--hz-cyan);
+}
+.portal-shell .rw.zinc .ricon { color: var(--hz-zinc-ink); border-color: var(--hz-zinc-line); }
+.portal-shell .rw .rmeta { min-width: 0; flex: 1; }
+.portal-shell .rw .rmeta b { font-size: 14px; font-weight: 600; display: block; }
+.portal-shell .rw .rmeta span { font-size: 12px; color: var(--hz-ink-3); }
+.portal-shell .rw .rcta { font-size: 12px; font-weight: 600; color: var(--hz-cyan); white-space: nowrap; }
+.portal-shell .rw.zinc .rcta { color: var(--hz-zinc-ink); }
+.portal-shell .rw .ver {
+  font-family: var(--hz-mono); font-size: 11px; color: var(--hz-ink-3); background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft);
+  border-radius: 6px; padding: 3px 8px;
+}
+.portal-shell .rw.lockedrow { opacity: 0.92; }
+.portal-shell .rw.lockedrow .ricon { color: var(--hz-grey); background: rgba(138, 155, 160, 0.06); }
+.portal-shell .rw .lockcta { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--hz-warn); white-space: nowrap; }
+
+/* ---- COURSE TILES ---- */
+.portal-shell .courses { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.portal-shell .courses.two { grid-template-columns: 1fr 1fr; }
+.portal-shell .course { background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft); border-radius: 11px; padding: 14px; position: relative; display: block; }
+.portal-shell .course .tag { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--hz-ink-3); }
+.portal-shell .course .tag.free { color: var(--hz-ok); }
+.portal-shell .course h4 { font-size: 14px; font-weight: 600; margin: 6px 0 4px; }
+.portal-shell .course p { font-size: 12px; color: var(--hz-ink-3); line-height: 1.4; }
+.portal-shell .course .bar { height: 4px; border-radius: 3px; background: rgba(45, 226, 230, 0.14); margin-top: 10px; overflow: hidden; }
+.portal-shell .course .bar i { display: block; height: 100%; background: var(--hz-cyan); }
+
+/* ---- LOCKED PREVIEW ---- */
+.portal-shell .locked-preview { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--hz-line-soft); }
+.portal-shell .locked-preview .blurbg { padding: 18px; filter: blur(2px) saturate(0.7); opacity: 0.5; pointer-events: none; }
+.portal-shell .locked-preview .veil {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: radial-gradient(circle at 50% 40%, rgba(5, 7, 11, 0.55), rgba(5, 7, 11, 0.86)); text-align: center; padding: 16px;
+}
+.portal-shell .locked-preview .veil .lk {
+  width: 34px; height: 34px; border-radius: 9px; background: rgba(255, 194, 75, 0.12); border: 1px solid rgba(255, 194, 75, 0.4);
+  display: flex; align-items: center; justify-content: center; color: var(--hz-warn); font-size: 16px;
+}
+.portal-shell .locked-preview .veil b { font-size: 14px; }
+.portal-shell .locked-preview .veil .up { font-size: 12px; font-weight: 700; color: var(--hz-warn); letter-spacing: 0.04em; }
+
+/* ---- SKELETON ---- */
+.portal-shell .skel { position: relative; overflow: hidden; background: var(--hz-panel-2); border-radius: 8px; }
+.portal-shell .skel::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(45, 226, 230, 0.08), transparent); animation: hz-sh 1.3s infinite;
+}
+@keyframes hz-sh { 100% { transform: translateX(100%); } }
+.portal-shell .sk-row { display: flex; align-items: center; gap: 13px; padding: 13px 12px; }
+.portal-shell .sk-c { width: 36px; height: 36px; border-radius: 9px; }
+.portal-shell .sk-l { height: 12px; border-radius: 5px; }
+
+/* ---- EMPTY STATE ---- */
+.portal-shell .empty { text-align: center; padding: 30px 20px; color: var(--hz-ink-3); }
+.portal-shell .empty .eic {
+  width: 48px; height: 48px; margin: 0 auto 12px; border-radius: 12px; background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft);
+  display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--hz-ink-3);
+}
+.portal-shell .empty b { display: block; color: var(--hz-ink-2); font-size: 14px; margin-bottom: 4px; }
+.portal-shell .empty p { font-size: 12px; max-width: 280px; margin: 0 auto; }
+
+/* ---- TELEGRAM LINK CTA ---- */
+.portal-shell .tgcta {
+  display: flex; align-items: center; gap: 13px; background: rgba(45, 226, 230, 0.06); border: 1px dashed var(--hz-card-line);
+  border-radius: 11px; padding: 13px 15px; margin-top: 8px; flex-wrap: wrap;
+}
+.portal-shell .tgcta .ricon { width: 36px; height: 36px; border-radius: 9px; background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft); display: flex; align-items: center; justify-content: center; }
+.portal-shell .tgcta .rmeta { flex: 1; min-width: 160px; }
+.portal-shell .tgcta .rmeta b { font-size: 14px; }
+.portal-shell .tgcta .rmeta span { font-size: 12px; color: var(--hz-ink-3); }
+
+.portal-shell .foot { margin-top: 30px; text-align: center; font-family: var(--hz-mono); font-size: 11px; color: var(--hz-ink-4); }
+
+/* ---- MOBILE DRAWER ---- */
+.portal-shell .scrim { display: none; }
+@media (max-width: 768px) {
+  .portal-shell .app { grid-template-columns: 1fr; }
+  .portal-shell .sidebar {
+    position: fixed; left: 0; top: 0; width: 280px; height: 100vh; transform: translateX(-100%);
+    transition: transform 0.22s ease; box-shadow: 24px 0 60px rgba(0, 0, 0, 0.6);
+  }
+  .portal-shell.nav-open .sidebar { transform: translateX(0); }
+  .portal-shell.nav-open .scrim { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 35; }
+  .portal-shell .burger { display: inline-flex; }
+  .portal-shell .content { padding: 20px 16px 50px; }
+  .portal-shell .topbar { padding: 0 16px; gap: 10px; }
+  .portal-shell .topbar h1 { font-size: 21px; }
+  .portal-shell .topbar .crumb { display: none; }
+  .portal-shell .g2, .portal-shell .courses { grid-template-columns: 1fr; }
+  .portal-shell .metrics { margin-left: 0; width: 100%; justify-content: space-between; }
+  .portal-shell .hero h2 { font-size: 26px; }
+}
