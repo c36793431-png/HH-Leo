@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
-import { issueLicense, extendLicense, revokeLicense } from "@/lib/licenses";
+import { issueLicense, extendLicense, revokeLicense, getLicenseExpiresAt } from "@/lib/licenses";
+import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction } from "@/lib/admin";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 
@@ -39,12 +40,14 @@ export async function expireNowAction(formData: FormData) {
   revalidateUsers(ownerId);
 }
 
-export async function extend30Action(formData: FormData) {
+export async function extendLicenseAction(formData: FormData) {
   const adminUserId = await requireAdminUsersPanel();
   const licenseId = formData.get("licenseId") as string;
   const ownerId = await getLicenseOwner(licenseId);
-  await extendLicense(licenseId, 30);
-  await logAdminAction(adminUserId, "admin_users_extend_30d", ownerId, { licenseId }, licenseId);
+  const current = await getLicenseExpiresAt(licenseId);
+  const expiresAt = resolveExpiresAt(parseDurationFormData(formData), current);
+  await extendLicense(licenseId, expiresAt);
+  await logAdminAction(adminUserId, "admin_users_extend", ownerId, { licenseId, expiresAt: expiresAt.toISOString() }, licenseId);
   revalidateUsers(ownerId);
 }
 
@@ -60,7 +63,8 @@ export async function revokeAction(formData: FormData) {
 export async function issueNewLicenseAction(formData: FormData) {
   const adminUserId = await requireAdminUsersPanel();
   const userId = formData.get("userId") as string;
-  const license = await issueLicense({ userId, ttlDays: 30 });
-  await logAdminAction(adminUserId, "admin_users_issue_license", userId, { licenseId: license.id }, license.id);
+  const expiresAt = resolveExpiresAt(parseDurationFormData(formData));
+  const license = await issueLicense({ userId, expiresAt });
+  await logAdminAction(adminUserId, "admin_users_issue_license", userId, { licenseId: license.id, expiresAt: expiresAt.toISOString() }, license.id);
   revalidateUsers(userId);
 }

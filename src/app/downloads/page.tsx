@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isPaidUser, getActiveLicenseForUser } from "@/lib/licenses";
-import { getInstallerInfo } from "@/lib/portal-config";
+import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { DownloadButton } from "@/components/download-button";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 
-const PLACEHOLDER_VERSION = "1.0.0";
 const PLACEHOLDER_CHANGELOG = "Release notes will appear here once the current build is published.";
 
 export default async function DownloadsPage() {
@@ -16,16 +15,15 @@ export default async function DownloadsPage() {
   const paid = await isPaidUser(session.user.id).catch(() => false);
   if (!paid) redirect("/dashboard");
 
-  const [license, installer] = await Promise.all([
+  const [license, downloads] = await Promise.all([
     getActiveLicenseForUser(session.user.id).catch(() => null),
-    getInstallerInfo().catch(() => null),
+    getLatestDownloads().catch((): LatestDownloads => ({})),
   ]);
 
   const isAdmin = isAdminUsersPanelEmail(session.user.email);
-  const version = installer?.version ?? PLACEHOLDER_VERSION;
-  const changelog = installer?.changelog ?? PLACEHOLDER_CHANGELOG;
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
+  const changelog = downloads.windows?.changelog ?? downloads.macos?.changelog ?? PLACEHOLDER_CHANGELOG;
 
   return (
     <PortalShell tier={isAdmin ? "admin" : "paid"} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
@@ -34,40 +32,34 @@ export default async function DownloadsPage() {
           <div className="chead">
             <span className="ic">▤</span>
             <h3>Latest build</h3>
-            <span className="cap">v{version}</span>
           </div>
           <div className="rows">
             <div className="rw">
               <div className="ricon">⤓</div>
               <div className="rmeta">
                 <b>Horizon Terminal — Windows</b>
-                <span>SHA256 verified</span>
+                <span>{downloads.windows ? `SHA256 ${downloads.windows.sha256.slice(0, 12)}…` : "Not yet published"}</span>
               </div>
-              <span className="ver">v{version}</span>
+              <span className="ver">{downloads.windows ? `v${downloads.windows.version}` : "—"}</span>
             </div>
             <div className="rw">
               <div className="ricon">⤓</div>
               <div className="rmeta">
                 <b>Horizon Terminal — macOS</b>
-                <span>Notarised</span>
+                <span>{downloads.macos ? `SHA256 ${downloads.macos.sha256.slice(0, 12)}…` : "Not yet published"}</span>
               </div>
-              <span className="ver">v{version}</span>
+              <span className="ver">{downloads.macos ? `v${downloads.macos.version}` : "—"}</span>
             </div>
           </div>
-          <div style={{ marginTop: 14 }}>
-            {installer ? (
-              <DownloadButton />
-            ) : (
+          <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+            {downloads.windows && <DownloadButton version={downloads.windows.version} platform="windows" />}
+            {downloads.macos && <DownloadButton version={downloads.macos.version} platform="macos" />}
+            {!downloads.windows && !downloads.macos && (
               <button type="button" disabled title="Build not yet published" className="btn primary sm">
                 Download installer
               </button>
             )}
           </div>
-          {installer && (
-            <p style={{ marginTop: 10, fontSize: 12, color: "var(--hz-ink-3)" }}>
-              {installer.filename} · uploaded {new Date(installer.uploadedAt).toLocaleDateString()}
-            </p>
-          )}
         </div>
 
         <div className="card">

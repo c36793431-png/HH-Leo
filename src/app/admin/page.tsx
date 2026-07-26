@@ -1,17 +1,17 @@
+import Link from "next/link";
 import { listClients, maskLicenseKey } from "@/lib/licenses";
-import { getInstallerInfo } from "@/lib/portal-config";
+import { DurationForm } from "@/components/admin/duration-form";
 import {
   issueLicenseAction,
   extendLicenseAction,
   revokeLicenseAction,
   resendWelcomeAction,
-  uploadInstallerAction,
   resendGroupInviteAction,
   forceRemoveGroupAction,
 } from "./actions";
 
 export default async function AdminPage() {
-  const [clients, installer] = await Promise.all([listClients(), getInstallerInfo()]);
+  const clients = await listClients();
 
   return (
     <div className="flex flex-1 flex-col">
@@ -31,7 +31,7 @@ export default async function AdminPage() {
           For clients who paid before signing up on the portal — bind by email or Telegram user ID;
           they claim it automatically on first login.
         </p>
-        <form action={issueLicenseAction} className="mt-4 flex flex-wrap items-end gap-3">
+        <DurationForm action={issueLicenseAction} submitLabel="Pre-provision" defaultAmount={30} defaultUnit="days">
           <div>
             <label className="block text-xs text-zinc-500">Email</label>
             <input
@@ -48,56 +48,18 @@ export default async function AdminPage() {
               className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
             />
           </div>
-          <button
-            type="submit"
-            className="rounded-md bg-cyan-500/90 px-3 py-1.5 text-sm font-medium text-black hover:bg-cyan-400"
-          >
-            Pre-provision
-          </button>
-        </form>
+        </DurationForm>
       </section>
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
         <h2 className="text-sm font-medium text-emerald-400">Downloads</h2>
-        {installer ? (
-          <p className="mt-2 text-sm text-zinc-300">
-            Current: v{installer.version} — {installer.filename} (uploaded{" "}
-            {new Date(installer.uploadedAt).toLocaleString()})
-          </p>
-        ) : (
-          <p className="mt-2 text-sm text-zinc-500">No installer uploaded yet.</p>
-        )}
-        <form action={uploadInstallerAction} className="mt-4 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs text-zinc-500">Version</label>
-            <input
-              name="version"
-              type="text"
-              placeholder="1.2.0"
-              required
-              className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-zinc-500">Installer file</label>
-            <input name="file" type="file" required className="mt-1 text-sm text-zinc-300" />
-          </div>
-          <div>
-            <label className="block text-xs text-zinc-500">Changelog</label>
-            <textarea
-              name="changelog"
-              rows={2}
-              placeholder="What changed in this build"
-              className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-md bg-emerald-500/90 px-3 py-1.5 text-sm font-medium text-black hover:bg-emerald-400"
-          >
-            Upload build
-          </button>
-        </form>
+        <p className="mt-2 text-sm text-zinc-500">
+          Manage Windows/macOS builds, versions, and history from the{" "}
+          <Link href="/admin/downloads" className="text-cyan-400 hover:underline">
+            Downloads
+          </Link>{" "}
+          section.
+        </p>
       </section>
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
@@ -136,22 +98,26 @@ export default async function AdminPage() {
                   </td>
                   <td className="py-2">
                     <div className="flex flex-wrap gap-2">
-                      <form action={issueLicenseAction}>
-                        <input type="hidden" name="userId" value={c.userId} />
-                        <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300">
-                          Issue license
-                        </button>
-                      </form>
+                      <DurationForm
+                        action={issueLicenseAction}
+                        hiddenFields={{ userId: c.userId }}
+                        submitLabel="Issue"
+                        compact
+                        triggerLabel="Issue license"
+                      />
                       {c.licenseId && (
                         <>
-                          <form action={extendLicenseAction}>
-                            <input type="hidden" name="licenseId" value={c.licenseId} />
-                            <input type="hidden" name="userId" value={c.userId} />
-                            <input type="hidden" name="days" value="30" />
-                            <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300">
-                              Extend 30d
-                            </button>
-                          </form>
+                          <DurationForm
+                            action={extendLicenseAction}
+                            hiddenFields={{ licenseId: c.licenseId, userId: c.userId }}
+                            submitLabel="Apply"
+                            compact
+                            triggerLabel="Extend"
+                            showExtendFrom
+                            defaultAmount={30}
+                            defaultUnit="days"
+                            triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                          />
                           <form action={revokeLicenseAction}>
                             <input type="hidden" name="licenseId" value={c.licenseId} />
                             <input type="hidden" name="userId" value={c.userId} />

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getUserDetail, maskLicenseKey } from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { expireNowAction, extend30Action, revokeAction, issueNewLicenseAction } from "../actions";
+import { DurationForm } from "@/components/admin/duration-form";
+import { expireNowAction, extendLicenseAction, revokeAction, issueNewLicenseAction } from "../actions";
 
 const STATUS_STYLES = {
   active: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
@@ -57,12 +58,13 @@ export default async function AdminUserDetailPage({
           </div>
         </dl>
         <div className="mt-4">
-          <form action={issueNewLicenseAction}>
-            <input type="hidden" name="userId" value={user.userId} />
-            <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300">
-              Issue new license
-            </button>
-          </form>
+          <DurationForm
+            action={issueNewLicenseAction}
+            hiddenFields={{ userId: user.userId }}
+            submitLabel="Issue"
+            compact
+            triggerLabel="Issue new license"
+          />
         </div>
       </section>
 
@@ -114,12 +116,17 @@ export default async function AdminUserDetailPage({
                             Trigger expire now
                           </button>
                         </form>
-                        <form action={extend30Action}>
-                          <input type="hidden" name="licenseId" value={l.id} />
-                          <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300">
-                            Extend 30d
-                          </button>
-                        </form>
+                        <DurationForm
+                          action={extendLicenseAction}
+                          hiddenFields={{ licenseId: l.id }}
+                          submitLabel="Apply"
+                          compact
+                          triggerLabel="Extend"
+                          showExtendFrom
+                          defaultAmount={30}
+                          defaultUnit="days"
+                          triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                        />
                         <form action={revokeAction}>
                           <input type="hidden" name="licenseId" value={l.id} />
                           <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">

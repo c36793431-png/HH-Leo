@@ -1,13 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
-import { issueLicense, extendLicense, revokeLicense, listClients, getGroupTarget } from "@/lib/licenses";
+import {
+  issueLicense,
+  extendLicense,
+  revokeLicense,
+  listClients,
+  getGroupTarget,
+  getLicenseExpiresAt,
+} from "@/lib/licenses";
+import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { sendPaidGroupInvite, removeFromPaidGroup } from "@/lib/group-membership";
 import { logAdminAction } from "@/lib/admin";
 import { notifyUser } from "@/lib/notify";
-import { getPortalConfig, setInstallerInfo } from "@/lib/portal-config";
+import { getPortalConfig } from "@/lib/portal-config";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 
 async function requireAdmin() {
@@ -21,11 +28,13 @@ export async function issueLicenseAction(formData: FormData) {
   const userId = (formData.get("userId") as string | null) || undefined;
   const email = (formData.get("email") as string | null) || undefined;
   const telegramUserIdRaw = (formData.get("telegramUserId") as string | null) || undefined;
+  const expiresAt = resolveExpiresAt(parseDurationFormData(formData));
 
   const license = await issueLicense({
     userId,
     claimEmail: !userId ? email : undefined,
     claimTelegramUserId: !userId && telegramUserIdRaw ? Number(telegramUserIdRaw) : undefined,
+    expiresAt,
   });
 
   await logAdminAction(session.user.id, "issue_license", userId ?? null, { licenseId: license.id });
@@ -49,9 +58,10 @@ export async function extendLicenseAction(formData: FormData) {
   const session = await requireAdmin();
   const licenseId = formData.get("licenseId") as string;
   const userId = (formData.get("userId") as string | null) || undefined;
-  const days = Number(formData.get("days") ?? 30);
-  await extendLicense(licenseId, days);
-  await logAdminAction(session.user.id, "extend_license", null, { licenseId, days });
+  const current = await getLicenseExpiresAt(licenseId);
+  const expiresAt = resolveExpiresAt(parseDurationFormData(formData), current);
+  await extendLicense(licenseId, expiresAt);
+  await logAdminAction(session.user.id, "extend_license", null, { licenseId, expiresAt: expiresAt.toISOString() });
 
   if (userId) {
     const target = await getGroupTarget(userId);
@@ -110,35 +120,3 @@ export async function resendWelcomeAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
-export async function uploadInstallerAction(formData: FormData) {
-  const session = await requireAdmin();
-  const file = formData.get("file");
-  const version = formData.get("version");
-  const changelog = (formData.get("changelog") as string | null) || undefined;
-  if (!(file instanceof File) || typeof version !== "string" || !version) {
-    throw new Error("file and version are required");
-  }
-
-  const blob = await put(`installers/${version}/${file.name}`, file, { access: "public" });
-  await setInstallerInfo({
-    blobUrl: blob.url,
-    filename: file.name,
-    version,
-    changelog,
-    uploadedAt: new Date().toISOString(),
-  });
-  await logAdminAction(session.user.id, "upload_installer", null, { version, filename: file.name });
-
-  const paidClients = (await listClients()).filter((c) => c.paid);
-  await Promise.all(
-    paidClients.map((c) =>
-      notifyUser(
-        { telegramUserId: c.telegramUserId, email: c.email },
-        "Horizon HFT update available",
-        `A new build (v${version}) is available. Log in to horizonhft.com to download it.`
-      )
-    )
-  );
-
-  revalidatePath("/admin");
-}

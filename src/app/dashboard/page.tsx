@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isPaidUser, getActiveLicenseForUser, getLicenseForUser } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
+import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { pool } from "@/lib/db";
 import { getBotUsername } from "@/lib/telegram-bot";
 import { LinkTelegramButton } from "@/components/link-telegram-button";
@@ -26,7 +27,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [paid, config, telegramLinked, botUsername] = await Promise.all([
+  const [paid, config, telegramLinked, botUsername, downloads] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
     getPortalConfig(),
     pool
@@ -37,6 +38,7 @@ export default async function DashboardPage() {
       .then((r) => r.rows[0]?.telegram_user_id !== null && r.rows[0]?.telegram_user_id !== undefined)
       .catch(() => false),
     getBotUsername(),
+    getLatestDownloads().catch((): LatestDownloads => ({})),
   ]);
   const license = paid ? await getActiveLicenseForUser(session.user.id).catch(() => null) : null;
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
@@ -146,19 +148,34 @@ export default async function DashboardPage() {
                   <div className="ricon">⤓</div>
                   <div className="rmeta">
                     <b>Horizon Terminal — Windows</b>
-                    <span>SHA256 verified</span>
+                    <span>
+                      {downloads.windows
+                        ? `v${downloads.windows.version} · SHA256 ${downloads.windows.sha256.slice(0, 8)}…`
+                        : "Not yet published"}
+                    </span>
                   </div>
-                  <span className="ver">{license?.licenseKey ? "Ready" : "—"}</span>
+                  {downloads.windows ? (
+                    <DownloadButton version={downloads.windows.version} platform="windows" />
+                  ) : (
+                    <span className="ver">—</span>
+                  )}
                 </div>
                 <div className="rw">
                   <div className="ricon">⤓</div>
                   <div className="rmeta">
                     <b>Horizon Terminal — macOS</b>
-                    <span>Notarised</span>
+                    <span>
+                      {downloads.macos
+                        ? `v${downloads.macos.version} · SHA256 ${downloads.macos.sha256.slice(0, 8)}…`
+                        : "Not yet published"}
+                    </span>
                   </div>
-                  <span className="ver">{license?.licenseKey ? "Ready" : "—"}</span>
+                  {downloads.macos ? (
+                    <DownloadButton version={downloads.macos.version} platform="macos" />
+                  ) : (
+                    <span className="ver">—</span>
+                  )}
                 </div>
-                <DownloadButton />
                 <Link className="rw" href="/downloads">
                   <div className="ricon">≡</div>
                   <div className="rmeta">

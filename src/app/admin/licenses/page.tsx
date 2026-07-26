@@ -7,6 +7,7 @@ import {
   type ExpiresWithinFilter,
 } from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
+import { DurationForm } from "@/components/admin/duration-form";
 import { extendLicenseFromListAction, revokeLicenseFromListAction } from "./actions";
 
 const STATUS_STYLES = {
@@ -182,12 +183,17 @@ export default async function AdminLicensesPage({
                     <div className="flex flex-wrap gap-2">
                       {(l.computedStatus === "active" || l.computedStatus === "expiring") && (
                         <>
-                          <form action={extendLicenseFromListAction}>
-                            <input type="hidden" name="licenseId" value={l.id} />
-                            <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300">
-                              Extend 30d
-                            </button>
-                          </form>
+                          <DurationForm
+                            action={extendLicenseFromListAction}
+                            hiddenFields={{ licenseId: l.id }}
+                            submitLabel="Apply"
+                            compact
+                            triggerLabel="Extend"
+                            showExtendFrom
+                            defaultAmount={30}
+                            defaultUnit="days"
+                            triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                          />
                           <form action={revokeLicenseFromListAction}>
                             <input type="hidden" name="licenseId" value={l.id} />
                             <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">

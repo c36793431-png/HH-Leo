@@ -25,7 +25,8 @@ interface IssueLicenseArgs {
   userId?: string;
   claimEmail?: string;
   claimTelegramUserId?: number;
-  ttlDays?: number;
+  /** Defaults to 30 days from now when omitted. */
+  expiresAt?: Date;
   notes?: string;
 }
 
@@ -37,20 +38,20 @@ export interface IssuedLicense {
 
 /** Creates an active license row bound to an existing user, or pre-provisioned by claim_email/claim_telegram_user_id ahead of signup. */
 export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicense> {
-  const ttlDays = args.ttlDays ?? 30;
+  const expiresAt = args.expiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   for (let attempt = 0; attempt < 5; attempt++) {
     const licenseKey = generateLicenseKey();
     try {
       const result = await pool.query(
         `insert into licenses (user_id, claim_email, claim_telegram_user_id, license_key, status, expires_at, notes)
-         values ($1, $2, $3, $4, 'active', now() + ($5 || ' days')::interval, $6)
+         values ($1, $2, $3, $4, 'active', $5, $6)
          returning id, license_key, expires_at`,
         [
           args.userId ?? null,
           args.claimEmail ?? null,
           args.claimTelegramUserId ?? null,
           licenseKey,
-          ttlDays,
+          expiresAt,
           args.notes ?? null,
         ]
       );
@@ -64,14 +65,19 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
   throw new Error("issueLicense: failed to generate a unique license key after 5 attempts");
 }
 
-export async function extendLicense(licenseId: string, extendDays: number): Promise<void> {
+export async function extendLicense(licenseId: string, expiresAt: Date): Promise<void> {
   await pool.query(
-    `update licenses
-     set expires_at = greatest(expires_at, now()) + ($2 || ' days')::interval,
-         lifecycle_state = null
-     where id = $1`,
-    [licenseId, extendDays]
+    `update licenses set expires_at = $2, lifecycle_state = null where id = $1`,
+    [licenseId, expiresAt]
   );
+}
+
+export async function getLicenseExpiresAt(licenseId: string): Promise<Date | null> {
+  const result = await pool.query<{ expires_at: Date }>(
+    "select expires_at from licenses where id = $1",
+    [licenseId]
+  );
+  return result.rows[0]?.expires_at ?? null;
 }
 
 export async function revokeLicense(licenseId: string): Promise<void> {

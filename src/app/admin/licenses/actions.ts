@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
-import { extendLicense, revokeLicense } from "@/lib/licenses";
+import { extendLicense, revokeLicense, getLicenseExpiresAt } from "@/lib/licenses";
+import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction } from "@/lib/admin";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 
@@ -34,8 +35,10 @@ export async function extendLicenseFromListAction(formData: FormData) {
   const adminUserId = await requireAdminUsersPanel();
   const licenseId = formData.get("licenseId") as string;
   const ownerId = await getLicenseOwner(licenseId);
-  await extendLicense(licenseId, 30);
-  await logAdminAction(adminUserId, "admin_licenses_extend_30d", ownerId, { licenseId }, licenseId);
+  const current = await getLicenseExpiresAt(licenseId);
+  const expiresAt = resolveExpiresAt(parseDurationFormData(formData), current);
+  await extendLicense(licenseId, expiresAt);
+  await logAdminAction(adminUserId, "admin_licenses_extend", ownerId, { licenseId, expiresAt: expiresAt.toISOString() }, licenseId);
   revalidateLicenses(ownerId);
 }
 

@@ -9,6 +9,7 @@ const TITLES: Record<string, { title: string; crumb: string }> = {
   "/admin": { title: "Admin", crumb: "admin" },
   "/admin/users": { title: "Users", crumb: "admin / users" },
   "/admin/licenses": { title: "Licenses", crumb: "admin / licenses" },
+  "/admin/downloads": { title: "Downloads", crumb: "admin / downloads" },
   "/admin/history": { title: "History", crumb: "admin / history" },
 };
 
