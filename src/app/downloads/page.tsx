@@ -37,12 +37,16 @@ export default async function DownloadsPage() {
       </header>
 
       <div className="grid gap-6 sm:grid-cols-2">
-        <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+        <section className="rounded-xl border border-cyan-500/60 bg-zinc-950/60 p-6 shadow-[0_0_20px_-6px_rgba(34,211,238,0.5)]">
           <h2 className="text-sm font-medium text-cyan-400">Latest build</h2>
           <p className="mt-3 font-mono text-sm text-emerald-300">v{version}</p>
-          {installer && (
+          {installer ? (
             <p className="mt-1 text-xs text-zinc-500">
-              Uploaded {new Date(installer.uploadedAt).toLocaleDateString()}
+              {installer.filename} · uploaded {new Date(installer.uploadedAt).toLocaleDateString()}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-zinc-500">
+              No downloads yet — once you grab the terminal installer, your version history shows up here.
             </p>
           )}
           <div className="mt-4">
@@ -59,17 +63,14 @@ export default async function DownloadsPage() {
               </button>
             )}
           </div>
-          {!installer && (
-            <p className="mt-2 text-xs text-zinc-500">No build published yet — check back soon.</p>
-          )}
         </section>
 
-        <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+        <section className="rounded-xl border border-cyan-500/60 bg-zinc-950/60 p-6 shadow-[0_0_20px_-6px_rgba(34,211,238,0.5)]">
           <h2 className="text-sm font-medium text-blue-400">Changelog</h2>
           <p className="mt-3 whitespace-pre-line text-sm text-zinc-300">{changelog}</p>
         </section>
 
-        <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6 sm:col-span-2">
+        <section className="rounded-xl border border-cyan-500/60 bg-zinc-950/60 p-6 shadow-[0_0_20px_-6px_rgba(34,211,238,0.5)] sm:col-span-2">
           <h2 className="text-sm font-medium text-zinc-400">Your license</h2>
           <p className="mt-1 text-xs text-zinc-500">License key</p>
           <p className="mt-1 font-mono text-sm text-emerald-300">{license?.licenseKey ?? "—"}</p>

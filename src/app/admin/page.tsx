@@ -9,7 +9,6 @@ import {
   resendGroupInviteAction,
   forceRemoveGroupAction,
 } from "./actions";
-import { Logo } from "@/components/logo";
 
 export default async function AdminPage() {
   const [clients, installer] = await Promise.all([listClients(), getInstallerInfo()]);
@@ -17,13 +16,13 @@ export default async function AdminPage() {
   return (
     <main className="flex flex-1 flex-col px-4 py-10 sm:px-10">
       <header className="mb-8">
-        <div className="flex items-center gap-3">
-          <Logo size="nav" />
-          <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-            Admin
-          </span>
-        </div>
-        <p className="mt-2 text-sm text-zinc-400">Client management, licensing, downloads</p>
+        <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+          Admin · Overview
+        </span>
+        <p className="mt-2 text-sm text-zinc-400">
+          Pre-provision licenses, publish installer builds, and manage welcome/invite messaging.
+          For filterable per-user and per-license views, see Users and Licenses.
+        </p>
       </header>
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
@@ -103,6 +102,9 @@ export default async function AdminPage() {
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
         <h2 className="text-sm font-medium text-blue-400">Clients</h2>
+        <p className="mt-1 text-xs text-zinc-500">
+          Quick actions across all signups. See Users for search, sort, and pagination.
+        </p>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-zinc-500">
