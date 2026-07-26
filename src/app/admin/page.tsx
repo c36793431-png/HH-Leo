@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import { listClients, maskLicenseKey } from "@/lib/licenses";
 import { getInstallerInfo } from "@/lib/portal-config";
 import {
@@ -14,10 +12,6 @@ import {
 import { Logo } from "@/components/logo";
 
 export default async function AdminPage() {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  if (session.user.role !== "admin") redirect("/dashboard");
-
   const [clients, installer] = await Promise.all([listClients(), getInstallerInfo()]);
 
   return (

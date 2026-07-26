@@ -1,0 +1,49 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
+import { pool } from "@/lib/db";
+import { extendLicense, revokeLicense } from "@/lib/licenses";
+import { logAdminAction } from "@/lib/admin";
+import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+
+async function requireAdminUsersPanel(): Promise<string> {
+  const session = await auth();
+  if (!session?.user?.id || !isAdminUsersPanelEmail(session.user.email)) {
+    throw new Error("forbidden");
+  }
+  return session.user.id;
+}
+
+function revalidateLicenses(userId?: string | null) {
+  revalidatePath("/admin/licenses");
+  revalidatePath("/admin/users");
+  if (userId) revalidatePath(`/admin/users/${userId}`);
+  revalidatePath("/admin/history");
+}
+
+async function getLicenseOwner(licenseId: string): Promise<string | null> {
+  const result = await pool.query<{ user_id: string | null }>(
+    "select user_id from licenses where id = $1",
+    [licenseId]
+  );
+  return result.rows[0]?.user_id ?? null;
+}
+
+export async function extendLicenseFromListAction(formData: FormData) {
+  const adminUserId = await requireAdminUsersPanel();
+  const licenseId = formData.get("licenseId") as string;
+  const ownerId = await getLicenseOwner(licenseId);
+  await extendLicense(licenseId, 30);
+  await logAdminAction(adminUserId, "admin_licenses_extend_30d", ownerId, { licenseId }, licenseId);
+  revalidateLicenses(ownerId);
+}
+
+export async function revokeLicenseFromListAction(formData: FormData) {
+  const adminUserId = await requireAdminUsersPanel();
+  const licenseId = formData.get("licenseId") as string;
+  const ownerId = await getLicenseOwner(licenseId);
+  await revokeLicense(licenseId);
+  await logAdminAction(adminUserId, "admin_licenses_revoke", ownerId, { licenseId }, licenseId);
+  revalidateLicenses(ownerId);
+}

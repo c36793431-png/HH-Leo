@@ -4,7 +4,7 @@ import Resend from "next-auth/providers/resend";
 import PostgresAdapter from "@auth/pg-adapter";
 import { pool } from "./db";
 import { verifyTelegramLogin, type TelegramLoginPayload } from "./telegram-auth";
-import { claimPendingLicense } from "./licenses";
+import { claimPendingLicense, recordSigninEvent } from "./licenses";
 import { sendTelegramMessage } from "./telegram-bot";
 import { getPortalConfig } from "./portal-config";
 
@@ -126,10 +126,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return session;
     },
-    async signIn({ user }) {
+    async signIn({ user, account }) {
       // Email-provider first-time signups: claim any pre-provisioned license by email.
       if (user?.email) {
         await claimPendingLicense({ userId: user.id!, email: user.email });
+      }
+      if (user?.id) {
+        await recordSigninEvent(user.id, account?.provider ?? "unknown").catch((err) => {
+          // Signin must succeed even if the history log write fails.
+          console.error("recordSigninEvent failed", err);
+        });
       }
       return true;
     },

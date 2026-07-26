@@ -1,10 +1,14 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
-import { listAllUsersWithLicenses, maskLicenseKey, type AdminUserRow } from "@/lib/licenses";
+import Link from "next/link";
+import {
+  listAllUsersWithLicenses,
+  maskLicenseKey,
+  type AdminUserRow,
+  type HasLicenseFilter,
+  type SignupSourceFilter,
+  type UsersSortColumn,
+} from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 import { expireNowAction, extend30Action, revokeAction, issueNewLicenseAction } from "./actions";
-import { Logo } from "@/components/logo";
 
 const BADGE_STYLES = {
   green: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
@@ -14,34 +18,138 @@ const BADGE_STYLES = {
 } as const;
 
 const EXPIRING_SOON_MS = 24 * 60 * 60 * 1000;
+const PER_PAGE = 50;
+
+const HAS_LICENSE_VALUES: HasLicenseFilter[] = ["active", "expired", "revoked", "none"];
+const SIGNUP_SOURCE_VALUES: SignupSourceFilter[] = ["telegram", "email-link", "both"];
+const SORT_COLUMNS: { key: UsersSortColumn; label: string }[] = [
+  { key: "joined_at", label: "Joined" },
+  { key: "last_verified_at", label: "Last verified" },
+  { key: "expires_at", label: "Expires" },
+];
 
 function getBadge(row: AdminUserRow): { label: string; color: keyof typeof BADGE_STYLES } {
-  if (!row.licenseId) return { label: "NO LICENSE", color: "grey" };
-  if (row.status === "revoked") return { label: "REVOKED", color: "red" };
+  if (row.computedStatus === "none") return { label: "NO LICENSE", color: "grey" };
+  if (row.computedStatus === "revoked") return { label: "REVOKED", color: "red" };
+  if (row.computedStatus === "expired") return { label: "EXPIRED", color: "red" };
   const msUntilExpiry = row.expiresAt ? row.expiresAt.getTime() - Date.now() : 0;
-  if (msUntilExpiry <= 0) return { label: "EXPIRED", color: "red" };
   if (msUntilExpiry < EXPIRING_SOON_MS) return { label: "EXPIRING", color: "amber" };
   return { label: "ACTIVE", color: "green" };
 }
 
-export default async function AdminUsersPage() {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  if (!isAdminUsersPanelEmail(session.user.email)) redirect("/dashboard");
+interface RawSearchParams {
+  q?: string;
+  hasLicense?: string;
+  signupSource?: string;
+  sort?: string;
+  dir?: string;
+  page?: string;
+}
 
-  const users = await listAllUsersWithLicenses();
+function buildQuery(base: RawSearchParams, overrides: RawSearchParams): string {
+  const merged = { ...base, ...overrides };
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(merged)) {
+    if (value) params.set(key, value);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export default async function AdminUsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<RawSearchParams>;
+}) {
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const sort: UsersSortColumn = SORT_COLUMNS.some((c) => c.key === sp.sort)
+    ? (sp.sort as UsersSortColumn)
+    : "joined_at";
+  const dir = sp.dir === "asc" ? "asc" : "desc";
+  const hasLicense = HAS_LICENSE_VALUES.includes(sp.hasLicense as HasLicenseFilter)
+    ? (sp.hasLicense as HasLicenseFilter)
+    : undefined;
+  const signupSource = SIGNUP_SOURCE_VALUES.includes(sp.signupSource as SignupSourceFilter)
+    ? (sp.signupSource as SignupSourceFilter)
+    : undefined;
+  const search = sp.q?.trim() || undefined;
+
+  const { rows: users, total } = await listAllUsersWithLicenses({
+    search,
+    hasLicense,
+    signupSource,
+    sort,
+    dir,
+    page,
+    perPage: PER_PAGE,
+  });
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   return (
     <main className="flex flex-1 flex-col px-4 py-10 sm:px-10">
       <header className="mb-8">
-        <div className="flex items-center gap-3">
-          <Logo size="nav" />
-          <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-            Admin · Users
-          </span>
-        </div>
+        <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+          Admin · Users
+        </span>
         <p className="mt-2 text-sm text-zinc-400">All users, license state, per-row lifecycle actions</p>
       </header>
+
+      <form className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+        <div className="flex-1 min-w-[200px]">
+          <label className="block text-xs text-zinc-500">Search</label>
+          <input
+            name="q"
+            type="text"
+            defaultValue={sp.q ?? ""}
+            placeholder="Email, name, or Telegram handle"
+            className="mt-1 w-full rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-zinc-500">Has license</label>
+          <select
+            name="hasLicense"
+            defaultValue={sp.hasLicense ?? ""}
+            className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
+          >
+            <option value="">Any</option>
+            {HAS_LICENSE_VALUES.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-zinc-500">Signup source</label>
+          <select
+            name="signupSource"
+            defaultValue={sp.signupSource ?? ""}
+            className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
+          >
+            <option value="">Any</option>
+            {SIGNUP_SOURCE_VALUES.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <input type="hidden" name="sort" value={sort} />
+        <input type="hidden" name="dir" value={dir} />
+        <button
+          type="submit"
+          className="rounded-md bg-cyan-500/90 px-3 py-1.5 text-sm font-medium text-black hover:bg-cyan-400"
+        >
+          Filter
+        </button>
+        {(search || hasLicense || signupSource) && (
+          <Link href="/admin/users" className="text-xs text-zinc-500 hover:text-zinc-300 hover:underline">
+            Clear filters
+          </Link>
+        )}
+      </form>
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
         <div className="overflow-x-auto">
@@ -50,13 +158,46 @@ export default async function AdminUsersPage() {
               <tr>
                 <th className="pb-2 pr-4">Email</th>
                 <th className="pb-2 pr-4">Telegram</th>
-                <th className="pb-2 pr-4">Joined</th>
+                <th className="pb-2 pr-4">Source</th>
+                <th className="pb-2 pr-4">
+                  <Link
+                    href={buildQuery(sp, {
+                      sort: "joined_at",
+                      dir: sort === "joined_at" && dir === "desc" ? "asc" : "desc",
+                      page: undefined,
+                    })}
+                    className="hover:text-zinc-300 hover:underline"
+                  >
+                    Joined {sort === "joined_at" && (dir === "desc" ? "↓" : "↑")}
+                  </Link>
+                </th>
                 <th className="pb-2 pr-4">License key</th>
                 <th className="pb-2 pr-4">Status</th>
-                <th className="pb-2 pr-4">Expires</th>
+                <th className="pb-2 pr-4">
+                  <Link
+                    href={buildQuery(sp, {
+                      sort: "expires_at",
+                      dir: sort === "expires_at" && dir === "asc" ? "desc" : "asc",
+                      page: undefined,
+                    })}
+                    className="hover:text-zinc-300 hover:underline"
+                  >
+                    Expires {sort === "expires_at" && (dir === "desc" ? "↓" : "↑")}
+                  </Link>
+                </th>
                 <th className="pb-2 pr-4">Tier</th>
-                <th className="pb-2 pr-4">HWID</th>
-                <th className="pb-2 pr-4">Last verified</th>
+                <th className="pb-2 pr-4">
+                  <Link
+                    href={buildQuery(sp, {
+                      sort: "last_verified_at",
+                      dir: sort === "last_verified_at" && dir === "desc" ? "asc" : "desc",
+                      page: undefined,
+                    })}
+                    className="hover:text-zinc-300 hover:underline"
+                  >
+                    Last verified {sort === "last_verified_at" && (dir === "desc" ? "↓" : "↑")}
+                  </Link>
+                </th>
                 <th className="pb-2">Actions</th>
               </tr>
             </thead>
@@ -64,11 +205,16 @@ export default async function AdminUsersPage() {
               {users.map((u) => {
                 const badge = getBadge(u);
                 return (
-                  <tr key={u.userId}>
-                    <td className="py-2 pr-4 text-zinc-200">{u.email ?? "—"}</td>
+                  <tr key={u.userId} className="group">
+                    <td className="py-2 pr-4 text-zinc-200">
+                      <Link href={`/admin/users/${u.userId}`} className="hover:text-cyan-300 hover:underline">
+                        {u.email ?? u.displayName ?? "—"}
+                      </Link>
+                    </td>
                     <td className="py-2 pr-4 text-zinc-400">
                       {u.telegramUsername ? `@${u.telegramUsername}` : "—"}
                     </td>
+                    <td className="py-2 pr-4 text-zinc-500 text-xs">{u.signupSource ?? "—"}</td>
                     <td className="py-2 pr-4 text-zinc-400">{formatRelative(u.joinedAt)}</td>
                     <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
                       {u.licenseKey ? maskLicenseKey(u.licenseKey) : "—"}
@@ -91,9 +237,6 @@ export default async function AdminUsersPage() {
                       )}
                     </td>
                     <td className="py-2 pr-4 text-zinc-400">{u.tier ?? "—"}</td>
-                    <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
-                      {u.hardwareId ? `${u.hardwareId.slice(0, 4)}…` : "—"}
-                    </td>
                     <td className="py-2 pr-4 text-zinc-400">
                       {u.lastVerifiedAt ? formatRelative(u.lastVerifiedAt) : "never"}
                     </td>
@@ -135,13 +278,41 @@ export default async function AdminUsersPage() {
               {users.length === 0 && (
                 <tr>
                   <td colSpan={10} className="py-4 text-center text-zinc-500">
-                    No users yet.
+                    {search || hasLicense || signupSource
+                      ? "No users match these filters."
+                      : "No users yet."}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between text-xs text-zinc-500">
+            <span>
+              Page {page} of {totalPages} ({total} total)
+            </span>
+            <div className="flex gap-2">
+              {page > 1 && (
+                <Link
+                  href={buildQuery(sp, { page: String(page - 1) })}
+                  className="rounded border border-zinc-700 px-2 py-1 hover:border-zinc-500 hover:text-zinc-300"
+                >
+                  Previous
+                </Link>
+              )}
+              {page < totalPages && (
+                <Link
+                  href={buildQuery(sp, { page: String(page + 1) })}
+                  className="rounded border border-zinc-700 px-2 py-1 hover:border-zinc-500 hover:text-zinc-300"
+                >
+                  Next
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );

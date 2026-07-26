@@ -229,23 +229,91 @@ export async function getLicenseForUser(userId: string): Promise<LicenseDetail |
 export interface AdminUserRow {
   userId: string;
   email: string | null;
+  displayName: string | null;
   telegramUsername: string | null;
   joinedAt: Date;
+  signupSource: "telegram" | "email-link" | "both" | null;
   licenseId: string | null;
   licenseKey: string | null;
   status: string | null;
+  computedStatus: "active" | "expired" | "revoked" | "none";
   expiresAt: Date | null;
   tier: string | null;
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
 }
 
-/** /admin/users source of truth: every user joined to their most recent license, regardless of role or paid state. */
-export async function listAllUsersWithLicenses(): Promise<AdminUserRow[]> {
-  const result = await pool.query(`
-    select u.id as user_id, u.email, u.telegram_username, u.created_at,
-           l.id as license_id, l.license_key, l.status, l.expires_at, l.tier,
-           l.hardware_id, l.last_verified_at
+export type HasLicenseFilter = "active" | "expired" | "revoked" | "none";
+export type SignupSourceFilter = "telegram" | "email-link" | "both";
+export type UsersSortColumn = "joined_at" | "last_verified_at" | "expires_at";
+export type SortDir = "asc" | "desc";
+
+export interface ListUsersOptions {
+  search?: string;
+  hasLicense?: HasLicenseFilter;
+  signupSource?: SignupSourceFilter;
+  sort?: UsersSortColumn;
+  dir?: SortDir;
+  page?: number;
+  perPage?: number;
+}
+
+const USERS_SORT_COLUMN_SQL: Record<UsersSortColumn, string> = {
+  joined_at: "u.created_at",
+  last_verified_at: "l.last_verified_at",
+  expires_at: "l.expires_at",
+};
+
+const COMPUTED_STATUS_SQL = `
+  case
+    when l.id is null then 'none'
+    when l.status = 'revoked' then 'revoked'
+    when l.expires_at <= now() then 'expired'
+    else 'active'
+  end
+`;
+
+const SIGNUP_SOURCE_SQL = `
+  case
+    when u.telegram_user_id is not null and u.email is not null then 'both'
+    when u.telegram_user_id is not null then 'telegram'
+    when u.email is not null then 'email-link'
+    else null
+  end
+`;
+
+/** /admin/users source of truth: every user joined to their most recent license, with search/filter/sort/pagination. */
+export async function listAllUsersWithLicenses(
+  options: ListUsersOptions = {}
+): Promise<{ rows: AdminUserRow[]; total: number }> {
+  const perPage = options.perPage ?? 50;
+  const page = Math.max(1, options.page ?? 1);
+  const offset = (page - 1) * perPage;
+  const sortColumn = USERS_SORT_COLUMN_SQL[options.sort ?? "joined_at"];
+  const dir = options.dir === "asc" ? "asc" : "desc";
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (options.search) {
+    params.push(`%${options.search}%`);
+    const idx = params.length;
+    conditions.push(
+      `(u.email ilike $${idx} or u.display_name ilike $${idx} or u.telegram_username ilike $${idx})`
+    );
+  }
+  if (options.hasLicense) {
+    params.push(options.hasLicense);
+    conditions.push(`${COMPUTED_STATUS_SQL} = $${params.length}`);
+  }
+  if (options.signupSource) {
+    params.push(options.signupSource);
+    conditions.push(`${SIGNUP_SOURCE_SQL} = $${params.length}`);
+  }
+
+  const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
+
+  const baseFrom = `
     from users u
     left join lateral (
       select id, license_key, status, expires_at, tier, hardware_id, last_verified_at
@@ -254,21 +322,273 @@ export async function listAllUsersWithLicenses(): Promise<AdminUserRow[]> {
       order by issued_at desc
       limit 1
     ) l on true
-    order by u.created_at desc
-  `);
-  return result.rows.map((r) => ({
-    userId: r.user_id,
-    email: r.email,
-    telegramUsername: r.telegram_username,
-    joinedAt: r.created_at,
-    licenseId: r.license_id,
-    licenseKey: r.license_key,
-    status: r.status,
-    expiresAt: r.expires_at,
-    tier: r.tier,
-    hardwareId: r.hardware_id,
-    lastVerifiedAt: r.last_verified_at,
-  }));
+  `;
+
+  const countResult = await pool.query<{ count: string }>(`select count(*) ${baseFrom} ${where}`, params);
+  const total = Number(countResult.rows[0]?.count ?? 0);
+
+  params.push(perPage);
+  params.push(offset);
+  const result = await pool.query(
+    `select u.id as user_id, u.email, u.display_name, u.telegram_username, u.created_at,
+            ${SIGNUP_SOURCE_SQL} as signup_source,
+            l.id as license_id, l.license_key, l.status, l.expires_at, l.tier,
+            l.hardware_id, l.last_verified_at,
+            ${COMPUTED_STATUS_SQL} as computed_status
+     ${baseFrom}
+     ${where}
+     order by ${sortColumn} ${dir} nulls last
+     limit $${params.length - 1} offset $${params.length}`,
+    params
+  );
+
+  return {
+    total,
+    rows: result.rows.map((r) => ({
+      userId: r.user_id,
+      email: r.email,
+      displayName: r.display_name,
+      telegramUsername: r.telegram_username,
+      joinedAt: r.created_at,
+      signupSource: r.signup_source,
+      licenseId: r.license_id,
+      licenseKey: r.license_key,
+      status: r.status,
+      computedStatus: r.computed_status,
+      expiresAt: r.expires_at,
+      tier: r.tier,
+      hardwareId: r.hardware_id,
+      lastVerifiedAt: r.last_verified_at,
+    })),
+  };
+}
+
+export interface UserLicenseRow {
+  id: string;
+  licenseKey: string;
+  status: string;
+  computedStatus: "active" | "expired" | "revoked";
+  tier: string;
+  issuedAt: Date;
+  expiresAt: Date;
+  hardwareId: string | null;
+  lastVerifiedAt: Date | null;
+}
+
+export interface SigninEventRow {
+  id: string;
+  provider: string;
+  createdAt: Date;
+}
+
+export interface UserDetailAdminActionRow {
+  id: string;
+  action: string;
+  actorEmail: string | null;
+  targetLicenseId: string | null;
+  details: unknown;
+  createdAt: Date;
+}
+
+export interface UserDetail {
+  userId: string;
+  email: string | null;
+  displayName: string | null;
+  telegramUsername: string | null;
+  telegramUserId: string | null;
+  role: string;
+  joinedAt: Date;
+  licenses: UserLicenseRow[];
+  signins: SigninEventRow[];
+  adminActions: UserDetailAdminActionRow[];
+}
+
+/** /admin/users/[id] source of truth: full profile, every license (past + present), signin history, admin actions taken against them. */
+export async function getUserDetail(userId: string): Promise<UserDetail | null> {
+  const userResult = await pool.query(
+    `select id, email, display_name, telegram_username, telegram_user_id, role, created_at
+     from users where id = $1`,
+    [userId]
+  );
+  const user = userResult.rows[0];
+  if (!user) return null;
+
+  const [licensesResult, signinsResult, actionsResult] = await Promise.all([
+    pool.query(
+      `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at,
+              case when status = 'revoked' then 'revoked'
+                   when expires_at <= now() then 'expired'
+                   else 'active' end as computed_status
+       from licenses where user_id = $1
+       order by issued_at desc`,
+      [userId]
+    ),
+    pool.query(
+      `select id, provider, created_at from signin_events
+       where user_id = $1 order by created_at desc limit 20`,
+      [userId]
+    ),
+    pool.query(
+      `select a.id, a.action_type, au.email as actor_email, a.target_license_id, a.details_json, a.created_at
+       from admin_actions a
+       left join users au on au.id = a.admin_user_id
+       where a.target_user_id = $1
+       order by a.created_at desc
+       limit 50`,
+      [userId]
+    ),
+  ]);
+
+  return {
+    userId: user.id,
+    email: user.email,
+    displayName: user.display_name,
+    telegramUsername: user.telegram_username,
+    telegramUserId: user.telegram_user_id !== null ? String(user.telegram_user_id) : null,
+    role: user.role,
+    joinedAt: user.created_at,
+    licenses: licensesResult.rows.map((r) => ({
+      id: r.id,
+      licenseKey: r.license_key,
+      status: r.status,
+      computedStatus: r.computed_status,
+      tier: r.tier,
+      issuedAt: r.issued_at,
+      expiresAt: r.expires_at,
+      hardwareId: r.hardware_id,
+      lastVerifiedAt: r.last_verified_at,
+    })),
+    signins: signinsResult.rows.map((r) => ({
+      id: r.id,
+      provider: r.provider,
+      createdAt: r.created_at,
+    })),
+    adminActions: actionsResult.rows.map((r) => ({
+      id: r.id,
+      action: r.action_type,
+      actorEmail: r.actor_email,
+      targetLicenseId: r.target_license_id,
+      details: r.details_json,
+      createdAt: r.created_at,
+    })),
+  };
+}
+
+export interface AdminLicenseRow {
+  id: string;
+  licenseKey: string;
+  status: string;
+  computedStatus: "active" | "expiring" | "expired" | "revoked";
+  tier: string;
+  issuedAt: Date;
+  expiresAt: Date;
+  hardwareId: string | null;
+  lastVerifiedAt: Date | null;
+  userId: string | null;
+  email: string | null;
+  claimEmail: string | null;
+}
+
+export type LicenseStatusFilter = "active" | "expiring" | "expired" | "revoked";
+export type ExpiresWithinFilter = "24h" | "7d" | "30d";
+
+export interface ListLicensesOptions {
+  status?: LicenseStatusFilter;
+  tier?: string;
+  expiresWithin?: ExpiresWithinFilter;
+  page?: number;
+  perPage?: number;
+}
+
+const EXPIRES_WITHIN_INTERVAL: Record<ExpiresWithinFilter, string> = {
+  "24h": "24 hours",
+  "7d": "7 days",
+  "30d": "30 days",
+};
+
+const LICENSE_COMPUTED_STATUS_SQL = `
+  case
+    when l.status = 'revoked' then 'revoked'
+    when l.expires_at <= now() then 'expired'
+    when l.expires_at <= now() + interval '24 hours' then 'expiring'
+    else 'active'
+  end
+`;
+
+/** /admin/licenses source of truth: every license (past + present), license-first (no user context required). */
+export async function listAllLicenses(
+  options: ListLicensesOptions = {}
+): Promise<{ rows: AdminLicenseRow[]; total: number }> {
+  const perPage = options.perPage ?? 50;
+  const page = Math.max(1, options.page ?? 1);
+  const offset = (page - 1) * perPage;
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (options.status) {
+    params.push(options.status);
+    conditions.push(`${LICENSE_COMPUTED_STATUS_SQL} = $${params.length}`);
+  }
+  if (options.tier) {
+    params.push(options.tier);
+    conditions.push(`l.tier = $${params.length}`);
+  }
+  if (options.expiresWithin) {
+    conditions.push(
+      `l.expires_at <= now() + interval '${EXPIRES_WITHIN_INTERVAL[options.expiresWithin]}'`
+    );
+  }
+
+  const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
+
+  const countResult = await pool.query<{ count: string }>(
+    `select count(*) from licenses l ${where}`,
+    params
+  );
+  const total = Number(countResult.rows[0]?.count ?? 0);
+
+  params.push(perPage);
+  params.push(offset);
+  const result = await pool.query(
+    `select l.id, l.license_key, l.status, l.tier, l.issued_at, l.expires_at,
+            l.hardware_id, l.last_verified_at, l.user_id, u.email, l.claim_email,
+            ${LICENSE_COMPUTED_STATUS_SQL} as computed_status
+     from licenses l
+     left join users u on u.id = l.user_id
+     ${where}
+     order by l.expires_at asc
+     limit $${params.length - 1} offset $${params.length}`,
+    params
+  );
+
+  return {
+    total,
+    rows: result.rows.map((r) => ({
+      id: r.id,
+      licenseKey: r.license_key,
+      status: r.status,
+      computedStatus: r.computed_status,
+      tier: r.tier,
+      issuedAt: r.issued_at,
+      expiresAt: r.expires_at,
+      hardwareId: r.hardware_id,
+      lastVerifiedAt: r.last_verified_at,
+      userId: r.user_id,
+      email: r.email,
+      claimEmail: r.claim_email,
+    })),
+  };
+}
+
+export async function listDistinctTiers(): Promise<string[]> {
+  const result = await pool.query("select distinct tier from licenses order by tier");
+  return result.rows.map((r) => r.tier);
+}
+
+/** Appends to the append-only signin_events log — called from the NextAuth signIn callback for every successful sign-in. */
+export async function recordSigninEvent(userId: string, provider: string): Promise<void> {
+  await pool.query("insert into signin_events (user_id, provider) values ($1, $2)", [userId, provider]);
 }
 
 /** Masks all but the last 4 characters — used wherever an admin views another user's key. Owners viewing their own key see it in full. */

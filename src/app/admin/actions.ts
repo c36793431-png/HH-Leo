@@ -8,10 +8,11 @@ import { sendPaidGroupInvite, removeFromPaidGroup } from "@/lib/group-membership
 import { logAdminAction } from "@/lib/admin";
 import { notifyUser } from "@/lib/notify";
 import { getPortalConfig, setInstallerInfo } from "@/lib/portal-config";
+import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 
 async function requireAdmin() {
   const session = await auth();
-  if (session?.user?.role !== "admin" || !session.user.id) throw new Error("forbidden");
+  if (!session?.user?.id || !isAdminUsersPanelEmail(session.user.email)) throw new Error("forbidden");
   return session as typeof session & { user: { id: string } };
 }
 
