@@ -3,10 +3,12 @@ import { notFound } from "next/navigation";
 import { getUserDetail, maskLicenseKey } from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
+import { ActionButton } from "@/components/admin/action-button";
 import { expireNowAction, extendLicenseAction, revokeAction, issueNewLicenseAction } from "../actions";
 
 const STATUS_STYLES = {
   active: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
+  expiring: "border-amber-500/40 bg-amber-500/15 text-amber-300",
   expired: "border-red-500/40 bg-red-500/15 text-red-300",
   revoked: "border-red-500/40 bg-red-500/15 text-red-300",
 } as const;
@@ -62,6 +64,7 @@ export default async function AdminUserDetailPage({
             action={issueNewLicenseAction}
             hiddenFields={{ userId: user.userId }}
             submitLabel="Issue"
+            successMessage="License issued"
             compact
             triggerLabel="Issue new license"
           />
@@ -108,18 +111,19 @@ export default async function AdminUserDetailPage({
                     {l.lastVerifiedAt ? formatRelative(l.lastVerifiedAt) : "never"}
                   </td>
                   <td className="py-2">
-                    {l.computedStatus === "active" && (
+                    {(l.computedStatus === "active" || l.computedStatus === "expiring") && (
                       <div className="flex flex-wrap gap-2">
-                        <form action={expireNowAction}>
-                          <input type="hidden" name="licenseId" value={l.id} />
-                          <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-amber-500 hover:text-amber-300">
-                            Trigger expire now
-                          </button>
-                        </form>
+                        <ActionButton
+                          action={expireNowAction}
+                          hiddenFields={{ licenseId: l.id }}
+                          label="Trigger expire now"
+                          successMessage="License expired"
+                        />
                         <DurationForm
                           action={extendLicenseAction}
                           hiddenFields={{ licenseId: l.id }}
                           submitLabel="Apply"
+                          successMessage="License extended"
                           compact
                           triggerLabel="Extend"
                           showExtendFrom
@@ -127,12 +131,13 @@ export default async function AdminUserDetailPage({
                           defaultUnit="days"
                           triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
                         />
-                        <form action={revokeAction}>
-                          <input type="hidden" name="licenseId" value={l.id} />
-                          <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">
-                            Revoke
-                          </button>
-                        </form>
+                        <ActionButton
+                          action={revokeAction}
+                          hiddenFields={{ licenseId: l.id }}
+                          label="Revoke"
+                          successMessage="License revoked"
+                          className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
                       </div>
                     )}
                   </td>

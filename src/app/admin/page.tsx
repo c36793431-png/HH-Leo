@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listClients, maskLicenseKey } from "@/lib/licenses";
 import { DurationForm } from "@/components/admin/duration-form";
+import { ActionButton } from "@/components/admin/action-button";
 import {
   issueLicenseAction,
   extendLicenseAction,
@@ -31,7 +32,13 @@ export default async function AdminPage() {
           For clients who paid before signing up on the portal — bind by email or Telegram user ID;
           they claim it automatically on first login.
         </p>
-        <DurationForm action={issueLicenseAction} submitLabel="Pre-provision" defaultAmount={30} defaultUnit="days">
+        <DurationForm
+          action={issueLicenseAction}
+          submitLabel="Pre-provision"
+          successMessage="License pre-provisioned"
+          defaultAmount={30}
+          defaultUnit="days"
+        >
           <div>
             <label className="block text-xs text-zinc-500">Email</label>
             <input
@@ -102,6 +109,7 @@ export default async function AdminPage() {
                         action={issueLicenseAction}
                         hiddenFields={{ userId: c.userId }}
                         submitLabel="Issue"
+                        successMessage="License issued"
                         compact
                         triggerLabel="Issue license"
                       />
@@ -111,6 +119,7 @@ export default async function AdminPage() {
                             action={extendLicenseAction}
                             hiddenFields={{ licenseId: c.licenseId, userId: c.userId }}
                             submitLabel="Apply"
+                            successMessage="License extended"
                             compact
                             triggerLabel="Extend"
                             showExtendFrom
@@ -118,35 +127,38 @@ export default async function AdminPage() {
                             defaultUnit="days"
                             triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
                           />
-                          <form action={revokeLicenseAction}>
-                            <input type="hidden" name="licenseId" value={c.licenseId} />
-                            <input type="hidden" name="userId" value={c.userId} />
-                            <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">
-                              Revoke
-                            </button>
-                          </form>
+                          <ActionButton
+                            action={revokeLicenseAction}
+                            hiddenFields={{ licenseId: c.licenseId, userId: c.userId }}
+                            label="Revoke"
+                            successMessage="License revoked"
+                            className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          />
                         </>
                       )}
-                      <form action={resendWelcomeAction}>
-                        <input type="hidden" name="userId" value={c.userId} />
-                        <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-blue-500 hover:text-blue-300">
-                          Resend welcome
-                        </button>
-                      </form>
+                      <ActionButton
+                        action={resendWelcomeAction}
+                        hiddenFields={{ userId: c.userId }}
+                        label="Resend welcome"
+                        successMessage="Welcome message sent"
+                        className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-blue-500 hover:text-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
                       {c.paid && (
                         <>
-                          <form action={resendGroupInviteAction}>
-                            <input type="hidden" name="userId" value={c.userId} />
-                            <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300">
-                              Resend invite link
-                            </button>
-                          </form>
-                          <form action={forceRemoveGroupAction}>
-                            <input type="hidden" name="userId" value={c.userId} />
-                            <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">
-                              Force remove
-                            </button>
-                          </form>
+                          <ActionButton
+                            action={resendGroupInviteAction}
+                            hiddenFields={{ userId: c.userId }}
+                            label="Resend invite link"
+                            successMessage="Invite link resent"
+                            className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          />
+                          <ActionButton
+                            action={forceRemoveGroupAction}
+                            hiddenFields={{ userId: c.userId }}
+                            label="Force remove"
+                            successMessage="Removed from group"
+                            className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          />
                         </>
                       )}
                     </div>

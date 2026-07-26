@@ -7,6 +7,7 @@ import { issueLicense, extendLicense, revokeLicense, getLicenseExpiresAt } from 
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction } from "@/lib/admin";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { runAction, type ActionResult } from "@/lib/action-result";
 
 async function requireAdminUsersPanel(): Promise<string> {
   const session = await auth();
@@ -31,40 +32,60 @@ async function getLicenseOwner(licenseId: string): Promise<string | null> {
   return result.rows[0]?.user_id ?? null;
 }
 
-export async function expireNowAction(formData: FormData) {
-  const adminUserId = await requireAdminUsersPanel();
-  const licenseId = formData.get("licenseId") as string;
-  const ownerId = await getLicenseOwner(licenseId);
-  await pool.query("update licenses set expires_at = now() where id = $1", [licenseId]);
-  await logAdminAction(adminUserId, "admin_users_expire_now", ownerId, { licenseId }, licenseId);
-  revalidateUsers(ownerId);
+export async function expireNowAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to expire license", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const licenseId = formData.get("licenseId") as string;
+    const ownerId = await getLicenseOwner(licenseId);
+    await pool.query("update licenses set expires_at = now() where id = $1", [licenseId]);
+    await logAdminAction(adminUserId, "admin_users_expire_now", ownerId, { licenseId }, licenseId);
+    revalidateUsers(ownerId);
+  });
 }
 
-export async function extendLicenseAction(formData: FormData) {
-  const adminUserId = await requireAdminUsersPanel();
-  const licenseId = formData.get("licenseId") as string;
-  const ownerId = await getLicenseOwner(licenseId);
-  const current = await getLicenseExpiresAt(licenseId);
-  const expiresAt = resolveExpiresAt(parseDurationFormData(formData), current);
-  await extendLicense(licenseId, expiresAt);
-  await logAdminAction(adminUserId, "admin_users_extend", ownerId, { licenseId, expiresAt: expiresAt.toISOString() }, licenseId);
-  revalidateUsers(ownerId);
+export async function extendLicenseAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to extend license", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const licenseId = formData.get("licenseId") as string;
+    const ownerId = await getLicenseOwner(licenseId);
+    const current = await getLicenseExpiresAt(licenseId);
+    const expiresAt = resolveExpiresAt(parseDurationFormData(formData), current);
+    await extendLicense(licenseId, expiresAt);
+    await logAdminAction(adminUserId, "admin_users_extend", ownerId, { licenseId, expiresAt: expiresAt.toISOString() }, licenseId);
+    revalidateUsers(ownerId);
+  });
 }
 
-export async function revokeAction(formData: FormData) {
-  const adminUserId = await requireAdminUsersPanel();
-  const licenseId = formData.get("licenseId") as string;
-  const ownerId = await getLicenseOwner(licenseId);
-  await revokeLicense(licenseId);
-  await logAdminAction(adminUserId, "admin_users_revoke", ownerId, { licenseId }, licenseId);
-  revalidateUsers(ownerId);
+export async function revokeAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to revoke license", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const licenseId = formData.get("licenseId") as string;
+    const ownerId = await getLicenseOwner(licenseId);
+    await revokeLicense(licenseId);
+    await logAdminAction(adminUserId, "admin_users_revoke", ownerId, { licenseId }, licenseId);
+    revalidateUsers(ownerId);
+  });
 }
 
-export async function issueNewLicenseAction(formData: FormData) {
-  const adminUserId = await requireAdminUsersPanel();
-  const userId = formData.get("userId") as string;
-  const expiresAt = resolveExpiresAt(parseDurationFormData(formData));
-  const license = await issueLicense({ userId, expiresAt });
-  await logAdminAction(adminUserId, "admin_users_issue_license", userId, { licenseId: license.id, expiresAt: expiresAt.toISOString() }, license.id);
-  revalidateUsers(userId);
+export async function issueNewLicenseAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to issue license", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const userId = formData.get("userId") as string;
+    const expiresAt = resolveExpiresAt(parseDurationFormData(formData));
+    const license = await issueLicense({ userId, expiresAt });
+    await logAdminAction(adminUserId, "admin_users_issue_license", userId, { licenseId: license.id, expiresAt: expiresAt.toISOString() }, license.id);
+    revalidateUsers(userId);
+  });
 }

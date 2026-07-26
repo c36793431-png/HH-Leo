@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { DURATION_PRESETS, DURATION_UNITS, type DurationUnit } from "@/lib/duration";
+import type { ActionResult } from "@/lib/action-result";
+import { emitToast } from "@/lib/toast-bus";
 
 const inputClass = "rounded border border-zinc-700 bg-black/40 px-1.5 py-0.5 text-xs text-zinc-200";
 const toggleClass = (active: boolean) =>
@@ -90,9 +92,10 @@ function DurationControls({ showExtendFrom, defaultAmount = 30, defaultUnit = "d
 }
 
 interface DurationFormProps extends DurationControlsProps {
-  action: (formData: FormData) => void | Promise<void>;
+  action: (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   hiddenFields?: Record<string, string>;
   submitLabel: string;
+  successMessage: string;
   compact?: boolean;
   triggerLabel?: string;
   triggerClassName?: string;
@@ -105,6 +108,7 @@ export function DurationForm({
   action,
   hiddenFields = {},
   submitLabel,
+  successMessage,
   showExtendFrom,
   defaultAmount,
   defaultUnit,
@@ -113,8 +117,21 @@ export function DurationForm({
   triggerClassName,
   children,
 }: DurationFormProps) {
+  const [state, formAction, isPending] = useActionState(action, null);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    if (state === null) return;
+    if (state.ok) {
+      emitToast(successMessage, "success");
+      if (detailsRef.current) detailsRef.current.open = false;
+    } else {
+      emitToast(state.error, "error");
+    }
+  }, [state, successMessage]);
+
   const form = (
-    <form action={action} className="flex flex-wrap items-end gap-2 rounded border border-zinc-800 bg-black/60 p-2">
+    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded border border-zinc-800 bg-black/60 p-2">
       {Object.entries(hiddenFields).map(([key, value]) => (
         <input key={key} type="hidden" name={key} value={value} />
       ))}
@@ -122,17 +139,19 @@ export function DurationForm({
       <DurationControls showExtendFrom={showExtendFrom} defaultAmount={defaultAmount} defaultUnit={defaultUnit} />
       <button
         type="submit"
-        className="rounded bg-emerald-500/90 px-2 py-1 text-xs font-medium text-black hover:bg-emerald-400"
+        disabled={isPending}
+        className="rounded bg-emerald-500/90 px-2 py-1 text-xs font-medium text-black hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {submitLabel}
+        {isPending ? "Working…" : submitLabel}
       </button>
+      {state && !state.ok && <p className="w-full text-xs text-red-400">{state.error}</p>}
     </form>
   );
 
   if (!compact) return form;
 
   return (
-    <details>
+    <details ref={detailsRef}>
       <summary
         className={
           triggerClassName ??

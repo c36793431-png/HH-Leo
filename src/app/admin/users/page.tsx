@@ -9,6 +9,7 @@ import {
 } from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
+import { ActionButton } from "@/components/admin/action-button";
 import { expireNowAction, extendLicenseAction, revokeAction, issueNewLicenseAction } from "./actions";
 
 const BADGE_STYLES = {
@@ -18,10 +19,9 @@ const BADGE_STYLES = {
   grey: "border-zinc-600/40 bg-zinc-600/15 text-zinc-400",
 } as const;
 
-const EXPIRING_SOON_MS = 24 * 60 * 60 * 1000;
 const PER_PAGE = 50;
 
-const HAS_LICENSE_VALUES: HasLicenseFilter[] = ["active", "expired", "revoked", "none"];
+const HAS_LICENSE_VALUES: HasLicenseFilter[] = ["active", "expiring", "expired", "revoked", "none"];
 const SIGNUP_SOURCE_VALUES: SignupSourceFilter[] = ["telegram", "email-link", "both"];
 const SORT_COLUMNS: { key: UsersSortColumn; label: string }[] = [
   { key: "joined_at", label: "Joined" },
@@ -29,13 +29,16 @@ const SORT_COLUMNS: { key: UsersSortColumn; label: string }[] = [
   { key: "expires_at", label: "Expires" },
 ];
 
+const BADGES: Record<AdminUserRow["computedStatus"], { label: string; color: keyof typeof BADGE_STYLES }> = {
+  none: { label: "NO LICENSE", color: "grey" },
+  revoked: { label: "REVOKED", color: "red" },
+  expired: { label: "EXPIRED", color: "red" },
+  expiring: { label: "EXPIRING", color: "amber" },
+  active: { label: "ACTIVE", color: "green" },
+};
+
 function getBadge(row: AdminUserRow): { label: string; color: keyof typeof BADGE_STYLES } {
-  if (row.computedStatus === "none") return { label: "NO LICENSE", color: "grey" };
-  if (row.computedStatus === "revoked") return { label: "REVOKED", color: "red" };
-  if (row.computedStatus === "expired") return { label: "EXPIRED", color: "red" };
-  const msUntilExpiry = row.expiresAt ? row.expiresAt.getTime() - Date.now() : 0;
-  if (msUntilExpiry < EXPIRING_SOON_MS) return { label: "EXPIRING", color: "amber" };
-  return { label: "ACTIVE", color: "green" };
+  return BADGES[row.computedStatus];
 }
 
 interface RawSearchParams {
@@ -245,16 +248,17 @@ export default async function AdminUsersPage({
                       <div className="flex flex-wrap gap-2">
                         {u.licenseId && (
                           <>
-                            <form action={expireNowAction}>
-                              <input type="hidden" name="licenseId" value={u.licenseId} />
-                              <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-amber-500 hover:text-amber-300">
-                                Trigger expire now
-                              </button>
-                            </form>
+                            <ActionButton
+                              action={expireNowAction}
+                              hiddenFields={{ licenseId: u.licenseId }}
+                              label="Trigger expire now"
+                              successMessage="License expired"
+                            />
                             <DurationForm
                               action={extendLicenseAction}
                               hiddenFields={{ licenseId: u.licenseId }}
                               submitLabel="Apply"
+                              successMessage="License extended"
                               compact
                               triggerLabel="Extend"
                               showExtendFrom
@@ -262,18 +266,20 @@ export default async function AdminUsersPage({
                               defaultUnit="days"
                               triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
                             />
-                            <form action={revokeAction}>
-                              <input type="hidden" name="licenseId" value={u.licenseId} />
-                              <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">
-                                Revoke
-                              </button>
-                            </form>
+                            <ActionButton
+                              action={revokeAction}
+                              hiddenFields={{ licenseId: u.licenseId }}
+                              label="Revoke"
+                              successMessage="License revoked"
+                              className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                            />
                           </>
                         )}
                         <DurationForm
                           action={issueNewLicenseAction}
                           hiddenFields={{ userId: u.userId }}
                           submitLabel="Issue"
+                          successMessage="License issued"
                           compact
                           triggerLabel="Issue new license"
                         />

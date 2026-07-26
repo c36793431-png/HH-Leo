@@ -1,6 +1,22 @@
 import crypto from "crypto";
 import { pool } from "./db";
 
+/** Single source of truth for the active/expiring/expired/revoked bucket shown on every
+ * license row across /admin/users, /admin/users/[id], and /admin/licenses — these three
+ * pages used to each define their own CASE expression and drifted (a license 24h from
+ * expiry showed ACTIVE on one page, EXPIRING on another). Any page rendering license
+ * status must select via this fragment, never hand-roll its own. */
+function licenseStatusCaseSql(alias: string, { noneWhenMissing = false } = {}): string {
+  return `
+    case
+      ${noneWhenMissing ? `when ${alias}.id is null then 'none'\n      ` : ""}when ${alias}.status = 'revoked' then 'revoked'
+      when ${alias}.expires_at <= now() then 'expired'
+      when ${alias}.expires_at <= now() + interval '24 hours' then 'expiring'
+      else 'active'
+    end
+  `;
+}
+
 interface ClaimArgs {
   userId: string;
   email?: string;
@@ -244,14 +260,14 @@ export interface AdminUserRow {
   licenseId: string | null;
   licenseKey: string | null;
   status: string | null;
-  computedStatus: "active" | "expired" | "revoked" | "none";
+  computedStatus: "active" | "expiring" | "expired" | "revoked" | "none";
   expiresAt: Date | null;
   tier: string | null;
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
 }
 
-export type HasLicenseFilter = "active" | "expired" | "revoked" | "none";
+export type HasLicenseFilter = "active" | "expiring" | "expired" | "revoked" | "none";
 export type SignupSourceFilter = "telegram" | "email-link" | "both";
 export type UsersSortColumn = "joined_at" | "last_verified_at" | "expires_at";
 export type SortDir = "asc" | "desc";
@@ -272,14 +288,7 @@ const USERS_SORT_COLUMN_SQL: Record<UsersSortColumn, string> = {
   expires_at: "l.expires_at",
 };
 
-const COMPUTED_STATUS_SQL = `
-  case
-    when l.id is null then 'none'
-    when l.status = 'revoked' then 'revoked'
-    when l.expires_at <= now() then 'expired'
-    else 'active'
-  end
-`;
+const COMPUTED_STATUS_SQL = licenseStatusCaseSql("l", { noneWhenMissing: true });
 
 const SIGNUP_SOURCE_SQL = `
   case
@@ -375,7 +384,7 @@ export interface UserLicenseRow {
   id: string;
   licenseKey: string;
   status: string;
-  computedStatus: "active" | "expired" | "revoked";
+  computedStatus: "active" | "expiring" | "expired" | "revoked";
   tier: string;
   issuedAt: Date;
   expiresAt: Date;
@@ -424,9 +433,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
   const [licensesResult, signinsResult, actionsResult] = await Promise.all([
     pool.query(
       `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at,
-              case when status = 'revoked' then 'revoked'
-                   when expires_at <= now() then 'expired'
-                   else 'active' end as computed_status
+              ${licenseStatusCaseSql("licenses")} as computed_status
        from licenses where user_id = $1
        order by issued_at desc`,
       [userId]
@@ -514,14 +521,7 @@ const EXPIRES_WITHIN_INTERVAL: Record<ExpiresWithinFilter, string> = {
   "30d": "30 days",
 };
 
-const LICENSE_COMPUTED_STATUS_SQL = `
-  case
-    when l.status = 'revoked' then 'revoked'
-    when l.expires_at <= now() then 'expired'
-    when l.expires_at <= now() + interval '24 hours' then 'expiring'
-    else 'active'
-  end
-`;
+const LICENSE_COMPUTED_STATUS_SQL = licenseStatusCaseSql("l");
 
 /** /admin/licenses source of truth: every license (past + present), license-first (no user context required). */
 export async function listAllLicenses(

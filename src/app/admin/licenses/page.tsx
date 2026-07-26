@@ -8,6 +8,7 @@ import {
 } from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
+import { ActionButton } from "@/components/admin/action-button";
 import { extendLicenseFromListAction, revokeLicenseFromListAction } from "./actions";
 
 const STATUS_STYLES = {
@@ -187,6 +188,7 @@ export default async function AdminLicensesPage({
                             action={extendLicenseFromListAction}
                             hiddenFields={{ licenseId: l.id }}
                             submitLabel="Apply"
+                            successMessage="License extended"
                             compact
                             triggerLabel="Extend"
                             showExtendFrom
@@ -194,12 +196,13 @@ export default async function AdminLicensesPage({
                             defaultUnit="days"
                             triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
                           />
-                          <form action={revokeLicenseFromListAction}>
-                            <input type="hidden" name="licenseId" value={l.id} />
-                            <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">
-                              Revoke
-                            </button>
-                          </form>
+                          <ActionButton
+                            action={revokeLicenseFromListAction}
+                            hiddenFields={{ licenseId: l.id }}
+                            label="Revoke"
+                            successMessage="License revoked"
+                            className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          />
                         </>
                       )}
                       {l.userId && (
