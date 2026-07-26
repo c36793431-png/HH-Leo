@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getActiveLicenseForUser } from "@/lib/licenses";
+import { isPaidUser, getActiveLicenseForUser, getLicenseForUser } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
 import { getBotUsername } from "@/lib/telegram-bot";
@@ -10,6 +10,10 @@ import { DownloadButton } from "@/components/download-button";
 import { LinkTelegramButton } from "@/components/link-telegram-button";
 import { Logo } from "@/components/logo";
 import { UserAvatar } from "@/components/user-avatar";
+import { LicenseStatusCard } from "@/components/license-status-card";
+
+/** Same hardcoded gate as dashboard/actions.ts — keep in sync until a real admin role lands. */
+const SELF_TEST_USER_ID = "94529d89-ae75-4df5-a15f-1f8a004509d1";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -28,6 +32,7 @@ export default async function DashboardPage() {
     getBotUsername(),
   ]);
   const license = paid ? await getActiveLicenseForUser(session.user.id).catch(() => null) : null;
+  const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
 
   return (
     <main className="flex flex-1 flex-col px-4 py-10 sm:px-10">
@@ -48,6 +53,12 @@ export default async function DashboardPage() {
       </header>
 
       <div className="grid gap-6 sm:grid-cols-2">
+        <LicenseStatusCard
+          license={licenseDetail}
+          showSelfTestActions={session.user.id === SELF_TEST_USER_ID}
+          telegramChannelUrl={config.telegramChannelUrl}
+        />
+
         <section className="rounded-xl border border-cyan-500/30 bg-zinc-950/60 p-6 shadow-[0_0_20px_-8px_rgba(34,211,238,0.35)]">
           <h2 className="text-sm font-medium text-cyan-400">Community</h2>
           <ul className="mt-3 space-y-2 text-sm text-zinc-300">

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { listClients } from "@/lib/licenses";
+import { listClients, maskLicenseKey } from "@/lib/licenses";
 import { getInstallerInfo } from "@/lib/portal-config";
 import {
   issueLicenseAction,
@@ -114,6 +114,7 @@ export default async function AdminPage() {
             <thead className="text-zinc-500">
               <tr>
                 <th className="pb-2 pr-4">Email / Telegram</th>
+                <th className="pb-2 pr-4">License key</th>
                 <th className="pb-2 pr-4">Status</th>
                 <th className="pb-2 pr-4">Expires</th>
                 <th className="pb-2">Actions</th>
@@ -125,6 +126,9 @@ export default async function AdminPage() {
                   <td className="py-2 pr-4 text-zinc-200">
                     {c.email ?? "—"}
                     {c.telegramUsername ? ` · @${c.telegramUsername}` : ""}
+                  </td>
+                  <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
+                    {c.licenseKey ? maskLicenseKey(c.licenseKey) : "—"}
                   </td>
                   <td className="py-2 pr-4">
                     <span className={c.paid ? "text-emerald-400" : "text-zinc-500"}>
@@ -189,7 +193,7 @@ export default async function AdminPage() {
               ))}
               {clients.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-zinc-500">
+                  <td colSpan={5} className="py-4 text-center text-zinc-500">
                     No signups yet.
                   </td>
                 </tr>

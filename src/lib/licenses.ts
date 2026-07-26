@@ -194,6 +194,44 @@ export async function isPaidUser(userId: string): Promise<boolean> {
   return (result.rowCount ?? 0) > 0;
 }
 
+export interface LicenseDetail {
+  id: string;
+  licenseKey: string;
+  status: string;
+  tier: string;
+  expiresAt: Date;
+  hardwareId: string | null;
+  lastVerifiedAt: Date | null;
+}
+
+/** Dashboard widget lookup — unlike getActiveLicenseForUser, returns the latest license regardless of status/expiry so the UI can render EXPIRED/REVOKED states. */
+export async function getLicenseForUser(userId: string): Promise<LicenseDetail | null> {
+  const result = await pool.query(
+    `select id, license_key, status, tier, expires_at, hardware_id, last_verified_at
+     from licenses where user_id = $1
+     order by issued_at desc
+     limit 1`,
+    [userId]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    licenseKey: row.license_key,
+    status: row.status,
+    tier: row.tier,
+    expiresAt: row.expires_at,
+    hardwareId: row.hardware_id,
+    lastVerifiedAt: row.last_verified_at,
+  };
+}
+
+/** Masks all but the last 4 characters — used wherever an admin views another user's key. Owners viewing their own key see it in full. */
+export function maskLicenseKey(key: string): string {
+  const last4 = key.slice(-4);
+  return key.slice(0, -4).replace(/[A-Za-z0-9]/g, "X") + last4;
+}
+
 export async function claimPendingLicense({ userId, email, telegramUserId }: ClaimArgs) {
   if (email) {
     await pool.query(
