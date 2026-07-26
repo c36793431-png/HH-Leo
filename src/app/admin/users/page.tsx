@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { listAllUsersWithLicenses, maskLicenseKey, type AdminUserRow } from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { ADMIN_USERS_PANEL_EMAIL } from "@/lib/admin-users-panel";
+import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 import { expireNowAction, extend30Action, revokeAction, issueNewLicenseAction } from "./actions";
 import { Logo } from "@/components/logo";
 
@@ -27,7 +27,7 @@ function getBadge(row: AdminUserRow): { label: string; color: keyof typeof BADGE
 export default async function AdminUsersPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  if (session.user.email !== ADMIN_USERS_PANEL_EMAIL) redirect("/dashboard");
+  if (!isAdminUsersPanelEmail(session.user.email)) redirect("/dashboard");
 
   const users = await listAllUsersWithLicenses();
 

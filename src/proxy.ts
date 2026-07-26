@@ -1,13 +1,14 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { ADMIN_USERS_PANEL_EMAIL } from "@/lib/admin-users-panel";
+import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 
 export default auth((req) => {
   if (req.nextUrl.pathname.startsWith("/admin/users")) {
     if (!req.auth?.user) {
       return NextResponse.redirect(new URL("/login", req.nextUrl));
     }
-    if (req.auth.user.email !== ADMIN_USERS_PANEL_EMAIL) {
+    console.log("[admin/users] proxy check session.user.email =", JSON.stringify(req.auth.user.email));
+    if (!isAdminUsersPanelEmail(req.auth.user.email)) {
       return new NextResponse("Forbidden", { status: 403 });
     }
     return;

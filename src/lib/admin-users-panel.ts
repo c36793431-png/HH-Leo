@@ -5,3 +5,9 @@
  * person needs this.
  */
 export const ADMIN_USERS_PANEL_EMAIL = "hfthorizon@keemail.me";
+
+// Compare trimmed + lowercased so stray whitespace or case differences
+// (e.g. from magic-link email capitalization) don't cause a false 403.
+export function isAdminUsersPanelEmail(email: string | null | undefined): boolean {
+  return email?.trim().toLowerCase() === ADMIN_USERS_PANEL_EMAIL;
+}

@@ -5,11 +5,11 @@ import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { issueLicense, extendLicense, revokeLicense } from "@/lib/licenses";
 import { logAdminAction } from "@/lib/admin";
-import { ADMIN_USERS_PANEL_EMAIL } from "@/lib/admin-users-panel";
+import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 
 async function requireAdminUsersPanel(): Promise<string> {
   const session = await auth();
-  if (!session?.user?.id || session.user.email !== ADMIN_USERS_PANEL_EMAIL) {
+  if (!session?.user?.id || !isAdminUsersPanelEmail(session.user.email)) {
     throw new Error("forbidden");
   }
   return session.user.id;
