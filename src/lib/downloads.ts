@@ -1,6 +1,10 @@
 import crypto from "crypto";
 import { put, del } from "@vercel/blob";
+import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
 import { pool } from "./db";
+
+const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+const ALLOWED_UPLOAD_CONTENT_TYPES = ["application/zip", "application/x-zip-compressed", "application/octet-stream"];
 
 export type Platform = "windows" | "macos";
 export const PLATFORMS: Platform[] = ["windows", "macos"];
@@ -24,25 +28,34 @@ interface CreateDownloadArgs {
   uploadedBy: string;
 }
 
-/** Uploads a build to private Vercel Blob storage, hashes it, and records the version row — the canonical write path for both the admin UI and the /api/admin/downloads/upload API. */
-export async function createDownload({
-  file,
-  version,
-  platform,
-  changelog,
-  uploadedBy,
-}: CreateDownloadArgs): Promise<DownloadRow> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
+function buildBlobPathname(platform: Platform, version: string, filename: string): string {
+  return `downloads/${platform}/${version}/${filename}`;
+}
 
-  const pathname = `downloads/${platform}/${version}/${file.name}`;
-  const blob = await put(pathname, buffer, { access: "private" });
-
+async function insertDownloadRow(args: {
+  version: string;
+  platform: Platform;
+  blobUrl: string;
+  blobPathname: string;
+  sha256: string;
+  sizeBytes: number;
+  changelog?: string;
+  uploadedBy: string;
+}): Promise<DownloadRow> {
   const result = await pool.query(
     `insert into downloads (version, platform, blob_url, blob_pathname, sha256, size_bytes, changelog, uploaded_by)
      values ($1, $2, $3, $4, $5, $6, $7, $8)
      returning id, version, platform, blob_pathname, sha256, size_bytes, changelog, uploaded_at`,
-    [version, platform, blob.url, blob.pathname, sha256, buffer.byteLength, changelog ?? null, uploadedBy]
+    [
+      args.version,
+      args.platform,
+      args.blobUrl,
+      args.blobPathname,
+      args.sha256,
+      args.sizeBytes,
+      args.changelog ?? null,
+      args.uploadedBy,
+    ]
   );
   const row = result.rows[0];
   return {
@@ -55,6 +68,71 @@ export async function createDownload({
     changelog: row.changelog,
     uploadedAt: row.uploaded_at,
   };
+}
+
+interface GenerateUploadTokenArgs {
+  version: string;
+  platform: Platform;
+  filename: string;
+}
+
+/** Mints a scoped client token so the browser can PUT the build directly to Blob storage,
+ * bypassing the ~4.5MB body-size limit on Vercel serverless functions/server actions. */
+export async function generateDownloadUploadToken({
+  version,
+  platform,
+  filename,
+}: GenerateUploadTokenArgs): Promise<{ token: string; pathname: string }> {
+  const pathname = buildBlobPathname(platform, version, filename);
+  const token = await generateClientTokenFromReadWriteToken({
+    pathname,
+    maximumSizeInBytes: MAX_UPLOAD_BYTES,
+    allowedContentTypes: ALLOWED_UPLOAD_CONTENT_TYPES,
+  });
+  return { token, pathname };
+}
+
+interface FinalizeDownloadUploadArgs {
+  blobUrl: string;
+  blobPathname: string;
+  version: string;
+  platform: Platform;
+  changelog?: string;
+  sha256: string;
+  sizeBytes: number;
+  uploadedBy: string;
+}
+
+/** Records the version row after the browser has already PUT the file straight to Blob —
+ * the metadata-only counterpart to the direct-upload flow started by generateDownloadUploadToken. */
+export async function finalizeDownloadUpload(args: FinalizeDownloadUploadArgs): Promise<DownloadRow> {
+  return insertDownloadRow(args);
+}
+
+/** Uploads a build to private Vercel Blob storage, hashes it, and records the version row — the canonical write path for both the admin UI and the /api/admin/downloads/upload API. */
+export async function createDownload({
+  file,
+  version,
+  platform,
+  changelog,
+  uploadedBy,
+}: CreateDownloadArgs): Promise<DownloadRow> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
+
+  const pathname = buildBlobPathname(platform, version, file.name);
+  const blob = await put(pathname, buffer, { access: "private" });
+
+  return insertDownloadRow({
+    version,
+    platform,
+    blobUrl: blob.url,
+    blobPathname: blob.pathname,
+    sha256,
+    sizeBytes: buffer.byteLength,
+    changelog,
+    uploadedBy,
+  });
 }
 
 export async function listDownloads(): Promise<DownloadRow[]> {

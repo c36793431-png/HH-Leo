@@ -1,6 +1,8 @@
-import { listDownloads, PLATFORMS } from "@/lib/downloads";
+import { listDownloads } from "@/lib/downloads";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { uploadDownloadAction, deleteDownloadAction } from "./actions";
+import { deleteDownloadAction } from "./actions";
+import { ActionButton } from "@/components/admin/action-button";
+import { UploadBuildForm } from "@/components/admin/upload-build-form";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -31,52 +33,7 @@ export default async function AdminDownloadsPage() {
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
         <h2 className="text-sm font-medium text-emerald-400">Upload a build</h2>
-        <form action={uploadDownloadAction} className="mt-4 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs text-zinc-500">Version</label>
-            <input
-              name="version"
-              type="text"
-              placeholder="4.2.1"
-              required
-              className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-zinc-500">Platform</label>
-            <select
-              name="platform"
-              required
-              defaultValue="windows"
-              className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
-            >
-              {PLATFORMS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-zinc-500">File</label>
-            <input name="file" type="file" required className="mt-1 text-sm text-zinc-300" />
-          </div>
-          <div>
-            <label className="block text-xs text-zinc-500">Changelog</label>
-            <textarea
-              name="changelog"
-              rows={2}
-              placeholder="What changed in this build"
-              className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-md bg-emerald-500/90 px-3 py-1.5 text-sm font-medium text-black hover:bg-emerald-400"
-          >
-            Upload build
-          </button>
-        </form>
+        <UploadBuildForm />
       </section>
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
@@ -106,12 +63,13 @@ export default async function AdminDownloadsPage() {
                     {formatAbsoluteUtc(d.uploadedAt)} <span className="text-zinc-600">({formatRelative(d.uploadedAt)})</span>
                   </td>
                   <td className="py-2">
-                    <form action={deleteDownloadAction}>
-                      <input type="hidden" name="id" value={d.id} />
-                      <button className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300">
-                        Delete
-                      </button>
-                    </form>
+                    <ActionButton
+                      action={deleteDownloadAction}
+                      hiddenFields={{ id: d.id }}
+                      label="Delete"
+                      successMessage="Build deleted"
+                      className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
                   </td>
                 </tr>
               ))}
