@@ -24,11 +24,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "filename is required" }, { status: 400 });
   }
 
-  const { token, pathname } = await generateDownloadUploadToken({
-    version,
-    platform: platform as Platform,
-    filename,
-  });
+  try {
+    const { token, pathname } = await generateDownloadUploadToken({
+      version,
+      platform: platform as Platform,
+      filename,
+    });
 
-  return NextResponse.json({ token, pathname });
+    return NextResponse.json({ token, pathname });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "failed to generate upload token";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
