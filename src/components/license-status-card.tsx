@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { LicenseDetail } from "@/lib/licenses";
+import { computeLicenseDisplayStatus, type LicenseDetail } from "@/lib/licenses";
 import { formatAbsoluteUtc } from "@/lib/format-time";
 
 function daysBetween(a: Date, b: Date): number {
@@ -21,10 +21,11 @@ export function LicenseStatusCard({
   const [copied, setCopied] = useState(false);
   const [now] = useState(() => new Date());
 
-  const isActive = license?.status === "active" && license.expiresAt.getTime() > now.getTime();
+  const displayStatus = computeLicenseDisplayStatus(license, now);
+  const isActive = displayStatus === "active" || displayStatus === "expiring";
 
-  if (!isActive) {
-    const label = license?.status === "revoked" ? "Revoked" : license ? `Expired ${formatAbsoluteUtc(license.expiresAt)}` : "No active license";
+  if (!license || !isActive) {
+    const label = displayStatus === "revoked" ? "Revoked" : license ? `Expired ${formatAbsoluteUtc(license.expiresAt)}` : "No active license";
     return (
       <div className="card full">
         <div className="chead">
@@ -48,10 +49,25 @@ export function LicenseStatusCard({
     );
   }
 
+  const isExpiring = displayStatus === "expiring";
+  const msRemaining = Math.max(0, license.expiresAt.getTime() - now.getTime());
   const totalDays = Math.max(1, daysBetween(license.expiresAt, license.issuedAt));
   const daysLeft = Math.max(0, daysBetween(license.expiresAt, now));
   const pct = Math.round(Math.min(100, Math.max(0, (daysLeft / totalDays) * 100)));
   const masked = license.licenseKey.replace(/.(?=.{4})/g, "•");
+
+  let ringValue: number;
+  let ringUnit: string;
+  if (msRemaining < 60 * 60 * 1000) {
+    ringValue = Math.ceil(msRemaining / 60_000);
+    ringUnit = "minutes left";
+  } else if (msRemaining < 24 * 60 * 60 * 1000) {
+    ringValue = Math.ceil(msRemaining / 3_600_000);
+    ringUnit = "hours left";
+  } else {
+    ringValue = daysLeft;
+    ringUnit = "days left";
+  }
 
   async function handleCopy() {
     try {
@@ -71,15 +87,15 @@ export function LicenseStatusCard({
         <span className="cap">{isAdminAccount ? "Your account" : "Overview"}</span>
       </div>
       <div className="lic-active">
-        <div className="ring" style={{ "--pct": pct } as React.CSSProperties}>
+        <div className={`ring${isExpiring ? " warn" : ""}`} style={{ "--pct": pct } as React.CSSProperties}>
           <div className="rin">
-            <b>{daysLeft}</b>
-            <span>days left</span>
+            <b>{ringValue}</b>
+            <span>{ringUnit}</span>
           </div>
         </div>
         <div className="body">
-          <span className="badge-ok">
-            <span className="dot" /> Active
+          <span className={`badge-ok${isExpiring ? " expiring" : ""}`}>
+            <span className="dot" /> {isExpiring ? "Expiring" : "Active"}
           </span>
           <h3>Horizon HFT — {license.tier} license</h3>
           <p>

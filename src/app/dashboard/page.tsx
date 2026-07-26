@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getActiveLicenseForUser, getLicenseForUser } from "@/lib/licenses";
+import { isPaidUser, getLicenseForUser, computeLicenseDisplayStatus } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { pool } from "@/lib/db";
@@ -11,17 +11,7 @@ import { DownloadButton } from "@/components/download-button";
 import { LicenseStatusCard } from "@/components/license-status-card";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
-
-const RENEWAL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-
-function getRenewalState(paid: boolean, license: { expiresAt: Date } | null) {
-  if (!paid || !license) return { renewsSoon: false, daysToExpiry: 0 };
-  const msRemaining = license.expiresAt.getTime() - Date.now();
-  return {
-    renewsSoon: msRemaining < RENEWAL_WINDOW_MS,
-    daysToExpiry: Math.max(0, Math.ceil(msRemaining / (24 * 60 * 60 * 1000))),
-  };
-}
+import { humanizeTimeUntil } from "@/lib/format-time";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -40,11 +30,11 @@ export default async function DashboardPage() {
     getBotUsername(),
     getLatestDownloads().catch((): LatestDownloads => ({})),
   ]);
-  const license = paid ? await getActiveLicenseForUser(session.user.id).catch(() => null) : null;
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
   const isAdmin = isAdminUsersPanelEmail(session.user.email);
-  const { renewsSoon, daysToExpiry } = getRenewalState(paid, license);
-  const isExpired = !paid && licenseDetail !== null && licenseDetail.status !== "revoked";
+  const displayStatus = computeLicenseDisplayStatus(licenseDetail);
+  const isExpired = displayStatus === "expired";
+  const isExpiringSoon = displayStatus === "expiring";
 
   const tier = isAdmin ? "admin" : paid ? "paid" : "free";
   const userName = session.user.name ?? session.user.email ?? "trader";
@@ -65,15 +55,15 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {paid && renewsSoon && (
+      {isExpiringSoon && (
         <div className="banner warn">
           <span className="bic">⏳</span>
           <div>
-            Your license renews in <b>{daysToExpiry} day{daysToExpiry === 1 ? "" : "s"}</b>. Renew early over
-            Telegram to avoid any interruption.
+            Expires in <b>{humanizeTimeUntil(licenseDetail!.expiresAt)}</b>. There&apos;s no auto-renewal —
+            message us on Telegram to get a new license issued before it lapses.
           </div>
           <a className="baction" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
-            Renew now →
+            Renew via Telegram →
           </a>
         </div>
       )}

@@ -227,6 +227,23 @@ export interface LicenseDetail {
   lastVerifiedAt: Date | null;
 }
 
+export type LicenseDisplayStatus = "active" | "expiring" | "expired" | "revoked" | "none";
+
+/** JS mirror of licenseStatusCaseSql, for pages that already hold a license row (dashboard
+ * card, banner) instead of querying — keep the 24h "expiring" threshold in sync with that
+ * SQL fragment if it ever changes. */
+export function computeLicenseDisplayStatus(
+  license: { status: string; expiresAt: Date } | null,
+  now: Date = new Date()
+): LicenseDisplayStatus {
+  if (!license) return "none";
+  if (license.status === "revoked") return "revoked";
+  const msRemaining = license.expiresAt.getTime() - now.getTime();
+  if (msRemaining <= 0) return "expired";
+  if (msRemaining <= 24 * 60 * 60 * 1000) return "expiring";
+  return "active";
+}
+
 /** Dashboard widget lookup — unlike getActiveLicenseForUser, returns the latest license regardless of status/expiry so the UI can render EXPIRED/REVOKED states. */
 export async function getLicenseForUser(userId: string): Promise<LicenseDetail | null> {
   const result = await pool.query(
