@@ -22,6 +22,10 @@ export default async function AdminUserDetailPage({
   const user = await getUserDetail(id);
   if (!user) notFound();
 
+  const activeLicense = user.licenses.find(
+    (l) => l.computedStatus === "active" || l.computedStatus === "expiring"
+  );
+
   return (
     <div className="flex flex-1 flex-col gap-6">
       <header>
@@ -67,6 +71,12 @@ export default async function AdminUserDetailPage({
             successMessage="License issued"
             compact
             triggerLabel="Issue new license"
+            disabled={Boolean(activeLicense)}
+            disabledReason={
+              activeLicense
+                ? `User has active license (expires ${formatAbsoluteUtc(activeLicense.expiresAt)}). Revoke it first to issue a new one.`
+                : undefined
+            }
           />
         </div>
       </section>

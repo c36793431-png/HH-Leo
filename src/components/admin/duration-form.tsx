@@ -100,6 +100,8 @@ interface DurationFormProps extends DurationControlsProps {
   triggerLabel?: string;
   triggerClassName?: string;
   children?: React.ReactNode;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 /** Flexible license-duration picker (Mode A: amount+unit+presets, Mode B: absolute date) reused by
@@ -116,6 +118,8 @@ export function DurationForm({
   triggerLabel,
   triggerClassName,
   children,
+  disabled,
+  disabledReason,
 }: DurationFormProps) {
   const [state, formAction, isPending] = useActionState(action, null);
   const detailsRef = useRef<HTMLDetailsElement>(null);
@@ -149,6 +153,21 @@ export function DurationForm({
   );
 
   if (!compact) return form;
+
+  if (disabled) {
+    return (
+      <span
+        title={disabledReason}
+        className={
+          (triggerClassName ??
+            "rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300") +
+          " cursor-not-allowed opacity-50"
+        }
+      >
+        {triggerLabel}
+      </span>
+    );
+  }
 
   return (
     <details ref={detailsRef}>

@@ -112,6 +112,12 @@ export default async function AdminPage() {
                         successMessage="License issued"
                         compact
                         triggerLabel="Issue license"
+                        disabled={c.paid}
+                        disabledReason={
+                          c.paid && c.expiresAt
+                            ? `User has active license (expires ${new Date(c.expiresAt).toLocaleString()}). Revoke it first to issue a new one.`
+                            : undefined
+                        }
                       />
                       {c.licenseId && (
                         <>

@@ -52,9 +52,21 @@ export interface IssuedLicense {
   expiresAt: Date;
 }
 
+/** Thrown by issueLicense when the target user already holds an active license — product rule is one active license per user at a time. */
+export class ActiveLicenseExistsError extends Error {
+  constructor(public existingLicenseId: string, public expiresAt: Date) {
+    super(`User already has an active license (expires ${expiresAt.toISOString()}). Revoke it before issuing a new one.`);
+    this.name = "ActiveLicenseExistsError";
+  }
+}
+
 /** Creates an active license row bound to an existing user, or pre-provisioned by claim_email/claim_telegram_user_id ahead of signup. */
 export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicense> {
   const expiresAt = args.expiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  if (args.userId) {
+    const existing = await getActiveLicenseForUser(args.userId);
+    if (existing) throw new ActiveLicenseExistsError(existing.id, existing.expiresAt);
+  }
   for (let attempt = 0; attempt < 5; attempt++) {
     const licenseKey = generateLicenseKey();
     try {
@@ -164,20 +176,21 @@ export async function listClients(): Promise<ClientRow[]> {
 }
 
 export interface ActiveLicense {
+  id: string;
   licenseKey: string;
   expiresAt: Date;
 }
 
 export async function getActiveLicenseForUser(userId: string): Promise<ActiveLicense | null> {
   const result = await pool.query(
-    `select license_key, expires_at from licenses
+    `select id, license_key, expires_at from licenses
      where user_id = $1 and status = 'active' and expires_at > now()
      order by expires_at desc
      limit 1`,
     [userId]
   );
   const row = result.rows[0];
-  return row ? { licenseKey: row.license_key, expiresAt: row.expires_at } : null;
+  return row ? { id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at } : null;
 }
 
 export interface VerifyLicenseResult {
