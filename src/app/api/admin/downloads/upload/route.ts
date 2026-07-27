@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 import { createDownload, PLATFORMS, type Platform } from "@/lib/downloads";
-import { logAdminAction } from "@/lib/admin";
+import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -23,15 +23,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "platform must be windows or macos" }, { status: 400 });
   }
 
+  const uploadedBy = await resolveAdminUserId(session.user.id);
+
   const download = await createDownload({
     file,
     version,
     platform: platform as Platform,
     changelog,
-    uploadedBy: session.user.id,
+    uploadedBy,
   });
 
-  await logAdminAction(session.user.id, "upload_download", null, {
+  await logAdminAction(uploadedBy, "upload_download", null, {
     downloadId: download.id,
     version,
     platform,

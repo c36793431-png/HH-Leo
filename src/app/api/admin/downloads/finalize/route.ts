@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import { del } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 import { finalizeDownloadUpload, PLATFORMS, type Platform } from "@/lib/downloads";
-import { logAdminAction } from "@/lib/admin";
+import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -39,6 +40,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const uploadedBy = await resolveAdminUserId(session.user.id);
+
     const download = await finalizeDownloadUpload({
       blobUrl,
       blobPathname,
@@ -47,10 +50,10 @@ export async function POST(req: NextRequest) {
       changelog: typeof changelog === "string" && changelog ? changelog : undefined,
       sha256,
       sizeBytes,
-      uploadedBy: session.user.id,
+      uploadedBy,
     });
 
-    await logAdminAction(session.user.id, "upload_download", null, {
+    await logAdminAction(uploadedBy, "upload_download", null, {
       downloadId: download.id,
       version,
       platform,
@@ -62,6 +65,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, id: download.id });
   } catch (err) {
+    await del(blobPathname).catch(() => undefined);
     const message = err instanceof Error ? err.message : "failed to finalize upload";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
