@@ -88,6 +88,7 @@ export async function generateDownloadUploadToken({
     pathname,
     maximumSizeInBytes: MAX_UPLOAD_BYTES,
     allowedContentTypes: ALLOWED_UPLOAD_CONTENT_TYPES,
+    addRandomSuffix: true,
   });
   return { token, pathname };
 }
