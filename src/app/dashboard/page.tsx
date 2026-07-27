@@ -39,6 +39,9 @@ export default async function DashboardPage() {
   const tier = isAdmin ? "admin" : paid ? "paid" : "free";
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
+  // Admin bypass: Downloads/Education render unlocked regardless of license, same as `paid`.
+  // Real-paid-only Telegram group invite flow below stays gated on `paid` — no license, no invite side effects.
+  const unlocked = paid || isAdmin;
 
   return (
     <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
@@ -68,7 +71,7 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {!paid && (
+      {!paid && !isAdmin && (
         <div className="hero">
           <div className="eyebrow">Free tier</div>
           <h2>Unlock the full Horizon HFT terminal</h2>
@@ -86,7 +89,12 @@ export default async function DashboardPage() {
       )}
 
       <div className="grid">
-        <LicenseStatusCard license={licenseDetail} telegramChannelUrl={config.telegramChannelUrl} isAdminAccount={isAdmin} />
+        <LicenseStatusCard
+          license={licenseDetail}
+          telegramChannelUrl={config.telegramChannelUrl}
+          isAdminAccount={isAdmin}
+          adminLabel={userName}
+        />
 
         {isAdmin && (
           <div className="card admincard full">
@@ -130,9 +138,9 @@ export default async function DashboardPage() {
             <div className="chead">
               <span className="ic">▤</span>
               <h3>Downloads</h3>
-              <span className="cap">{paid ? "Latest" : "Paid only"}</span>
+              <span className="cap">{unlocked ? "Latest" : "Paid only"}</span>
             </div>
-            {paid ? (
+            {unlocked ? (
               <div className="rows">
                 <div className="rw">
                   <div className="ricon">⤓</div>
@@ -227,7 +235,7 @@ export default async function DashboardPage() {
                 </div>
                 <span className="rcta">Open →</span>
               </a>
-              {!paid && (
+              {!unlocked && (
                 <div className="rw lockedrow">
                   <div className="ricon">🔒</div>
                   <div className="rmeta">

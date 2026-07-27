@@ -81,7 +81,12 @@ export default async function AccountPage() {
           </div>
         </div>
 
-        <LicenseStatusCard license={licenseDetail} telegramChannelUrl={config.telegramChannelUrl} isAdminAccount={isAdmin} />
+        <LicenseStatusCard
+          license={licenseDetail}
+          telegramChannelUrl={config.telegramChannelUrl}
+          isAdminAccount={isAdmin}
+          adminLabel={userName}
+        />
       </div>
     </PortalShell>
   );

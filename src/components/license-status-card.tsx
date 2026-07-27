@@ -8,14 +8,23 @@ function daysBetween(a: Date, b: Date): number {
   return Math.round((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000));
 }
 
+// Deterministic (not random) so the fake admin key row doesn't change between server/client render.
+function fakeAdminKeySuffix(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (Math.imul(h, 31) + seed.charCodeAt(i)) >>> 0;
+  return h.toString(16).padStart(8, "0").toUpperCase();
+}
+
 export function LicenseStatusCard({
   license,
   telegramChannelUrl,
   isAdminAccount = false,
+  adminLabel = "admin",
 }: {
   license: LicenseDetail | null;
   telegramChannelUrl: string;
   isAdminAccount?: boolean;
+  adminLabel?: string;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -23,6 +32,56 @@ export function LicenseStatusCard({
 
   const displayStatus = computeLicenseDisplayStatus(license, now);
   const isActive = displayStatus === "active" || displayStatus === "expiring";
+
+  if (isAdminAccount && !isActive) {
+    const slug = (adminLabel.split("@")[0] || "admin").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) || "ADMIN";
+    const fullKey = `HZN-ADM-0001-${slug}-${fakeAdminKeySuffix(adminLabel)}`;
+    const maskedKey = fullKey.replace(/.(?=.{4})/g, "•");
+
+    async function handleCopy() {
+      try {
+        await navigator.clipboard.writeText(fullKey);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      } catch {
+        // clipboard unavailable — no-op
+      }
+    }
+
+    return (
+      <div className="card full">
+        <div className="chead">
+          <span className="ic">◐</span>
+          <h3>License status</h3>
+          <span className="cap">Your account</span>
+        </div>
+        <div className="lic-active">
+          <div className="ring warn">
+            <div className="rin">
+              <b>∞</b>
+              <span>admin</span>
+            </div>
+          </div>
+          <div className="body">
+            <span className="badge-ok amber">
+              <span className="dot" /> Active
+            </span>
+            <h3>Horizon HFT — Admin / Pro</h3>
+            <p>Admin access is independent of license state.</p>
+            <div className="keyrow">
+              <span className="k">{revealed ? fullKey : maskedKey}</span>
+              <button type="button" className="copy" onClick={() => setRevealed((v) => !v)}>
+                {revealed ? "Hide" : "Reveal"}
+              </button>
+              <button type="button" className="copy" onClick={handleCopy}>
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!license || !isActive) {
     const label = displayStatus === "revoked" ? "Revoked" : license ? `Expired ${formatAbsoluteUtc(license.expiresAt)}` : "No active license";
@@ -87,14 +146,14 @@ export function LicenseStatusCard({
         <span className="cap">{isAdminAccount ? "Your account" : "Overview"}</span>
       </div>
       <div className="lic-active">
-        <div className={`ring${isExpiring ? " warn" : ""}`} style={{ "--pct": pct } as React.CSSProperties}>
+        <div className={`ring${isExpiring || isAdminAccount ? " warn" : ""}`} style={{ "--pct": pct } as React.CSSProperties}>
           <div className="rin">
             <b>{ringValue}</b>
             <span>{ringUnit}</span>
           </div>
         </div>
         <div className="body">
-          <span className={`badge-ok${isExpiring ? " expiring" : ""}`}>
+          <span className={`badge-ok${isExpiring ? " expiring" : isAdminAccount ? " amber" : ""}`}>
             <span className="dot" /> {isExpiring ? "Expiring" : "Active"}
           </span>
           <h3>Horizon HFT — {license.tier} license</h3>

@@ -16,7 +16,7 @@ const PORTAL_LINKS = [
 const ADMIN_LINKS = [
   { href: "/admin/users", label: "Users", icon: "◱" },
   { href: "/admin/licenses", label: "Licenses", icon: "⬡" },
-  { href: "/admin/downloads", label: "Downloads", icon: "▤" },
+  { href: "/admin/downloads", label: "Publish builds", icon: "⇧" },
   { href: "/admin/history", label: "History", icon: "↻" },
 ] as const;
 

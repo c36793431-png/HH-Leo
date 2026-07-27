@@ -13,14 +13,14 @@ export default async function DownloadsPage() {
   if (!session?.user?.id) redirect("/login");
 
   const paid = await isPaidUser(session.user.id).catch(() => false);
-  if (!paid) redirect("/dashboard");
+  const isAdmin = isAdminUsersPanelEmail(session.user.email);
+  if (!paid && !isAdmin) redirect("/dashboard");
 
   const [license, downloads] = await Promise.all([
     getActiveLicenseForUser(session.user.id).catch(() => null),
     getLatestDownloads().catch((): LatestDownloads => ({})),
   ]);
 
-  const isAdmin = isAdminUsersPanelEmail(session.user.email);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   const changelog = downloads.windows?.changelog ?? downloads.macos?.changelog ?? PLACEHOLDER_CHANGELOG;
