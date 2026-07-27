@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 const TITLES: Record<string, { title: string; crumb: string }> = {
   "/dashboard": { title: "Dashboard", crumb: "dashboard" },
   "/downloads": { title: "Downloads", crumb: "downloads" },
+  "/education": { title: "Education", crumb: "education" },
   "/account": { title: "Account", crumb: "account" },
   "/admin": { title: "Admin", crumb: "admin" },
   "/admin/users": { title: "Users", crumb: "admin / users" },

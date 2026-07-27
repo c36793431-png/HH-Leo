@@ -22,6 +22,10 @@
   --hz-ink-2: #8fb0b7;
   --hz-ink-3: #546e74;
   --hz-ink-4: #3a5157;
+  --emerald: #34d399;
+  --emerald-500: #10b981;
+  --emerald-line: rgba(16, 185, 129, 0.6);
+  --emerald-soft: rgba(52, 211, 153, 0.14);
   --hz-ok: #37f5a0;
   --hz-warn: #ffc24b;
   --hz-bad: #ff5c7a;
@@ -78,6 +82,8 @@
   margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
   background: rgba(45, 226, 230, 0.14); color: var(--hz-cyan); border-radius: 999px; padding: 2px 7px; text-transform: uppercase;
 }
+.portal-shell .nav a.on.edu { color: var(--emerald-500); }
+.portal-shell .nav a.on.edu::before { background: var(--emerald-500); box-shadow: 0 0 12px var(--emerald-500); }
 .portal-shell .nav a.locked { color: var(--hz-ink-3); }
 .portal-shell .nav a.locked:hover { background: rgba(138, 155, 160, 0.06); }
 .portal-shell .nav a .lock { margin-left: auto; font-size: 12px; opacity: 0.7; }
@@ -315,6 +321,65 @@
 
 .portal-shell .foot { margin-top: 30px; text-align: center; font-family: var(--hz-mono); font-size: 11px; color: var(--hz-ink-4); }
 
+/* ---- EDUCATION ---- */
+.portal-shell .edu-hero {
+  position: relative; overflow: hidden; border-radius: 16px; padding: 26px 28px; margin-bottom: 22px;
+  background: linear-gradient(120deg, var(--emerald-soft), rgba(16, 185, 129, 0.05) 60%, transparent), var(--hz-panel);
+  border: 1px solid var(--emerald-line); box-shadow: 0 0 40px rgba(16, 185, 129, 0.1);
+}
+.portal-shell .edu-hero::after {
+  content: ""; position: absolute; right: -40px; top: -40px; width: 240px; height: 240px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.24), transparent 70%); pointer-events: none;
+}
+.portal-shell .edu-hero .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: var(--emerald); }
+.portal-shell .edu-hero h2 { font-family: var(--hz-disp); font-weight: 800; font-size: 32px; line-height: 1.05; margin: 8px 0 8px; max-width: 600px; }
+.portal-shell .edu-hero p { color: var(--hz-ink-2); font-size: 14px; max-width: 560px; line-height: 1.5; }
+.portal-shell .edu-stats { display: flex; gap: 32px; margin-top: 22px; flex-wrap: wrap; }
+.portal-shell .edu-stats .stat b { font-family: var(--hz-disp); font-weight: 800; font-size: 28px; color: var(--emerald); display: block; }
+.portal-shell .edu-stats .stat span { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--hz-ink-3); }
+
+.portal-shell .edu-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+.portal-shell .chip {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--hz-ink-2);
+  background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft); border-radius: 999px; padding: 8px 15px;
+  cursor: pointer; font-family: inherit;
+}
+.portal-shell .chip:hover { color: var(--hz-ink); border-color: var(--hz-line); }
+.portal-shell .chip .n { font-size: 11px; color: var(--hz-ink-3); }
+.portal-shell .chip.on { background: var(--emerald-soft); border-color: var(--emerald-line); color: var(--emerald); }
+.portal-shell .chip.on .n { color: var(--emerald); }
+
+.portal-shell .edu-cat { margin-bottom: 30px; }
+.portal-shell .edu-cat-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.portal-shell .edu-cat-head .dot { width: 8px; height: 8px; border-radius: 2px; background: var(--emerald-500); flex: 0 0 8px; }
+.portal-shell .edu-cat-head .edu-cat-txt { display: flex; flex-direction: column; }
+.portal-shell .edu-cat-head h3 { font-family: var(--hz-disp); font-weight: 700; font-size: 18px; }
+.portal-shell .edu-cat-head span { font-size: 12px; color: var(--hz-ink-3); }
+.portal-shell .edu-cat-head .cnt { margin-left: auto; font-size: 11px; color: var(--hz-ink-3); font-family: var(--hz-mono); white-space: nowrap; }
+
+.portal-shell .edu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.portal-shell .lesson {
+  position: relative; display: block; background: var(--hz-panel); border: 1px solid var(--hz-card-line); border-radius: 14px;
+  padding: 16px; transition: border-color 0.15s;
+}
+.portal-shell a.lesson:hover { border-color: var(--emerald-line); }
+.portal-shell .lesson.locked { border-color: var(--hz-line-soft); transition: border-color 0.15s; }
+.portal-shell .lesson.locked:hover { border-color: rgba(255, 194, 75, 0.4); }
+.portal-shell .lthumb {
+  position: relative; height: 64px; border-radius: 10px; background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 12px;
+}
+.portal-shell .lthumb .glyph { font-size: 24px; color: var(--emerald); }
+.portal-shell .lesson.locked .lthumb { filter: grayscale(1) blur(1.5px); opacity: 0.5; }
+.portal-shell .lthumb .veil { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; filter: none; opacity: 1; }
+.portal-shell .lesson .tag.free { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--emerald); margin-bottom: 4px; }
+.portal-shell .lesson h4 { font-size: 14px; font-weight: 600; margin: 2px 0 4px; }
+.portal-shell .lesson p { font-size: 12px; color: var(--hz-ink-3); line-height: 1.4; min-height: 32px; }
+.portal-shell .lfoot { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.portal-shell .lfoot .mins { font-size: 11px; color: var(--hz-ink-3); font-family: var(--hz-mono); }
+.portal-shell .lfoot .start { font-size: 12px; font-weight: 700; color: var(--emerald); }
+.portal-shell .lfoot .upgrade { font-size: 12px; font-weight: 700; color: var(--hz-warn); }
+
 /* ---- MOBILE DRAWER ---- */
 .portal-shell .scrim { display: none; }
 @media (max-width: 768px) {
@@ -330,7 +395,8 @@
   .portal-shell .topbar { padding: 0 16px; gap: 10px; }
   .portal-shell .topbar h1 { font-size: 21px; }
   .portal-shell .topbar .crumb { display: none; }
-  .portal-shell .g2, .portal-shell .courses { grid-template-columns: 1fr; }
+  .portal-shell .g2, .portal-shell .courses, .portal-shell .edu-grid { grid-template-columns: 1fr; }
   .portal-shell .metrics { margin-left: 0; width: 100%; justify-content: space-between; }
-  .portal-shell .hero h2 { font-size: 26px; }
+  .portal-shell .hero h2, .portal-shell .edu-hero h2 { font-size: 26px; }
+  .portal-shell .edu-stats { gap: 22px; }
 }
