@@ -18,7 +18,11 @@ function resolveTitle(pathname: string): { title: string; crumb: string } {
   if (TITLES[pathname]) return TITLES[pathname];
   const segments = pathname.split("/").filter(Boolean);
   const last = segments[segments.length - 1] ?? "dashboard";
-  return { title: last.charAt(0).toUpperCase() + last.slice(1), crumb: segments.join(" / ") };
+  const title = last
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+  return { title, crumb: segments.join(" / ") };
 }
 
 export function PortalTopbar({ isAdmin, onBurgerClick }: { isAdmin: boolean; onBurgerClick: () => void }) {

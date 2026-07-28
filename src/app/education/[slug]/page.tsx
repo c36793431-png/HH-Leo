@@ -1,0 +1,32 @@
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isPaidUser } from "@/lib/licenses";
+import { PortalShell } from "@/components/portal/portal-shell";
+import { LessonDetail } from "@/components/education/lesson-detail";
+import { getEducationLesson } from "@/lib/education";
+
+export default async function EducationLessonPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const lesson = getEducationLesson(slug);
+  if (!lesson) notFound();
+
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+
+  const paid = await isPaidUser(session.user.id).catch(() => false);
+  const isAdmin = isAdminUsersPanelEmail(session.user.email);
+  const tier = isAdmin ? "admin" : paid ? "paid" : "free";
+  const userName = session.user.name ?? session.user.email ?? "trader";
+  const userEmail = session.user.email ?? "";
+
+  // TODO: gate by license.tier once real license check is wired up — assume free-tier for now.
+  const isPaidTier = false;
+
+  return (
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+      <LessonDetail lesson={lesson} isPaidTier={isPaidTier} />
+      <div className="foot">HORIZON HFT · customer portal</div>
+    </PortalShell>
+  );
+}

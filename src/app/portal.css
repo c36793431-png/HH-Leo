@@ -61,6 +61,7 @@
   color: #02171a; font-family: var(--hz-disp); font-weight: 800; font-size: 22px;
   box-shadow: 0 4px 18px rgba(45, 226, 230, 0.35);
 }
+.portal-shell .brand .glyph-img { width: 38px; height: 38px; border-radius: 10px; object-fit: contain; flex: 0 0 auto; }
 .portal-shell .brand .txt { font-family: var(--hz-disp); font-weight: 800; font-size: 22px; letter-spacing: 0.04em; line-height: 1; }
 .portal-shell .brand .txt small { display: block; font-family: var(--hz-sans); font-weight: 600; font-size: 10px; letter-spacing: 0.32em; color: var(--hz-cyan); margin-top: 3px; }
 
@@ -380,6 +381,54 @@
 .portal-shell .lfoot .start { font-size: 12px; font-weight: 700; color: var(--emerald); }
 .portal-shell .lfoot .upgrade { font-size: 12px; font-weight: 700; color: var(--hz-warn); }
 
+/* ---- EDUCATION LESSON DETAIL ---- */
+.portal-shell .lesson-detail { max-width: 760px; }
+.portal-shell .lesson-back {
+  display: inline-block; font-size: 12px; font-weight: 600; color: var(--hz-ink-3); margin-bottom: 18px;
+  transition: color 0.12s;
+}
+.portal-shell .lesson-back:hover { color: var(--hz-cyan); }
+.portal-shell .lesson-head-row { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+.portal-shell .lesson-badge {
+  flex: 0 0 48px; width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--hz-cyan);
+  color: var(--hz-cyan); font-family: var(--hz-disp); font-weight: 800; font-size: 20px;
+  display: flex; align-items: center; justify-content: center; background: rgba(45, 226, 230, 0.08);
+}
+.portal-shell .lesson-head-txt h1 { font-family: var(--hz-disp); font-weight: 800; font-size: 26px; line-height: 1.1; }
+.portal-shell .lesson-head-txt span { font-size: 12px; color: var(--hz-ink-3); font-family: var(--hz-mono); }
+.portal-shell .lesson-intro { font-size: 15px; color: var(--hz-ink-2); line-height: 1.6; max-width: 640px; margin-bottom: 26px; }
+.portal-shell .lesson-blocks { display: flex; flex-direction: column; gap: 14px; }
+.portal-shell .lesson-block {
+  background: var(--hz-panel); border-radius: 12px; padding: 16px 18px; border: 1px solid var(--hz-card-line);
+  border-left: 3px solid var(--hz-cyan);
+}
+.portal-shell .lesson-block.setting { border-left-color: var(--emerald-500); }
+.portal-shell .lesson-block.warning { border-left-color: var(--hz-warn); }
+.portal-shell .lesson-block.blocked { border-left-color: #f8716a; }
+.portal-shell .lb-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.portal-shell .lb-tag {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--hz-cyan);
+  background: rgba(45, 226, 230, 0.12); border-radius: 999px; padding: 3px 8px;
+}
+.portal-shell .lesson-block.setting .lb-tag { color: var(--emerald); background: var(--emerald-soft); }
+.portal-shell .lesson-block.warning .lb-tag { color: var(--hz-warn); background: rgba(255, 194, 75, 0.14); }
+.portal-shell .lesson-block.blocked .lb-tag { color: #f8716a; background: rgba(248, 113, 106, 0.14); }
+.portal-shell .lesson-block h3 { font-size: 14px; font-weight: 700; }
+.portal-shell .lesson-block p { font-size: 13px; color: var(--hz-ink-2); line-height: 1.55; }
+.portal-shell .lesson-block ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.portal-shell .lesson-block li { font-size: 13px; color: var(--hz-ink-2); line-height: 1.5; }
+.portal-shell .lesson-locked-cta {
+  display: flex; align-items: center; gap: 14px; background: rgba(255, 194, 75, 0.06);
+  border: 1px dashed rgba(255, 194, 75, 0.4); border-radius: 12px; padding: 18px;
+}
+.portal-shell .lesson-locked-cta .glyph { font-size: 22px; flex: 0 0 auto; }
+.portal-shell .lesson-locked-cta b { display: block; font-size: 14px; margin-bottom: 2px; }
+.portal-shell .lesson-locked-cta span { font-size: 12px; color: var(--hz-ink-3); }
+.portal-shell .lesson-locked-cta .upgrade {
+  margin-left: auto; flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--hz-warn);
+  border: 1px solid rgba(255, 194, 75, 0.4); border-radius: 999px; padding: 8px 14px; white-space: nowrap;
+}
+
 /* ---- MOBILE DRAWER ---- */
 .portal-shell .scrim { display: none; }
 @media (max-width: 768px) {
@@ -399,4 +448,6 @@
   .portal-shell .metrics { margin-left: 0; width: 100%; justify-content: space-between; }
   .portal-shell .hero h2, .portal-shell .edu-hero h2 { font-size: 26px; }
   .portal-shell .edu-stats { gap: 22px; }
+  .portal-shell .lesson-locked-cta { flex-wrap: wrap; }
+  .portal-shell .lesson-locked-cta .upgrade { margin-left: 0; }
 }

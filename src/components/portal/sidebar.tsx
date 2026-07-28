@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -45,7 +46,7 @@ export function PortalSidebar({
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="glyph">H</div>
+        <Image src="/brand/horizon-logo.jpg" alt="Horizon" width={38} height={38} className="glyph-img" priority />
         <div className="txt">
           HORIZON
           <small>HFT PORTAL</small>
