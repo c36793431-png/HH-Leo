@@ -137,7 +137,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     description: "What Fast Feed is, and why it gives you a data advantage.",
     category: "connecting-brokers",
     minutes: 7,
-    free: false,
+    free: true,
     section: 4,
     intro:
       "Fast Feed is Horizon's low-latency market data path — the foundation every latency-sensitive strategy depends on.",
@@ -162,7 +162,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     description: "Trade the gap between Fast Feed and your broker feed as it opens.",
     category: "strategy-deep-dives",
     minutes: 12,
-    free: false,
+    free: true,
     section: 5,
     intro: "1 Leg trades the gap between Fast Feed and your broker feed the moment a price discrepancy opens up.",
     blocks: [
@@ -187,7 +187,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     description: "Hedge-based arbitrage with trailing exits — requires a hedge-enabled broker.",
     category: "strategy-deep-dives",
     minutes: 13,
-    free: false,
+    free: true,
     section: 6,
     intro:
       "2 Leg Lock opens offsetting positions across two legs and manages them as a hedged pair with a trailing exit.",
@@ -217,7 +217,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     description: "Fast Feed impulse detection for momentum entries.",
     category: "strategy-deep-dives",
     minutes: 10,
-    free: false,
+    free: true,
     section: 7,
     intro: "Trend Impulse watches Fast Feed for sudden directional moves and enters in the direction of the impulse.",
     blocks: [
@@ -244,7 +244,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     description: "Order book imbalance trading on CME L2 depth — needs the Horizon CME feed.",
     category: "strategy-deep-dives",
     minutes: 14,
-    free: false,
+    free: true,
     section: 8,
     intro: "OBI reads CME Level 2 depth to trade directional order book imbalances.",
     blocks: [
@@ -276,7 +276,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     description: "Candle-momentum entries with progressive grid sizing and basket-level exits.",
     category: "strategy-deep-dives",
     minutes: 16,
-    free: false,
+    free: true,
     section: 9,
     intro:
       "Grid Arbitrage enters on candle momentum confirmed by a trend filter, then scales a progressive grid as price moves against the basket.",
@@ -311,7 +311,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     description: "FixedLot vs. Risk%-based auto-lot, plus the EMA trend filter.",
     category: "advanced",
     minutes: 11,
-    free: false,
+    free: true,
     section: 10,
     intro: "Horizon supports two lot-sizing models, plus a shared trend filter usable across strategies.",
     blocks: [
@@ -335,7 +335,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     description: "Trade pacing, real vs. virtual stops, auto-offset, and the Order Mixer.",
     category: "advanced",
     minutes: 12,
-    free: false,
+    free: true,
     section: 11,
     intro:
       "A cluster of protective settings governs how often Horizon trades, how it manages stops, and how it disguises its footprint with brokers.",
