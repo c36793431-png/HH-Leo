@@ -6,6 +6,7 @@ import { getPortalConfig } from "@/lib/portal-config";
 import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { pool } from "@/lib/db";
 import { getBotUsername } from "@/lib/telegram-bot";
+import { createOnboardingToken } from "@/lib/telegram-onboarding";
 import { LinkTelegramButton } from "@/components/link-telegram-button";
 import { DownloadButton } from "@/components/download-button";
 import { LicenseStatusCard } from "@/components/license-status-card";
@@ -17,19 +18,27 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [paid, config, telegramLinked, botUsername, downloads] = await Promise.all([
+  const [paid, config, telegramStatus, botUsername, downloads] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
     getPortalConfig(),
     pool
-      .query<{ telegram_user_id: string | null }>(
-        "select telegram_user_id from users where id = $1",
+      .query<{ telegram_user_id: string | null; telegram_bot_started_at: Date | null }>(
+        "select telegram_user_id, telegram_bot_started_at from users where id = $1",
         [session.user.id]
       )
-      .then((r) => r.rows[0]?.telegram_user_id !== null && r.rows[0]?.telegram_user_id !== undefined)
-      .catch(() => false),
+      .then((r) => ({
+        linked: r.rows[0]?.telegram_user_id !== null && r.rows[0]?.telegram_user_id !== undefined,
+        botStarted: r.rows[0]?.telegram_bot_started_at != null,
+      }))
+      .catch(() => ({ linked: false, botStarted: false })),
     getBotUsername(),
     getLatestDownloads().catch((): LatestDownloads => ({})),
   ]);
+  const { linked: telegramLinked, botStarted: telegramBotStarted } = telegramStatus;
+  const onboarding =
+    paid && telegramLinked && !telegramBotStarted
+      ? await createOnboardingToken(session.user.id).catch(() => null)
+      : null;
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
   const isAdmin = isAdminUsersPanelEmail(session.user.email);
   const displayStatus = computeLicenseDisplayStatus(licenseDetail);
@@ -266,7 +275,32 @@ export default async function DashboardPage() {
                 )}
               </div>
             )}
-            {paid && telegramLinked && (
+            {paid && telegramLinked && !telegramBotStarted && (
+              <div className="tgcta">
+                <div className="ricon" style={{ color: "var(--hz-cyan)" }}>
+                  ✈
+                </div>
+                <div className="rmeta">
+                  <b>Paid Users Group</b>
+                  <span>Start the bot to get your invite</span>
+                </div>
+                {onboarding ? (
+                  <a
+                    className="rcta"
+                    href={onboarding.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Start the bot →
+                  </a>
+                ) : (
+                  <span className="rmeta">
+                    <span>Telegram linking unavailable — bot not configured.</span>
+                  </span>
+                )}
+              </div>
+            )}
+            {paid && telegramLinked && telegramBotStarted && (
               <div className="rows">
                 <div className="rw">
                   <div className="ricon">★</div>
