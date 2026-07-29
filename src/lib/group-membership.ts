@@ -1,5 +1,6 @@
 import { createChatInviteLink, banChatMember, unbanChatMember } from "./telegram-bot";
 import { notifyUser } from "./notify";
+import { pool } from "./db";
 
 function paidGroupChatId(): string {
   const chatId = process.env.TELEGRAM_PAID_GROUP_CHAT_ID;
@@ -34,8 +35,15 @@ export async function sendPaidGroupInvite(target: InviteTarget): Promise<InviteR
     return { sent: false, reason: "telegram_not_linked" };
   }
 
-  const link = await createChatInviteLink(paidGroupChatId(), `paid-${target.userId}`);
+  const chatId = paidGroupChatId();
+  const link = await createChatInviteLink(chatId, `paid-${target.userId}`);
   if (!link) return { sent: false, reason: "invite_link_failed" };
+
+  await pool.query(
+    `insert into group_memberships (user_id, telegram_id, chat_id, invite_link, invited_at, status)
+     values ($1, $2, $3, $4, now(), 'invited')`,
+    [target.userId, target.telegramUserId, chatId, link]
+  );
 
   await notifyUser(
     { telegramUserId: target.telegramUserId },
@@ -46,8 +54,14 @@ export async function sendPaidGroupInvite(target: InviteTarget): Promise<InviteR
 }
 
 /** Ban immediately followed by unban: removes the member but preserves rejoin via a fresh invite link on renewal. */
-export async function removeFromPaidGroup(telegramUserId: string | number): Promise<void> {
+export async function removeFromPaidGroup(userId: string, telegramUserId: string | number): Promise<void> {
   const chatId = paidGroupChatId();
   await banChatMember(chatId, telegramUserId);
   await unbanChatMember(chatId, telegramUserId);
+
+  await pool.query(
+    `update group_memberships set status = 'removed_on_lapse', removed_at = now()
+     where user_id = $1 and status not in ('removed_on_lapse', 'left')`,
+    [userId]
+  );
 }

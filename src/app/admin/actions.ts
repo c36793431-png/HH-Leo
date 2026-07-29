@@ -95,7 +95,7 @@ export async function revokeLicenseAction(
 
     if (userId) {
       const target = await getGroupTarget(userId);
-      if (target?.telegramUserId) await removeFromPaidGroup(target.telegramUserId);
+      if (target?.telegramUserId) await removeFromPaidGroup(target.userId, target.telegramUserId);
     }
 
     revalidatePath("/admin");
@@ -124,7 +124,7 @@ export async function forceRemoveGroupAction(
     const session = await requireAdmin();
     const userId = formData.get("userId") as string;
     const target = await getGroupTarget(userId);
-    if (target?.telegramUserId) await removeFromPaidGroup(target.telegramUserId);
+    if (target?.telegramUserId) await removeFromPaidGroup(target.userId, target.telegramUserId);
     await logAdminAction(session.user.id, "force_remove_group", userId, null);
     revalidatePath("/admin");
   });

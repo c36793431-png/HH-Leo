@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   for (const row of expired.rows) {
     try {
       if (row.telegram_user_id) {
-        await removeFromPaidGroup(row.telegram_user_id);
+        await removeFromPaidGroup(row.user_id, row.telegram_user_id);
       }
       await notifyUser(
         { telegramUserId: row.telegram_user_id, email: row.email },

@@ -67,13 +67,14 @@ async function callTelegramApi(method: string, body: Record<string, unknown>): P
   return true;
 }
 
-/** Single-use invite link — bots cannot add members directly, so this is the only join path (hard Bot API limit). */
+/** Single-use invite link — bots cannot add members directly, so this is the only join path (hard Bot API limit). Expires 24h after creation so a stale, unused link can't be joined later. */
 export async function createChatInviteLink(chatId: string, name?: string): Promise<string | null> {
   try {
+    const expireDate = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
     const res = await fetch(`${API_ROOT}/bot${botToken()}/createChatInviteLink`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, member_limit: 1, name }),
+      body: JSON.stringify({ chat_id: chatId, member_limit: 1, expire_date: expireDate, name }),
     });
     if (!res.ok) {
       console.error("createChatInviteLink failed", await res.text());
