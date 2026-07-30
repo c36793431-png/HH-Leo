@@ -233,10 +233,19 @@
   display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
   padding: 6px 13px; border-radius: 999px; background: rgba(55, 245, 160, 0.12); border: 1px solid rgba(55, 245, 160, 0.36); color: var(--hz-ok);
 }
-.portal-shell .lic-active .badge-ok.expired { background: rgba(138, 155, 160, 0.12); border-color: rgba(138, 155, 160, 0.34); color: var(--hz-grey); }
+.portal-shell .lic-active .badge-ok.expired, .portal-shell .lic-active .badge-ok.bad { background: rgba(255, 92, 122, 0.12); border-color: rgba(255, 92, 122, 0.34); color: var(--hz-bad); }
+.portal-shell .lic-active .badge-ok.grey { background: rgba(138, 155, 160, 0.12); border-color: rgba(138, 155, 160, 0.34); color: var(--hz-grey); }
 .portal-shell .lic-active .badge-ok.expiring, .portal-shell .lic-active .badge-ok.amber { background: rgba(255, 194, 75, 0.14); border-color: rgba(255, 194, 75, 0.36); color: var(--hz-warn); }
 .portal-shell .lic-active .badge-ok .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hz-ok); box-shadow: 0 0 8px var(--hz-ok); }
+.portal-shell .lic-active .badge-ok.expired .dot, .portal-shell .lic-active .badge-ok.bad .dot { background: var(--hz-bad); box-shadow: 0 0 8px var(--hz-bad); }
+.portal-shell .lic-active .badge-ok.grey .dot { background: var(--hz-grey); box-shadow: none; }
 .portal-shell .lic-active .badge-ok.expiring .dot, .portal-shell .lic-active .badge-ok.amber .dot { background: var(--hz-warn); box-shadow: 0 0 8px var(--hz-warn); }
+.portal-shell .lic-active .hwid-row { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--hz-ink-3); }
+.portal-shell .lic-active .hwid-row b { color: var(--hz-ink-2); font-weight: 600; }
+.portal-shell .lic-test-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.portal-shell .lic-test-actions button { font-size: 12px; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255, 194, 75, 0.36); background: rgba(255, 194, 75, 0.1); color: var(--hz-warn); cursor: pointer; }
+.portal-shell .lic-test-actions button.danger { border-color: rgba(255, 92, 122, 0.36); background: rgba(255, 92, 122, 0.1); color: var(--hz-bad); }
+.portal-shell .lic-test-actions button:disabled { opacity: 0.5; cursor: default; }
 .portal-shell .lic-active .body h3 { font-family: var(--hz-disp); font-weight: 700; font-size: 22px; margin: 12px 0 4px; }
 .portal-shell .lic-active .body p { color: var(--hz-ink-2); font-size: 13px; }
 .portal-shell .keyrow {

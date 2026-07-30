@@ -174,6 +174,13 @@ export async function extendLicense(licenseId: string, expiresAt: Date): Promise
   );
 }
 
+export async function expireLicenseNow(licenseId: string): Promise<void> {
+  await pool.query(
+    `update licenses set expires_at = now(), lifecycle_state = null where id = $1`,
+    [licenseId]
+  );
+}
+
 export async function getLicenseExpiresAt(licenseId: string): Promise<Date | null> {
   const result = await pool.query<{ expires_at: Date }>(
     "select expires_at from licenses where id = $1",
