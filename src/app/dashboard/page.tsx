@@ -18,7 +18,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [paid, config, telegramStatus, botUsername, downloads] = await Promise.all([
+  const [paid, config, telegramStatus, groupMembershipStatus, botUsername, downloads] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
     getPortalConfig(),
     pool
@@ -31,6 +31,14 @@ export default async function DashboardPage() {
         botStarted: r.rows[0]?.telegram_bot_started_at != null,
       }))
       .catch(() => ({ linked: false, botStarted: false })),
+    pool
+      .query<{ status: string }>(
+        `select status from group_memberships where user_id = $1
+         order by coalesce(joined_at, invited_at) desc limit 1`,
+        [session.user.id]
+      )
+      .then((r): string | null => r.rows[0]?.status ?? null)
+      .catch((): string | null => null),
     getBotUsername(),
     getLatestDownloads().catch((): LatestDownloads => ({})),
   ]);
@@ -306,7 +314,13 @@ export default async function DashboardPage() {
                   <div className="ricon">★</div>
                   <div className="rmeta">
                     <b>Paid Users Group</b>
-                    <span>Linked · invite sent via Telegram</span>
+                    {groupMembershipStatus === "joined" ? (
+                      <span>✅ Joined · in group</span>
+                    ) : groupMembershipStatus === "removed_on_lapse" ? (
+                      <span>Removed — resubscribe to rejoin</span>
+                    ) : (
+                      <span>Linked · invite sent via Telegram</span>
+                    )}
                   </div>
                 </div>
               </div>
