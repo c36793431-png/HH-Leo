@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { pool } from "./db";
+import { notifyPaidActivation } from "./telemetry-sink";
 
 /** Single source of truth for the active/expiring/expired/revoked bucket shown on every
  * license row across /admin/users, /admin/users/[id], and /admin/licenses — these three
@@ -52,6 +53,41 @@ export interface IssuedLicense {
   expiresAt: Date;
 }
 
+/** True if this license is the user's (or pre-provisioned claim's) only currently-active
+ * one — i.e. a genuine new activation rather than a renewal/re-issue landing alongside
+ * (or on top of) one that's still active. issueLicense already refuses to create a second
+ * active license for a known userId, so this mainly guards the claim_email/claim_telegram
+ * pre-provision path, which has no such check at insert time. */
+async function isFirstActiveLicense(args: {
+  newLicenseId: string;
+  userId?: string;
+  claimEmail?: string;
+  claimTelegramUserId?: number;
+}): Promise<boolean> {
+  if (args.userId) {
+    const result = await pool.query(
+      `select 1 from licenses where user_id = $1 and status = 'active' and id != $2 limit 1`,
+      [args.userId, args.newLicenseId]
+    );
+    return (result.rowCount ?? 0) === 0;
+  }
+  if (args.claimEmail) {
+    const result = await pool.query(
+      `select 1 from licenses where claim_email = $1 and status = 'active' and id != $2 limit 1`,
+      [args.claimEmail, args.newLicenseId]
+    );
+    return (result.rowCount ?? 0) === 0;
+  }
+  if (args.claimTelegramUserId !== undefined) {
+    const result = await pool.query(
+      `select 1 from licenses where claim_telegram_user_id = $1 and status = 'active' and id != $2 limit 1`,
+      [args.claimTelegramUserId, args.newLicenseId]
+    );
+    return (result.rowCount ?? 0) === 0;
+  }
+  return true;
+}
+
 /** Thrown by issueLicense when the target user already holds an active license — product rule is one active license per user at a time. */
 export class ActiveLicenseExistsError extends Error {
   constructor(public existingLicenseId: string, public expiresAt: Date) {
@@ -73,7 +109,7 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
       const result = await pool.query(
         `insert into licenses (user_id, claim_email, claim_telegram_user_id, license_key, status, expires_at, notes)
          values ($1, $2, $3, $4, 'active', $5, $6)
-         returning id, license_key, expires_at`,
+         returning id, license_key, expires_at, tier`,
         [
           args.userId ?? null,
           args.claimEmail ?? null,
@@ -84,6 +120,16 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
         ]
       );
       const row = result.rows[0];
+
+      notifyNewPaidActivation({
+        newLicenseId: row.id,
+        licenseKey: row.license_key,
+        tier: row.tier,
+        userId: args.userId,
+        claimEmail: args.claimEmail,
+        claimTelegramUserId: args.claimTelegramUserId,
+      }).catch(() => {});
+
       return { id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at };
     } catch (err: unknown) {
       if ((err as { code?: string })?.code === "23505") continue; // license_key collision — retry with a fresh key
@@ -91,6 +137,34 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
     }
   }
   throw new Error("issueLicense: failed to generate a unique license key after 5 attempts");
+}
+
+/** Fires the paid-signup sink notify, gated on this being a genuine new activation
+ * (see isFirstActiveLicense) — never on a renewal or re-issue landing alongside an
+ * already-active license. Best-effort: must never throw into issueLicense's caller. */
+async function notifyNewPaidActivation(args: {
+  newLicenseId: string;
+  licenseKey: string;
+  tier: string;
+  userId?: string;
+  claimEmail?: string;
+  claimTelegramUserId?: number;
+}): Promise<void> {
+  const isFirst = await isFirstActiveLicense(args);
+  if (!isFirst) return;
+
+  let email = args.claimEmail ?? null;
+  if (!email && args.userId) {
+    const result = await pool.query<{ email: string | null }>("select email from users where id = $1", [args.userId]);
+    email = result.rows[0]?.email ?? null;
+  }
+
+  await notifyPaidActivation({
+    email,
+    licenseKey: args.licenseKey,
+    activatedAt: new Date(),
+    tier: args.tier,
+  });
 }
 
 export async function extendLicense(licenseId: string, expiresAt: Date): Promise<void> {

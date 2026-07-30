@@ -80,6 +80,36 @@ export async function notifyFreeSignup(opts: {
   }
 }
 
+/** Best-effort, non-blocking: a failed notify must never block license issuance. */
+export async function notifyPaidActivation(opts: {
+  email: string | null;
+  licenseKey: string;
+  activatedAt: Date;
+  tier?: string;
+}): Promise<void> {
+  const token = process.env.TELEMETRY_BOT_TOKEN;
+  if (!token) return; // Not configured yet — coxwell sets this in Vercel.
+
+  const keyTail = opts.licenseKey.length > 4 ? opts.licenseKey.slice(-4) : opts.licenseKey;
+  const text =
+    `💰 new paid signup\n` +
+    `email: ${opts.email ?? "-"}\n` +
+    `license: …${keyTail}\n` +
+    `activated: ${opts.activatedAt.toISOString()}` +
+    (opts.tier ? `\ntier: ${opts.tier}` : "");
+
+  try {
+    const res = await fetch(`${API_ROOT}/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: SIGNUP_NOTIFY_CHAT_ID, text }),
+    });
+    if (!res.ok) console.error("notifyPaidActivation: sink send failed", res.status);
+  } catch (err) {
+    console.error("notifyPaidActivation failed", err);
+  }
+}
+
 function fmt(v: unknown): string {
   if (v === undefined || v === null) return "-";
   if (typeof v === "object") return JSON.stringify(v);
