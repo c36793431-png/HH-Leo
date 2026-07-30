@@ -3,7 +3,6 @@ import Link from "next/link";
 
 const SIZES = {
   nav: { mark: 22, gap: "gap-2", word: "text-sm", sub: "text-[10px]" },
-  auth: { mark: 40, gap: "gap-3", word: "text-2xl", sub: "text-xs" },
   hero: { mark: 56, gap: "gap-4", word: "text-4xl sm:text-5xl", sub: "text-sm" },
 } as const;
 

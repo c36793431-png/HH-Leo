@@ -17,7 +17,7 @@ export default async function LoginPage({
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-8 px-4 py-16">
-      <Logo size="auth" />
+      <Logo size="hero" />
       <AuthCard mode="login" botUsername={botUsername} error={error} />
     </main>
   );
