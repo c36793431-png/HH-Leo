@@ -68,6 +68,19 @@ export async function listPayments(limit = 200): Promise<PaymentRow[]> {
   return result.rows.map(mapRow);
 }
 
+/** Powers the Payments block on /admin/users/[id] — every payment tagged to this user_id. */
+export async function listPaymentsForUser(userId: string, limit = 50): Promise<PaymentRow[]> {
+  const result = await pool.query<PaymentDbRow>(
+    `select id, received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, created_at
+     from payments
+     where user_id = $1
+     order by received_at desc
+     limit $2`,
+    [userId, limit]
+  );
+  return result.rows.map(mapRow);
+}
+
 export interface PaymentTotals {
   grossIn: number;
   totalOut: number;

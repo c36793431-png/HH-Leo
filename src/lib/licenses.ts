@@ -496,6 +496,7 @@ export interface UserLicenseRow {
   licenseKey: string;
   status: string;
   computedStatus: "active" | "expiring" | "expired" | "revoked";
+  lifecycleState: string | null;
   tier: string;
   issuedAt: Date;
   expiresAt: Date;
@@ -518,32 +519,65 @@ export interface UserDetailAdminActionRow {
   createdAt: Date;
 }
 
+export interface UserGroupMembershipRow {
+  id: string;
+  chatId: string;
+  status: string;
+  invitedAt: Date;
+  joinedAt: Date | null;
+  removedAt: Date | null;
+}
+
+export type UserTierLabel = "Paid" | "Trial" | "Team" | "Deal" | "Free" | "Admin";
+
 export interface UserDetail {
   userId: string;
   email: string | null;
   displayName: string | null;
   telegramUsername: string | null;
   telegramUserId: string | null;
+  telegramBotStartedAt: Date | null;
   role: string;
   joinedAt: Date;
+  tierLabel: UserTierLabel;
   licenses: UserLicenseRow[];
   signins: SigninEventRow[];
   adminActions: UserDetailAdminActionRow[];
+  groupMemberships: UserGroupMembershipRow[];
 }
 
-/** /admin/users/[id] source of truth: full profile, every license (past + present), signin history, admin actions taken against them. */
+/** Same active-tier-or-Free/Admin bucketing as getRecentSignups' statusLabel, but also
+ * distinguishes admin accounts (role='admin' — never carries a customer license). */
+function computeTierLabel(role: string, activeTier: string | null): UserTierLabel {
+  if (role === "admin") return "Admin";
+  switch (activeTier) {
+    case "paid":
+      return "Paid";
+    case "trial":
+      return "Trial";
+    case "team":
+      return "Team";
+    case "deal":
+      return "Deal";
+    default:
+      return "Free";
+  }
+}
+
+/** /admin/users/[id] source of truth: full profile, every license (past + present), signin
+ * history, admin actions taken against them, Telegram group memberships, and tier badge. */
 export async function getUserDetail(userId: string): Promise<UserDetail | null> {
   const userResult = await pool.query(
-    `select id, email, display_name, telegram_username, telegram_user_id, role, created_at
+    `select id, email, display_name, telegram_username, telegram_user_id, telegram_bot_started_at, role, created_at
      from users where id = $1`,
     [userId]
   );
   const user = userResult.rows[0];
   if (!user) return null;
 
-  const [licensesResult, signinsResult, actionsResult] = await Promise.all([
+  const [licensesResult, signinsResult, actionsResult, groupsResult] = await Promise.all([
     pool.query(
-      `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at,
+      `select id, license_key, status, lifecycle_state, tier, issued_at, expires_at, hardware_id, last_verified_at,
               ${licenseStatusCaseSql("licenses")} as computed_status
        from licenses where user_id = $1
        order by issued_at desc`,
@@ -563,7 +597,17 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
        limit 50`,
       [userId]
     ),
+    pool.query(
+      `select id, chat_id, status, invited_at, joined_at, removed_at
+       from group_memberships where user_id = $1
+       order by invited_at desc`,
+      [userId]
+    ),
   ]);
+
+  const activeTier = licensesResult.rows.find(
+    (r) => r.computed_status === "active" || r.computed_status === "expiring"
+  )?.tier as string | undefined;
 
   return {
     userId: user.id,
@@ -571,13 +615,16 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
     displayName: user.display_name,
     telegramUsername: user.telegram_username,
     telegramUserId: user.telegram_user_id !== null ? String(user.telegram_user_id) : null,
+    telegramBotStartedAt: user.telegram_bot_started_at,
     role: user.role,
     joinedAt: user.created_at,
+    tierLabel: computeTierLabel(user.role, activeTier ?? null),
     licenses: licensesResult.rows.map((r) => ({
       id: r.id,
       licenseKey: r.license_key,
       status: r.status,
       computedStatus: r.computed_status,
+      lifecycleState: r.lifecycle_state,
       tier: r.tier,
       issuedAt: r.issued_at,
       expiresAt: r.expires_at,
@@ -596,6 +643,14 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
       targetLicenseId: r.target_license_id,
       details: r.details_json,
       createdAt: r.created_at,
+    })),
+    groupMemberships: groupsResult.rows.map((r) => ({
+      id: r.id,
+      chatId: String(r.chat_id),
+      status: r.status,
+      invitedAt: r.invited_at,
+      joinedAt: r.joined_at,
+      removedAt: r.removed_at,
     })),
   };
 }

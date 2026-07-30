@@ -5,6 +5,7 @@ import {
   getSignupsPerDay,
   getRevenueStats,
 } from "@/lib/admin-dashboard";
+import Link from "next/link";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { maskLicenseKey } from "@/lib/licenses";
 
@@ -129,10 +130,25 @@ export default async function AdminDashboardPage() {
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 {signups.map((s) => (
-                  <tr key={s.userId}>
-                    <td className="py-2 pr-4 text-zinc-200">{s.email ?? s.displayName ?? "—"}</td>
-                    <td className="py-2 pr-4 text-zinc-400">{formatRelative(s.createdAt)}</td>
-                    <td className={`py-2 ${SIGNUP_STATUS_STYLES[s.statusLabel]}`}>{s.statusLabel}</td>
+                  <tr key={s.userId} className="group cursor-pointer hover:bg-zinc-900/60">
+                    <td className="py-2 pr-4 text-zinc-200">
+                      <Link
+                        href={`/admin/users/${s.userId}`}
+                        className="block group-hover:text-cyan-300 group-hover:underline"
+                      >
+                        {s.email ?? s.displayName ?? "—"}
+                      </Link>
+                    </td>
+                    <td className="py-2 pr-4 text-zinc-400">
+                      <Link href={`/admin/users/${s.userId}`} className="block">
+                        {formatRelative(s.createdAt)}
+                      </Link>
+                    </td>
+                    <td className={`py-2 ${SIGNUP_STATUS_STYLES[s.statusLabel]}`}>
+                      <Link href={`/admin/users/${s.userId}`} className="block">
+                        {s.statusLabel}
+                      </Link>
+                    </td>
                   </tr>
                 ))}
                 {signups.length === 0 && (
