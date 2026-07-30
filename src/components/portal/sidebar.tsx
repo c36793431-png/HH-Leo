@@ -17,6 +17,7 @@ const PORTAL_LINKS = [
 
 const ADMIN_LINKS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "◫" },
+  { href: "/admin/finance", label: "Finance", icon: "$" },
   { href: "/admin/users", label: "Users", icon: "◱" },
   { href: "/admin/licenses", label: "Licenses", icon: "⬡" },
   { href: "/admin/downloads", label: "Publish builds", icon: "⇧" },

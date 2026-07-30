@@ -8,6 +8,16 @@ import {
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { maskLicenseKey } from "@/lib/licenses";
 
+/** "YYYY-MM-DD" -> "Jul 1" for sparkline x-axis ticks. */
+function formatShortDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
@@ -51,22 +61,13 @@ export default async function AdminDashboardPage() {
       </header>
 
       <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        <StatTile label="Total payments" value={revenue ? `$${revenue.totalAllTime}` : "Not tracked"} sub={revenue ? undefined : "no payments table yet"} />
-        <StatTile label="This month" value={revenue ? `$${revenue.totalThisMonth}` : "Not tracked"} />
-        <StatTile label="MRR" value={revenue ? `$${revenue.mrr}` : "Not tracked"} />
+        <StatTile label="Total payments" value={`$${revenue.totalAllTime.toFixed(2)}`} />
+        <StatTile label="This month" value={`$${revenue.totalThisMonth.toFixed(2)}`} />
+        <StatTile label="MRR" value={`$${revenue.mrr.toFixed(2)}`} sub="proxy: this month's customer payments" />
         <StatTile label="Total users" value={String(counts.total)} />
         <StatTile label="Paid" value={String(counts.paid)} />
         <StatTile label="Free / Lapsed" value={`${counts.free} / ${counts.lapsed}`} />
       </section>
-
-      {!revenue && (
-        <section className="mb-8 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
-          Payments aren&apos;t tracked in the DB yet — no orders/payments table and no
-          per-tier pricing exists to compute revenue or MRR from. Flagging for a
-          product call: add a payments table wired to whatever checkout flow is used
-          (Stripe, manual, etc.) before these tiles can show real numbers.
-        </section>
-      )}
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
         <h2 className="text-sm font-medium text-cyan-400">New signups — last 30 days</h2>
@@ -79,6 +80,17 @@ export default async function AdminDashboardPage() {
               style={{ height: `${Math.max(4, (d.count / maxSparkline) * 100)}%` }}
             />
           ))}
+        </div>
+        <div className="mt-1 flex gap-0.5 text-[9px] text-zinc-600">
+          {sparkline.map((d, i) => {
+            const isEdge = i === 0 || i === sparkline.length - 1;
+            const isWeeklyTick = i % 7 === 0;
+            return (
+              <div key={d.date} className="flex-1 text-center">
+                {isEdge || isWeeklyTick ? formatShortDate(d.date) : ""}
+              </div>
+            );
+          })}
         </div>
       </section>
 

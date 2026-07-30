@@ -1,4 +1,5 @@
 import { pool } from "./db";
+import { getPaymentTotals } from "./payments";
 
 /**
  * All counts/lists here scope to role='user' (matches listClients' convention) —
@@ -153,10 +154,10 @@ export async function getSignupsPerDay(days = 30): Promise<SignupsPerDay[]> {
 }
 
 /**
- * No payments/orders table exists yet (no Stripe/checkout integration wired up) — nothing
- * in the schema records a transaction amount. Revenue and MRR can't be computed without
- * fabricating numbers, so this returns null and the dashboard renders an explicit
- * "not tracked" state rather than a fake $0. Flagged to marcus/coxwell in the handoff.
+ * No per-tier pricing/subscription schema exists, so true MRR isn't computable —
+ * `mrr` is a crude proxy (this month's customer-sourced payments), not a real
+ * recurring-revenue figure. Flagged to marcus/coxwell rather than leaving it "not
+ * tracked" now that the payments table backs totalAllTime/totalThisMonth for real.
  */
 export interface RevenueStats {
   totalAllTime: number;
@@ -164,6 +165,11 @@ export interface RevenueStats {
   mrr: number;
 }
 
-export async function getRevenueStats(): Promise<RevenueStats | null> {
-  return null;
+export async function getRevenueStats(): Promise<RevenueStats> {
+  const totals = await getPaymentTotals();
+  return {
+    totalAllTime: totals.allTime,
+    totalThisMonth: totals.thisMonth,
+    mrr: totals.bySourceTypeThisMonth.customer,
+  };
 }
