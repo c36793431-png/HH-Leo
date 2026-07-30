@@ -8,6 +8,11 @@ import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 
 const PLACEHOLDER_CHANGELOG = "Release notes will appear here once the current build is published.";
 
+function formatSize(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+}
+
 export default async function DownloadsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -38,7 +43,11 @@ export default async function DownloadsPage() {
               <div className="ricon">⤓</div>
               <div className="rmeta">
                 <b>Horizon Terminal — Windows</b>
-                <span>{downloads.windows ? `SHA256 ${downloads.windows.sha256.slice(0, 12)}…` : "Not yet published"}</span>
+                <span>
+                  {downloads.windows
+                    ? `${formatSize(downloads.windows.sizeBytes)} · SHA256 ${downloads.windows.sha256.slice(0, 12)}…`
+                    : "Not yet published"}
+                </span>
               </div>
               <span className="ver">{downloads.windows ? `v${downloads.windows.version}` : "—"}</span>
             </div>
@@ -46,7 +55,11 @@ export default async function DownloadsPage() {
               <div className="ricon">⤓</div>
               <div className="rmeta">
                 <b>Horizon Terminal — macOS</b>
-                <span>{downloads.macos ? `SHA256 ${downloads.macos.sha256.slice(0, 12)}…` : "Not yet published"}</span>
+                <span>
+                  {downloads.macos
+                    ? `${formatSize(downloads.macos.sizeBytes)} · SHA256 ${downloads.macos.sha256.slice(0, 12)}…`
+                    : "Not yet published"}
+                </span>
               </div>
               <span className="ver">{downloads.macos ? `v${downloads.macos.version}` : "—"}</span>
             </div>
@@ -70,7 +83,7 @@ export default async function DownloadsPage() {
           <p style={{ fontSize: 13, color: "var(--hz-ink-2)", whiteSpace: "pre-line", lineHeight: 1.6 }}>{changelog}</p>
         </div>
 
-        <div className="card full">
+        <div className="card">
           <div className="chead">
             <span className="ic">◐</span>
             <h3>Your license</h3>
@@ -83,6 +96,18 @@ export default async function DownloadsPage() {
               Expires {new Date(license.expiresAt).toLocaleDateString()}
             </p>
           )}
+        </div>
+
+        <div className="card">
+          <div className="chead">
+            <span className="ic">↧</span>
+            <h3>Download history</h3>
+          </div>
+          <div className="empty">
+            <div className="eic">▤</div>
+            <b>No downloads yet</b>
+            <p>Once you grab the terminal installer, your version history shows up here.</p>
+          </div>
         </div>
       </div>
 
