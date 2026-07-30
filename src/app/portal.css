@@ -28,6 +28,7 @@
   --emerald-soft: rgba(52, 211, 153, 0.14);
   --hz-ok: #37f5a0;
   --hz-warn: #ffc24b;
+  --hz-amber-line: rgba(255, 194, 75, 0.6);
   --hz-bad: #ff5c7a;
   --hz-info: #6fa8ff;
   --hz-grey: #8a9ba0;
@@ -195,7 +196,8 @@
 .portal-shell .g2 { grid-template-columns: 1fr 1fr; }
 .portal-shell .card { background: var(--hz-panel); border: 1.5px solid rgba(6, 182, 212, 0.85); border-radius: 14px; padding: 20px; box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.08), 0 4px 24px rgba(6, 182, 212, 0.1); }
 .portal-shell .card.plain { border-color: var(--hz-line-soft); box-shadow: none; }
-.portal-shell .card.admincard { border-color: var(--hz-zinc-line); background: linear-gradient(180deg, rgba(39, 39, 42, 0.28), var(--hz-panel)); box-shadow: 0 0 0 1px rgba(113, 113, 122, 0.1), 0 4px 24px rgba(0, 0, 0, 0.2); }
+.portal-shell .card.admincard { border-color: var(--hz-amber-line); background: linear-gradient(180deg, rgba(39, 39, 42, 0.28), var(--hz-panel)); box-shadow: 0 0 0 1px rgba(255, 194, 75, 0.1), 0 4px 24px rgba(0, 0, 0, 0.2); }
+.portal-shell .card.admin-lic { border-color: var(--hz-amber-line); box-shadow: 0 0 0 1px rgba(255, 194, 75, 0.08), 0 4px 24px rgba(255, 194, 75, 0.1); }
 .portal-shell .card .chead { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
 .portal-shell .card .chead h3 { font-family: var(--hz-disp); font-weight: 700; font-size: 19px; letter-spacing: 0.02em; }
 .portal-shell .card .chead .cap { font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--hz-ink-3); margin-left: auto; }

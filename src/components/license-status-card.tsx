@@ -93,7 +93,7 @@ export function LicenseStatusCard({
     }
 
     return (
-      <div className="card full">
+      <div className="card full admin-lic">
         <div className="chead">
           <span className="ic">◐</span>
           <h3>License status</h3>
@@ -189,7 +189,7 @@ export function LicenseStatusCard({
   const badgeLabel = isExpired ? "EXPIRED" : isExpiring ? "EXPIRING SOON" : "ACTIVE";
 
   return (
-    <div className="card full">
+    <div className={`card full${isAdminAccount ? " admin-lic" : ""}`}>
       <div className="chead">
         <span className="ic">◐</span>
         <h3>License status</h3>
