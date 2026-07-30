@@ -7,12 +7,14 @@ import { DurationForm } from "@/components/admin/duration-form";
 import { ActionButton } from "@/components/admin/action-button";
 import { TierSelectForm } from "@/components/admin/tier-select-form";
 import { CopyIdButton } from "@/components/admin/copy-id-button";
+import { InlineEditField } from "@/components/admin/inline-edit-field";
 import {
   expireNowAction,
   extendLicenseAction,
   revokeAction,
   issueNewLicenseAction,
   setUserLicenseTierAction,
+  updateUserFieldAction,
 } from "../actions";
 
 const STATUS_STYLES = {
@@ -106,11 +108,28 @@ export default async function AdminUserDetailPage({
         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-xs text-zinc-500">Email</dt>
-            <dd className="text-zinc-200">{user.email ?? "—"}</dd>
+            <dd className="text-zinc-200">
+              <InlineEditField
+                action={updateUserFieldAction}
+                hiddenFields={{ userId: user.userId }}
+                field="email"
+                type="email"
+                value={user.email ?? ""}
+                label="Email"
+              />
+            </dd>
           </div>
           <div>
             <dt className="text-xs text-zinc-500">Display name</dt>
-            <dd className="text-zinc-200">{user.displayName ?? "—"}</dd>
+            <dd className="text-zinc-200">
+              <InlineEditField
+                action={updateUserFieldAction}
+                hiddenFields={{ userId: user.userId }}
+                field="display_name"
+                value={user.displayName ?? ""}
+                label="Display name"
+              />
+            </dd>
           </div>
           <div>
             <dt className="text-xs text-zinc-500">Telegram</dt>
@@ -121,7 +140,16 @@ export default async function AdminUserDetailPage({
           </div>
           <div>
             <dt className="text-xs text-zinc-500">Role</dt>
-            <dd className="text-zinc-200">{user.role}</dd>
+            <dd className="text-zinc-200">
+              <InlineEditField
+                action={updateUserFieldAction}
+                hiddenFields={{ userId: user.userId }}
+                field="role"
+                value={user.role}
+                label="Role"
+                options={["user", "admin"]}
+              />
+            </dd>
           </div>
         </dl>
         <div className="mt-4">

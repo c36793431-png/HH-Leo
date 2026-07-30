@@ -100,6 +100,48 @@ export async function setUserLicenseTierAction(
   });
 }
 
+const ADMIN_EDITABLE_USER_FIELDS = ["display_name", "email", "role"] as const;
+type AdminEditableUserField = (typeof ADMIN_EDITABLE_USER_FIELDS)[number];
+
+export async function updateUserFieldAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to update user", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const userId = formData.get("userId") as string;
+    const field = formData.get("field") as string;
+    if (!ADMIN_EDITABLE_USER_FIELDS.includes(field as AdminEditableUserField)) {
+      throw new Error("Invalid field");
+    }
+    const value = ((formData.get("value") as string) ?? "").trim();
+    if (field === "role" && value !== "user" && value !== "admin") {
+      throw new Error("Invalid role");
+    }
+    if (field === "email" && value === "") {
+      throw new Error("Email is required");
+    }
+    const nextValue = field === "display_name" && value === "" ? null : value;
+
+    const current = await pool.query<{ value: string | null }>(
+      `select ${field} as value from users where id = $1`,
+      [userId]
+    );
+    if (current.rowCount === 0) throw new Error("User not found");
+    const previousValue = current.rows[0].value;
+
+    await pool.query(`update users set ${field} = $1 where id = $2`, [nextValue, userId]);
+    await logAdminAction(
+      adminUserId,
+      "admin_users_update_field",
+      userId,
+      { field, from: previousValue, to: nextValue },
+      null
+    );
+    revalidateUsers(userId);
+  });
+}
+
 export async function issueNewLicenseAction(
   _prevState: ActionResult | null,
   formData: FormData
