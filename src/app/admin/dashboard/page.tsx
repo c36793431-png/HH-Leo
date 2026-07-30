@@ -1,0 +1,163 @@
+import {
+  getUserCounts,
+  getRecentSignups,
+  getRecentLicenseActivity,
+  getSignupsPerDay,
+  getRevenueStats,
+} from "@/lib/admin-dashboard";
+import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
+import { maskLicenseKey } from "@/lib/licenses";
+
+function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+      <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="mt-1 text-2xl font-semibold text-zinc-100">{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>}
+    </div>
+  );
+}
+
+const ACTIVITY_STYLES: Record<string, { label: string; color: string }> = {
+  issued: { label: "Issued", color: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300" },
+  revoked: { label: "Revoked", color: "border-red-500/40 bg-red-500/15 text-red-300" },
+  expired: { label: "Expired", color: "border-amber-500/40 bg-amber-500/15 text-amber-300" },
+};
+
+const SIGNUP_STATUS_STYLES: Record<string, string> = {
+  Paid: "text-emerald-400",
+  Lapsed: "text-amber-400",
+  Free: "text-zinc-500",
+};
+
+export default async function AdminDashboardPage() {
+  const [counts, signups, activity, sparkline, revenue] = await Promise.all([
+    getUserCounts(),
+    getRecentSignups(10),
+    getRecentLicenseActivity(10),
+    getSignupsPerDay(30),
+    getRevenueStats(),
+  ]);
+
+  const maxSparkline = Math.max(1, ...sparkline.map((d) => d.count));
+
+  return (
+    <div className="flex flex-1 flex-col">
+      <header className="mb-8">
+        <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+          Admin · Dashboard
+        </span>
+        <p className="mt-2 text-sm text-zinc-400">Business aggregates across users, licenses, and revenue.</p>
+      </header>
+
+      <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <StatTile label="Total payments" value={revenue ? `$${revenue.totalAllTime}` : "Not tracked"} sub={revenue ? undefined : "no payments table yet"} />
+        <StatTile label="This month" value={revenue ? `$${revenue.totalThisMonth}` : "Not tracked"} />
+        <StatTile label="MRR" value={revenue ? `$${revenue.mrr}` : "Not tracked"} />
+        <StatTile label="Total users" value={String(counts.total)} />
+        <StatTile label="Paid" value={String(counts.paid)} />
+        <StatTile label="Free / Lapsed" value={`${counts.free} / ${counts.lapsed}`} />
+      </section>
+
+      {!revenue && (
+        <section className="mb-8 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+          Payments aren&apos;t tracked in the DB yet — no orders/payments table and no
+          per-tier pricing exists to compute revenue or MRR from. Flagging for a
+          product call: add a payments table wired to whatever checkout flow is used
+          (Stripe, manual, etc.) before these tiles can show real numbers.
+        </section>
+      )}
+
+      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+        <h2 className="text-sm font-medium text-cyan-400">New signups — last 30 days</h2>
+        <div className="mt-4 flex h-16 items-end gap-0.5">
+          {sparkline.map((d) => (
+            <div
+              key={d.date}
+              title={`${d.date}: ${d.count}`}
+              className="flex-1 rounded-t bg-cyan-500/60"
+              style={{ height: `${Math.max(4, (d.count / maxSparkline) * 100)}%` }}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+          <h2 className="text-sm font-medium text-blue-400">Recent signups</h2>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-zinc-500">
+                <tr>
+                  <th className="pb-2 pr-4">Email</th>
+                  <th className="pb-2 pr-4">Signed up</th>
+                  <th className="pb-2">Tier</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {signups.map((s) => (
+                  <tr key={s.userId}>
+                    <td className="py-2 pr-4 text-zinc-200">{s.email ?? s.displayName ?? "—"}</td>
+                    <td className="py-2 pr-4 text-zinc-400">{formatRelative(s.createdAt)}</td>
+                    <td className={`py-2 ${SIGNUP_STATUS_STYLES[s.statusLabel]}`}>{s.statusLabel}</td>
+                  </tr>
+                ))}
+                {signups.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="py-4 text-center text-zinc-500">
+                      No signups yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+          <h2 className="text-sm font-medium text-emerald-400">Recent license activity</h2>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-zinc-500">
+                <tr>
+                  <th className="pb-2 pr-4">Event</th>
+                  <th className="pb-2 pr-4">License</th>
+                  <th className="pb-2 pr-4">User</th>
+                  <th className="pb-2">When</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {activity.map((a, i) => {
+                  const style = ACTIVITY_STYLES[a.type];
+                  return (
+                    <tr key={i}>
+                      <td className="py-2 pr-4">
+                        <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${style.color}`}>
+                          {style.label}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
+                        {a.licenseKey ? maskLicenseKey(a.licenseKey) : "—"}
+                      </td>
+                      <td className="py-2 pr-4 text-zinc-400">{a.userEmail ?? "—"}</td>
+                      <td className="py-2 text-zinc-500" title={formatAbsoluteUtc(a.at)}>
+                        {formatRelative(a.at)}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {activity.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-4 text-center text-zinc-500">
+                      No license activity yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
