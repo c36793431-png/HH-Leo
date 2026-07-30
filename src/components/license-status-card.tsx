@@ -111,7 +111,10 @@ export function LicenseStatusCard({
               <span className="dot" /> ACTIVE
             </span>
             <h3>Horizon HFT — Admin / Pro</h3>
-            <p>Admin access is independent of license state.</p>
+            <p>
+              Admin access is independent of license state.
+              {license && ` Personal license valid until ${formatAbsoluteUtc(license.expiresAt)}.`}
+            </p>
             <div className="keyrow">
               <span className="k ok">{revealed ? fullKey : maskLicenseKey(fullKey)}</span>
               <button type="button" className="copy" onClick={() => setRevealed((v) => !v)}>
