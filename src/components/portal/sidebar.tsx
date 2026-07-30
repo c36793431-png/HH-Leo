@@ -65,7 +65,7 @@ export function PortalSidebar({
         <div className="txt">
           HORIZON
           <small>HFT PORTAL</small>
-          {tier === "paid" && <span className="brand-pill paid">PAID</span>}
+          {tier === "paid" && <span className="brand-pill paid">ACTIVE</span>}
           {tier === "admin" && <span className="brand-pill admin">ADMIN</span>}
         </div>
       </div>
