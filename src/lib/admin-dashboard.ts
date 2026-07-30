@@ -11,11 +11,17 @@ export interface UserCounts {
   free: number;
   paid: number;
   lapsed: number;
+  admins: number;
 }
 
-/** free = never had a license row; paid = has one active now; lapsed = had one before, none active now. */
+/**
+ * free/paid/lapsed/total scope to role='user' (real customers only). paid = has an
+ * active license now, lapsed = had one before with none active now. admins is a
+ * separate tile — role='admin' accounts, independent of license status, so they
+ * never get lumped into the paid-customer count.
+ */
 export async function getUserCounts(): Promise<UserCounts> {
-  const result = await pool.query<{ paid: string; lapsed: string; free: string; total: string }>(`
+  const result = await pool.query<{ paid: string; lapsed: string; free: string; total: string; admins: string }>(`
     with scoped as (
       select u.id,
              exists (
@@ -26,11 +32,11 @@ export async function getUserCounts(): Promise<UserCounts> {
       where u.role = 'user'
     )
     select
-      count(*) filter (where is_paid) as paid,
-      count(*) filter (where not is_paid and ever_licensed) as lapsed,
-      count(*) filter (where not ever_licensed) as free,
-      count(*) as total
-    from scoped
+      (select count(*) filter (where is_paid) from scoped) as paid,
+      (select count(*) filter (where not is_paid and ever_licensed) from scoped) as lapsed,
+      (select count(*) filter (where not ever_licensed) from scoped) as free,
+      (select count(*) from scoped) as total,
+      (select count(*) from users where role = 'admin') as admins
   `);
   const row = result.rows[0];
   return {
@@ -38,6 +44,7 @@ export async function getUserCounts(): Promise<UserCounts> {
     free: Number(row?.free ?? 0),
     paid: Number(row?.paid ?? 0),
     lapsed: Number(row?.lapsed ?? 0),
+    admins: Number(row?.admins ?? 0),
   };
 }
 
@@ -155,21 +162,29 @@ export async function getSignupsPerDay(days = 30): Promise<SignupsPerDay[]> {
 
 /**
  * No per-tier pricing/subscription schema exists, so true MRR isn't computable —
- * `mrr` is a crude proxy (this month's customer-sourced payments), not a real
+ * `mrr` is a crude proxy (this month's customer-sourced "in" payments), not a real
  * recurring-revenue figure. Flagged to marcus/coxwell rather than leaving it "not
- * tracked" now that the payments table backs totalAllTime/totalThisMonth for real.
+ * tracked" now that the payments table backs gross/net for real.
  */
 export interface RevenueStats {
-  totalAllTime: number;
-  totalThisMonth: number;
+  grossIn: number;
+  totalOut: number;
+  net: number;
+  grossInThisMonth: number;
+  totalOutThisMonth: number;
+  netThisMonth: number;
   mrr: number;
 }
 
 export async function getRevenueStats(): Promise<RevenueStats> {
   const totals = await getPaymentTotals();
   return {
-    totalAllTime: totals.allTime,
-    totalThisMonth: totals.thisMonth,
-    mrr: totals.bySourceTypeThisMonth.customer,
+    grossIn: totals.grossIn,
+    totalOut: totals.totalOut,
+    net: totals.net,
+    grossInThisMonth: totals.grossInThisMonth,
+    totalOutThisMonth: totals.totalOutThisMonth,
+    netThisMonth: totals.netThisMonth,
+    mrr: totals.mrrProxy,
   };
 }

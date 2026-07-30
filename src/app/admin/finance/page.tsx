@@ -2,19 +2,31 @@ import { listPayments, getPaymentTotals, listUserEmailsForAutocomplete } from "@
 import { formatAbsoluteUtc } from "@/lib/format-time";
 import { AddPaymentForm } from "@/components/admin/add-payment-form";
 
-function StatTile({ label, value }: { label: string; value: string }) {
+function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
       <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-zinc-100">{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>}
     </div>
   );
 }
 
-const SOURCE_STYLES: Record<string, string> = {
+const CATEGORY_LABELS: Record<string, string> = {
+  customer: "Customer",
+  partner: "Partner",
+  affiliate: "Affiliate",
+  feed_provider: "Feed provider",
+  infra: "Infra",
+  other: "Other",
+};
+
+const CATEGORY_STYLES: Record<string, string> = {
   customer: "text-emerald-400",
   partner: "text-cyan-400",
   affiliate: "text-blue-400",
+  feed_provider: "text-amber-400",
+  infra: "text-purple-400",
   other: "text-zinc-400",
 };
 
@@ -35,16 +47,13 @@ export default async function AdminFinancePage() {
         <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
           Admin · Finance
         </span>
-        <p className="mt-2 text-sm text-zinc-400">Payments received — manually logged, newest first.</p>
+        <p className="mt-2 text-sm text-zinc-400">Money in from customers, money out to vendors/partners — manually logged, newest first.</p>
       </header>
 
-      <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        <StatTile label="All-time received" value={fmt(totals.allTime)} />
-        <StatTile label="This month" value={fmt(totals.thisMonth)} />
-        <StatTile label="Customer" value={fmt(totals.bySourceTypeAllTime.customer)} />
-        <StatTile label="Partner" value={fmt(totals.bySourceTypeAllTime.partner)} />
-        <StatTile label="Affiliate" value={fmt(totals.bySourceTypeAllTime.affiliate)} />
-        <StatTile label="Other" value={fmt(totals.bySourceTypeAllTime.other)} />
+      <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatTile label="Gross in" value={fmt(totals.grossIn)} sub={`This month: ${fmt(totals.grossInThisMonth)}`} />
+        <StatTile label="Total out" value={fmt(totals.totalOut)} sub={`This month: ${fmt(totals.totalOutThisMonth)}`} />
+        <StatTile label="Net" value={fmt(totals.net)} sub={`This month: ${fmt(totals.netThisMonth)}`} />
       </section>
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
@@ -61,8 +70,9 @@ export default async function AdminFinancePage() {
             <thead className="text-zinc-500">
               <tr>
                 <th className="pb-2 pr-4">Date</th>
+                <th className="pb-2 pr-4">Direction</th>
                 <th className="pb-2 pr-4">Amount</th>
-                <th className="pb-2 pr-4">Source</th>
+                <th className="pb-2 pr-4">Category</th>
                 <th className="pb-2 pr-4">Counterparty</th>
                 <th className="pb-2">Memo</th>
               </tr>
@@ -73,18 +83,23 @@ export default async function AdminFinancePage() {
                   <td className="py-2 pr-4 text-zinc-400" title={formatAbsoluteUtc(p.receivedAt)}>
                     {p.receivedAt.toISOString().slice(0, 10)}
                   </td>
+                  <td className={`py-2 pr-4 font-medium ${p.direction === "in" ? "text-emerald-400" : "text-red-400"}`}>
+                    {p.direction === "in" ? "↓ In" : "↑ Out"}
+                  </td>
                   <td className="py-2 pr-4 text-zinc-200">
                     {p.currency === "USD" ? "$" : `${p.currency} `}
                     {p.amountUsd.toFixed(2)}
                   </td>
-                  <td className={`py-2 pr-4 ${SOURCE_STYLES[p.sourceType] ?? "text-zinc-400"}`}>{p.sourceType}</td>
+                  <td className={`py-2 pr-4 ${CATEGORY_STYLES[p.category] ?? "text-zinc-400"}`}>
+                    {CATEGORY_LABELS[p.category] ?? p.category}
+                  </td>
                   <td className="py-2 pr-4 text-zinc-400">{p.counterparty ?? "—"}</td>
                   <td className="py-2 text-zinc-500">{p.memo ?? "—"}</td>
                 </tr>
               ))}
               {payments.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-4 text-center text-zinc-500">
+                  <td colSpan={6} className="py-4 text-center text-zinc-500">
                     No payments logged yet.
                   </td>
                 </tr>

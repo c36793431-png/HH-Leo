@@ -60,12 +60,26 @@ export default async function AdminDashboardPage() {
         <p className="mt-2 text-sm text-zinc-400">Business aggregates across users, licenses, and revenue.</p>
       </header>
 
-      <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        <StatTile label="Total payments" value={`$${revenue.totalAllTime.toFixed(2)}`} />
-        <StatTile label="This month" value={`$${revenue.totalThisMonth.toFixed(2)}`} />
+      <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatTile
+          label="Gross received"
+          value={`$${revenue.grossIn.toFixed(2)}`}
+          sub={`This month: $${revenue.grossInThisMonth.toFixed(2)}`}
+        />
+        <StatTile
+          label="Costs"
+          value={`$${revenue.totalOut.toFixed(2)}`}
+          sub={`This month: $${revenue.totalOutThisMonth.toFixed(2)}`}
+        />
+        <StatTile
+          label="Net revenue"
+          value={`$${revenue.net.toFixed(2)}`}
+          sub={`This month: $${revenue.netThisMonth.toFixed(2)}`}
+        />
         <StatTile label="MRR" value={`$${revenue.mrr.toFixed(2)}`} sub="proxy: this month's customer payments" />
         <StatTile label="Total users" value={String(counts.total)} />
-        <StatTile label="Paid" value={String(counts.paid)} />
+        <StatTile label="Paid customers" value={String(counts.paid)} />
+        <StatTile label="Admins" value={String(counts.admins)} />
         <StatTile label="Free / Lapsed" value={`${counts.free} / ${counts.lapsed}`} />
       </section>
 

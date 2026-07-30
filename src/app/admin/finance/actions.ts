@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
-import { insertPayment, PAYMENT_SOURCE_TYPES, type PaymentSourceType } from "@/lib/payments";
+import {
+  insertPayment,
+  PAYMENT_CATEGORIES,
+  PAYMENT_DIRECTIONS,
+  type PaymentCategory,
+  type PaymentDirection,
+} from "@/lib/payments";
 import { logAdminAction } from "@/lib/admin";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
@@ -32,12 +38,16 @@ export async function addPaymentAction(
     const receivedAtRaw = formData.get("receivedAt") as string;
     const amountRaw = formData.get("amountUsd") as string;
     const currency = ((formData.get("currency") as string) || "USD").trim().toUpperCase();
-    const sourceType = formData.get("sourceType") as string;
+    const direction = formData.get("direction") as string;
+    const category = formData.get("category") as string;
     const counterparty = ((formData.get("counterparty") as string) || "").trim() || null;
     const memo = ((formData.get("memo") as string) || "").trim() || null;
 
-    if (!PAYMENT_SOURCE_TYPES.includes(sourceType as PaymentSourceType)) {
-      throw new Error("Invalid source type");
+    if (!PAYMENT_DIRECTIONS.includes(direction as PaymentDirection)) {
+      throw new Error("Invalid direction");
+    }
+    if (!PAYMENT_CATEGORIES.includes(category as PaymentCategory)) {
+      throw new Error("Invalid category");
     }
     const amountUsd = Number(amountRaw);
     if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
@@ -48,20 +58,26 @@ export async function addPaymentAction(
       throw new Error("Invalid date");
     }
 
-    const userId = sourceType === "customer" ? await resolveUserIdByEmail(counterparty) : null;
+    const userId = category === "customer" ? await resolveUserIdByEmail(counterparty) : null;
 
     const paymentId = await insertPayment({
       receivedAt,
       amountUsd,
       currency,
-      sourceType: sourceType as PaymentSourceType,
+      direction: direction as PaymentDirection,
+      category: category as PaymentCategory,
       counterparty,
       userId,
       memo,
       createdBy: adminEmail,
     });
 
-    await logAdminAction(adminUserId, "admin_finance_add_payment", userId, { paymentId, amountUsd, sourceType });
+    await logAdminAction(adminUserId, "admin_finance_add_payment", userId, {
+      paymentId,
+      amountUsd,
+      direction,
+      category,
+    });
 
     revalidatePath("/admin/finance");
     revalidatePath("/admin/dashboard");

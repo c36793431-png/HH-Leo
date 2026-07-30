@@ -1,14 +1,25 @@
 import { pool } from "./db";
 
-export type PaymentSourceType = "customer" | "partner" | "affiliate" | "other";
-export const PAYMENT_SOURCE_TYPES: PaymentSourceType[] = ["customer", "partner", "affiliate", "other"];
+export type PaymentDirection = "in" | "out";
+export const PAYMENT_DIRECTIONS: PaymentDirection[] = ["in", "out"];
+
+export type PaymentCategory = "customer" | "partner" | "affiliate" | "feed_provider" | "infra" | "other";
+export const PAYMENT_CATEGORIES: PaymentCategory[] = [
+  "customer",
+  "partner",
+  "affiliate",
+  "feed_provider",
+  "infra",
+  "other",
+];
 
 export interface PaymentRow {
   id: string;
   receivedAt: Date;
   amountUsd: number;
   currency: string;
-  sourceType: PaymentSourceType;
+  direction: PaymentDirection;
+  category: PaymentCategory;
   counterparty: string | null;
   userId: string | null;
   memo: string | null;
@@ -21,7 +32,8 @@ interface PaymentDbRow {
   received_at: Date;
   amount_usd: string;
   currency: string;
-  source_type: PaymentSourceType;
+  direction: PaymentDirection;
+  category: PaymentCategory;
   counterparty: string | null;
   user_id: string | null;
   memo: string | null;
@@ -35,7 +47,8 @@ function mapRow(r: PaymentDbRow): PaymentRow {
     receivedAt: r.received_at,
     amountUsd: Number(r.amount_usd),
     currency: r.currency,
-    sourceType: r.source_type,
+    direction: r.direction,
+    category: r.category,
     counterparty: r.counterparty,
     userId: r.user_id,
     memo: r.memo,
@@ -46,7 +59,7 @@ function mapRow(r: PaymentDbRow): PaymentRow {
 
 export async function listPayments(limit = 200): Promise<PaymentRow[]> {
   const result = await pool.query<PaymentDbRow>(
-    `select id, received_at, amount_usd, currency, source_type, counterparty, user_id, memo, created_by, created_at
+    `select id, received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, created_at
      from payments
      order by received_at desc
      limit $1`,
@@ -55,51 +68,55 @@ export async function listPayments(limit = 200): Promise<PaymentRow[]> {
   return result.rows.map(mapRow);
 }
 
-export type SourceTypeTotals = Record<PaymentSourceType, number>;
-
 export interface PaymentTotals {
-  allTime: number;
-  thisMonth: number;
-  bySourceTypeAllTime: SourceTypeTotals;
-  bySourceTypeThisMonth: SourceTypeTotals;
+  grossIn: number;
+  totalOut: number;
+  net: number;
+  grossInThisMonth: number;
+  totalOutThisMonth: number;
+  netThisMonth: number;
+  /** proxy: this month's "in" payments from customers — no per-tier pricing exists for true MRR. */
+  mrrProxy: number;
 }
 
-function emptyTotals(): SourceTypeTotals {
-  return { customer: 0, partner: 0, affiliate: 0, other: 0 };
-}
-
-/** Grouped by source_type in one pass so the finance page's totals strip and the
- * dashboard's MRR proxy (this-month customer payments) share a single query. */
 export async function getPaymentTotals(): Promise<PaymentTotals> {
-  const result = await pool.query<{ source_type: PaymentSourceType; all_time: string; this_month: string }>(`
+  const result = await pool.query<{
+    gross_in: string;
+    total_out: string;
+    gross_in_month: string;
+    total_out_month: string;
+    mrr_proxy: string;
+  }>(`
     select
-      source_type,
-      coalesce(sum(amount_usd), 0) as all_time,
-      coalesce(sum(amount_usd) filter (where received_at >= date_trunc('month', now())), 0) as this_month
+      coalesce(sum(amount_usd) filter (where direction = 'in'), 0) as gross_in,
+      coalesce(sum(amount_usd) filter (where direction = 'out'), 0) as total_out,
+      coalesce(sum(amount_usd) filter (where direction = 'in' and received_at >= date_trunc('month', now())), 0) as gross_in_month,
+      coalesce(sum(amount_usd) filter (where direction = 'out' and received_at >= date_trunc('month', now())), 0) as total_out_month,
+      coalesce(sum(amount_usd) filter (where direction = 'in' and category = 'customer' and received_at >= date_trunc('month', now())), 0) as mrr_proxy
     from payments
-    group by source_type
   `);
-
-  const bySourceTypeAllTime = emptyTotals();
-  const bySourceTypeThisMonth = emptyTotals();
-  let allTime = 0;
-  let thisMonth = 0;
-  for (const row of result.rows) {
-    const at = Number(row.all_time);
-    const tm = Number(row.this_month);
-    bySourceTypeAllTime[row.source_type] = at;
-    bySourceTypeThisMonth[row.source_type] = tm;
-    allTime += at;
-    thisMonth += tm;
-  }
-  return { allTime, thisMonth, bySourceTypeAllTime, bySourceTypeThisMonth };
+  const row = result.rows[0];
+  const grossIn = Number(row?.gross_in ?? 0);
+  const totalOut = Number(row?.total_out ?? 0);
+  const grossInThisMonth = Number(row?.gross_in_month ?? 0);
+  const totalOutThisMonth = Number(row?.total_out_month ?? 0);
+  return {
+    grossIn,
+    totalOut,
+    net: grossIn - totalOut,
+    grossInThisMonth,
+    totalOutThisMonth,
+    netThisMonth: grossInThisMonth - totalOutThisMonth,
+    mrrProxy: Number(row?.mrr_proxy ?? 0),
+  };
 }
 
 export interface AddPaymentInput {
   receivedAt: Date;
   amountUsd: number;
   currency: string;
-  sourceType: PaymentSourceType;
+  direction: PaymentDirection;
+  category: PaymentCategory;
   counterparty: string | null;
   userId: string | null;
   memo: string | null;
@@ -108,14 +125,15 @@ export interface AddPaymentInput {
 
 export async function insertPayment(input: AddPaymentInput): Promise<string> {
   const result = await pool.query<{ id: string }>(
-    `insert into payments (received_at, amount_usd, currency, source_type, counterparty, user_id, memo, created_by)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
+    `insert into payments (received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      returning id`,
     [
       input.receivedAt,
       input.amountUsd,
       input.currency,
-      input.sourceType,
+      input.direction,
+      input.category,
       input.counterparty,
       input.userId,
       input.memo,
@@ -125,7 +143,7 @@ export async function insertPayment(input: AddPaymentInput): Promise<string> {
   return result.rows[0].id;
 }
 
-/** Powers the counterparty <datalist> on the Add payment form. */
+/** Powers the counterparty <datalist> on the Add payment form when category=customer. */
 export async function listUserEmailsForAutocomplete(limit = 500): Promise<string[]> {
   const result = await pool.query<{ email: string }>(
     `select email from users where role = 'user' and email is not null order by email limit $1`,
