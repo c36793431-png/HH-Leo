@@ -35,9 +35,11 @@ const ACTIVITY_STYLES: Record<string, { label: string; color: string }> = {
 };
 
 const SIGNUP_STATUS_STYLES: Record<string, string> = {
-  Paid: "text-emerald-400",
-  Lapsed: "text-amber-400",
   Free: "text-zinc-500",
+  Trial: "text-amber-400",
+  Paid: "text-emerald-400",
+  Team: "text-cyan-400",
+  Lapsed: "text-rose-400",
 };
 
 export default async function AdminDashboardPage() {
@@ -79,8 +81,11 @@ export default async function AdminDashboardPage() {
         <StatTile label="MRR" value={`$${revenue.mrr.toFixed(2)}`} sub="proxy: this month's customer payments" />
         <StatTile label="Total users" value={String(counts.total)} />
         <StatTile label="Paid customers" value={String(counts.paid)} />
+        <StatTile label="Trial" value={String(counts.trial)} />
+        <StatTile label="Team" value={String(counts.team)} />
+        <StatTile label="Free" value={String(counts.free)} />
+        <StatTile label="Lapsed" value={String(counts.lapsed)} />
         <StatTile label="Admins" value={String(counts.admins)} />
-        <StatTile label="Free / Lapsed" value={`${counts.free} / ${counts.lapsed}`} />
       </section>
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">

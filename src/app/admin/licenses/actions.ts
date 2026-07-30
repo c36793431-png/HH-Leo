@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
-import { extendLicense, revokeLicense, getLicenseExpiresAt } from "@/lib/licenses";
+import { extendLicense, revokeLicense, getLicenseExpiresAt, setLicenseTier, LICENSE_TIERS, type LicenseTier } from "@/lib/licenses";
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction } from "@/lib/admin";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
@@ -44,6 +44,22 @@ export async function extendLicenseFromListAction(
     const expiresAt = resolveExpiresAt(parseDurationFormData(formData), current);
     await extendLicense(licenseId, expiresAt);
     await logAdminAction(adminUserId, "admin_licenses_extend", ownerId, { licenseId, expiresAt: expiresAt.toISOString() }, licenseId);
+    revalidateLicenses(ownerId);
+  });
+}
+
+export async function setLicenseTierAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to update tier", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const licenseId = formData.get("licenseId") as string;
+    const tier = formData.get("tier") as string;
+    if (!LICENSE_TIERS.includes(tier as LicenseTier)) throw new Error("Invalid tier");
+    const ownerId = await getLicenseOwner(licenseId);
+    await setLicenseTier(licenseId, tier as LicenseTier);
+    await logAdminAction(adminUserId, "admin_licenses_set_tier", ownerId, { licenseId, tier }, licenseId);
     revalidateLicenses(ownerId);
   });
 }

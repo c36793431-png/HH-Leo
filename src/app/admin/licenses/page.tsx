@@ -9,7 +9,8 @@ import {
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
 import { ActionButton } from "@/components/admin/action-button";
-import { extendLicenseFromListAction, revokeLicenseFromListAction } from "./actions";
+import { TierSelectForm } from "@/components/admin/tier-select-form";
+import { extendLicenseFromListAction, revokeLicenseFromListAction, setLicenseTierAction } from "./actions";
 
 const STATUS_STYLES = {
   active: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
@@ -161,7 +162,9 @@ export default async function AdminLicensesPage({
                       "—"
                     )}
                   </td>
-                  <td className="py-2 pr-4 text-zinc-400">{l.tier}</td>
+                  <td className="py-2 pr-4">
+                    <TierSelectForm action={setLicenseTierAction} hiddenFields={{ licenseId: l.id }} currentTier={l.tier} />
+                  </td>
                   <td className="py-2 pr-4">
                     <span
                       className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${STATUS_STYLES[l.computedStatus]}`}

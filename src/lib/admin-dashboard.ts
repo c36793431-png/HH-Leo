@@ -10,31 +10,47 @@ export interface UserCounts {
   total: number;
   free: number;
   paid: number;
+  trial: number;
+  team: number;
   lapsed: number;
   admins: number;
 }
 
 /**
- * free/paid/lapsed/total scope to role='user' (real customers only). paid = has an
- * active license now, lapsed = had one before with none active now. admins is a
- * separate tile — role='admin' accounts, independent of license status, so they
- * never get lumped into the paid-customer count.
+ * free/paid/trial/team/lapsed/total scope to role='user' (real customers only). paid/
+ * trial/team come from the active license's tier column (trial|paid|team, see migration
+ * 0012). lapsed = had a license before with none active now. free = never licensed.
+ * admins is a separate tile — role='admin' accounts, independent of license status, so
+ * they never get lumped into the customer counts.
  */
 export async function getUserCounts(): Promise<UserCounts> {
-  const result = await pool.query<{ paid: string; lapsed: string; free: string; total: string; admins: string }>(`
+  const result = await pool.query<{
+    paid: string;
+    trial: string;
+    team: string;
+    lapsed: string;
+    free: string;
+    total: string;
+    admins: string;
+  }>(`
     with scoped as (
       select u.id,
-             exists (
-               select 1 from licenses l where l.user_id = u.id and l.status = 'active' and l.expires_at > now()
-             ) as is_paid,
+             (
+               select l.tier from licenses l
+               where l.user_id = u.id and l.status = 'active' and l.expires_at > now()
+               order by l.expires_at desc
+               limit 1
+             ) as active_tier,
              exists (select 1 from licenses l where l.user_id = u.id) as ever_licensed
       from users u
       where u.role = 'user'
     )
     select
-      (select count(*) filter (where is_paid) from scoped) as paid,
-      (select count(*) filter (where not is_paid and ever_licensed) from scoped) as lapsed,
-      (select count(*) filter (where not ever_licensed) from scoped) as free,
+      (select count(*) filter (where active_tier = 'paid') from scoped) as paid,
+      (select count(*) filter (where active_tier = 'trial') from scoped) as trial,
+      (select count(*) filter (where active_tier = 'team') from scoped) as team,
+      (select count(*) filter (where active_tier is null and ever_licensed) from scoped) as lapsed,
+      (select count(*) filter (where active_tier is null and not ever_licensed) from scoped) as free,
       (select count(*) from scoped) as total,
       (select count(*) from users where role = 'admin') as admins
   `);
@@ -43,6 +59,8 @@ export async function getUserCounts(): Promise<UserCounts> {
     total: Number(row?.total ?? 0),
     free: Number(row?.free ?? 0),
     paid: Number(row?.paid ?? 0),
+    trial: Number(row?.trial ?? 0),
+    team: Number(row?.team ?? 0),
     lapsed: Number(row?.lapsed ?? 0),
     admins: Number(row?.admins ?? 0),
   };
@@ -53,7 +71,7 @@ export interface RecentSignupRow {
   email: string | null;
   displayName: string | null;
   createdAt: Date;
-  statusLabel: "Paid" | "Lapsed" | "Free";
+  statusLabel: "Paid" | "Trial" | "Team" | "Lapsed" | "Free";
 }
 
 export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
@@ -62,13 +80,16 @@ export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
     email: string | null;
     display_name: string | null;
     created_at: Date;
-    is_paid: boolean;
+    active_tier: string | null;
     ever_licensed: boolean;
   }>(
     `select u.id, u.email, u.display_name, u.created_at,
-            exists (
-              select 1 from licenses l where l.user_id = u.id and l.status = 'active' and l.expires_at > now()
-            ) as is_paid,
+            (
+              select l.tier from licenses l
+              where l.user_id = u.id and l.status = 'active' and l.expires_at > now()
+              order by l.expires_at desc
+              limit 1
+            ) as active_tier,
             exists (select 1 from licenses l where l.user_id = u.id) as ever_licensed
      from users u
      where u.role = 'user'
@@ -81,7 +102,16 @@ export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
     email: r.email,
     displayName: r.display_name,
     createdAt: r.created_at,
-    statusLabel: r.is_paid ? "Paid" : r.ever_licensed ? "Lapsed" : "Free",
+    statusLabel:
+      r.active_tier === "paid"
+        ? "Paid"
+        : r.active_tier === "trial"
+          ? "Trial"
+          : r.active_tier === "team"
+            ? "Team"
+            : r.ever_licensed
+              ? "Lapsed"
+              : "Free",
   }));
 }
 
