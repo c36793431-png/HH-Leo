@@ -48,7 +48,7 @@ export function PortalSidebar({
   // Falls back to the free asset if the paid asset isn't deployed yet.
   const [paidLogoFailed, setPaidLogoFailed] = useState(false);
   const showPaidLogo = (tier === "paid" || tier === "admin") && !paidLogoFailed;
-  const logoSrc = showPaidLogo ? "/brand/horizon-logo-paid.jpg" : "/brand/horizon-logo.jpg";
+  const logoSrc = showPaidLogo ? "/brand/horizon-logo-paid.png" : "/brand/horizon-logo-free.png";
 
   return (
     <aside className="sidebar">
