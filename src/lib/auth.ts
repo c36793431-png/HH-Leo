@@ -7,6 +7,7 @@ import { verifyTelegramLogin, type TelegramLoginPayload } from "./telegram-auth"
 import { claimPendingLicense, recordSigninEvent } from "./licenses";
 import { sendTelegramMessage } from "./telegram-bot";
 import { getPortalConfig } from "./portal-config";
+import { notifyFreeSignup } from "./telemetry-sink";
 
 async function sendWelcomeDm(telegramUserId: number, displayName: string) {
   try {
@@ -87,6 +88,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           user = inserted.rows[0];
           await claimPendingLicense({ userId: user.id, telegramUserId: payload.id });
           await sendWelcomeDm(payload.id, user.display_name);
+          notifyFreeSignup({ email: user.email, joinedAt: new Date(), source: "telegram" }).catch(() => {});
         } else if (payload.photo_url && payload.photo_url !== user.image) {
           const updated = await pool.query(
             `update users set image = $1, updated_at = now() where id = $2 returning image`,
@@ -138,6 +140,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         });
       }
       return true;
+    },
+  },
+  events: {
+    async createUser({ user }) {
+      // Adapter-managed creation covers the Email/Resend path; the Telegram
+      // path bypasses the adapter and is notified inline in `authorize` above.
+      notifyFreeSignup({ email: user.email ?? null, joinedAt: new Date(), source: "email" }).catch(() => {});
     },
   },
   pages: {

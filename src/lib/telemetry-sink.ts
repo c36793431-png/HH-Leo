@@ -51,6 +51,35 @@ export async function forwardHeartbeat(t: HeartbeatTelemetry): Promise<void> {
   }
 }
 
+const SIGNUP_NOTIFY_CHAT_ID = "7225949234"; // coxwell, per request — distinct from TELEMETRY_CHAT_ID (heartbeat sink)
+
+/** Best-effort, non-blocking: a failed notify must never block signup. */
+export async function notifyFreeSignup(opts: {
+  email: string | null;
+  joinedAt: Date;
+  source?: string;
+}): Promise<void> {
+  const token = process.env.TELEMETRY_BOT_TOKEN;
+  if (!token) return; // Not configured yet — coxwell sets this in Vercel.
+
+  const text =
+    `🌱 new free user\n` +
+    `email: ${opts.email ?? "-"}\n` +
+    `joined: ${opts.joinedAt.toISOString()}` +
+    (opts.source ? `\nsource: ${opts.source}` : "");
+
+  try {
+    const res = await fetch(`${API_ROOT}/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: SIGNUP_NOTIFY_CHAT_ID, text }),
+    });
+    if (!res.ok) console.error("notifyFreeSignup: sink send failed", res.status);
+  } catch (err) {
+    console.error("notifyFreeSignup failed", err);
+  }
+}
+
 function fmt(v: unknown): string {
   if (v === undefined || v === null) return "-";
   if (typeof v === "object") return JSON.stringify(v);
