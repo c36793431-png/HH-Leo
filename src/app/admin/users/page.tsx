@@ -190,6 +190,7 @@ export default async function AdminUsersPage({
                   </Link>
                 </th>
                 <th className="pb-2 pr-4">Tier</th>
+                <th className="pb-2 pr-4">HWID</th>
                 <th className="pb-2 pr-4">
                   <Link
                     href={buildQuery(sp, {
@@ -241,6 +242,9 @@ export default async function AdminUsersPage({
                       )}
                     </td>
                     <td className="py-2 pr-4 text-zinc-400">{u.tier ?? "—"}</td>
+                    <td className="py-2 pr-4 font-mono text-xs text-zinc-500">
+                      {u.hardwareId ? `${u.hardwareId.slice(0, 4)}…` : "—"}
+                    </td>
                     <td className="py-2 pr-4 text-zinc-400">
                       {u.lastVerifiedAt ? formatRelative(u.lastVerifiedAt) : "never"}
                     </td>
@@ -290,7 +294,7 @@ export default async function AdminUsersPage({
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-4 text-center text-zinc-500">
+                  <td colSpan={11} className="py-4 text-center text-zinc-500">
                     {search || hasLicense || signupSource
                       ? "No users match these filters."
                       : "No users yet."}
