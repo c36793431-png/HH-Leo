@@ -13,6 +13,12 @@ function daysBetween(a: Date, b: Date): number {
   return Math.round((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000));
 }
 
+// Keeps the first segment (product prefix) visible, masks the rest until revealed.
+function maskLicenseKey(key: string): string {
+  const segments = key.split("-");
+  return segments.map((seg, i) => (i <= 1 ? seg : "•".repeat(seg.length))).join("-");
+}
+
 // Deterministic (not random) so the fake admin key row doesn't change between server/client render.
 function fakeAdminKeySuffix(seed: string): string {
   let h = 0;
@@ -56,14 +62,17 @@ export function LicenseStatusCard({
   isAdminAccount = false,
   adminLabel = "admin",
   showTestActions = false,
+  installedVersion = null,
 }: {
   license: LicenseDetail | null;
   telegramChannelUrl: string;
   isAdminAccount?: boolean;
   adminLabel?: string;
   showTestActions?: boolean;
+  installedVersion?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const [now] = useState(() => new Date());
 
   const displayStatus = computeLicenseDisplayStatus(license, now);
@@ -104,7 +113,10 @@ export function LicenseStatusCard({
             <h3>Horizon HFT — Admin / Pro</h3>
             <p>Admin access is independent of license state.</p>
             <div className="keyrow">
-              <span className="k">{fullKey}</span>
+              <span className="k">{revealed ? fullKey : maskLicenseKey(fullKey)}</span>
+              <button type="button" className="copy" onClick={() => setRevealed((v) => !v)}>
+                {revealed ? "Hide" : "Reveal"}
+              </button>
               <button type="button" className="copy" onClick={handleCopy}>
                 {copied ? "Copied" : "Copy"}
               </button>
@@ -195,10 +207,13 @@ export function LicenseStatusCard({
           <p>
             {isAdminAccount && "Admin access is independent of license state. "}
             {isExpired ? "Expired" : "Valid until"} <b>{formatAbsoluteUtc(license.expiresAt)}</b>
-            {" "}({formatRelative(license.expiresAt)})
+            {" "}({formatRelative(license.expiresAt)}) · issued {formatAbsoluteUtc(license.issuedAt)} · seat 1 of 1
           </p>
           <div className="keyrow">
-            <span className="k">{license.licenseKey}</span>
+            <span className="k">{revealed ? license.licenseKey : maskLicenseKey(license.licenseKey)}</span>
+            <button type="button" className="copy" onClick={() => setRevealed((v) => !v)}>
+              {revealed ? "Hide" : "Reveal"}
+            </button>
             <button type="button" className="copy" onClick={handleCopy}>
               {copied ? "Copied" : "Copy"}
             </button>
@@ -213,6 +228,16 @@ export function LicenseStatusCard({
             </span>
           </div>
           {showTestActions && <TestActionButtons />}
+        </div>
+        <div className="metrics">
+          <div className="m">
+            <b>{installedVersion ? `v${installedVersion}` : "—"}</b>
+            <span>Installed</span>
+          </div>
+          <div className="m">
+            <b>{isExpired ? "0d" : `${daysLeft}d`}</b>
+            <span>Remaining</span>
+          </div>
         </div>
       </div>
     </div>

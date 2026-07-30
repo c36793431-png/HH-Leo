@@ -74,26 +74,22 @@ export function PortalSidebar({
         </div>
       </Link>
       <nav className="nav">
-        {!isAdmin && (
-          <>
-            <div className="grp">Portal</div>
-            {PORTAL_LINKS.map((link) => {
-              const locked = "paidOnly" in link && link.paidOnly && tier === "free";
-              const active = isActive(pathname, link.href);
-              const isEdu = link.href === "/education";
-              return (
-                <Link
-                  key={link.href}
-                  href={locked ? "/dashboard#downloads" : link.href}
-                  className={locked ? "locked" : active ? (isEdu ? "on edu" : "on") : undefined}
-                >
-                  <span className="ic">{link.icon}</span> {link.label}
-                  {locked && <span className="lock">🔒</span>}
-                </Link>
-              );
-            })}
-          </>
-        )}
+        <div className="grp">Portal</div>
+        {PORTAL_LINKS.map((link) => {
+          const locked = "paidOnly" in link && link.paidOnly && tier === "free";
+          const active = isActive(pathname, link.href);
+          const isEdu = link.href === "/education";
+          return (
+            <Link
+              key={link.href}
+              href={locked ? "/dashboard#downloads" : link.href}
+              className={locked ? "locked" : active ? (isEdu ? "on edu" : "on") : undefined}
+            >
+              <span className="ic">{link.icon}</span> {link.label}
+              {locked && <span className="lock">🔒</span>}
+            </Link>
+          );
+        })}
 
         {isAdmin && (
           <div className="admin-block">

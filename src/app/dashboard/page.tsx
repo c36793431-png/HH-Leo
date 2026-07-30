@@ -18,7 +18,6 @@ import { humanizeTimeUntil } from "@/lib/format-time";
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  if (isAdminUsersPanelEmail(session.user.email)) redirect("/admin/dashboard");
 
   const [paid, config, telegramStatus, groupMembershipStatus, botUsername, downloads] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
@@ -114,6 +113,7 @@ export default async function DashboardPage() {
           isAdminAccount={isAdmin}
           adminLabel={userName}
           showTestActions={isCoxwellTestUserEmail(session.user.email)}
+          installedVersion={downloads.windows?.version ?? downloads.macos?.version ?? null}
         />
 
         {isAdmin && (
@@ -371,6 +371,55 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
+
+        {unlocked && (
+          <div className="grid g2 full">
+            {/* SIGNAL FEED — skeleton only, real data is v3 */}
+            <div className="card">
+              <div className="chead">
+                <span className="ic">◇</span>
+                <h3>Signal feed</h3>
+                <span className="cap">Loading…</span>
+              </div>
+              <div className="rows">
+                <div className="sk-row">
+                  <div className="skel sk-c" />
+                  <div style={{ flex: 1 }}>
+                    <div className="skel sk-l" style={{ width: "55%" }} />
+                    <div className="skel sk-l" style={{ width: "32%", marginTop: 8, height: 10 }} />
+                  </div>
+                </div>
+                <div className="sk-row">
+                  <div className="skel sk-c" />
+                  <div style={{ flex: 1 }}>
+                    <div className="skel sk-l" style={{ width: "68%" }} />
+                    <div className="skel sk-l" style={{ width: "40%", marginTop: 8, height: 10 }} />
+                  </div>
+                </div>
+                <div className="sk-row">
+                  <div className="skel sk-c" />
+                  <div style={{ flex: 1 }}>
+                    <div className="skel sk-l" style={{ width: "48%" }} />
+                    <div className="skel sk-l" style={{ width: "28%", marginTop: 8, height: 10 }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* DOWNLOAD HISTORY — empty state until per-user download tracking exists */}
+            <div className="card">
+              <div className="chead">
+                <span className="ic">↧</span>
+                <h3>Download history</h3>
+              </div>
+              <div className="empty">
+                <div className="eic">▤</div>
+                <b>No downloads yet</b>
+                <p>Once you grab the terminal installer, your version history shows up here.</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="foot">HORIZON HFT · customer portal</div>
