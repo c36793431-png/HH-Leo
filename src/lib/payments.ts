@@ -3,7 +3,14 @@ import { pool } from "./db";
 export type PaymentDirection = "in" | "out";
 export const PAYMENT_DIRECTIONS: PaymentDirection[] = ["in", "out"];
 
-export type PaymentCategory = "customer" | "partner" | "affiliate" | "feed_provider" | "infra" | "other";
+export type PaymentCategory =
+  | "customer"
+  | "partner"
+  | "affiliate"
+  | "feed_provider"
+  | "infra"
+  | "other"
+  | "referral_payout";
 export const PAYMENT_CATEGORIES: PaymentCategory[] = [
   "customer",
   "partner",
@@ -11,6 +18,7 @@ export const PAYMENT_CATEGORIES: PaymentCategory[] = [
   "feed_provider",
   "infra",
   "other",
+  "referral_payout",
 ];
 
 export interface PaymentRow {

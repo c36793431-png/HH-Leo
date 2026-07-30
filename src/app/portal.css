@@ -443,6 +443,23 @@
   border: 1px solid rgba(255, 194, 75, 0.4); border-radius: 999px; padding: 8px 14px; white-space: nowrap;
 }
 
+/* ---- REFERRALS ---- */
+.portal-shell .ref-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
+.portal-shell .ref-stat { background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft); border-radius: 11px; padding: 14px; }
+.portal-shell .ref-stat b { font-family: var(--hz-disp); font-weight: 800; font-size: 24px; display: block; color: var(--hz-ink); }
+.portal-shell .ref-stat span { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--hz-ink-3); }
+.portal-shell .ref-bar { height: 6px; border-radius: 4px; background: rgba(45, 226, 230, 0.14); margin-top: 8px; overflow: hidden; }
+.portal-shell .ref-bar i { display: block; height: 100%; background: var(--hz-cyan); }
+.portal-shell .ref-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.portal-shell .ref-table th { text-align: left; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--hz-ink-3); padding-bottom: 8px; }
+.portal-shell .ref-table td { padding: 8px 12px 8px 0; border-top: 1px solid var(--hz-line-soft); color: var(--hz-ink-2); }
+.portal-shell .ref-status { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; display: inline-block; }
+.portal-shell .ref-status.pending { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); }
+.portal-shell .ref-status.cleared { background: rgba(45, 226, 230, 0.14); color: var(--hz-cyan); }
+.portal-shell .ref-status.paid, .portal-shell .ref-status.active { background: rgba(55, 245, 160, 0.14); color: var(--hz-ok); }
+.portal-shell .ref-status.clawback { background: rgba(255, 92, 122, 0.14); color: var(--hz-bad); }
+.portal-shell .ref-status.lapsed { background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); }
+
 /* ---- MOBILE DRAWER ---- */
 .portal-shell .scrim { display: none; }
 @media (max-width: 768px) {

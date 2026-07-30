@@ -13,6 +13,7 @@ import {
 import { logAdminAction } from "@/lib/admin";
 import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
+import { maybeCreateReferralEarning } from "@/lib/referrals";
 
 async function requireAdminUsersPanel(): Promise<{ userId: string; email: string }> {
   const session = await auth();
@@ -79,7 +80,12 @@ export async function addPaymentAction(
       category,
     });
 
+    if (direction === "in" && category === "customer") {
+      await maybeCreateReferralEarning(paymentId);
+    }
+
     revalidatePath("/admin/finance");
     revalidatePath("/admin/dashboard");
+    revalidatePath("/admin/referrals");
   });
 }

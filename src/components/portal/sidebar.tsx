@@ -12,12 +12,14 @@ const PORTAL_LINKS = [
   { href: "/downloads", label: "Downloads", icon: "▤", paidOnly: true },
   { href: "/dashboard#community", label: "Community", icon: "◍" },
   { href: "/education", label: "Education", icon: "◈" },
+  { href: "/account/refer", label: "Refer & earn", icon: "$" },
   { href: "/account", label: "Account", icon: "◔" },
 ] as const;
 
 const ADMIN_LINKS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "◫" },
   { href: "/admin/finance", label: "Finance", icon: "$" },
+  { href: "/admin/referrals", label: "Referrals", icon: "◈" },
   { href: "/admin/users", label: "Users", icon: "◱" },
   { href: "/admin/licenses", label: "Licenses", icon: "⬡" },
   { href: "/admin/downloads", label: "Publish builds", icon: "⇧" },
@@ -26,7 +28,7 @@ const ADMIN_LINKS = [
 
 function isActive(pathname: string, href: string): boolean {
   const [path] = href.split("#");
-  if (path === "/dashboard") return pathname === "/dashboard";
+  if (path === "/dashboard" || path === "/account") return pathname === path;
   return pathname === path || pathname.startsWith(`${path}/`);
 }
 

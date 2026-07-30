@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/expire-licenses",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/referral-clearance",
+      "schedule": "0 2 * * *"
     }
   ]
 }

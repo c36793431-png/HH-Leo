@@ -8,6 +8,7 @@ import { claimPendingLicense, recordSigninEvent } from "./licenses";
 import { sendTelegramMessage } from "./telegram-bot";
 import { getPortalConfig } from "./portal-config";
 import { notifyFreeSignup } from "./telemetry-sink";
+import { attributeReferralFromCookie, getOrCreateReferralCode } from "./referrals";
 
 async function sendWelcomeDm(telegramUserId: number, displayName: string) {
   try {
@@ -87,6 +88,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           );
           user = inserted.rows[0];
           await claimPendingLicense({ userId: user.id, telegramUserId: payload.id });
+          await getOrCreateReferralCode(user.id);
+          await attributeReferralFromCookie(user.id).catch((err) => {
+            console.error("attributeReferralFromCookie failed (telegram)", err);
+          });
           await sendWelcomeDm(payload.id, user.display_name);
           notifyFreeSignup({ email: user.email, joinedAt: new Date(), source: "telegram" }).catch(() => {});
         } else if (payload.photo_url && payload.photo_url !== user.image) {
@@ -146,6 +151,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async createUser({ user }) {
       // Adapter-managed creation covers the Email/Resend path; the Telegram
       // path bypasses the adapter and is notified inline in `authorize` above.
+      if (user.id) {
+        await getOrCreateReferralCode(user.id);
+        await attributeReferralFromCookie(user.id).catch((err) => {
+          console.error("attributeReferralFromCookie failed (email)", err);
+        });
+      }
       notifyFreeSignup({ email: user.email ?? null, joinedAt: new Date(), source: "email" }).catch(() => {});
     },
   },

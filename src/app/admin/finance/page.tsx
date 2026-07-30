@@ -19,6 +19,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   feed_provider: "Feed provider",
   infra: "Infra",
   other: "Other",
+  referral_payout: "Referral payout",
 };
 
 const CATEGORY_STYLES: Record<string, string> = {
@@ -28,6 +29,7 @@ const CATEGORY_STYLES: Record<string, string> = {
   feed_provider: "text-amber-400",
   infra: "text-purple-400",
   other: "text-zinc-400",
+  referral_payout: "text-pink-400",
 };
 
 function fmt(n: number): string {
