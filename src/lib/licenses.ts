@@ -115,8 +115,8 @@ export async function revokeLicense(licenseId: string): Promise<void> {
   );
 }
 
-export type LicenseTier = "trial" | "paid" | "team";
-export const LICENSE_TIERS: LicenseTier[] = ["trial", "paid", "team"];
+export type LicenseTier = "trial" | "paid" | "team" | "deal";
+export const LICENSE_TIERS: LicenseTier[] = ["trial", "paid", "team", "deal"];
 
 export async function setLicenseTier(licenseId: string, tier: LicenseTier): Promise<void> {
   await pool.query(`update licenses set tier = $2 where id = $1`, [licenseId, tier]);

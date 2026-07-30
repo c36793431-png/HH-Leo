@@ -39,6 +39,7 @@ const SIGNUP_STATUS_STYLES: Record<string, string> = {
   Trial: "text-amber-400",
   Paid: "text-emerald-400",
   Team: "text-cyan-400",
+  Deal: "text-purple-400",
   Lapsed: "text-rose-400",
 };
 
@@ -83,6 +84,7 @@ export default async function AdminDashboardPage() {
         <StatTile label="Paid customers" value={String(counts.paid)} />
         <StatTile label="Trial" value={String(counts.trial)} />
         <StatTile label="Team" value={String(counts.team)} />
+        <StatTile label="Deal" value={String(counts.deal)} sub="barter/swap — not revenue" />
         <StatTile label="Free" value={String(counts.free)} />
         <StatTile label="Lapsed" value={String(counts.lapsed)} />
         <StatTile label="Admins" value={String(counts.admins)} />

@@ -12,22 +12,26 @@ export interface UserCounts {
   paid: number;
   trial: number;
   team: number;
+  deal: number;
   lapsed: number;
   admins: number;
 }
 
 /**
- * free/paid/trial/team/lapsed/total scope to role='user' (real customers only). paid/
- * trial/team come from the active license's tier column (trial|paid|team, see migration
- * 0012). lapsed = had a license before with none active now. free = never licensed.
- * admins is a separate tile — role='admin' accounts, independent of license status, so
- * they never get lumped into the customer counts.
+ * free/paid/trial/team/deal/lapsed/total scope to role='user' (real customers only). paid/
+ * trial/team/deal come from the active license's tier column (trial|paid|team|deal, see
+ * migrations 0012/0013). deal = bartered licenses (non-cash), tracked separately from paid
+ * so the customer breakdown stays honest — it's not counted in payments/revenue. lapsed =
+ * had a license before with none active now. free = never licensed. admins is a separate
+ * tile — role='admin' accounts, independent of license status, so they never get lumped
+ * into the customer counts.
  */
 export async function getUserCounts(): Promise<UserCounts> {
   const result = await pool.query<{
     paid: string;
     trial: string;
     team: string;
+    deal: string;
     lapsed: string;
     free: string;
     total: string;
@@ -49,6 +53,7 @@ export async function getUserCounts(): Promise<UserCounts> {
       (select count(*) filter (where active_tier = 'paid') from scoped) as paid,
       (select count(*) filter (where active_tier = 'trial') from scoped) as trial,
       (select count(*) filter (where active_tier = 'team') from scoped) as team,
+      (select count(*) filter (where active_tier = 'deal') from scoped) as deal,
       (select count(*) filter (where active_tier is null and ever_licensed) from scoped) as lapsed,
       (select count(*) filter (where active_tier is null and not ever_licensed) from scoped) as free,
       (select count(*) from scoped) as total,
@@ -61,6 +66,7 @@ export async function getUserCounts(): Promise<UserCounts> {
     paid: Number(row?.paid ?? 0),
     trial: Number(row?.trial ?? 0),
     team: Number(row?.team ?? 0),
+    deal: Number(row?.deal ?? 0),
     lapsed: Number(row?.lapsed ?? 0),
     admins: Number(row?.admins ?? 0),
   };
@@ -71,7 +77,7 @@ export interface RecentSignupRow {
   email: string | null;
   displayName: string | null;
   createdAt: Date;
-  statusLabel: "Paid" | "Trial" | "Team" | "Lapsed" | "Free";
+  statusLabel: "Paid" | "Trial" | "Team" | "Deal" | "Lapsed" | "Free";
 }
 
 export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
@@ -109,9 +115,11 @@ export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
           ? "Trial"
           : r.active_tier === "team"
             ? "Team"
-            : r.ever_licensed
-              ? "Lapsed"
-              : "Free",
+            : r.active_tier === "deal"
+              ? "Deal"
+              : r.ever_licensed
+                ? "Lapsed"
+                : "Free",
   }));
 }
 
