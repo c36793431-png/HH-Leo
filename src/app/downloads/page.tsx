@@ -89,7 +89,7 @@ export default async function DownloadsPage() {
             <h3>Your license</h3>
           </div>
           <div className="keyrow">
-            <span className="k">{license?.licenseKey ?? "—"}</span>
+            <span className={`k${license ? " ok" : ""}`}>{license?.licenseKey ?? "—"}</span>
           </div>
           {license && (
             <p style={{ marginTop: 10, fontSize: 12, color: "var(--hz-ink-3)" }}>
