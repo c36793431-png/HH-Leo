@@ -56,7 +56,7 @@ export function PortalSidebar({
 
   return (
     <aside className="sidebar">
-      <div className="brand">
+      <Link href="/dashboard" className="brand" aria-label="Horizon HFT dashboard">
         <Image
           src={logoSrc}
           alt="Horizon"
@@ -72,7 +72,7 @@ export function PortalSidebar({
           {tier === "paid" && <span className="brand-pill paid">ACTIVE</span>}
           {tier === "admin" && <span className="brand-pill admin">ADMIN</span>}
         </div>
-      </div>
+      </Link>
       <nav className="nav">
         {!isAdmin && (
           <>

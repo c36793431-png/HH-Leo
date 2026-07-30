@@ -8,7 +8,7 @@ export default async function Home() {
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4 text-center">
-      <Logo size="hero" />
+      <Logo size="hero" href={null} />
       <p className="max-w-md text-sm text-zinc-400">
         Arbitrage execution software, licenses, and updates for Horizon HFT clients.
       </p>

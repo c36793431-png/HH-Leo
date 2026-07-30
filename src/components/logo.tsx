@@ -1,3 +1,6 @@
+import Image from "next/image";
+import Link from "next/link";
+
 const SIZES = {
   nav: { mark: 22, gap: "gap-2", word: "text-sm", sub: "text-[10px]" },
   auth: { mark: 40, gap: "gap-3", word: "text-2xl", sub: "text-xs" },
@@ -7,25 +10,15 @@ const SIZES = {
 interface LogoProps {
   size?: keyof typeof SIZES;
   className?: string;
+  href?: string | null;
 }
 
-export function Logo({ size = "nav", className = "" }: LogoProps) {
+export function Logo({ size = "nav", className = "", href = "/" }: LogoProps) {
   const s = SIZES[size];
 
-  return (
+  const mark = (
     <div className={`flex items-center ${s.gap} ${className}`}>
-      <svg
-        width={s.mark}
-        height={s.mark}
-        viewBox="0 0 32 32"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        <path d="M3 22 L12 13 L18 19 L29 8" stroke="#22d3ee" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M21 8 H29 V16" stroke="#22d3ee" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        <line x1="3" y1="26" x2="29" y2="26" stroke="#3f3f46" strokeWidth="2" strokeLinecap="round" />
-      </svg>
+      <Image src="/logo.png" alt="Horizon HFT" width={s.mark} height={s.mark} priority />
       <div className="flex flex-col leading-none">
         <span className={`font-semibold tracking-wide text-zinc-50 ${s.word}`}>
           HORIZON<span className="text-cyan-400"> HFT</span>
@@ -37,5 +30,13 @@ export function Logo({ size = "nav", className = "" }: LogoProps) {
         )}
       </div>
     </div>
+  );
+
+  if (!href) return mark;
+
+  return (
+    <Link href={href} aria-label="Horizon HFT home">
+      {mark}
+    </Link>
   );
 }
