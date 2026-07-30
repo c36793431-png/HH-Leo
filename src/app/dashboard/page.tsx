@@ -234,7 +234,7 @@ export default async function DashboardPage() {
                   <b>Horizon General</b>
                   <span>Open to all members</span>
                 </div>
-                <span className="rcta">Open →</span>
+                <span className="join-pill">Join</span>
               </a>
               <a className="rw" href={config.communityGroupUrl} target="_blank" rel="noopener noreferrer">
                 <div className="ricon">◔</div>
@@ -242,7 +242,7 @@ export default async function DashboardPage() {
                   <b>Market Chatter</b>
                   <span>Free group</span>
                 </div>
-                <span className="rcta">Open →</span>
+                <span className="join-pill">Join</span>
               </a>
               {!unlocked && (
                 <div className="rw lockedrow">

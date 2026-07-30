@@ -54,6 +54,21 @@ export async function getBotUsername(): Promise<string | null> {
   }
 }
 
+export async function getChat(chatId: number | string): Promise<{ username?: string } | null> {
+  try {
+    const res = await fetch(`${API_ROOT}/bot${botToken()}/getChat?chat_id=${chatId}`);
+    if (!res.ok) {
+      console.error("getChat failed", await res.text());
+      return null;
+    }
+    const data = await res.json();
+    return data?.result ?? null;
+  } catch (err) {
+    console.error("getChat failed", err);
+    return null;
+  }
+}
+
 async function callTelegramApi(method: string, body: Record<string, unknown>): Promise<boolean> {
   const res = await fetch(`${API_ROOT}/bot${botToken()}/${method}`, {
     method: "POST",

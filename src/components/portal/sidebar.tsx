@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 export type PortalTier = "free" | "paid" | "admin";
 
@@ -43,10 +44,24 @@ export function PortalSidebar({
   const tierLabel = tier === "admin" ? "Admin" : tier === "paid" ? "Active" : "Free";
   const tierClass = tier === "admin" ? "admin" : tier === "paid" ? "paid" : "";
 
+  // Paid/admin get the blue+cyan+gold-apex mark; free gets the green tri-triangle.
+  // Falls back to the free asset if the paid asset isn't deployed yet.
+  const [paidLogoFailed, setPaidLogoFailed] = useState(false);
+  const showPaidLogo = (tier === "paid" || tier === "admin") && !paidLogoFailed;
+  const logoSrc = showPaidLogo ? "/brand/horizon-logo-paid.jpg" : "/brand/horizon-logo.jpg";
+
   return (
     <aside className="sidebar">
       <div className="brand">
-        <Image src="/brand/horizon-logo.jpg" alt="Horizon" width={38} height={38} className="glyph-img" priority />
+        <Image
+          src={logoSrc}
+          alt="Horizon"
+          width={38}
+          height={38}
+          className="glyph-img"
+          priority
+          onError={() => setPaidLogoFailed(true)}
+        />
         <div className="txt">
           HORIZON
           <small>HFT PORTAL</small>

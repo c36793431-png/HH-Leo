@@ -264,6 +264,12 @@
 .portal-shell .rw.lockedrow { opacity: 0.92; }
 .portal-shell .rw.lockedrow .ricon { color: var(--hz-grey); background: rgba(138, 155, 160, 0.06); }
 .portal-shell .rw .lockcta { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--hz-warn); white-space: nowrap; }
+.portal-shell .rw .join-pill {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; white-space: nowrap;
+  font-size: 12px; font-weight: 700; padding: 6px 15px; border-radius: 999px;
+  background: rgba(55, 245, 160, 0.14); border: 1px solid rgba(55, 245, 160, 0.36); color: var(--hz-ok);
+}
+.portal-shell a.rw:hover .join-pill { background: rgba(55, 245, 160, 0.22); }
 
 /* ---- COURSE TILES ---- */
 .portal-shell .courses { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }

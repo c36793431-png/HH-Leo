@@ -6,7 +6,7 @@ interface TelegramUpdate {
   message?: {
     text?: string;
     chat?: { id: number };
-    from?: { id: number; first_name?: string };
+    from?: { id: number; first_name?: string; username?: string };
   };
 }
 
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
   const text = update.message?.text;
   const chatId = update.message?.chat?.id;
   const fromId = update.message?.from?.id;
+  const fromUsername = update.message?.from?.username;
   if (!text || !chatId || !fromId) return NextResponse.json({ ok: true });
 
   const match = text.match(/^\/start onb_([a-f0-9]{32})\b/);
@@ -68,9 +69,10 @@ export async function POST(req: NextRequest) {
     `update users
      set telegram_bot_started_at = now(),
          telegram_user_id = coalesce(telegram_user_id, $1),
+         telegram_username = coalesce($2, telegram_username),
          updated_at = now()
-     where id = $2`,
-    [fromId, userId]
+     where id = $3`,
+    [fromId, fromUsername ?? null, userId]
   );
 
   try {
