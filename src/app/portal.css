@@ -61,7 +61,7 @@
   color: #02171a; font-family: var(--hz-disp); font-weight: 800; font-size: 22px;
   box-shadow: 0 4px 18px rgba(45, 226, 230, 0.35);
 }
-.portal-shell .brand .glyph-img { width: 38px; height: 38px; border-radius: 10px; object-fit: contain; flex: 0 0 auto; }
+.portal-shell .brand .glyph-img { width: 38px; height: 38px; object-fit: contain; background: transparent; flex: 0 0 auto; }
 .portal-shell .brand .txt { font-family: var(--hz-disp); font-weight: 800; font-size: 22px; letter-spacing: 0.04em; line-height: 1; }
 .portal-shell .brand .txt small { display: block; font-family: var(--hz-sans); font-weight: 600; font-size: 10px; letter-spacing: 0.32em; color: var(--hz-cyan); margin-top: 3px; }
 
