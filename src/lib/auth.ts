@@ -15,7 +15,7 @@ async function sendWelcomeDm(telegramUserId: number, displayName: string) {
       telegramUserId,
       `Welcome to Horizon HFT, ${displayName}!\n\n` +
         `Community: ${config.telegramChannelUrl}\n` +
-        `Free Users group: ${config.communityGroupUrl}\n\n` +
+        `Free Users group: ${config.telegramFreeGroupUrl}\n\n` +
         `Log in any time at horizonhft.com to see pricing and docs.`
     );
   } catch (err) {

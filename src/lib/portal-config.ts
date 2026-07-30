@@ -3,6 +3,7 @@ import { pool } from "./db";
 export interface PortalConfig {
   communityGroupUrl: string;
   telegramChannelUrl: string;
+  telegramFreeGroupUrl: string;
   testingGroupUrl: string;
   pricingDisplay: string;
   educationPreview: { title: string; summary: string }[];
@@ -11,6 +12,7 @@ export interface PortalConfig {
 const DEFAULTS: PortalConfig = {
   communityGroupUrl: "https://t.me/horizonhft",
   telegramChannelUrl: "https://t.me/horizonhft",
+  telegramFreeGroupUrl: "https://t.me/+2LSFHZbapbNlODhk",
   testingGroupUrl: "https://t.me/horizonhft",
   pricingDisplay: "$100/mo — full access to Horizon HFT",
   educationPreview: [
@@ -41,6 +43,7 @@ export async function getPortalConfig(): Promise<PortalConfig> {
   return {
     communityGroupUrl: overrides.community_group_url as string ?? DEFAULTS.communityGroupUrl,
     telegramChannelUrl: overrides.telegram_channel_url as string ?? DEFAULTS.telegramChannelUrl,
+    telegramFreeGroupUrl: overrides.telegram_free_group_url as string ?? DEFAULTS.telegramFreeGroupUrl,
     testingGroupUrl: overrides.testing_group_url as string ?? DEFAULTS.testingGroupUrl,
     pricingDisplay: overrides.pricing_display as string ?? DEFAULTS.pricingDisplay,
     educationPreview:
