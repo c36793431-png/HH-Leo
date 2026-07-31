@@ -201,7 +201,7 @@ export async function getSignupsPerDay(days = 30): Promise<SignupsPerDay[]> {
 /**
  * No per-tier pricing/subscription schema exists, so true MRR isn't computable —
  * `mrr` is a crude proxy (this month's customer-sourced "in" payments), not a real
- * recurring-revenue figure. Flagged to marcus/coxwell rather than leaving it "not
+ * recurring-revenue figure. Flagged for follow-up rather than leaving it "not
  * tracked" now that the payments table backs gross/net for real.
  */
 export interface RevenueStats {

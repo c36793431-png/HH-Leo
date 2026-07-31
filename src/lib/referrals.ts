@@ -143,9 +143,9 @@ export interface UserReferralStats {
 }
 
 /** Active = same definition used everywhere else in the app (isPaidUser: licenses.status='active'
- * AND expires_at > now()). Default pending marcus/coxwell reply on the Wellington short-cycle
- * question raised in HANDOFF_referral_active_status_question_2026-07-30.md — reversible one-line
- * swap to a payment-recency definition if they want Option B instead. */
+ * AND expires_at > now()). Default pending reply on the Wellington short-cycle
+ * question raised internally — reversible one-line swap to a payment-recency
+ * definition if Option B is preferred instead. */
 export async function getUserReferralStats(userId: string, baseUrl: string): Promise<UserReferralStats> {
   const referralCode = await getOrCreateReferralCode(userId);
 
@@ -360,9 +360,9 @@ export async function listAllReferralEarnings(search?: string, limit = 300): Pro
   }));
 }
 
-/** Manual clawback (no automated refund detection exists in the payments schema yet — see
- * HANDOFF_referral_active_status_question_2026-07-30.md). Only pending/cleared earnings can be
- * clawed back; already-paid earnings need a separate reversal, not modeled here. */
+/** Manual clawback (no automated refund detection exists in the payments schema yet).
+ * Only pending/cleared earnings can be clawed back; already-paid earnings need a
+ * separate reversal, not modeled here. */
 export async function clawbackEarning(earningId: string): Promise<void> {
   await pool.query(
     `update referral_earnings set status = 'clawback' where id = $1 and status in ('pending', 'cleared')`,

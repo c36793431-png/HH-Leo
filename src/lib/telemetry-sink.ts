@@ -17,7 +17,7 @@ export interface HeartbeatTelemetry {
   key: string;
   hwid: string;
   version?: string;
-  // Opaque client-supplied fields — semantics TBD (flagged to Axiom). Forwarded as-is.
+  // Opaque client-supplied fields — semantics TBD. Forwarded as-is.
   d1?: unknown;
   d2?: unknown;
   d3?: unknown;

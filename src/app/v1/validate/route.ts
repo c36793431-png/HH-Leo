@@ -6,7 +6,7 @@ import { signResponse, signingConfigured } from "@/lib/response-signing";
 
 /**
  * /v1/validate — desktop-client activation call.
- * Flow (Axiom probe): client prompts for key → saves license.dat → POST here.
+ * Flow (from client reverse-engineering): client prompts for key → saves license.dat → POST here.
  * Request body (FROZEN, from probe): { licensekey, hardwareid, currentversion }.
  *
  * STATUS: request plumbing, rate-limiting, HTTPS enforcement, key lookup, response

@@ -38,7 +38,7 @@
 --      active_licenses.sql): status = 'revoked', lifecycle_state =
 --      'expired_processed'. That preserves the "lapsed, not admin-revoked"
 --      distinction Coxwell wanted, just in the lifecycle_state column
---      instead of status. Flagged to marcus for confirmation.
+--      instead of status. Flagged for confirmation.
 --   2. Moves B's real Telegram identity onto A, after clearing it from B
 --      first (telegram_user_id is UNIQUE across users, so both values
 --      can't exist at once -- clear-then-set, in a single statement via a

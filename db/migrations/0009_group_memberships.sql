@@ -1,6 +1,6 @@
 -- Phase 2 of paid-user onboarding automation: DB-side tracking of paid-group
--- invite/join/removal lifecycle, so the portal (and the bus listener on the
--- axiom side) has a durable record independent of Telegram's own state.
+-- invite/join/removal lifecycle, so the portal has a durable record
+-- independent of Telegram's own state.
 create table if not exists group_memberships (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,

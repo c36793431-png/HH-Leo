@@ -1,5 +1,4 @@
--- License tier backfill for known accounts (bus thread
--- horizon-portal-admin-dashboard-2026-07-30, marcus/coxwell). The 'deal' tier
+-- License tier backfill for known accounts. The 'deal' tier
 -- and its check constraint already landed in 0013 (jaymob123@gmail.com
 -- backfilled there). This migration covers the remaining named corrections
 -- coxwell confirmed: Alonzo (trial), sahilsahu202@gmail.com (team), and

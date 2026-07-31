@@ -1,5 +1,4 @@
--- Add "deal" license tier (bus thread horizon-portal-admin-dashboard-2026-07-30,
--- marcus/coxwell). Deal = bartered license (user traded another software for it, not
+-- Add "deal" license tier. Deal = bartered license (user traded another software for it, not
 -- cash) — a real customer category, distinguished from paid in the dashboard breakdown,
 -- but never counted as revenue since the payments table stays keyed off actual payment
 -- rows, not license tier.
