@@ -18,6 +18,7 @@ import { humanizeTimeUntil } from "@/lib/format-time";
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  if (isAdminUsersPanelEmail(session.user.email)) redirect("/admin/dashboard");
 
   const [paid, config, telegramStatus, groupMembershipStatus, botUsername, downloads] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
