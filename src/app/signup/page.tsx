@@ -16,9 +16,13 @@ export default async function SignupPage({
   const { error } = await searchParams;
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-8 px-4 py-16">
-      <Logo size="hero" />
-      <AuthCard mode="signup" botUsername={botUsername} error={error} />
-    </main>
+    <>
+      <header className="flex items-center px-6 py-5">
+        <Logo size="nav" />
+      </header>
+      <main className="flex flex-1 flex-col items-center justify-center gap-8 px-4 pb-16">
+        <AuthCard mode="signup" botUsername={botUsername} error={error} />
+      </main>
+    </>
   );
 }
