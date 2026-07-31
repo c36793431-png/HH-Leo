@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { pool } from "./db";
 import { notifyPaidActivation } from "./telemetry-sink";
+import { insertPayment } from "./payments";
 
 /** Single source of truth for the active/expiring/expired/revoked bucket shown on every
  * license row across /admin/users, /admin/users/[id], and /admin/licenses — these three
@@ -130,6 +131,14 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
         claimTelegramUserId: args.claimTelegramUserId,
       }).catch(() => {});
 
+      recordAutoPaymentForNewLicense({
+        newLicenseId: row.id,
+        tier: row.tier,
+        userId: args.userId,
+        claimEmail: args.claimEmail,
+        claimTelegramUserId: args.claimTelegramUserId,
+      }).catch(() => {});
+
       return { id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at };
     } catch (err: unknown) {
       if ((err as { code?: string })?.code === "23505") continue; // license_key collision — retry with a fresh key
@@ -164,6 +173,49 @@ async function notifyNewPaidActivation(args: {
     licenseKey: args.licenseKey,
     activatedAt: new Date(),
     tier: args.tier,
+  });
+}
+
+/** portal_config row lets coxwell reprice without a code change; falls back to $100 if unset. */
+async function getPaidTierDefaultPriceUsd(): Promise<number> {
+  const result = await pool.query<{ value: unknown }>(
+    "select value from portal_config where key = 'paid_tier_default_price_usd'"
+  );
+  const parsed = Number(result.rows[0]?.value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+}
+
+/** Auto-logs a finance payment row when a Paid-tier license is a genuine new activation
+ * (never on Trial/Team/Deal, and never on a renewal/re-issue — same isFirstActiveLicense
+ * guard as notifyNewPaidActivation). Coxwell can still edit/delete the row from /admin/finance. */
+async function recordAutoPaymentForNewLicense(args: {
+  newLicenseId: string;
+  tier: string;
+  userId?: string;
+  claimEmail?: string;
+  claimTelegramUserId?: number;
+}): Promise<void> {
+  if (args.tier !== "paid" || !args.userId) return;
+
+  const isFirst = await isFirstActiveLicense(args);
+  if (!isFirst) return;
+
+  const result = await pool.query<{ email: string | null }>("select email from users where id = $1", [args.userId]);
+  const email = result.rows[0]?.email ?? null;
+  if (!email) return;
+
+  const amountUsd = await getPaidTierDefaultPriceUsd().catch(() => 100);
+
+  await insertPayment({
+    receivedAt: new Date(),
+    amountUsd,
+    currency: "USD",
+    direction: "in",
+    category: "customer",
+    counterparty: email,
+    userId: args.userId,
+    memo: `Auto: Paid tier license activation ${args.newLicenseId.slice(0, 8)}`,
+    createdBy: null,
   });
 }
 
