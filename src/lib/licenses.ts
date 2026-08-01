@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { pool } from "./db";
 import { notifyPaidActivation } from "./telemetry-sink";
 import { insertPayment } from "./payments";
+import { maybeCreateReferralEarning } from "./referrals";
 
 /** Single source of truth for the active/expiring/expired/revoked bucket shown on every
  * license row across /admin/users, /admin/users/[id], and /admin/licenses — these three
@@ -208,7 +209,7 @@ async function recordAutoPaymentForNewLicense(args: {
 
   const amountUsd = await getPaidTierDefaultPriceUsd().catch(() => 100);
 
-  await insertPayment({
+  const paymentId = await insertPayment({
     receivedAt: new Date(),
     amountUsd,
     currency: "USD",
@@ -219,6 +220,8 @@ async function recordAutoPaymentForNewLicense(args: {
     memo: `Auto: Paid tier license activation ${args.newLicenseId.slice(0, 8)}`,
     createdBy: null,
   });
+
+  await maybeCreateReferralEarning(paymentId);
 }
 
 export async function extendLicense(licenseId: string, expiresAt: Date): Promise<void> {
