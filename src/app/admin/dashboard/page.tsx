@@ -93,17 +93,24 @@ export default async function AdminDashboardPage() {
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
         <h2 className="text-sm font-medium text-cyan-400">New signups — last 30 days</h2>
-        <div className="mt-4 flex h-16 items-end gap-0.5">
-          {sparkline.map((d) => (
-            <div
-              key={d.date}
-              title={`${d.date}: ${d.count}`}
-              className="flex-1 rounded-t bg-cyan-500/60"
-              style={{ height: `${Math.max(4, (d.count / maxSparkline) * 100)}%` }}
-            />
-          ))}
+        <div className="relative mt-4 h-16">
+          <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="border-t border-teal-300/40" />
+            ))}
+          </div>
+          <div className="relative flex h-16 items-end gap-0.5">
+            {sparkline.map((d) => (
+              <div
+                key={d.date}
+                title={`${d.date}: ${d.count}`}
+                className="flex-1 rounded-t bg-cyan-500/60"
+                style={{ height: `${Math.max(4, (d.count / maxSparkline) * 100)}%` }}
+              />
+            ))}
+          </div>
         </div>
-        <div className="mt-1 flex gap-0.5 text-[9px] text-zinc-600">
+        <div className="mt-1 flex gap-0.5 text-[10px] text-[#e5e5e5]">
           {sparkline.map((d, i) => {
             const isEdge = i === 0 || i === sparkline.length - 1;
             const isWeeklyTick = i % 7 === 0;
