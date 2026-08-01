@@ -427,39 +427,7 @@ export default async function DashboardPage() {
         </div>
 
         {unlocked && (
-          <div className="grid g2 full">
-            {/* SIGNAL FEED — skeleton only, real data is v3 */}
-            <div className="card">
-              <div className="chead">
-                <span className="ic">◇</span>
-                <h3>Signal feed</h3>
-                <span className="cap">Loading…</span>
-              </div>
-              <div className="rows">
-                <div className="sk-row">
-                  <div className="skel sk-c" />
-                  <div style={{ flex: 1 }}>
-                    <div className="skel sk-l" style={{ width: "55%" }} />
-                    <div className="skel sk-l" style={{ width: "32%", marginTop: 8, height: 10 }} />
-                  </div>
-                </div>
-                <div className="sk-row">
-                  <div className="skel sk-c" />
-                  <div style={{ flex: 1 }}>
-                    <div className="skel sk-l" style={{ width: "68%" }} />
-                    <div className="skel sk-l" style={{ width: "40%", marginTop: 8, height: 10 }} />
-                  </div>
-                </div>
-                <div className="sk-row">
-                  <div className="skel sk-c" />
-                  <div style={{ flex: 1 }}>
-                    <div className="skel sk-l" style={{ width: "48%" }} />
-                    <div className="skel sk-l" style={{ width: "28%", marginTop: 8, height: 10 }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
+          <div className="grid full">
             {/* DOWNLOAD HISTORY — empty state until per-user download tracking exists */}
             <div className="card">
               <div className="chead">

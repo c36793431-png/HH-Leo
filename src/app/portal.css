@@ -321,17 +321,6 @@
 .portal-shell .locked-preview .veil b { font-size: 14px; }
 .portal-shell .locked-preview .veil .up { font-size: 12px; font-weight: 700; color: var(--hz-warn); letter-spacing: 0.04em; }
 
-/* ---- SKELETON ---- */
-.portal-shell .skel { position: relative; overflow: hidden; background: var(--hz-panel-2); border-radius: 8px; }
-.portal-shell .skel::after {
-  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(45, 226, 230, 0.08), transparent); animation: hz-sh 1.3s infinite;
-}
-@keyframes hz-sh { 100% { transform: translateX(100%); } }
-.portal-shell .sk-row { display: flex; align-items: center; gap: 13px; padding: 13px 12px; }
-.portal-shell .sk-c { width: 36px; height: 36px; border-radius: 9px; }
-.portal-shell .sk-l { height: 12px; border-radius: 5px; }
-
 /* ---- EMPTY STATE ---- */
 .portal-shell .empty { text-align: center; padding: 30px 20px; color: var(--hz-ink-3); }
 .portal-shell .empty .eic {
