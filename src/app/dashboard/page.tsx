@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getLicenseForUser, computeLicenseDisplayStatus } from "@/lib/licenses";
+import {
+  isPaidUser,
+  getLicenseForUser,
+  computeLicenseDisplayStatus,
+  computeUserActiveFeeds,
+  FEED_TYPES,
+  FEED_TYPE_META,
+} from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { pool } from "@/lib/db";
@@ -51,6 +58,7 @@ export default async function DashboardPage() {
       ? await createOnboardingToken(session.user.id).catch(() => null)
       : null;
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
+  const activeFeeds = await computeUserActiveFeeds(session.user.id).catch((): typeof FEED_TYPES => []);
   const isAdmin = isAdminUsersPanelEmail(session.user.email);
   const displayStatus = computeLicenseDisplayStatus(licenseDetail);
   const isExpired = displayStatus === "expired";
@@ -117,6 +125,43 @@ export default async function DashboardPage() {
           showTestActions={isCoxwellTestUserEmail(session.user.email)}
           installedVersion={downloads.windows?.version ?? downloads.macos?.version ?? null}
         />
+
+        <div className="card full" id="feeds">
+          <div className="chead">
+            <span className="ic">◇</span>
+            <h3>Signal Feeds</h3>
+            <span className="cap">{activeFeeds.length} of {FEED_TYPES.length} active</span>
+          </div>
+          <div className="feed-grid">
+            {FEED_TYPES.map((f) => {
+              const meta = FEED_TYPE_META[f];
+              const isActive = activeFeeds.includes(f);
+              return (
+                <div key={f} className={`feed-card${isActive ? " active" : ""}`}>
+                  <div className="fc-head">
+                    <b>{meta.name}</b>
+                    {isActive && <span className="fc-check">✓</span>}
+                  </div>
+                  <p>{meta.description}</p>
+                  {isActive ? (
+                    <span className="fc-status">
+                      Active until {licenseDetail ? licenseDetail.expiresAt.toLocaleDateString() : "—"}
+                    </span>
+                  ) : (
+                    <a
+                      className="fc-cta"
+                      href={config.telegramChannelUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Not included — contact us to add
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         {isAdmin && (
           <div className="card admincard full">

@@ -46,6 +46,7 @@ interface IssueLicenseArgs {
   /** Defaults to 30 days from now when omitted. */
   expiresAt?: Date;
   notes?: string;
+  feedTypes?: FeedType[];
 }
 
 export interface IssuedLicense {
@@ -108,8 +109,8 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
     const licenseKey = generateLicenseKey();
     try {
       const result = await pool.query(
-        `insert into licenses (user_id, claim_email, claim_telegram_user_id, license_key, status, expires_at, notes)
-         values ($1, $2, $3, $4, 'active', $5, $6)
+        `insert into licenses (user_id, claim_email, claim_telegram_user_id, license_key, status, expires_at, notes, feed_types)
+         values ($1, $2, $3, $4, 'active', $5, $6, $7)
          returning id, license_key, expires_at, tier`,
         [
           args.userId ?? null,
@@ -118,6 +119,7 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
           licenseKey,
           expiresAt,
           args.notes ?? null,
+          args.feedTypes ?? [],
         ]
       );
       const row = result.rows[0];
@@ -378,6 +380,7 @@ export interface LicenseDetail {
   expiresAt: Date;
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
+  feedTypes: FeedType[];
 }
 
 export type LicenseDisplayStatus = "active" | "expiring" | "expired" | "revoked" | "none";
@@ -400,7 +403,7 @@ export function computeLicenseDisplayStatus(
 /** Dashboard widget lookup — unlike getActiveLicenseForUser, returns the latest license regardless of status/expiry so the UI can render EXPIRED/REVOKED states. */
 export async function getLicenseForUser(userId: string): Promise<LicenseDetail | null> {
   const result = await pool.query(
-    `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at
+    `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types
      from licenses where user_id = $1
      order by issued_at desc
      limit 1`,
@@ -417,6 +420,7 @@ export async function getLicenseForUser(userId: string): Promise<LicenseDetail |
     expiresAt: row.expires_at,
     hardwareId: row.hardware_id,
     lastVerifiedAt: row.last_verified_at,
+    feedTypes: (row.feed_types ?? []).filter(isFeedType),
   };
 }
 
@@ -563,6 +567,7 @@ export interface UserLicenseRow {
   expiresAt: Date;
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
+  feedTypes: FeedType[];
 }
 
 export interface SigninEventRow {
@@ -638,7 +643,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
 
   const [licensesResult, signinsResult, actionsResult, groupsResult] = await Promise.all([
     pool.query(
-      `select id, license_key, status, lifecycle_state, tier, issued_at, expires_at, hardware_id, last_verified_at,
+      `select id, license_key, status, lifecycle_state, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types,
               ${licenseStatusCaseSql("licenses")} as computed_status
        from licenses where user_id = $1
        order by issued_at desc`,
@@ -691,6 +696,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
       expiresAt: r.expires_at,
       hardwareId: r.hardware_id,
       lastVerifiedAt: r.last_verified_at,
+      feedTypes: (r.feed_types ?? []).filter(isFeedType),
     })),
     signins: signinsResult.rows.map((r) => ({
       id: r.id,
@@ -830,6 +836,45 @@ export async function recordSigninEvent(userId: string, provider: string): Promi
 export function maskLicenseKey(key: string): string {
   const last4 = key.slice(-4);
   return key.slice(0, -4).replace(/[A-Za-z0-9]/g, "X") + last4;
+}
+
+export type FeedType = "futures" | "london" | "ny" | "crypto";
+export const FEED_TYPES: FeedType[] = ["futures", "london", "ny", "crypto"];
+
+export interface FeedTypeMeta {
+  id: FeedType;
+  name: string;
+  description: string;
+}
+
+// text[] column (not enum) — new feed types append here without a schema change.
+export const FEED_TYPE_META: Record<FeedType, FeedTypeMeta> = {
+  futures: { id: "futures", name: "Futures Feed", description: "CME futures signals, session-hour focused" },
+  london: { id: "london", name: "London Feed", description: "LSE + EU pre-open signals" },
+  ny: { id: "ny", name: "NY Feed", description: "NYSE + NASDAQ open + close signals" },
+  crypto: { id: "crypto", name: "Crypto Feed", description: "24/7 major-pair signals" },
+};
+
+function isFeedType(value: string): value is FeedType {
+  return (FEED_TYPES as string[]).includes(value);
+}
+
+export async function setLicenseFeedTypes(licenseId: string, feedTypes: FeedType[]): Promise<void> {
+  await pool.query(`update licenses set feed_types = $2 where id = $1`, [licenseId, feedTypes]);
+}
+
+/** Feeds live and die with the license they're attached to — active feeds are just the
+ * feed_types array on the user's currently-active license, empty when there's none. */
+export async function computeUserActiveFeeds(userId: string): Promise<FeedType[]> {
+  const result = await pool.query<{ feed_types: string[] }>(
+    `select feed_types from licenses
+     where user_id = $1 and status = 'active' and expires_at > now()
+     order by expires_at desc
+     limit 1`,
+    [userId]
+  );
+  const raw = result.rows[0]?.feed_types ?? [];
+  return raw.filter(isFeedType);
 }
 
 export async function claimPendingLicense({ userId, email, telegramUserId }: ClaimArgs) {

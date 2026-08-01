@@ -8,6 +8,8 @@ import { ActionButton } from "@/components/admin/action-button";
 import { TierSelectForm } from "@/components/admin/tier-select-form";
 import { CopyIdButton } from "@/components/admin/copy-id-button";
 import { InlineEditField } from "@/components/admin/inline-edit-field";
+import { FeedCheckboxes, FeedSelectForm } from "@/components/admin/feed-select-form";
+import { FEED_TYPE_META } from "@/lib/licenses";
 import {
   expireNowAction,
   extendLicenseAction,
@@ -15,6 +17,7 @@ import {
   issueNewLicenseAction,
   setUserLicenseTierAction,
   updateUserFieldAction,
+  updateLicenseFeedsAction,
 } from "../actions";
 
 const STATUS_STYLES = {
@@ -166,7 +169,9 @@ export default async function AdminUserDetailPage({
                 ? `User has active license (expires ${formatAbsoluteUtc(activeLicense.expiresAt)}). Revoke it first to issue a new one.`
                 : undefined
             }
-          />
+          >
+            <FeedCheckboxes />
+          </DurationForm>
         </div>
       </section>
 
@@ -181,6 +186,7 @@ export default async function AdminUserDetailPage({
                 <th className="pb-2 pr-4">Status</th>
                 <th className="pb-2 pr-4">Lifecycle</th>
                 <th className="pb-2 pr-4">Tier</th>
+                <th className="pb-2 pr-4">Feeds</th>
                 <th className="pb-2 pr-4">Issued</th>
                 <th className="pb-2 pr-4">Expires</th>
                 <th className="pb-2 pr-4">HWID</th>
@@ -202,6 +208,22 @@ export default async function AdminUserDetailPage({
                   </td>
                   <td className="py-2 pr-4 text-zinc-500 text-xs">{l.lifecycleState ?? "—"}</td>
                   <td className="py-2 pr-4 text-zinc-400">{l.tier}</td>
+                  <td className="py-2 pr-4">
+                    <div className="flex flex-wrap gap-1">
+                      {l.feedTypes.length === 0 ? (
+                        <span className="text-xs text-zinc-600">—</span>
+                      ) : (
+                        l.feedTypes.map((f) => (
+                          <span
+                            key={f}
+                            className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300"
+                          >
+                            {FEED_TYPE_META[f].name}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </td>
                   <td className="py-2 pr-4 text-zinc-400">{formatRelative(l.issuedAt)}</td>
                   <td className="py-2 pr-4 text-zinc-400">
                     {formatAbsoluteUtc(l.expiresAt)}{" "}
@@ -234,6 +256,11 @@ export default async function AdminUserDetailPage({
                           defaultUnit="days"
                           triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
                         />
+                        <FeedSelectForm
+                          action={updateLicenseFeedsAction}
+                          hiddenFields={{ licenseId: l.id }}
+                          currentFeedTypes={l.feedTypes}
+                        />
                         <ActionButton
                           action={revokeAction}
                           hiddenFields={{ licenseId: l.id }}
@@ -248,7 +275,7 @@ export default async function AdminUserDetailPage({
               ))}
               {user.licenses.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-4 text-center text-zinc-500">
+                  <td colSpan={11} className="py-4 text-center text-zinc-500">
                     No licenses yet — issue one above.
                   </td>
                 </tr>

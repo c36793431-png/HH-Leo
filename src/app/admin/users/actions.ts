@@ -9,8 +9,11 @@ import {
   revokeLicense,
   getLicenseExpiresAt,
   setLicenseTier,
+  setLicenseFeedTypes,
   LICENSE_TIERS,
+  FEED_TYPES,
   type LicenseTier,
+  type FeedType,
 } from "@/lib/licenses";
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction } from "@/lib/admin";
@@ -100,6 +103,27 @@ export async function setUserLicenseTierAction(
   });
 }
 
+function readFeedTypesFromFormData(formData: FormData): FeedType[] {
+  return formData
+    .getAll("feedTypes")
+    .filter((f): f is string => typeof f === "string" && (FEED_TYPES as string[]).includes(f)) as FeedType[];
+}
+
+export async function updateLicenseFeedsAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to update feeds", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const licenseId = formData.get("licenseId") as string;
+    const feedTypes = readFeedTypesFromFormData(formData);
+    const ownerId = await getLicenseOwner(licenseId);
+    await setLicenseFeedTypes(licenseId, feedTypes);
+    await logAdminAction(adminUserId, "admin_users_set_feeds", ownerId, { licenseId, feedTypes }, licenseId);
+    revalidateUsers(ownerId);
+  });
+}
+
 const ADMIN_EDITABLE_USER_FIELDS = ["display_name", "email", "role"] as const;
 type AdminEditableUserField = (typeof ADMIN_EDITABLE_USER_FIELDS)[number];
 
@@ -150,8 +174,15 @@ export async function issueNewLicenseAction(
     const adminUserId = await requireAdminUsersPanel();
     const userId = formData.get("userId") as string;
     const expiresAt = resolveExpiresAt(parseDurationFormData(formData));
-    const license = await issueLicense({ userId, expiresAt });
-    await logAdminAction(adminUserId, "admin_users_issue_license", userId, { licenseId: license.id, expiresAt: expiresAt.toISOString() }, license.id);
+    const feedTypes = readFeedTypesFromFormData(formData);
+    const license = await issueLicense({ userId, expiresAt, feedTypes });
+    await logAdminAction(
+      adminUserId,
+      "admin_users_issue_license",
+      userId,
+      { licenseId: license.id, expiresAt: expiresAt.toISOString(), feedTypes },
+      license.id
+    );
     revalidateUsers(userId);
   });
 }

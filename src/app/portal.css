@@ -506,6 +506,19 @@
 
 /* ---- MOBILE DRAWER ---- */
 .portal-shell .scrim { display: none; }
+.portal-shell .feed-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.portal-shell .feed-card { border-radius: 10px; padding: 14px; border: 1px solid var(--hz-line-soft); background: rgba(255, 255, 255, 0.02); }
+.portal-shell .feed-card.active { border-color: rgba(55, 245, 160, 0.4); background: rgba(55, 245, 160, 0.06); }
+.portal-shell .feed-card .fc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.portal-shell .feed-card .fc-head b { font-size: 13px; font-weight: 600; color: var(--hz-ink); }
+.portal-shell .feed-card:not(.active) .fc-head b { color: var(--hz-ink-2); }
+.portal-shell .feed-card .fc-check { color: var(--hz-ok); font-size: 15px; line-height: 1; }
+.portal-shell .feed-card p { font-size: 11px; color: var(--hz-ink-3); margin: 0; }
+.portal-shell .feed-card .fc-status { display: block; margin-top: 8px; font-size: 11px; font-weight: 600; }
+.portal-shell .feed-card.active .fc-status { color: var(--hz-ok); }
+.portal-shell .feed-card:not(.active) .fc-status { color: var(--hz-ink-3); }
+.portal-shell .feed-card .fc-cta { display: inline-block; margin-top: 8px; font-size: 11px; font-weight: 600; color: var(--hz-warn); }
+
 @media (max-width: 768px) {
   .portal-shell .app { grid-template-columns: 1fr; }
   .portal-shell .sidebar {
@@ -520,6 +533,7 @@
   .portal-shell .topbar h1 { font-size: 21px; }
   .portal-shell .topbar .crumb { display: none; }
   .portal-shell .g2, .portal-shell .courses, .portal-shell .edu-grid { grid-template-columns: 1fr; }
+  .portal-shell .feed-grid { grid-template-columns: 1fr 1fr; }
   .portal-shell .metrics { margin-left: 0; width: 100%; justify-content: space-between; }
   .portal-shell .hero h2, .portal-shell .edu-hero h2 { font-size: 26px; }
   .portal-shell .edu-stats { gap: 22px; }
