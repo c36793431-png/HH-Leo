@@ -425,6 +425,7 @@ export interface AdminUserRow {
   email: string | null;
   displayName: string | null;
   telegramUsername: string | null;
+  role: string;
   joinedAt: Date;
   signupSource: "telegram" | "email-link" | "both" | null;
   licenseId: string | null;
@@ -517,7 +518,7 @@ export async function listAllUsersWithLicenses(
   params.push(perPage);
   params.push(offset);
   const result = await pool.query(
-    `select u.id as user_id, u.email, u.display_name, u.telegram_username, u.created_at,
+    `select u.id as user_id, u.email, u.display_name, u.telegram_username, u.role, u.created_at,
             ${SIGNUP_SOURCE_SQL} as signup_source,
             l.id as license_id, l.license_key, l.status, l.expires_at, l.tier,
             l.hardware_id, l.last_verified_at,
@@ -536,6 +537,7 @@ export async function listAllUsersWithLicenses(
       email: r.email,
       displayName: r.display_name,
       telegramUsername: r.telegram_username,
+      role: r.role,
       joinedAt: r.created_at,
       signupSource: r.signup_source,
       licenseId: r.license_id,
@@ -587,7 +589,7 @@ export interface UserGroupMembershipRow {
   removedAt: Date | null;
 }
 
-export type UserTierLabel = "Paid" | "Trial" | "Team" | "Deal" | "Free" | "Admin";
+export type UserTierLabel = "Paid" | "Trial" | "Team" | "Deal" | "No Active License" | "Admin";
 
 export interface UserDetail {
   userId: string;
@@ -619,7 +621,7 @@ function computeTierLabel(role: string, activeTier: string | null): UserTierLabe
     case "deal":
       return "Deal";
     default:
-      return "Free";
+      return "No Active License";
   }
 }
 

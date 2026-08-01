@@ -17,6 +17,7 @@ const BADGE_STYLES = {
   amber: "border-amber-500/40 bg-amber-500/15 text-amber-300",
   red: "border-red-500/40 bg-red-500/15 text-red-300",
   grey: "border-zinc-600/40 bg-zinc-600/15 text-zinc-400",
+  blue: "border-blue-500/40 bg-blue-500/15 text-blue-300",
 } as const;
 
 const PER_PAGE = 50;
@@ -38,6 +39,7 @@ const BADGES: Record<AdminUserRow["computedStatus"], { label: string; color: key
 };
 
 function getBadge(row: AdminUserRow): { label: string; color: keyof typeof BADGE_STYLES } {
+  if (row.role === "admin") return { label: "ADMIN", color: "blue" };
   return BADGES[row.computedStatus];
 }
 

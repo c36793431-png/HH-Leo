@@ -29,7 +29,7 @@ const TIER_BADGE_STYLES: Record<UserTierLabel, string> = {
   Trial: "border-amber-500/40 bg-amber-500/15 text-amber-300",
   Team: "border-cyan-500/40 bg-cyan-500/15 text-cyan-300",
   Deal: "border-purple-500/40 bg-purple-500/15 text-purple-300",
-  Free: "border-zinc-600/40 bg-zinc-600/15 text-zinc-400",
+  "No Active License": "border-zinc-600/40 bg-zinc-600/15 text-zinc-400",
   Admin: "border-blue-500/40 bg-blue-500/15 text-blue-300",
 };
 
