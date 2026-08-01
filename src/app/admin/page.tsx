@@ -26,7 +26,7 @@ export default async function AdminPage() {
         </p>
       </header>
 
-      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="mb-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-cyan-400">Pre-provision a license</h2>
         <p className="mt-1 text-xs text-zinc-500">
           For clients who paid before signing up on the portal — bind by email or Telegram user ID;
@@ -58,7 +58,7 @@ export default async function AdminPage() {
         </DurationForm>
       </section>
 
-      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="mb-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-emerald-400">Downloads</h2>
         <p className="mt-2 text-sm text-zinc-500">
           Manage Windows/macOS builds, versions, and history from the{" "}
@@ -69,7 +69,7 @@ export default async function AdminPage() {
         </p>
       </section>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-blue-400">Clients</h2>
         <p className="mt-1 text-xs text-zinc-500">
           Quick actions across all signups. See Users for search, sort, and pagination.

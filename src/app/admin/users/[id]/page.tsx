@@ -106,7 +106,7 @@ export default async function AdminUserDetailPage({
         </div>
       </header>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-cyan-400">Profile</h2>
         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
           <div>
@@ -175,7 +175,7 @@ export default async function AdminUserDetailPage({
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-emerald-400">Licenses ({user.licenses.length})</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -285,7 +285,7 @@ export default async function AdminUserDetailPage({
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-sky-400">Telegram</h2>
         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
           <div>
@@ -347,7 +347,7 @@ export default async function AdminUserDetailPage({
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-amber-400">Payments</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -384,7 +384,7 @@ export default async function AdminUserDetailPage({
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-blue-400">Signin history (last 20)</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -415,7 +415,7 @@ export default async function AdminUserDetailPage({
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-zinc-400">Admin actions taken against this user</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">

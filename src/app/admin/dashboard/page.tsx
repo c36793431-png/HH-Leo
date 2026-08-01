@@ -91,7 +91,7 @@ export default async function AdminDashboardPage() {
         <StatTile label="Admins" value={String(counts.admins)} />
       </section>
 
-      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="mb-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-cyan-400">New signups — last 30 days</h2>
         <div className="relative mt-4 h-16">
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
@@ -124,7 +124,7 @@ export default async function AdminDashboardPage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+        <div className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
           <h2 className="text-sm font-medium text-blue-400">Recent signups</h2>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -170,7 +170,7 @@ export default async function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+        <div className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
           <h2 className="text-sm font-medium text-emerald-400">Recent license activity</h2>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">

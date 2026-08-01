@@ -9,7 +9,7 @@ import { MarkPaidButton, ClawbackButton } from "@/components/admin/referral-acti
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+    <div className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-4">
       <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-zinc-100">{value}</div>
       {sub && <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>}
@@ -61,7 +61,7 @@ export default async function AdminReferralsPage({
         <StatTile label="Paid out (all-time)" value={fmt(totalPaid)} />
       </section>
 
-      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="mb-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-emerald-400">Pending payouts (≥ ${REFERRAL_MIN_PAYOUT_USD})</h2>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -94,7 +94,7 @@ export default async function AdminReferralsPage({
         </div>
       </section>
 
-      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="mb-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-cyan-400">Top referrers</h2>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -129,7 +129,7 @@ export default async function AdminReferralsPage({
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-medium text-blue-400">All earnings</h2>
           <form className="flex items-center gap-2">

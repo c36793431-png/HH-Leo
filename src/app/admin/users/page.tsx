@@ -102,7 +102,7 @@ export default async function AdminUsersPage({
         <p className="mt-2 text-sm text-zinc-400">All users, license state, per-row lifecycle actions</p>
       </header>
 
-      <form className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+      <form className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-4">
         <div className="flex-1 min-w-[200px]">
           <label className="block text-xs text-zinc-500">Search</label>
           <input
@@ -158,7 +158,7 @@ export default async function AdminUsersPage({
         )}
       </form>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-zinc-500">

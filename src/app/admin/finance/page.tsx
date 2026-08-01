@@ -4,7 +4,7 @@ import { AddPaymentForm } from "@/components/admin/add-payment-form";
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+    <div className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-4">
       <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-zinc-100">{value}</div>
       {sub && <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>}
@@ -58,14 +58,14 @@ export default async function AdminFinancePage() {
         <StatTile label="Net" value={fmt(totals.net)} sub={`This month: ${fmt(totals.netThisMonth)}`} />
       </section>
 
-      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="mb-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-cyan-400">Add payment</h2>
         <div className="mt-4">
           <AddPaymentForm userEmails={userEmails} />
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-blue-400">All payments</h2>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">

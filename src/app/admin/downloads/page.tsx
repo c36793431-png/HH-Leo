@@ -31,12 +31,12 @@ export default async function AdminDownloadsPage() {
         </p>
       </header>
 
-      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="mb-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-emerald-400">Upload a build</h2>
         <UploadBuildForm />
       </section>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="mb-4 text-sm font-medium text-cyan-400">Versions</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

@@ -58,7 +58,7 @@ export default async function AdminHistoryPage({
         </p>
       </header>
 
-      <form className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+      <form className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-4">
         <div>
           <label className="block text-xs text-zinc-500">Actor</label>
           <select
@@ -120,7 +120,7 @@ export default async function AdminHistoryPage({
         )}
       </form>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-zinc-500">
