@@ -10,7 +10,7 @@ export type PortalTier = "free" | "paid" | "admin";
 const PORTAL_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: "▨" },
   { href: "/downloads", label: "Downloads", icon: "▤", paidOnly: true },
-  { href: "/dashboard#community", label: "Community", icon: "◍" },
+  { href: "/community", label: "Community", icon: "◍" },
   { href: "/education", label: "Education", icon: "◈" },
   { href: "/account/refer", label: "Refer & earn", icon: "$" },
   { href: "/account", label: "Account", icon: "◔" },

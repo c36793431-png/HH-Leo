@@ -43,6 +43,7 @@ export async function linkTelegramAction(payload: TelegramLoginPayload): Promise
   await claimPendingLicense({ userId: session.user.id, telegramUserId: payload.id });
 
   revalidatePath("/dashboard");
+  revalidatePath("/community");
 }
 
 /** Self-serve "Start the bot" trigger — same sendPaidGroupInvite path the admin panel already
@@ -87,5 +88,6 @@ export async function requestPaidGroupInviteAction(): Promise<ActionResult> {
   }
 
   revalidatePath("/dashboard");
+  revalidatePath("/community");
   return { ok: true };
 }

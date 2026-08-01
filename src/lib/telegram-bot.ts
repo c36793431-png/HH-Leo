@@ -69,6 +69,31 @@ export async function getChat(chatId: number | string): Promise<{ username?: str
   }
 }
 
+const memberCountCache = new Map<string, { count: number; fetchedAt: number }>();
+const MEMBER_COUNT_TTL_MS = 10 * 60 * 1000;
+
+/** Cached — Bot API getChatMemberCount is rate-limited and this value changes slowly, so we
+ * don't want a page load hitting Telegram on every render. */
+export async function getChatMemberCount(chatId: string): Promise<number | null> {
+  const cached = memberCountCache.get(chatId);
+  if (cached && Date.now() - cached.fetchedAt < MEMBER_COUNT_TTL_MS) return cached.count;
+
+  try {
+    const res = await fetch(`${API_ROOT}/bot${botToken()}/getChatMemberCount?chat_id=${encodeURIComponent(chatId)}`);
+    if (!res.ok) {
+      console.error("getChatMemberCount failed", await res.text());
+      return cached?.count ?? null;
+    }
+    const data = await res.json();
+    const count = typeof data?.result === "number" ? data.result : null;
+    if (count !== null) memberCountCache.set(chatId, { count, fetchedAt: Date.now() });
+    return count;
+  } catch (err) {
+    console.error("getChatMemberCount failed", err);
+    return cached?.count ?? null;
+  }
+}
+
 async function callTelegramApi(method: string, body: Record<string, unknown>): Promise<boolean> {
   const res = await fetch(`${API_ROOT}/bot${botToken()}/${method}`, {
     method: "POST",
