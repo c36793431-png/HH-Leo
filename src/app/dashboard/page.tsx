@@ -8,6 +8,7 @@ import { pool } from "@/lib/db";
 import { getBotUsername } from "@/lib/telegram-bot";
 import { createOnboardingToken } from "@/lib/telegram-onboarding";
 import { LinkTelegramButton } from "@/components/link-telegram-button";
+import { RequestInviteButton } from "@/components/request-invite-button";
 import { DownloadButton } from "@/components/download-button";
 import { LicenseStatusCard } from "@/components/license-status-card";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -319,13 +320,20 @@ export default async function DashboardPage() {
                   <div className="rmeta">
                     <b>Paid Users Group</b>
                     {groupMembershipStatus === "joined" ? (
-                      <span>✅ Joined · in group</span>
+                      <span>In the group</span>
                     ) : groupMembershipStatus === "removed_on_lapse" ? (
-                      <span>Removed — resubscribe to rejoin</span>
+                      <span>Access removed — renew to rejoin</span>
                     ) : (
-                      <span>Linked · invite sent via Telegram</span>
+                      <span>Ready to join</span>
                     )}
                   </div>
+                  {groupMembershipStatus === "joined" ? (
+                    <span className="join-pill">Active</span>
+                  ) : groupMembershipStatus === "removed_on_lapse" ? (
+                    <RequestInviteButton label="Start the bot again →" />
+                  ) : (
+                    <RequestInviteButton label="Start the bot →" />
+                  )}
                 </div>
               </div>
             )}

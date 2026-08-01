@@ -47,8 +47,9 @@ export async function sendPaidGroupInvite(target: InviteTarget): Promise<InviteR
 
   await notifyUser(
     { telegramUserId: target.telegramUserId },
-    "Your Horizon HFT Paid Users Group invite",
-    `Join the Paid Users Group: ${link}\n\nThis link is single-use — it expires once you join.`
+    "Your Horizon HFT Paid Users Group access is active",
+    `🎉 Welcome to Horizon HFT paid! Your Paid Users Group access is active — join here: ${link}. ` +
+      `See you inside.\n\nThis link is single-use — it expires once you join.`
   );
   return { sent: true };
 }
