@@ -21,7 +21,7 @@ function formatShortDate(iso: string): string {
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-cyan-400/35 bg-cyan-950/30 p-4">
+    <div className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-4">
       <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-zinc-100">{value}</div>
       {sub && <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>}
