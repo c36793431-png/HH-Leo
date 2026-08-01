@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   listAllUsersWithLicenses,
   maskLicenseKey,
+  FEED_TYPE_META,
   type AdminUserRow,
   type HasLicenseFilter,
   type SignupSourceFilter,
@@ -192,6 +193,7 @@ export default async function AdminUsersPage({
                   </Link>
                 </th>
                 <th className="pb-2 pr-4">Tier</th>
+                <th className="pb-2 pr-4">Feeds</th>
                 <th className="pb-2 pr-4">HWID</th>
                 <th className="pb-2 pr-4">
                   <Link
@@ -244,6 +246,22 @@ export default async function AdminUsersPage({
                       )}
                     </td>
                     <td className="py-2 pr-4 text-zinc-400">{u.tier ?? "—"}</td>
+                    <td className="py-2 pr-4">
+                      <div className="flex flex-wrap gap-1">
+                        {u.feedTypes.length === 0 ? (
+                          <span className="text-xs text-zinc-600">—</span>
+                        ) : (
+                          u.feedTypes.map((f) => (
+                            <span
+                              key={f}
+                              className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300"
+                            >
+                              {FEED_TYPE_META[f].name}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2 pr-4 font-mono text-xs text-zinc-500">
                       {u.hardwareId ? `${u.hardwareId.slice(0, 4)}…` : "—"}
                     </td>
@@ -296,7 +314,7 @@ export default async function AdminUsersPage({
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="py-4 text-center text-zinc-500">
+                  <td colSpan={12} className="py-4 text-center text-zinc-500">
                     {search || hasLicense || signupSource
                       ? "No users match these filters."
                       : "No users yet."}

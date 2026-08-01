@@ -440,6 +440,7 @@ export interface AdminUserRow {
   tier: string | null;
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
+  feedTypes: FeedType[];
 }
 
 export type HasLicenseFilter = "active" | "expiring" | "expired" | "revoked" | "none";
@@ -508,7 +509,7 @@ export async function listAllUsersWithLicenses(
   const baseFrom = `
     from users u
     left join lateral (
-      select id, license_key, status, expires_at, tier, hardware_id, last_verified_at
+      select id, license_key, status, expires_at, tier, hardware_id, last_verified_at, feed_types
       from licenses
       where user_id = u.id
       order by issued_at desc
@@ -525,7 +526,7 @@ export async function listAllUsersWithLicenses(
     `select u.id as user_id, u.email, u.display_name, u.telegram_username, u.role, u.created_at,
             ${SIGNUP_SOURCE_SQL} as signup_source,
             l.id as license_id, l.license_key, l.status, l.expires_at, l.tier,
-            l.hardware_id, l.last_verified_at,
+            l.hardware_id, l.last_verified_at, l.feed_types,
             ${COMPUTED_STATUS_SQL} as computed_status
      ${baseFrom}
      ${where}
@@ -552,6 +553,7 @@ export async function listAllUsersWithLicenses(
       tier: r.tier,
       hardwareId: r.hardware_id,
       lastVerifiedAt: r.last_verified_at,
+      feedTypes: (r.feed_types ?? []).filter(isFeedType),
     })),
   };
 }
