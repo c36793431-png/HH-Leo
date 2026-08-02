@@ -166,6 +166,22 @@ export async function updateUserFieldAction(
   });
 }
 
+export async function updateUserNotesAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to save notes", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const userId = formData.get("userId") as string;
+    const notes = ((formData.get("notes") as string) ?? "").trim();
+    const nextValue = notes === "" ? null : notes;
+
+    await pool.query("update users set admin_notes = $1 where id = $2", [nextValue, userId]);
+    await logAdminAction(adminUserId, "admin_users_update_notes", userId, { notes: nextValue }, null);
+    revalidateUsers(userId);
+  });
+}
+
 export async function issueNewLicenseAction(
   _prevState: ActionResult | null,
   formData: FormData

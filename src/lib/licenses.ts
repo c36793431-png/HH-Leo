@@ -615,6 +615,9 @@ export interface UserDetail {
   signins: SigninEventRow[];
   adminActions: UserDetailAdminActionRow[];
   groupMemberships: UserGroupMembershipRow[];
+  adminNotes: string | null;
+  notesLastEditedBy: string | null;
+  notesLastEditedAt: Date | null;
 }
 
 /** Same active-tier-or-Free/Admin bucketing as getRecentSignups' statusLabel, but also
@@ -639,7 +642,7 @@ function computeTierLabel(role: string, activeTier: string | null): UserTierLabe
  * history, admin actions taken against them, Telegram group memberships, and tier badge. */
 export async function getUserDetail(userId: string): Promise<UserDetail | null> {
   const userResult = await pool.query(
-    `select id, email, display_name, telegram_username, telegram_user_id, telegram_bot_started_at, role, created_at
+    `select id, email, display_name, telegram_username, telegram_user_id, telegram_bot_started_at, role, created_at, admin_notes
      from users where id = $1`,
     [userId]
   );
@@ -679,6 +682,8 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
   const activeTier = licensesResult.rows.find(
     (r) => r.computed_status === "active" || r.computed_status === "expiring"
   )?.tier as string | undefined;
+
+  const lastNoteEdit = actionsResult.rows.find((r) => r.action_type === "admin_users_update_notes");
 
   return {
     userId: user.id,
@@ -724,6 +729,9 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
       joinedAt: r.joined_at,
       removedAt: r.removed_at,
     })),
+    adminNotes: user.admin_notes,
+    notesLastEditedBy: lastNoteEdit?.actor_email ?? null,
+    notesLastEditedAt: lastNoteEdit?.created_at ?? null,
   };
 }
 

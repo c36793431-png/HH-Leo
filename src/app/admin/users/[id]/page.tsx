@@ -9,6 +9,7 @@ import { TierSelectForm } from "@/components/admin/tier-select-form";
 import { CopyIdButton } from "@/components/admin/copy-id-button";
 import { InlineEditField } from "@/components/admin/inline-edit-field";
 import { FeedCheckboxes, FeedSelectForm } from "@/components/admin/feed-select-form";
+import { NotesForm } from "@/components/admin/notes-form";
 import { FEED_TYPE_META } from "@/lib/licenses";
 import {
   expireNowAction,
@@ -18,6 +19,7 @@ import {
   setUserLicenseTierAction,
   updateUserFieldAction,
   updateLicenseFeedsAction,
+  updateUserNotesAction,
 } from "../actions";
 
 const STATUS_STYLES = {
@@ -172,6 +174,20 @@ export default async function AdminUserDetailPage({
           >
             <FeedCheckboxes />
           </DurationForm>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-zinc-300">Notes</h2>
+          {user.notesLastEditedAt && (
+            <span className="text-xs text-zinc-500">
+              Last edited by {user.notesLastEditedBy ?? "unknown"} · {formatRelative(user.notesLastEditedAt)}
+            </span>
+          )}
+        </div>
+        <div className="mt-3">
+          <NotesForm action={updateUserNotesAction} userId={user.userId} value={user.adminNotes ?? ""} />
         </div>
       </section>
 
