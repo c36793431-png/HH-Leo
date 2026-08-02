@@ -54,6 +54,7 @@ export default async function AdminDashboardPage() {
   ]);
 
   const maxSparkline = Math.max(1, ...sparkline.map((d) => d.count));
+  const sparklineTicks = [4, 3, 2, 1, 0].map((i) => Math.round((maxSparkline * i) / 4));
 
   return (
     <div className="flex flex-1 flex-col">
@@ -93,33 +94,43 @@ export default async function AdminDashboardPage() {
 
       <section className="mb-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-cyan-400">New signups — last 30 days</h2>
-        <div className="relative mt-4 h-16">
-          <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i} className="border-t border-teal-300/40" />
+        <div className="mt-4 flex h-16 gap-2">
+          <div className="flex h-16 w-4 flex-col justify-between text-right text-[10px] leading-none text-zinc-500">
+            {sparklineTicks.map((v, i) => (
+              <span key={i}>{v}</span>
             ))}
           </div>
-          <div className="relative flex h-16 items-end gap-0.5">
-            {sparkline.map((d) => (
-              <div
-                key={d.date}
-                title={`${d.date}: ${d.count}`}
-                className="flex-1 rounded-t bg-cyan-500/60"
-                style={{ height: `${Math.max(4, (d.count / maxSparkline) * 100)}%` }}
-              />
-            ))}
+          <div className="relative h-16 flex-1">
+            <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="border-t border-teal-300/40" />
+              ))}
+            </div>
+            <div className="relative flex h-16 items-end gap-0.5">
+              {sparkline.map((d) => (
+                <div
+                  key={d.date}
+                  title={`${d.date}: ${d.count}`}
+                  className="flex-1 rounded-t bg-cyan-500/60"
+                  style={{ height: `${Math.max(4, (d.count / maxSparkline) * 100)}%` }}
+                />
+              ))}
+            </div>
           </div>
         </div>
-        <div className="mt-1 flex gap-0.5 text-[10px] text-[#e5e5e5]">
-          {sparkline.map((d, i) => {
-            const isEdge = i === 0 || i === sparkline.length - 1;
-            const isWeeklyTick = i % 7 === 0;
-            return (
-              <div key={d.date} className="flex-1 text-center">
-                {isEdge || isWeeklyTick ? formatShortDate(d.date) : ""}
-              </div>
-            );
-          })}
+        <div className="mt-1 flex gap-2">
+          <div className="w-4 shrink-0" />
+          <div className="flex flex-1 gap-0.5 text-[10px] text-[#e5e5e5]">
+            {sparkline.map((d, i) => {
+              const isEdge = i === 0 || i === sparkline.length - 1;
+              const isWeeklyTick = i % 7 === 0;
+              return (
+                <div key={d.date} className="flex-1 text-center">
+                  {isEdge || isWeeklyTick ? formatShortDate(d.date) : ""}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </section>
 
