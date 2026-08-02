@@ -882,6 +882,26 @@ export async function computeUserActiveFeeds(userId: string): Promise<FeedType[]
   return raw.filter(isFeedType);
 }
 
+/** Sum of monthly_cost_usd across every feed_type entitlement on every currently-active
+ * license — the real per-feed provider cost, not a manual payments-ledger entry. Powers
+ * the admin dashboard Costs stat tile. */
+export async function getFeedCostStats(): Promise<{ totalMonthlyCost: number; activeLicenseCount: number }> {
+  const result = await pool.query<{ total: string; active_license_count: string }>(
+    `select
+       coalesce(sum(fd.monthly_cost_usd), 0) as total,
+       count(distinct l.id) filter (where fd.feed_type is not null) as active_license_count
+     from licenses l
+     left join lateral unnest(l.feed_types) as feed_type on true
+     left join feed_definitions fd on fd.feed_type = feed_type
+     where l.status = 'active' and l.expires_at > now()`
+  );
+  const row = result.rows[0];
+  return {
+    totalMonthlyCost: Number(row?.total ?? 0),
+    activeLicenseCount: Number(row?.active_license_count ?? 0),
+  };
+}
+
 export async function claimPendingLicense({ userId, email, telegramUserId }: ClaimArgs) {
   if (email) {
     await pool.query(

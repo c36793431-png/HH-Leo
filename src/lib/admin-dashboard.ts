@@ -1,5 +1,6 @@
 import { pool } from "./db";
 import { getPaymentTotals } from "./payments";
+import { getFeedCostStats } from "./licenses";
 
 /**
  * All counts/lists here scope to role='user' (matches listClients' convention) —
@@ -212,10 +213,15 @@ export interface RevenueStats {
   totalOutThisMonth: number;
   netThisMonth: number;
   mrr: number;
+  /** Real feed-provider cost: sum of feed_definitions.monthly_cost_usd across every
+   * feed_type entitlement on every currently-active license — a live recurring rate,
+   * not a payments-ledger total, so it has no separate "this month" figure. */
+  feedCost: number;
+  feedCostLicenseCount: number;
 }
 
 export async function getRevenueStats(): Promise<RevenueStats> {
-  const totals = await getPaymentTotals();
+  const [totals, feedCosts] = await Promise.all([getPaymentTotals(), getFeedCostStats()]);
   return {
     grossIn: totals.grossIn,
     totalOut: totals.totalOut,
@@ -224,5 +230,7 @@ export async function getRevenueStats(): Promise<RevenueStats> {
     totalOutThisMonth: totals.totalOutThisMonth,
     netThisMonth: totals.netThisMonth,
     mrr: totals.mrrProxy,
+    feedCost: feedCosts.totalMonthlyCost,
+    feedCostLicenseCount: feedCosts.activeLicenseCount,
   };
 }

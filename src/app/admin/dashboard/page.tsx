@@ -73,8 +73,8 @@ export default async function AdminDashboardPage() {
         />
         <StatTile
           label="Costs"
-          value={`$${revenue.totalOut.toFixed(2)}`}
-          sub={`This month: $${revenue.totalOutThisMonth.toFixed(2)}`}
+          value={`$${revenue.feedCost.toFixed(2)}`}
+          sub={`Monthly rate · ${revenue.feedCostLicenseCount} active license${revenue.feedCostLicenseCount === 1 ? "" : "s"}`}
         />
         <StatTile
           label="Net revenue"
