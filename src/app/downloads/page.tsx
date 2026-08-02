@@ -75,6 +75,34 @@ export default async function DownloadsPage() {
           </div>
         </div>
 
+        {/* Builds up to and including v2.0 rely on the machine already having the
+            Microsoft Visual C++ runtime: the licence check loads libsodium, which imports
+            vcruntime140.dll. On a clean Windows install that file is absent, the check
+            cannot run, and the client reports it as a signature failure. Later builds ship
+            the runtime alongside the executable, but this note stays for anyone installing
+            an older download. */}
+        <div className="card">
+          <div className="chead">
+            <span className="ic">!</span>
+            <h3>Before you install</h3>
+          </div>
+          <p style={{ fontSize: 13, color: "var(--hz-ink-2)", lineHeight: 1.6 }}>
+            Windows needs the{" "}
+            <a
+              href="https://aka.ms/vs/17/release/vc_redist.x64.exe"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: "var(--hz-accent)", textDecoration: "underline" }}
+            >
+              Microsoft Visual C++ 2015-2022 Redistributable (x64)
+            </a>{" "}
+            before Horizon HFT can validate your licence. Most machines already have it. If
+            yours does not, the terminal will report that the licence response failed
+            signature verification even though your licence is perfectly valid — install the
+            redistributable, restart the terminal, and activation will go through.
+          </p>
+        </div>
+
         <div className="card">
           <div className="chead">
             <span className="ic">≡</span>
