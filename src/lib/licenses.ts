@@ -451,15 +451,10 @@ export type SignupSourceFilter = "telegram" | "email-link" | "both";
 export type UsersSortColumn = "joined_at" | "last_verified_at" | "expires_at";
 export type SortDir = "asc" | "desc";
 
-/** Segmented tab bucket for /admin/users: admin/free by role+license state, the rest by active tier. */
-export type UsersTierBucket = "free" | "trial" | "paid" | "team" | "deal" | "admin";
-export const USERS_TIER_BUCKETS: UsersTierBucket[] = ["free", "trial", "paid", "team", "deal", "admin"];
-
 export interface ListUsersOptions {
   search?: string;
   hasLicense?: HasLicenseFilter;
   signupSource?: SignupSourceFilter;
-  tierBucket?: UsersTierBucket;
   sort?: UsersSortColumn;
   dir?: SortDir;
   page?: number;
@@ -510,16 +505,6 @@ export async function listAllUsersWithLicenses(
   if (options.signupSource) {
     params.push(options.signupSource);
     conditions.push(`${SIGNUP_SOURCE_SQL} = $${params.length}`);
-  }
-  if (options.tierBucket === "admin") {
-    conditions.push(`u.role = 'admin'`);
-  } else if (options.tierBucket === "free") {
-    conditions.push(`u.role != 'admin' and ${COMPUTED_STATUS_SQL} not in ('active', 'expiring')`);
-  } else if (options.tierBucket) {
-    params.push(options.tierBucket);
-    conditions.push(
-      `u.role != 'admin' and ${COMPUTED_STATUS_SQL} in ('active', 'expiring') and l.tier = $${params.length}`
-    );
   }
 
   const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
