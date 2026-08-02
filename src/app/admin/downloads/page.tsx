@@ -1,7 +1,10 @@
 import { listDownloads } from "@/lib/downloads";
+import { signDownloadToken } from "@/lib/download-token";
+import { auth } from "@/lib/auth";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { deleteDownloadAction } from "./actions";
+import { deleteDownloadAction, updateDownloadAction } from "./actions";
 import { ActionButton } from "@/components/admin/action-button";
+import { EditDownloadForm } from "@/components/admin/edit-download-form";
 import { UploadBuildForm } from "@/components/admin/upload-build-form";
 
 function formatBytes(bytes: number): string {
@@ -17,7 +20,8 @@ function formatBytes(bytes: number): string {
 }
 
 export default async function AdminDownloadsPage() {
-  const downloads = await listDownloads();
+  const [downloads, session] = await Promise.all([listDownloads(), auth()]);
+  const adminUserId = session?.user?.id ?? "";
 
   return (
     <div className="flex flex-1 flex-col">
@@ -51,28 +55,54 @@ export default async function AdminDownloadsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
-              {downloads.map((d) => (
-                <tr key={d.id}>
-                  <td className="py-2 pr-4 text-zinc-200">v{d.version}</td>
-                  <td className="py-2 pr-4 text-zinc-400">{d.platform}</td>
-                  <td className="py-2 pr-4 text-zinc-400">{formatBytes(d.sizeBytes)}</td>
-                  <td className="py-2 pr-4 font-mono text-xs text-zinc-500" title={d.sha256}>
-                    {d.sha256.slice(0, 12)}…
-                  </td>
-                  <td className="py-2 pr-4 text-zinc-400">
-                    {formatAbsoluteUtc(d.uploadedAt)} <span className="text-zinc-600">({formatRelative(d.uploadedAt)})</span>
-                  </td>
-                  <td className="py-2">
-                    <ActionButton
-                      action={deleteDownloadAction}
-                      hiddenFields={{ id: d.id }}
-                      label="Delete"
-                      successMessage="Build deleted"
-                      className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
-                    />
-                  </td>
-                </tr>
-              ))}
+              {downloads.map((d) => {
+                const { token, expires } = signDownloadToken(adminUserId, d.id);
+                const previewUrl = `/api/download/file?id=${d.id}&expires=${expires}&token=${token}`;
+                return (
+                  <tr key={d.id}>
+                    <td className="py-2 pr-4 text-zinc-200">v{d.version}</td>
+                    <td className="py-2 pr-4 text-zinc-400">{d.platform}</td>
+                    <td className="py-2 pr-4 text-zinc-400">{formatBytes(d.sizeBytes)}</td>
+                    <td className="py-2 pr-4 font-mono text-xs text-zinc-500" title={d.sha256}>
+                      {d.sha256.slice(0, 12)}…
+                    </td>
+                    <td className="py-2 pr-4 text-zinc-400">
+                      {formatAbsoluteUtc(d.uploadedAt)} <span className="text-zinc-600">({formatRelative(d.uploadedAt)})</span>
+                    </td>
+                    <td className="py-2">
+                      <div className="flex flex-wrap gap-2">
+                        <details>
+                          <summary className="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300">
+                            Preview
+                          </summary>
+                          <div className="mt-2 max-w-xs rounded border border-zinc-800 bg-black/60 p-2 text-xs text-zinc-400">
+                            <p className="whitespace-pre-wrap">{d.changelog || "No changelog."}</p>
+                            <a
+                              href={previewUrl}
+                              className="mt-2 inline-block text-cyan-300 hover:underline"
+                            >
+                              Tap to download (self-verify, expires in 5 min)
+                            </a>
+                          </div>
+                        </details>
+                        <EditDownloadForm
+                          action={updateDownloadAction}
+                          id={d.id}
+                          defaultVersion={d.version}
+                          defaultChangelog={d.changelog ?? ""}
+                        />
+                        <ActionButton
+                          action={deleteDownloadAction}
+                          hiddenFields={{ id: d.id }}
+                          label="Delete"
+                          successMessage="Build deleted"
+                          className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {downloads.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-4 text-center text-zinc-500">
