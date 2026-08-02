@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { REFERRAL_COOKIE, REFERRAL_COOKIE_MAX_AGE_DAYS } from "@/lib/referrals";
 
 export default auth((req) => {
@@ -8,7 +8,7 @@ export default auth((req) => {
     if (!req.auth?.user) {
       return NextResponse.redirect(new URL("/login", req.nextUrl));
     }
-    if (!isAdminUsersPanelEmail(req.auth.user.email)) {
+    if (!isAdminUser(req.auth.user)) {
       return new NextResponse("Forbidden", { status: 403 });
     }
   }

@@ -11,7 +11,14 @@ import {
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
 import { ActionButton } from "@/components/admin/action-button";
-import { expireNowAction, extendLicenseAction, revokeAction, issueNewLicenseAction } from "./actions";
+import { FeedSelectForm } from "@/components/admin/feed-select-form";
+import {
+  expireNowAction,
+  extendLicenseAction,
+  revokeAction,
+  issueNewLicenseAction,
+  updateLicenseFeedsAction,
+} from "./actions";
 
 const BADGE_STYLES = {
   green: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
@@ -42,6 +49,10 @@ const BADGES: Record<AdminUserRow["computedStatus"], { label: string; color: key
 function getBadge(row: AdminUserRow): { label: string; color: keyof typeof BADGE_STYLES } {
   if (row.role === "admin") return { label: "ADMIN", color: "blue" };
   return BADGES[row.computedStatus];
+}
+
+function hasActiveLicense(row: AdminUserRow): boolean {
+  return row.computedStatus === "active" || row.computedStatus === "expiring";
 }
 
 interface RawSearchParams {
@@ -290,6 +301,14 @@ export default async function AdminUsersPage({
                               defaultUnit="days"
                               triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
                             />
+                            {hasActiveLicense(u) && (
+                              <FeedSelectForm
+                                action={updateLicenseFeedsAction}
+                                hiddenFields={{ licenseId: u.licenseId }}
+                                currentFeedTypes={u.feedTypes}
+                                triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300"
+                              />
+                            )}
                             <ActionButton
                               action={revokeAction}
                               hiddenFields={{ licenseId: u.licenseId }}

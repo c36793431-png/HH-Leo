@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { isPaidUser } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { LessonDetail } from "@/components/education/lesson-detail";
@@ -15,7 +15,7 @@ export default async function EducationLessonPage({ params }: { params: Promise<
   if (!session?.user?.id) redirect("/login");
 
   const paid = await isPaidUser(session.user.id).catch(() => false);
-  const isAdmin = isAdminUsersPanelEmail(session.user.email);
+  const isAdmin = isAdminUser(session.user);
   const tier = isAdmin ? "admin" : paid ? "paid" : "free";
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";

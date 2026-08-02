@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { softDeleteDownload } from "@/lib/downloads";
 import { logAdminAction } from "@/lib/admin";
 import { runAction, type ActionResult } from "@/lib/action-result";
 
 async function requireAdmin(): Promise<string> {
   const session = await auth();
-  if (!session?.user?.id || !isAdminUsersPanelEmail(session.user.email)) throw new Error("forbidden");
+  if (!session?.user?.id || !isAdminUser(session.user)) throw new Error("forbidden");
   return session.user.id;
 }
 

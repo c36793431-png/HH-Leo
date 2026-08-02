@@ -2,13 +2,13 @@ import { pool } from "./db";
 import { ADMIN_USERS_PANEL_EMAIL } from "./admin-users-panel";
 
 /**
- * All admin_actions callers gate on isAdminUsersPanelEmail() first, so the acting
- * admin's email is always ADMIN_USERS_PANEL_EMAIL. Their session.user.id (JWT sub)
+ * All admin_actions callers gate on isAdminUser() first. session.user.id (JWT sub)
  * can nonetheless point at a users row that no longer exists (stale session, or a
  * row that was recreated under a new id) — inserts against any users.id FK (admin_actions,
- * downloads.uploaded_by, etc) would then 500. Resolve to a real users.id, preferring the
- * email match (source of truth) over the possibly-stale session id, backfilling only if
- * neither exists. Shared by logAdminAction and any admin write path that stamps a users.id.
+ * downloads.uploaded_by, etc) would then 500. Resolve to a real users.id, falling back to
+ * the original hardcoded admin's row (source of truth for that account) over the possibly-
+ * stale session id, backfilling only if neither exists. Shared by logAdminAction and any
+ * admin write path that stamps a users.id.
  */
 export async function resolveAdminUserId(sessionUserId: string): Promise<string> {
   const byId = await pool.query("select id from users where id = $1", [sessionUserId]);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { get } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { isPaidUser } from "@/lib/licenses";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { verifyDownloadToken } from "@/lib/download-token";
 import { getDownloadById } from "@/lib/downloads";
 
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "link expired" }, { status: 403 });
   }
 
-  const paid = (await isPaidUser(session.user.id).catch(() => false)) || isAdminUsersPanelEmail(session.user.email);
+  const paid = (await isPaidUser(session.user.id).catch(() => false)) || isAdminUser(session.user);
   if (!paid) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }

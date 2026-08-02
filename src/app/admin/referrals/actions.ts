@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { logAdminAction } from "@/lib/admin";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { clawbackEarning, markReferrerPaid, REFERRAL_MIN_PAYOUT_USD } from "@/lib/referrals";
 
 async function requireAdminUsersPanel(): Promise<{ userId: string; email: string }> {
   const session = await auth();
-  if (!session?.user?.id || !isAdminUsersPanelEmail(session.user.email)) {
+  if (!session?.user?.id || !isAdminUser(session.user)) {
     throw new Error("forbidden");
   }
   return { userId: session.user.id, email: session.user.email ?? "" };

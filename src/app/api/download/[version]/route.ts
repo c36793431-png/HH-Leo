@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { isPaidUser } from "@/lib/licenses";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { getDownloadByVersionPlatform, type Platform } from "@/lib/downloads";
 import { signDownloadToken } from "@/lib/download-token";
 
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ vers
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const paid = (await isPaidUser(session.user.id).catch(() => false)) || isAdminUsersPanelEmail(session.user.email);
+  const paid = (await isPaidUser(session.user.id).catch(() => false)) || isAdminUser(session.user);
   if (!paid) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }

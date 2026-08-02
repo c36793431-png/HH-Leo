@@ -6,12 +6,12 @@ import { pool } from "@/lib/db";
 import { extendLicense, revokeLicense, getLicenseExpiresAt, setLicenseTier, LICENSE_TIERS, type LicenseTier } from "@/lib/licenses";
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction } from "@/lib/admin";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
 
 async function requireAdminUsersPanel(): Promise<string> {
   const session = await auth();
-  if (!session?.user?.id || !isAdminUsersPanelEmail(session.user.email)) {
+  if (!session?.user?.id || !isAdminUser(session.user)) {
     throw new Error("forbidden");
   }
   return session.user.id;

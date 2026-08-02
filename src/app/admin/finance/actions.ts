@@ -11,13 +11,13 @@ import {
   type PaymentDirection,
 } from "@/lib/payments";
 import { logAdminAction } from "@/lib/admin";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { maybeCreateReferralEarning } from "@/lib/referrals";
 
 async function requireAdminUsersPanel(): Promise<{ userId: string; email: string }> {
   const session = await auth();
-  if (!session?.user?.id || !isAdminUsersPanelEmail(session.user.email)) {
+  if (!session?.user?.id || !isAdminUser(session.user)) {
     throw new Error("forbidden");
   }
   return { userId: session.user.id, email: session.user.email ?? "" };

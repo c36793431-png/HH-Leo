@@ -8,7 +8,7 @@ import { LinkTelegramButton } from "@/components/link-telegram-button";
 import { LicenseStatusCard } from "@/components/license-status-card";
 import { SignOutButton } from "@/components/sign-out-button";
 import { PortalShell } from "@/components/portal/portal-shell";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 
 export default async function AccountPage() {
   const session = await auth();
@@ -27,7 +27,7 @@ export default async function AccountPage() {
     getBotUsername(),
   ]);
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
-  const isAdmin = isAdminUsersPanelEmail(session.user.email);
+  const isAdmin = isAdminUser(session.user);
   const telegramLinked = telegramRow.telegram_user_id !== null;
 
   const tier = isAdmin ? "admin" : paid ? "paid" : "free";

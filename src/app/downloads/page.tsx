@@ -4,7 +4,7 @@ import { isPaidUser, getActiveLicenseForUser } from "@/lib/licenses";
 import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { DownloadButton } from "@/components/download-button";
 import { PortalShell } from "@/components/portal/portal-shell";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 
 const PLACEHOLDER_CHANGELOG = "Release notes will appear here once the current build is published.";
 
@@ -18,7 +18,7 @@ export default async function DownloadsPage() {
   if (!session?.user?.id) redirect("/login");
 
   const paid = await isPaidUser(session.user.id).catch(() => false);
-  const isAdmin = isAdminUsersPanelEmail(session.user.email);
+  const isAdmin = isAdminUser(session.user);
   if (!paid && !isAdmin) redirect("/dashboard");
 
   const [license, downloads] = await Promise.all([

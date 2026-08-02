@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { isPaidUser } from "@/lib/licenses";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { getUserReferralStats, REFERRAL_MIN_PAYOUT_USD } from "@/lib/referrals";
 import { formatAbsoluteUtc } from "@/lib/format-time";
@@ -25,7 +25,7 @@ export default async function ReferPage() {
 
   const [paid, isAdmin, headerList] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
-    Promise.resolve(isAdminUsersPanelEmail(session.user.email)),
+    Promise.resolve(isAdminUser(session.user)),
     headers(),
   ]);
 

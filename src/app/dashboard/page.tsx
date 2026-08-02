@@ -19,14 +19,14 @@ import { RequestInviteButton } from "@/components/request-invite-button";
 import { DownloadButton } from "@/components/download-button";
 import { LicenseStatusCard } from "@/components/license-status-card";
 import { PortalShell } from "@/components/portal/portal-shell";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { isCoxwellTestUserEmail } from "@/lib/coxwell-test-admin";
 import { humanizeTimeUntil } from "@/lib/format-time";
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  if (isAdminUsersPanelEmail(session.user.email)) redirect("/admin/dashboard");
+  if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, config, telegramStatus, groupMembershipStatus, botUsername, downloads] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
@@ -59,7 +59,7 @@ export default async function DashboardPage() {
       : null;
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
   const activeFeeds = await computeUserActiveFeeds(session.user.id).catch((): typeof FEED_TYPES => []);
-  const isAdmin = isAdminUsersPanelEmail(session.user.email);
+  const isAdmin = isAdminUser(session.user);
   const displayStatus = computeLicenseDisplayStatus(licenseDetail);
   const isExpired = displayStatus === "expired";
   const isExpiringSoon = displayStatus === "expiring";

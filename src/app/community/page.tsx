@@ -8,7 +8,7 @@ import { createOnboardingToken } from "@/lib/telegram-onboarding";
 import { LinkTelegramButton } from "@/components/link-telegram-button";
 import { RequestInviteButton } from "@/components/request-invite-button";
 import { PortalShell } from "@/components/portal/portal-shell";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 
 /** Public channels/supergroups accept "@username" as chat_id; invite-only chats need a
  * numeric chat_id the bot already knows (configured separately per chat). */
@@ -26,7 +26,7 @@ function formatMemberCount(count: number | null): string | null {
 export default async function CommunityPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  if (isAdminUsersPanelEmail(session.user.email)) redirect("/admin/dashboard");
+  if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, config, telegramStatus, groupMembershipStatus, botUsername] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),

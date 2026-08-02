@@ -15,12 +15,12 @@ import { sendPaidGroupInvite, removeFromPaidGroup } from "@/lib/group-membership
 import { logAdminAction } from "@/lib/admin";
 import { notifyUser } from "@/lib/notify";
 import { getPortalConfig } from "@/lib/portal-config";
-import { isAdminUsersPanelEmail } from "@/lib/admin-users-panel";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
 
 async function requireAdmin() {
   const session = await auth();
-  if (!session?.user?.id || !isAdminUsersPanelEmail(session.user.email)) throw new Error("forbidden");
+  if (!session?.user?.id || !isAdminUser(session.user)) throw new Error("forbidden");
   return session as typeof session & { user: { id: string } };
 }
 
