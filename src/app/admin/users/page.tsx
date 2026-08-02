@@ -14,12 +14,14 @@ import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
 import { ActionButton } from "@/components/admin/action-button";
 import { FeedSelectForm } from "@/components/admin/feed-select-form";
+import { TierSelectForm } from "@/components/admin/tier-select-form";
 import {
   expireNowAction,
   extendLicenseAction,
   revokeAction,
   issueNewLicenseAction,
   updateLicenseFeedsAction,
+  setUserLicenseTierAction,
 } from "./actions";
 
 const BADGE_STYLES = {
@@ -83,7 +85,11 @@ function buildQuery(base: RawSearchParams, overrides: RawSearchParams): string {
     if (value) params.set(key, value);
   }
   const qs = params.toString();
-  return qs ? `?${qs}` : "";
+  // Must be the bare path, not "" — <Link href=""> resolves to the CURRENT url, query
+  // string included, so clicking "All" from /admin/users?tab=free navigated straight back
+  // to ?tab=free and the filter appeared stuck. Only bit when no other param survived,
+  // which is why the plain Free -> All click was the repro.
+  return qs ? `?${qs}` : "/admin/users";
 }
 
 export default async function AdminUsersPage({
@@ -352,6 +358,16 @@ export default async function AdminUsersPage({
                                 triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300"
                               />
                             )}
+                            {/* Tier is a property of the licence row itself, not of its
+                                active/expired state, so this is gated on licenseId only —
+                                same as /admin/licenses, which lets an expired licence's tier
+                                be corrected. Rows with no licence render nothing here. */}
+                            <TierSelectForm
+                              action={setUserLicenseTierAction}
+                              hiddenFields={{ licenseId: u.licenseId }}
+                              currentTier={u.tier ?? "paid"}
+                              confirmSubject={u.email ?? "this user"}
+                            />
                             <ActionButton
                               action={revokeAction}
                               hiddenFields={{ licenseId: u.licenseId }}
