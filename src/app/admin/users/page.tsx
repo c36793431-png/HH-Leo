@@ -3,10 +3,12 @@ import {
   listAllUsersWithLicenses,
   maskLicenseKey,
   FEED_TYPE_META,
+  USERS_TIER_BUCKETS,
   type AdminUserRow,
   type HasLicenseFilter,
   type SignupSourceFilter,
   type UsersSortColumn,
+  type UsersTierBucket,
 } from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
@@ -55,10 +57,20 @@ function hasActiveLicense(row: AdminUserRow): boolean {
   return row.computedStatus === "active" || row.computedStatus === "expiring";
 }
 
+const TAB_LABELS: Record<UsersTierBucket, string> = {
+  free: "Free",
+  trial: "Trial",
+  paid: "Paid",
+  team: "Team",
+  admin: "Admin",
+  deal: "Deal",
+};
+
 interface RawSearchParams {
   q?: string;
   hasLicense?: string;
   signupSource?: string;
+  tab?: string;
   sort?: string;
   dir?: string;
   page?: string;
@@ -91,12 +103,16 @@ export default async function AdminUsersPage({
   const signupSource = SIGNUP_SOURCE_VALUES.includes(sp.signupSource as SignupSourceFilter)
     ? (sp.signupSource as SignupSourceFilter)
     : undefined;
+  const tierBucket = USERS_TIER_BUCKETS.includes(sp.tab as UsersTierBucket)
+    ? (sp.tab as UsersTierBucket)
+    : undefined;
   const search = sp.q?.trim() || undefined;
 
   const { rows: users, total } = await listAllUsersWithLicenses({
     search,
     hasLicense,
     signupSource,
+    tierBucket,
     sort,
     dir,
     page,
@@ -112,6 +128,32 @@ export default async function AdminUsersPage({
         </span>
         <p className="mt-2 text-sm text-zinc-400">All users, license state, per-row lifecycle actions</p>
       </header>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Link
+          href={buildQuery(sp, { tab: undefined, page: undefined })}
+          className={`rounded-full border px-3 py-1 text-xs font-medium ${
+            !tierBucket
+              ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-300"
+              : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+          }`}
+        >
+          All
+        </Link>
+        {USERS_TIER_BUCKETS.map((tab) => (
+          <Link
+            key={tab}
+            href={buildQuery(sp, { tab, page: undefined })}
+            className={`rounded-full border px-3 py-1 text-xs font-medium ${
+              tierBucket === tab
+                ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-300"
+                : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+            }`}
+          >
+            {TAB_LABELS[tab]}
+          </Link>
+        ))}
+      </div>
 
       <form className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-4">
         <div className="flex-1 min-w-[200px]">
@@ -156,6 +198,7 @@ export default async function AdminUsersPage({
         </div>
         <input type="hidden" name="sort" value={sort} />
         <input type="hidden" name="dir" value={dir} />
+        {tierBucket && <input type="hidden" name="tab" value={tierBucket} />}
         <button
           type="submit"
           className="rounded-md bg-cyan-500/90 px-3 py-1.5 text-sm font-medium text-black hover:bg-cyan-400"
