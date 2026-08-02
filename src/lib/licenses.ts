@@ -899,8 +899,8 @@ export async function getFeedCostStats(): Promise<{ totalMonthlyCost: number; ac
        coalesce(sum(fd.monthly_cost_usd), 0) as total,
        count(distinct l.id) filter (where fd.feed_type is not null) as active_license_count
      from licenses l
-     left join lateral unnest(l.feed_types) as feed_type on true
-     left join feed_definitions fd on fd.feed_type = feed_type
+     left join lateral unnest(l.feed_types) as ft(feed_type) on true
+     left join feed_definitions fd on fd.feed_type = ft.feed_type
      where l.status = 'active' and l.expires_at > now()`
   );
   const row = result.rows[0];
