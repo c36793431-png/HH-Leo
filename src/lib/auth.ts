@@ -8,7 +8,8 @@ import { claimPendingLicense, recordSigninEvent } from "./licenses";
 import { sendTelegramMessage } from "./telegram-bot";
 import { getPortalConfig } from "./portal-config";
 import { notifyFreeSignup } from "./telemetry-sink";
-import { attributeReferralFromCookie, getOrCreateReferralCode } from "./referrals";
+import { getOrCreateReferralCode } from "./referrals";
+import { attributeReferralFromCookie } from "./referrals-cookie";
 
 async function sendWelcomeDm(telegramUserId: number, displayName: string) {
   try {

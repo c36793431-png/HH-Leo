@@ -1,5 +1,4 @@
 import crypto from "crypto";
-import { cookies } from "next/headers";
 import { pool } from "./db";
 
 export const REFERRAL_COOKIE = "hz_ref";
@@ -46,30 +45,6 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
     }
   }
   throw new Error("getOrCreateReferralCode: failed to generate a unique code after 5 attempts");
-}
-
-/** Resolves the hz_ref cookie (if any) to a referrer and attributes the new user to them.
- * Only ever applies on first creation (guarded by `referred_by_user_id is null`) and blocks
- * self-referral defensively, though a brand-new user can't yet know their own code. Call once,
- * right after a users row is inserted, from every signup path (Telegram inline insert + the
- * Auth.js adapter's createUser event for the email path). */
-export async function attributeReferralFromCookie(newUserId: string): Promise<void> {
-  const store = await cookies();
-  const code = store.get(REFERRAL_COOKIE)?.value;
-  if (!code) return;
-
-  const referrer = await pool.query<{ id: string }>(
-    "select id from users where referral_code = $1",
-    [code.trim()]
-  );
-  const referrerId = referrer.rows[0]?.id;
-  if (!referrerId || referrerId === newUserId) return;
-
-  await pool.query(
-    `update users set referred_by_user_id = $1, referred_at = now()
-     where id = $2 and referred_by_user_id is null`,
-    [referrerId, newUserId]
-  );
 }
 
 /** Hooked from addPaymentAction after insertPayment: a 'customer'/'in' payment from a
