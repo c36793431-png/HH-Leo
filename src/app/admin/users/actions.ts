@@ -16,9 +16,15 @@ import {
   type FeedType,
 } from "@/lib/licenses";
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
-import { logAdminAction } from "@/lib/admin";
+import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
+import {
+  saveConfigSummary,
+  parseConfigParamsText,
+  CONFIG_SUMMARY_STRATEGIES,
+  type ConfigSummaryStrategy,
+} from "@/lib/config-summary";
 
 async function requireAdminUsersPanel(): Promise<string> {
   const session = await auth();
@@ -178,6 +184,44 @@ export async function updateUserNotesAction(
 
     await pool.query("update users set admin_notes = $1 where id = $2", [nextValue, userId]);
     await logAdminAction(adminUserId, "admin_users_update_notes", userId, { notes: nextValue }, null);
+    revalidateUsers(userId);
+  });
+}
+
+export async function updateConfigSummaryAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to save config summary", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const resolvedAdminId = await resolveAdminUserId(adminUserId);
+    const userId = formData.get("userId") as string;
+    const strategy = (formData.get("strategy") as string) || null;
+    if (strategy && !CONFIG_SUMMARY_STRATEGIES.includes(strategy as ConfigSummaryStrategy)) {
+      throw new Error("Invalid strategy");
+    }
+    const commissionRaw = (formData.get("commissionPtsRoundTrip") as string) ?? "";
+    const symbolsRaw = (formData.get("symbols") as string) ?? "";
+
+    await saveConfigSummary(
+      userId,
+      {
+        broker: ((formData.get("broker") as string) ?? "").trim() || null,
+        accountType: ((formData.get("accountType") as string) ?? "").trim() || null,
+        commissionPtsRoundTrip: commissionRaw.trim() === "" ? null : Math.round(Number(commissionRaw)),
+        fastFeedProvider: ((formData.get("fastFeedProvider") as string) ?? "").trim() || null,
+        symbols: symbolsRaw
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        strategy: strategy as ConfigSummaryStrategy | null,
+        configJson: parseConfigParamsText((formData.get("configParams") as string) ?? ""),
+        notes: ((formData.get("notes") as string) ?? "").trim() || null,
+      },
+      "admin_verified",
+      resolvedAdminId
+    );
+    await logAdminAction(adminUserId, "admin_users_update_config_summary", userId, null, null);
     revalidateUsers(userId);
   });
 }

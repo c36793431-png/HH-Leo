@@ -10,7 +10,9 @@ import { CopyIdButton } from "@/components/admin/copy-id-button";
 import { InlineEditField } from "@/components/admin/inline-edit-field";
 import { FeedCheckboxes, FeedSelectForm } from "@/components/admin/feed-select-form";
 import { NotesForm } from "@/components/admin/notes-form";
+import { ConfigSummaryForm } from "@/components/admin/config-summary-form";
 import { FEED_TYPE_META } from "@/lib/licenses";
+import { getConfigSummary } from "@/lib/config-summary";
 import {
   expireNowAction,
   extendLicenseAction,
@@ -20,6 +22,7 @@ import {
   updateUserFieldAction,
   updateLicenseFeedsAction,
   updateUserNotesAction,
+  updateConfigSummaryAction,
 } from "../actions";
 
 const STATUS_STYLES = {
@@ -51,7 +54,11 @@ export default async function AdminUserDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [user, payments] = await Promise.all([getUserDetail(id), listPaymentsForUser(id)]);
+  const [user, payments, configSummary] = await Promise.all([
+    getUserDetail(id),
+    listPaymentsForUser(id),
+    getConfigSummary(id),
+  ]);
   if (!user) notFound();
 
   const activeLicense = user.licenses.find(
@@ -188,6 +195,25 @@ export default async function AdminUserDetailPage({
         </div>
         <div className="mt-3">
           <NotesForm action={updateUserNotesAction} userId={user.userId} value={user.adminNotes ?? ""} />
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-zinc-300">Config Summary</h2>
+          {configSummary && (
+            <span className="text-xs text-zinc-500">
+              Last updated by{" "}
+              {configSummary.source === "admin_verified"
+                ? `admin:${configSummary.updatedByEmail ?? "unknown"}`
+                : (configSummary.updatedByEmail ?? "unknown")}{" "}
+              on {formatAbsoluteUtc(configSummary.updatedAt)} —{" "}
+              {configSummary.source === "admin_verified" ? "admin-verified" : "self-reported"}
+            </span>
+          )}
+        </div>
+        <div className="mt-3">
+          <ConfigSummaryForm action={updateConfigSummaryAction} userId={user.userId} value={configSummary} showPaste />
         </div>
       </section>
 

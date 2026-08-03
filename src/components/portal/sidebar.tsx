@@ -13,6 +13,7 @@ const PORTAL_LINKS = [
   { href: "/community", label: "Community", icon: "◍" },
   { href: "/education", label: "Education", icon: "◈" },
   { href: "/account/refer", label: "Refer & earn", icon: "$" },
+  { href: "/account/my-setup", label: "My setup", icon: "⚙" },
   { href: "/account", label: "Account", icon: "◔" },
 ] as const;
 
