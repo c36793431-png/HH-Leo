@@ -20,7 +20,6 @@ import { DownloadButton } from "@/components/download-button";
 import { LicenseStatusCard } from "@/components/license-status-card";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { isCoxwellTestUserEmail } from "@/lib/coxwell-test-admin";
 import { humanizeTimeUntil } from "@/lib/format-time";
 
 export default async function DashboardPage() {
@@ -122,7 +121,6 @@ export default async function DashboardPage() {
           telegramChannelUrl={config.telegramChannelUrl}
           isAdminAccount={isAdmin}
           adminLabel={userName}
-          showTestActions={isCoxwellTestUserEmail(session.user.email)}
           installedVersion={downloads.windows?.version ?? downloads.macos?.version ?? null}
         />
 

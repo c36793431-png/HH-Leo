@@ -1,13 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { computeLicenseDisplayStatus, type LicenseDetail } from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import {
-  expireTestLicenseNowAction,
-  extendTestLicense30dAction,
-  revokeTestLicenseAction,
-} from "@/app/dashboard/license-test-actions";
 
 function daysBetween(a: Date, b: Date): number {
   return Math.round((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000));
@@ -26,49 +21,17 @@ function fakeAdminKeySuffix(seed: string): string {
   return h.toString(16).padStart(8, "0").toUpperCase();
 }
 
-function TestActionButtons() {
-  const [pending, startTransition] = useTransition();
-  return (
-    <div className="lic-test-actions">
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => startTransition(() => void expireTestLicenseNowAction())}
-      >
-        Trigger expire now
-      </button>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => startTransition(() => void extendTestLicense30dAction())}
-      >
-        Extend by 30 days
-      </button>
-      <button
-        type="button"
-        className="danger"
-        disabled={pending}
-        onClick={() => startTransition(() => void revokeTestLicenseAction())}
-      >
-        Revoke
-      </button>
-    </div>
-  );
-}
-
 export function LicenseStatusCard({
   license,
   telegramChannelUrl,
   isAdminAccount = false,
   adminLabel = "admin",
-  showTestActions = false,
   installedVersion = null,
 }: {
   license: LicenseDetail | null;
   telegramChannelUrl: string;
   isAdminAccount?: boolean;
   adminLabel?: string;
-  showTestActions?: boolean;
   installedVersion?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
@@ -150,7 +113,6 @@ export function LicenseStatusCard({
             Reach out on Telegram to get a license
           </a>
         </div>
-        {showTestActions && license && displayStatus === "revoked" && <TestActionButtons />}
       </div>
     );
   }
@@ -232,7 +194,6 @@ export function LicenseStatusCard({
               <b>{license.lastVerifiedAt ? formatRelative(license.lastVerifiedAt) : "never"}</b>
             </span>
           </div>
-          {showTestActions && <TestActionButtons />}
         </div>
         <div className="metrics">
           <div className="m">
