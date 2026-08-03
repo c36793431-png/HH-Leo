@@ -163,7 +163,15 @@ export default async function AdminLicensesPage({
                     )}
                   </td>
                   <td className="py-2 pr-4">
-                    <TierSelectForm action={setLicenseTierAction} hiddenFields={{ licenseId: l.id }} currentTier={l.tier} />
+                    {/* revokeSubject, not confirmSubject: this page has never confirmed ordinary
+                        tier changes and still does not — only the destructive "free" path prompts. */}
+                    <TierSelectForm
+                      action={setLicenseTierAction}
+                      revokeAction={revokeLicenseFromListAction}
+                      hiddenFields={{ licenseId: l.id }}
+                      currentTier={l.tier}
+                      revokeSubject={l.email ?? l.claimEmail ?? undefined}
+                    />
                   </td>
                   <td className="py-2 pr-4">
                     <span

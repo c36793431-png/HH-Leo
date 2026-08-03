@@ -364,6 +364,7 @@ export default async function AdminUsersPage({
                                 be corrected. Rows with no licence render nothing here. */}
                             <TierSelectForm
                               action={setUserLicenseTierAction}
+                              revokeAction={revokeAction}
                               hiddenFields={{ licenseId: u.licenseId }}
                               currentTier={u.tier ?? "paid"}
                               confirmSubject={u.email ?? "this user"}
