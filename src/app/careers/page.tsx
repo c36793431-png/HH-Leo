@@ -66,13 +66,18 @@ function CareersContent() {
         </div>
       </div>
 
-      <p className="mt-6 text-xs text-zinc-500">
-        Other roles? Introduce yourself at{" "}
-        <a href="https://t.me/coxwell2" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">
-          @coxwell2
-        </a>{" "}
-        — we hire opportunistically.
-      </p>
+      <div className="mt-6 rounded-xl border border-cyan-500/10 bg-[#0b0e16]/60 p-5">
+        <h3 className="text-sm font-medium text-zinc-300">Want to join the Horizon team?</h3>
+        <p className="mt-1.5 text-xs text-zinc-500">
+          Send us your info and CV — we&apos;re always open to talking with strong builders.
+        </p>
+        <p className="mt-3 text-xs text-zinc-500">
+          Contact →{" "}
+          <a href="https://t.me/coxwell2" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">
+            @coxwell2 on Telegram
+          </a>
+        </p>
+      </div>
     </div>
   );
 }
