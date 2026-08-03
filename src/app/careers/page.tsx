@@ -12,11 +12,11 @@ function CareersContent() {
         <div className="text-xs font-semibold tracking-[0.2em] text-cyan-400">CAREERS</div>
         <h1 className="mt-2 text-3xl font-bold text-zinc-50">Work with Horizon HFT</h1>
         <p className="mt-3 text-sm text-zinc-400">
-          We hire opinionated builders for project-based work. If you&apos;re a fit, message{" "}
-          <a href="https://t.me/coxwell2" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">
-            @coxwell2
+          We hire opinionated builders for project-based work. If you&apos;re a fit, email{" "}
+          <a href="mailto:hfthorizon@keemail.me" className="text-cyan-400 hover:underline">
+            hfthorizon@keemail.me
           </a>{" "}
-          on Telegram with a short intro + CV.
+          with a short intro + CV.
         </p>
       </div>
 
@@ -56,12 +56,10 @@ function CareersContent() {
           </dl>
 
           <a
-            href="https://t.me/coxwell2"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="mailto:hfthorizon@keemail.me?subject=Application%3A%20C%23%20Developer"
             className="inline-flex items-center justify-center rounded-md bg-cyan-500/90 px-5 py-2.5 text-sm font-medium text-black hover:bg-cyan-400"
           >
-            Apply via Telegram → @coxwell2
+            Apply → hfthorizon@keemail.me
           </a>
         </div>
       </div>
@@ -73,8 +71,8 @@ function CareersContent() {
         </p>
         <p className="mt-3 text-xs text-zinc-500">
           Contact →{" "}
-          <a href="https://t.me/coxwell2" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">
-            @coxwell2 on Telegram
+          <a href="mailto:hfthorizon@keemail.me?subject=Introducing%20myself" className="text-cyan-400 hover:underline">
+            hfthorizon@keemail.me
           </a>
         </p>
       </div>
