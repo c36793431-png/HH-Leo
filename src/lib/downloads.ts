@@ -224,6 +224,36 @@ export async function getDownloadById(id: string): Promise<DownloadRow | null> {
   };
 }
 
+interface UpdateDownloadMetadataArgs {
+  version?: string;
+  changelog?: string;
+}
+
+/** Row-level metadata fix (typo'd version string, changelog edit) — never touches the uploaded Blob. */
+export async function updateDownloadMetadata(
+  id: string,
+  args: UpdateDownloadMetadataArgs
+): Promise<DownloadRow> {
+  const result = await pool.query(
+    `update downloads set version = coalesce($2, version), changelog = coalesce($3, changelog)
+     where id = $1 and deleted_at is null
+     returning id, version, platform, blob_pathname, sha256, size_bytes, changelog, uploaded_at`,
+    [id, args.version ?? null, args.changelog ?? null]
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error("download not found");
+  return {
+    id: row.id,
+    version: row.version,
+    platform: row.platform,
+    blobPathname: row.blob_pathname,
+    sha256: row.sha256,
+    sizeBytes: Number(row.size_bytes),
+    changelog: row.changelog,
+    uploadedAt: row.uploaded_at,
+  };
+}
+
 /** Soft-delete: keeps the row (and admin_actions audit trail) but removes it from listings and the Blob store. */
 export async function softDeleteDownload(id: string): Promise<void> {
   const result = await pool.query<{ blob_pathname: string }>(
