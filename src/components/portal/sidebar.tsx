@@ -12,6 +12,8 @@ const PORTAL_LINKS = [
   { href: "/downloads", label: "Downloads", icon: "▤", paidOnly: true },
   { href: "/community", label: "Community", icon: "◍" },
   { href: "/education", label: "Education", icon: "◈" },
+  { href: "/vps", label: "VPS", icon: "◎" },
+  { href: "/careers", label: "Careers", icon: "▣" },
   { href: "/account/refer", label: "Refer & earn", icon: "$" },
   { href: "/account/my-setup", label: "My setup", icon: "⚙" },
   { href: "/account", label: "Account", icon: "◔" },
