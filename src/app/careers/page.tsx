@@ -4,6 +4,7 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { isPaidUser } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { Logo } from "@/components/logo";
+import { ApplicationForm } from "@/components/careers/application-form";
 
 function CareersContent() {
   return (
@@ -12,9 +13,9 @@ function CareersContent() {
         <div className="text-xs font-semibold tracking-[0.2em] text-cyan-400">CAREERS</div>
         <h1 className="mt-2 text-3xl font-bold text-zinc-50">Work with Horizon HFT</h1>
         <p className="mt-3 text-sm text-zinc-400">
-          We hire opinionated builders for project-based work. If you&apos;re a fit, email{" "}
-          <a href="mailto:hfthorizon@keemail.me" className="text-cyan-400 hover:underline">
-            hfthorizon@keemail.me
+          We hire opinionated builders for project-based work. If you&apos;re a fit,{" "}
+          <a href="#apply-form" className="text-cyan-400 hover:underline">
+            apply below
           </a>{" "}
           with a short intro + CV.
         </p>
@@ -56,10 +57,10 @@ function CareersContent() {
           </dl>
 
           <a
-            href="mailto:hfthorizon@keemail.me?subject=Application%3A%20C%23%20Developer"
+            href="#apply-form"
             className="inline-flex items-center justify-center rounded-md bg-cyan-500/90 px-5 py-2.5 text-sm font-medium text-black hover:bg-cyan-400"
           >
-            Apply → hfthorizon@keemail.me
+            Apply below ↓
           </a>
         </div>
       </div>
@@ -70,11 +71,14 @@ function CareersContent() {
           Send us your info and CV — we&apos;re always open to talking with strong builders.
         </p>
         <p className="mt-3 text-xs text-zinc-500">
-          Contact →{" "}
-          <a href="mailto:hfthorizon@keemail.me?subject=Introducing%20myself" className="text-cyan-400 hover:underline">
-            hfthorizon@keemail.me
+          <a href="#apply-form" className="text-cyan-400 hover:underline">
+            Apply below →
           </a>
         </p>
+      </div>
+
+      <div className="mt-6">
+        <ApplicationForm />
       </div>
     </div>
   );
