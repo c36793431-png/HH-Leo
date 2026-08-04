@@ -123,7 +123,7 @@ export function ConfigSummaryForm({
             value={paste}
             onChange={(e) => setPaste(e.target.value)}
             rows={6}
-            placeholder={"Broker: PUPrime (ECN)\nCommission: 8 pts round-trip\nFeed: Horizon CFD (LD)\nSymbol: XAUUSD.p\nStrategy: 1 Leg\nConfig: Gap=35 / SL=30 / TP=100 / Trail Start=45 / Trail Dist=3\nNotes: whatever"}
+            placeholder={"Broker: IC Markets (ECN)\nCommission: $3.50 per lot round-trip\nFeed: Your feed provider (LD)\nSymbol: EURUSD\nStrategy: 1 Leg\nConfig: Gap=X / SL=X / TP=X / Trail Start=X / Trail Dist=X\nNotes: whatever"}
             className={`${inputClass} mt-1 font-mono text-xs`}
           />
           <button
@@ -140,7 +140,7 @@ export function ConfigSummaryForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className={labelClass}>Broker</label>
-          <input value={broker} onChange={(e) => setBroker(e.target.value)} disabled={isPending} className={inputClass} placeholder="PUPrime, Opogroup, Fxview…" />
+          <input value={broker} onChange={(e) => setBroker(e.target.value)} disabled={isPending} className={inputClass} placeholder="IC Markets, Pepperstone, Exness…" />
         </div>
         <div>
           <label className={labelClass}>Account type</label>
@@ -154,6 +154,7 @@ export function ConfigSummaryForm({
             onChange={(e) => setCommission(e.target.value)}
             disabled={isPending}
             className={inputClass}
+            placeholder="e.g. $3.50 per lot round-trip"
           />
         </div>
         <div>
@@ -163,12 +164,12 @@ export function ConfigSummaryForm({
             onChange={(e) => setFeedProvider(e.target.value)}
             disabled={isPending}
             className={inputClass}
-            placeholder="Horizon CFD…"
+            placeholder="Your feed provider…"
           />
         </div>
         <div>
           <label className={labelClass}>Symbols (comma-separated)</label>
-          <input value={symbols} onChange={(e) => setSymbols(e.target.value)} disabled={isPending} className={inputClass} placeholder="XAUUSD.p, EURUSD" />
+          <input value={symbols} onChange={(e) => setSymbols(e.target.value)} disabled={isPending} className={inputClass} placeholder="EURUSD, XAUUSD" />
         </div>
         <div>
           <label className={labelClass}>Strategy</label>
@@ -187,13 +188,13 @@ export function ConfigSummaryForm({
           </select>
         </div>
         <div className="sm:col-span-2">
-          <label className={labelClass}>Config params (Gap=35 / SL=30 / TP=100 / …)</label>
+          <label className={labelClass}>Config params (Gap=X / SL=X / TP=X / …)</label>
           <input
             value={configParams}
             onChange={(e) => setConfigParams(e.target.value)}
             disabled={isPending}
             className={`${inputClass} font-mono`}
-            placeholder="Gap=35 / SL=30 / TP=100 / Trail Start=45 / Trail Dist=3 / Shift=0 / MaxSpread=20"
+            placeholder="Gap=X / SL=X / TP=X / Trail Start=X / Trail Dist=X / Shift=X / MaxSpread=X"
           />
         </div>
         <div className="sm:col-span-2">
