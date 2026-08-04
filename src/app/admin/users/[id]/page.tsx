@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getUserDetail, maskLicenseKey, type UserTierLabel } from "@/lib/licenses";
+import { getUserDetail, maskLicenseKey, LICENSE_TIERS, type UserTierLabel } from "@/lib/licenses";
 import { listPaymentsForUser } from "@/lib/payments";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
@@ -179,6 +179,20 @@ export default async function AdminUserDetailPage({
                 : undefined
             }
           >
+            <label className="flex items-center gap-1 text-xs text-zinc-400">
+              Tier
+              <select
+                name="tier"
+                defaultValue="paid"
+                className="rounded border border-zinc-700 bg-black/40 px-1.5 py-0.5 text-xs text-zinc-200"
+              >
+                {LICENSE_TIERS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
             <FeedCheckboxes />
           </DurationForm>
         </div>
@@ -198,7 +212,7 @@ export default async function AdminUserDetailPage({
         </div>
       </section>
 
-      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
+      <section id="config-summary" className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-zinc-300">Config Summary</h2>
           {configSummary && (

@@ -235,12 +235,15 @@ export async function issueNewLicenseAction(
     const userId = formData.get("userId") as string;
     const expiresAt = resolveExpiresAt(parseDurationFormData(formData));
     const feedTypes = readFeedTypesFromFormData(formData);
-    const license = await issueLicense({ userId, expiresAt, feedTypes });
+    const tierRaw = formData.get("tier") as string | null;
+    if (tierRaw && !LICENSE_TIERS.includes(tierRaw as LicenseTier)) throw new Error("Invalid tier");
+    const tier = (tierRaw as LicenseTier) || undefined;
+    const license = await issueLicense({ userId, expiresAt, feedTypes, tier });
     await logAdminAction(
       adminUserId,
       "admin_users_issue_license",
       userId,
-      { licenseId: license.id, expiresAt: expiresAt.toISOString(), feedTypes },
+      { licenseId: license.id, expiresAt: expiresAt.toISOString(), feedTypes, tier: tier ?? "paid" },
       license.id
     );
     revalidateUsers(userId);

@@ -48,6 +48,8 @@ interface IssueLicenseArgs {
   expiresAt?: Date;
   notes?: string;
   feedTypes?: FeedType[];
+  /** Defaults to the DB column default ('paid') when omitted. */
+  tier?: LicenseTier;
 }
 
 export interface IssuedLicense {
@@ -110,8 +112,8 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
     const licenseKey = generateLicenseKey();
     try {
       const result = await pool.query(
-        `insert into licenses (user_id, claim_email, claim_telegram_user_id, license_key, status, expires_at, notes, feed_types)
-         values ($1, $2, $3, $4, 'active', $5, $6, $7)
+        `insert into licenses (user_id, claim_email, claim_telegram_user_id, license_key, status, expires_at, notes, feed_types, tier)
+         values ($1, $2, $3, $4, 'active', $5, $6, $7, coalesce($8, 'paid'))
          returning id, license_key, expires_at, tier`,
         [
           args.userId ?? null,
@@ -121,6 +123,7 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
           expiresAt,
           args.notes ?? null,
           args.feedTypes ?? [],
+          args.tier ?? null,
         ]
       );
       const row = result.rows[0];
