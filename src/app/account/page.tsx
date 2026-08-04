@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getLicenseForUser } from "@/lib/licenses";
+import { getLicenseForUser, computePortalTier } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
 import { getBotUsername } from "@/lib/telegram-bot";
@@ -14,8 +14,7 @@ export default async function AccountPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [paid, config, telegramRow, botUsername] = await Promise.all([
-    isPaidUser(session.user.id).catch(() => false),
+  const [config, telegramRow, botUsername] = await Promise.all([
     getPortalConfig(),
     pool
       .query<{ telegram_user_id: string | null; telegram_username: string | null }>(
@@ -30,7 +29,8 @@ export default async function AccountPage() {
   const isAdmin = isAdminUser(session.user);
   const telegramLinked = telegramRow.telegram_user_id !== null;
 
-  const tier = isAdmin ? "admin" : paid ? "paid" : "free";
+  const tier = computePortalTier(isAdmin, licenseDetail);
+  const tierBadgeLabel = tier.toUpperCase();
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
@@ -49,6 +49,7 @@ export default async function AccountPage() {
                 <b>{userName}</b>
                 <span>{userEmail}</span>
               </div>
+              <span className={`tier-badge ${tier}`}>{tierBadgeLabel}</span>
             </div>
             <div className="rw">
               <div className="ricon">✈</div>

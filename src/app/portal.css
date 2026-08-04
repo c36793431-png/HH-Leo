@@ -72,6 +72,8 @@
   background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); border: 1px solid rgba(138, 155, 160, 0.3);
 }
 .portal-shell .brand .txt .brand-pill.paid { background: rgba(55, 245, 160, 0.14); color: var(--hz-ok); border-color: rgba(55, 245, 160, 0.34); }
+.portal-shell .brand .txt .brand-pill.trial { background: rgba(111, 168, 255, 0.14); color: var(--hz-info); border-color: rgba(111, 168, 255, 0.34); }
+.portal-shell .brand .txt .brand-pill.team { background: rgba(45, 226, 230, 0.14); color: var(--hz-cyan); border-color: rgba(45, 226, 230, 0.34); }
 .portal-shell .brand .txt .brand-pill.admin { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: rgba(255, 194, 75, 0.36); }
 
 .portal-shell .nav { flex: 1; overflow-y: auto; padding: 6px 14px; }
@@ -127,7 +129,19 @@
   background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); border: 1px solid rgba(138, 155, 160, 0.3);
 }
 .portal-shell .acct .tier.paid { background: rgba(55, 245, 160, 0.14); color: var(--hz-ok); border-color: rgba(55, 245, 160, 0.34); }
+.portal-shell .acct .tier.trial { background: rgba(111, 168, 255, 0.14); color: var(--hz-info); border-color: rgba(111, 168, 255, 0.34); }
+.portal-shell .acct .tier.team { background: rgba(45, 226, 230, 0.14); color: var(--hz-cyan); border-color: rgba(45, 226, 230, 0.34); }
 .portal-shell .acct .tier.admin { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: rgba(255, 194, 75, 0.36); }
+
+.portal-shell .tier-badge {
+  margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; flex: 0 0 auto;
+  background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); border: 1px solid rgba(138, 155, 160, 0.3);
+}
+.portal-shell .tier-badge.paid { background: rgba(55, 245, 160, 0.14); color: var(--hz-ok); border-color: rgba(55, 245, 160, 0.34); }
+.portal-shell .tier-badge.trial { background: rgba(111, 168, 255, 0.14); color: var(--hz-info); border-color: rgba(111, 168, 255, 0.34); }
+.portal-shell .tier-badge.team { background: rgba(45, 226, 230, 0.14); color: var(--hz-cyan); border-color: rgba(45, 226, 230, 0.34); }
+.portal-shell .tier-badge.admin { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: rgba(255, 194, 75, 0.36); }
 
 /* ---- MAIN ---- */
 .portal-shell .main {

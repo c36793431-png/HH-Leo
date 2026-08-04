@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser } from "@/lib/licenses";
+import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { ConfigSummaryForm } from "@/components/admin/config-summary-form";
@@ -13,14 +13,15 @@ export default async function MySetupPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [paid, configSummary, config] = await Promise.all([
+  const [paid, licenseDetail, configSummary, config] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
+    getLicenseForUser(session.user.id).catch(() => null),
     getConfigSummary(session.user.id),
     getPortalConfig(),
   ]);
   const isAdmin = isAdminUser(session.user);
 
-  const tier = isAdmin ? "admin" : paid ? "paid" : "free";
+  const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   const unlocked = paid || isAdmin;

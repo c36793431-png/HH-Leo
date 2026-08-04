@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getActiveLicenseForUser } from "@/lib/licenses";
+import { isPaidUser, getActiveLicenseForUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
 import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { DownloadButton } from "@/components/download-button";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -21,17 +21,19 @@ export default async function DownloadsPage() {
   const isAdmin = isAdminUser(session.user);
   if (!paid && !isAdmin) redirect("/dashboard");
 
-  const [license, downloads] = await Promise.all([
+  const [license, licenseDetail, downloads] = await Promise.all([
     getActiveLicenseForUser(session.user.id).catch(() => null),
+    getLicenseForUser(session.user.id).catch(() => null),
     getLatestDownloads().catch((): LatestDownloads => ({})),
   ]);
 
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   const changelog = downloads.windows?.changelog ?? downloads.macos?.changelog ?? PLACEHOLDER_CHANGELOG;
+  const tier = computePortalTier(isAdmin, licenseDetail);
 
   return (
-    <PortalShell tier={isAdmin ? "admin" : "paid"} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
       <div className="grid g2">
         <div className="card">
           <div className="chead">

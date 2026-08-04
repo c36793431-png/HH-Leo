@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { isPaidUser } from "@/lib/licenses";
+import { getLicenseForUser, computePortalTier } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { getUserReferralStats, REFERRAL_MIN_PAYOUT_USD } from "@/lib/referrals";
@@ -23,8 +23,8 @@ export default async function ReferPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [paid, isAdmin, headerList] = await Promise.all([
-    isPaidUser(session.user.id).catch(() => false),
+  const [licenseDetail, isAdmin, headerList] = await Promise.all([
+    getLicenseForUser(session.user.id).catch(() => null),
     Promise.resolve(isAdminUser(session.user)),
     headers(),
   ]);
@@ -33,7 +33,7 @@ export default async function ReferPage() {
   const protocol = headerList.get("x-forwarded-proto") ?? "https";
   const stats = await getUserReferralStats(session.user.id, `${protocol}://${host}`);
 
-  const tier = isAdmin ? "admin" : paid ? "paid" : "free";
+  const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser } from "@/lib/licenses";
+import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
 import { getBotUsername, getChatMemberCount } from "@/lib/telegram-bot";
@@ -28,8 +28,9 @@ export default async function CommunityPage() {
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [paid, config, telegramStatus, groupMembershipStatus, botUsername] = await Promise.all([
+  const [paid, licenseDetail, config, telegramStatus, groupMembershipStatus, botUsername] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
+    getLicenseForUser(session.user.id).catch(() => null),
     getPortalConfig(),
     pool
       .query<{ telegram_user_id: string | null; telegram_bot_started_at: Date | null }>(
@@ -66,7 +67,7 @@ export default async function CommunityPage() {
 
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
-  const tier = paid ? "paid" : "free";
+  const tier = computePortalTier(false, licenseDetail);
 
   return (
     <PortalShell tier={tier} isAdmin={false} userName={userName} userEmail={userEmail}>

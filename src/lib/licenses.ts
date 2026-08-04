@@ -406,6 +406,22 @@ export function computeLicenseDisplayStatus(
   return "active";
 }
 
+/** Sidebar/account nav tier bucket for the signed-in user — folds 'deal' into 'paid'
+ * (no dedicated nav slot for it) and any non-active license into 'free'. Kept as its
+ * own string union rather than importing PortalTier from the sidebar component to
+ * avoid pulling a "use client" module into this server-only file. */
+export function computePortalTier(
+  isAdmin: boolean,
+  license: { tier: string; status: string; expiresAt: Date } | null
+): "free" | "trial" | "paid" | "team" | "admin" {
+  if (isAdmin) return "admin";
+  const status = computeLicenseDisplayStatus(license);
+  if (status !== "active" && status !== "expiring") return "free";
+  if (license!.tier === "team") return "team";
+  if (license!.tier === "trial") return "trial";
+  return "paid";
+}
+
 /** Dashboard widget lookup — unlike getActiveLicenseForUser, returns the latest license regardless of status/expiry so the UI can render EXPIRED/REVOKED states. */
 export async function getLicenseForUser(userId: string): Promise<LicenseDetail | null> {
   const result = await pool.query(

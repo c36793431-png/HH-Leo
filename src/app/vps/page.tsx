@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { isPaidUser } from "@/lib/licenses";
+import { getLicenseForUser, computePortalTier } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { Logo } from "@/components/logo";
 
@@ -77,9 +77,9 @@ export default async function VpsPage() {
     );
   }
 
-  const paid = await isPaidUser(session.user.id).catch(() => false);
+  const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
   const isAdmin = isAdminUser(session.user);
-  const tier = isAdmin ? "admin" : paid ? "paid" : "free";
+  const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 

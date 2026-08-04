@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { isPaidUser } from "@/lib/licenses";
+import { getLicenseForUser, computePortalTier } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { EducationCatalog } from "@/components/education/education-catalog";
 import { EDUCATION_CATEGORIES, EDUCATION_LESSONS } from "@/lib/education";
@@ -10,9 +10,9 @@ export default async function EducationPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const paid = await isPaidUser(session.user.id).catch(() => false);
+  const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
   const isAdmin = isAdminUser(session.user);
-  const tier = isAdmin ? "admin" : paid ? "paid" : "free";
+  const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 

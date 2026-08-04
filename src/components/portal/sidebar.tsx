@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-export type PortalTier = "free" | "paid" | "admin";
+export type PortalTier = "free" | "trial" | "paid" | "team" | "admin";
 
 const PORTAL_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: "▨" },
@@ -50,13 +50,13 @@ export function PortalSidebar({
 }) {
   const pathname = usePathname();
   const initial = (userName.trim()[0] ?? "?").toUpperCase();
-  const tierLabel = tier === "admin" ? "Admin" : tier === "paid" ? "Active" : "Free";
-  const tierClass = tier === "admin" ? "admin" : tier === "paid" ? "paid" : "";
+  const tierLabel = tier === "admin" ? "Admin" : tier === "team" ? "Team" : tier === "trial" ? "Trial" : tier === "paid" ? "Active" : "Free";
+  const tierClass = tier === "free" ? "" : tier;
 
-  // Paid/admin get the blue+cyan+gold-apex mark; free gets the green tri-triangle.
+  // Paid/trial/team/admin get the blue+cyan+gold-apex mark; free gets the green tri-triangle.
   // Falls back to the free asset if the paid asset isn't deployed yet.
   const [paidLogoFailed, setPaidLogoFailed] = useState(false);
-  const showPaidLogo = (tier === "paid" || tier === "admin") && !paidLogoFailed;
+  const showPaidLogo = tier !== "free" && !paidLogoFailed;
   const logoSrc = showPaidLogo ? "/brand/horizon-logo-paid.png" : "/brand/horizon-logo-free.png";
 
   return (
@@ -74,8 +74,7 @@ export function PortalSidebar({
         <div className="txt">
           HORIZON
           <small>HFT PORTAL</small>
-          {tier === "paid" && <span className="brand-pill paid">ACTIVE</span>}
-          {tier === "admin" && <span className="brand-pill admin">ADMIN</span>}
+          <span className={`brand-pill${tierClass ? ` ${tierClass}` : ""}`}>{tierLabel.toUpperCase()}</span>
         </div>
       </Link>
       <nav className="nav">

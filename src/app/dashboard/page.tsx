@@ -6,6 +6,7 @@ import {
   getLicenseForUser,
   computeLicenseDisplayStatus,
   computeUserActiveFeeds,
+  computePortalTier,
   FEED_TYPES,
   FEED_TYPE_META,
 } from "@/lib/licenses";
@@ -63,7 +64,7 @@ export default async function DashboardPage() {
   const isExpired = displayStatus === "expired";
   const isExpiringSoon = displayStatus === "expiring";
 
-  const tier = isAdmin ? "admin" : paid ? "paid" : "free";
+  const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   // Admin bypass: Downloads/Education render unlocked regardless of license, same as `paid`.
