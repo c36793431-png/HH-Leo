@@ -15,7 +15,7 @@ const PORTAL_LINKS = [
   { href: "/vps", label: "VPS", icon: "◎" },
   { href: "/careers", label: "Careers", icon: "▣" },
   { href: "/account/refer", label: "Refer & earn", icon: "$" },
-  { href: "/account/my-setup", label: "My setup", icon: "⚙" },
+  { href: "/account/my-setup", label: "My setup", icon: "⚙", paidOnly: true, lockedStaysOnPage: true },
   { href: "/account", label: "Account", icon: "◔" },
 ] as const;
 
@@ -24,8 +24,10 @@ const ADMIN_LINKS = [
   { href: "/admin/finance", label: "Finance", icon: "$" },
   { href: "/admin/referrals", label: "Referrals", icon: "◈" },
   { href: "/admin/users", label: "Users", icon: "◱" },
+  { href: "/admin/setups", label: "Setups", icon: "⚙" },
   { href: "/admin/licenses", label: "Licenses", icon: "⬡" },
   { href: "/admin/downloads", label: "Publish builds", icon: "⇧" },
+  { href: "/admin/applications", label: "Applications", icon: "▣" },
   { href: "/admin/history", label: "History", icon: "↻" },
 ] as const;
 
@@ -82,12 +84,13 @@ export function PortalSidebar({
             <div className="grp">Portal</div>
             {PORTAL_LINKS.map((link) => {
               const locked = "paidOnly" in link && link.paidOnly && tier === "free";
+              const lockedStaysOnPage = "lockedStaysOnPage" in link && link.lockedStaysOnPage;
               const active = isActive(pathname, link.href);
               const isEdu = link.href === "/education";
               return (
                 <Link
                   key={link.href}
-                  href={locked ? "/dashboard#downloads" : link.href}
+                  href={locked && !lockedStaysOnPage ? "/dashboard#downloads" : link.href}
                   className={locked ? "locked" : active ? (isEdu ? "on edu" : "on") : undefined}
                 >
                   <span className="ic">{link.icon}</span> {link.label}

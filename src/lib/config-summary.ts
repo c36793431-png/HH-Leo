@@ -146,6 +146,76 @@ export async function saveConfigSummary(
   }
 }
 
+export type ConfigSummaryTierFilter = "free" | "trial" | "paid" | "team" | "deal";
+export type ConfigSummaryUpdatedWithinFilter = "24h" | "7d" | "30d";
+
+export interface ListConfigSummariesOptions {
+  tier?: ConfigSummaryTierFilter;
+  source?: ConfigSummarySource;
+  symbolContains?: string;
+  updatedWithin?: ConfigSummaryUpdatedWithinFilter;
+}
+
+export interface AdminConfigSummaryRow extends ConfigSummary {
+  email: string | null;
+  tier: string | null;
+}
+
+const UPDATED_WITHIN_INTERVAL: Record<ConfigSummaryUpdatedWithinFilter, string> = {
+  "24h": "24 hours",
+  "7d": "7 days",
+  "30d": "30 days",
+};
+
+/** /admin/setups source of truth: every user_config_summaries row joined to the user's email
+ * and currently-active license tier (null when free), newest first. */
+export async function listAllConfigSummaries(
+  options: ListConfigSummariesOptions = {}
+): Promise<AdminConfigSummaryRow[]> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (options.source) {
+    params.push(options.source);
+    conditions.push(`s.source = $${params.length}`);
+  }
+  if (options.symbolContains) {
+    params.push(`%${options.symbolContains}%`);
+    conditions.push(
+      `exists (select 1 from unnest(s.symbols) sym where sym ilike $${params.length})`
+    );
+  }
+  if (options.updatedWithin) {
+    conditions.push(`s.updated_at >= now() - interval '${UPDATED_WITHIN_INTERVAL[options.updatedWithin]}'`);
+  }
+  if (options.tier === "free") {
+    conditions.push(`l.tier is null`);
+  } else if (options.tier) {
+    params.push(options.tier);
+    conditions.push(`l.tier = $${params.length}`);
+  }
+
+  const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
+
+  const result = await pool.query<ConfigSummaryRow & { owner_email: string | null; tier: string | null }>(
+    `select s.*, ub.email as updated_by_email, uo.email as owner_email, l.tier
+     from user_config_summaries s
+     left join users uo on uo.id = s.user_id
+     left join users ub on ub.id = s.updated_by
+     left join lateral (
+       select tier from licenses
+       where user_id = s.user_id and status = 'active' and expires_at > now()
+       order by expires_at desc
+       limit 1
+     ) l on true
+     ${where}
+     order by s.updated_at desc`,
+    params
+  );
+
+  return result.rows.map((row) => ({ ...mapRow(row), email: row.owner_email, tier: row.tier }));
+}
+
 export async function deleteConfigSummary(userId: string): Promise<void> {
   await pool.query("delete from user_config_summaries where user_id = $1", [userId]);
 }
