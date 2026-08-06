@@ -67,7 +67,7 @@ export function EditSetfileForm({ action, id, mode, defaults }: EditSetfileFormP
             Source
             <select name="source" defaultValue={defaults?.source ?? "example"} className={inputClass}>
               <option value="verified">Verified</option>
-              <option value="example">Example / AI-generated</option>
+              <option value="example">Example</option>
             </select>
           </label>
         </div>

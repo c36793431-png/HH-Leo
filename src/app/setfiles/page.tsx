@@ -92,7 +92,7 @@ export default async function SetfilesPage() {
                                 : { color: "var(--hz-cyan)", background: "rgba(45, 226, 230, 0.12)" }
                             }
                           >
-                            {row.source === "verified" ? "Verified" : "Example / AI-generated"}
+                            {row.source === "verified" ? "Verified" : "Example"}
                           </span>
                           {row.sessionWindow && <span className="lb-tag">{row.sessionWindow}</span>}
                         </div>
