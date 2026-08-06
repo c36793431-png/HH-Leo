@@ -11,6 +11,7 @@ const PORTAL_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: "▨" },
   { href: "/downloads", label: "Downloads", icon: "▤", paidOnly: true },
   { href: "/community", label: "Community", icon: "◍" },
+  { href: "/feeds", label: "Feeds", icon: "≈", paidOnly: true, lockedStaysOnPage: true },
   { href: "/setfiles", label: "Setfiles", icon: "⌘", paidOnly: true, lockedStaysOnPage: true },
   { href: "/education", label: "Education", icon: "◈" },
   { href: "/education/advanced", label: "Advanced Education", icon: "◈", paidOnly: true, lockedStaysOnPage: true },

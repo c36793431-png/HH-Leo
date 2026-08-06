@@ -519,6 +519,31 @@
 .portal-shell .comm-cta { flex: 0 0 auto; white-space: nowrap; }
 .portal-shell .comm-unavailable { font-size: 12px; color: var(--hz-ink-3); max-width: 220px; }
 
+/* ---- FEEDS PAGE ---- */
+.portal-shell .fp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.portal-shell .fp-card { display: flex; flex-direction: column; gap: 6px; }
+.portal-shell .fp-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.portal-shell .fp-flag { font-size: 24px; line-height: 1; }
+.portal-shell .fp-pill {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid transparent;
+}
+.portal-shell .fp-pill-active { background: rgba(55, 245, 160, 0.14); color: var(--hz-ok); border-color: rgba(55, 245, 160, 0.4); }
+.portal-shell .fp-pill-trial { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: var(--hz-amber-line); }
+.portal-shell .fp-pill-included { background: rgba(76, 141, 255, 0.14); color: var(--hz-blue-bright); border-color: rgba(76, 141, 255, 0.4); }
+.portal-shell .fp-pill-locked { background: rgba(255, 92, 122, 0.14); color: var(--hz-bad); border-color: rgba(255, 92, 122, 0.4); }
+.portal-shell .fp-pill-coming_soon { background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); border-color: rgba(138, 155, 160, 0.35); }
+.portal-shell .fp-name { font-family: var(--hz-disp); font-weight: 700; font-size: 17px; }
+.portal-shell .fp-desc { font-size: 12px; color: var(--hz-ink-3); line-height: 1.5; min-height: 34px; }
+.portal-shell .fp-latency { font-family: var(--hz-mono); font-size: 11px; color: var(--hz-ink-2); }
+.portal-shell .fp-expiry { font-size: 11px; font-weight: 600; color: var(--hz-ink-2); }
+.portal-shell .fp-card.fp-active .fp-expiry { color: var(--hz-ok); }
+.portal-shell .fp-card.fp-trial .fp-expiry { color: var(--hz-warn); }
+.portal-shell .fp-note { font-size: 11px; color: var(--hz-ink-3); }
+.portal-shell .fp-cta { align-self: flex-start; margin-top: 6px; }
+.portal-shell .fp-card.fp-coming_soon { opacity: 0.7; }
+.portal-shell .fp-footnote { font-size: 12px; color: var(--hz-ink-3); margin-top: 18px; max-width: 640px; }
+
 /* ---- MOBILE DRAWER ---- */
 .portal-shell .scrim { display: none; }
 .portal-shell .feed-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
