@@ -32,10 +32,17 @@ export default async function PropFirmPage() {
           </div>
           {unlocked ? (
             <>
-              <p style={{ fontWeight: 700, marginBottom: 8 }}>Prop Firm recommendations — coming soon</p>
+              <p style={{ fontWeight: 700, marginBottom: 8 }}>Personalized prop firm match</p>
               <p style={{ color: "var(--hz-ink-2)", fontSize: 13, lineHeight: 1.6 }}>
-                Curated list of vetted prop firms that work well with Horizon HFT strategies.
+                Prop firm choice matters — payout terms, HFT rules, and backend execution vary
+                widely. We help pick the right one based on your strategy, capital tier, and goals.
+                Message{" "}
+                <a href="https://t.me/coxwell2" target="_blank" rel="noopener noreferrer">
+                  @coxwell2
+                </a>{" "}
+                on Telegram for a personalized recommendation.
               </p>
+              <p style={{ color: "var(--hz-ink-3)", fontSize: 12, marginTop: 16 }}>Curated prop firm list coming soon.</p>
             </>
           ) : (
             <LockedLanding
