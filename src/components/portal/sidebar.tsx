@@ -58,6 +58,10 @@ export function PortalSidebar({
   const tierLabel = tier === "admin" ? "Admin" : tier === "team" ? "Team" : tier === "trial" ? "Trial" : tier === "paid" ? "Active" : "Free";
   const tierClass = tier === "free" ? "" : tier;
 
+  // "deal" licenses fold into "paid" upstream (see computePortalTier), so this covers
+  // the full paid+/team/deal/admin set the sidebar theming applies to.
+  const isPaidPlus = tier === "paid" || tier === "team" || tier === "admin";
+
   // Paid/trial/team/admin get the blue+cyan+gold-apex mark; free gets the green tri-triangle.
   // Falls back to the free asset if the paid asset isn't deployed yet.
   const [paidLogoFailed, setPaidLogoFailed] = useState(false);
@@ -82,12 +86,14 @@ export function PortalSidebar({
           <span className={`brand-pill${tierClass ? ` ${tierClass}` : ""}`}>{tierLabel.toUpperCase()}</span>
         </div>
       </Link>
-      <nav className="nav">
+      <nav className={`nav${isPaidPlus ? " paid-theme" : ""}`}>
         {!isAdmin && (
           <>
             <div className="grp">Portal</div>
             {PORTAL_LINKS.map((link) => {
-              const locked = "paidOnly" in link && link.paidOnly && tier === "free";
+              const paidOnly = "paidOnly" in link && link.paidOnly;
+              const locked = paidOnly && tier === "free";
+              const unlocked = paidOnly && isPaidPlus;
               const lockedStaysOnPage = "lockedStaysOnPage" in link && link.lockedStaysOnPage;
               const active = isActive(pathname, link.href);
               const isEdu = link.href === "/education";
@@ -99,6 +105,7 @@ export function PortalSidebar({
                 >
                   <span className="ic">{link.icon}</span> {link.label}
                   {locked && <span className="lock">🔒</span>}
+                  {unlocked && <span className="crown" aria-label="Included in your plan">👑</span>}
                 </Link>
               );
             })}
