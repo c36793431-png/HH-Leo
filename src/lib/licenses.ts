@@ -898,10 +898,10 @@ export interface FeedTypeMeta {
 
 // text[] column (not enum) — new feed types append here without a schema change.
 export const FEED_TYPE_META: Record<FeedType, FeedTypeMeta> = {
-  futures: { id: "futures", name: "Futures Feed", description: "CME futures signals, session-hour focused" },
-  london: { id: "london", name: "London Feed", description: "LSE + EU pre-open signals" },
-  ny: { id: "ny", name: "NY Feed", description: "NYSE + NASDAQ open + close signals" },
-  crypto: { id: "crypto", name: "Crypto Feed", description: "24/7 major-pair signals" },
+  futures: { id: "futures", name: "CME Futures Feed", description: "Chicago · CH1 co-lo — CME Group futures, indices, metals & energy" },
+  london: { id: "london", name: "London Feed", description: "London · LD4 co-lo — European ECN aggregator, FX, gold & indices" },
+  ny: { id: "ny", name: "New York Feed", description: "New York · NY4 co-lo — Institutional FX aggregator, majors, metals & US indices" },
+  crypto: { id: "crypto", name: "Crypto Tokyo Feed", description: "Tokyo · TY3 co-lo — Institutional crypto aggregator, spot & perpetual futures" },
 };
 
 function isFeedType(value: string): value is FeedType {

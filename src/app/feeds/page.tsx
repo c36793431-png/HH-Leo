@@ -4,7 +4,12 @@ import { isPaidUser, getLicenseForUser, computeUserActiveFeeds, computePortalTie
 import { getPortalConfig } from "@/lib/portal-config";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { FEED_CATALOGUE, computeFeedCardStatus, type FeedCardStatus } from "@/lib/feeds-catalogue";
+import {
+  FEED_CATALOGUE,
+  COMING_SOON_CATALOGUE,
+  computeFeedCardStatus,
+  type FeedCardStatus,
+} from "@/lib/feeds-catalogue";
 
 const STATUS_LABEL: Record<FeedCardStatus, string> = {
   active: "Active",
@@ -84,6 +89,51 @@ export default async function FeedsPage() {
           Feeds are bundled with your license. Message us on Telegram to talk through which feeds fit your setup.
         </p>
       )}
+
+      <div className="fp-section">
+        <h2 className="fp-section-title">What&apos;s coming</h2>
+        {COMING_SOON_CATALOGUE.length > 0 ? (
+          <div className="fp-grid">
+            {COMING_SOON_CATALOGUE.map((entry) => (
+              <div key={entry.slug} className="card fp-card fp-coming_soon">
+                <div className="fp-top">
+                  <span className="fp-flag">{entry.countryFlag}</span>
+                  <span className="fp-pill fp-pill-coming_soon">{STATUS_LABEL.coming_soon}</span>
+                </div>
+                <h3 className="fp-name">{entry.name}</h3>
+                <p className="fp-desc">{entry.description}</p>
+                <span className="fp-latency">{entry.latencyBand}</span>
+                <span className="fp-note">Planned — not live yet</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="fp-section-empty">Roadmap coming soon — check back for what&apos;s next.</p>
+        )}
+      </div>
+
+      <div className="fp-ctas">
+        <div className="card fp-cta-card">
+          <h3 className="fp-cta-title">Request a feed</h3>
+          <p className="fp-cta-copy">
+            Need a feed we don&apos;t offer yet? Tell us what you need and we&apos;ll evaluate adding it.
+          </p>
+          <a className="btn ghost sm" href="mailto:feeds@horizonhft.com?subject=Feed%20request">
+            Request a feed →
+          </a>
+        </div>
+
+        <div className="card fp-consult-card">
+          <span className="fp-consult-badge">CONSULTING</span>
+          <h3 className="fp-cta-title">Faster feed setup, done for you</h3>
+          <p className="fp-cta-copy">
+            We handle setup end-to-end: server, feed handler, distribution to your MT4/MT5/FIX endpoint, monitoring.
+          </p>
+          <a className="btn primary sm" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
+            Talk to us →
+          </a>
+        </div>
+      </div>
 
       <div className="foot">HORIZON HFT · customer portal</div>
     </PortalShell>

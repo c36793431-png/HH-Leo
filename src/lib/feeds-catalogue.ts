@@ -25,15 +25,6 @@ export const FEED_CATALOGUE: FeedCatalogueEntry[] = [
     isLive: true,
   },
   {
-    slug: "london",
-    feedType: "london",
-    name: FEED_TYPE_META.london.name,
-    countryFlag: "🇬🇧",
-    description: FEED_TYPE_META.london.description,
-    latencyBand: "~15ms typical",
-    isLive: true,
-  },
-  {
     slug: "ny",
     feedType: "ny",
     name: FEED_TYPE_META.ny.name,
@@ -43,24 +34,28 @@ export const FEED_CATALOGUE: FeedCatalogueEntry[] = [
     isLive: true,
   },
   {
+    slug: "london",
+    feedType: "london",
+    name: FEED_TYPE_META.london.name,
+    countryFlag: "🇬🇧",
+    description: FEED_TYPE_META.london.description,
+    latencyBand: "~15ms typical",
+    isLive: true,
+  },
+  {
     slug: "crypto",
     feedType: "crypto",
     name: FEED_TYPE_META.crypto.name,
-    countryFlag: "🌐",
+    countryFlag: "🇯🇵",
     description: FEED_TYPE_META.crypto.description,
     latencyBand: "~50ms typical",
     isLive: true,
   },
-  {
-    slug: "asian",
-    feedType: null,
-    name: "Asian Feeds",
-    countryFlag: "🇯🇵🇸🇬🇭🇰",
-    description: "Tokyo, Singapore & Hong Kong session signals — in the pipeline.",
-    latencyBand: "TBD",
-    isLive: false,
-  },
 ];
+
+/** Placeholder "what's coming" slots — coxwell to supply the real roadmap list. Adding a
+ * feed here with isLive: false renders it in the coming-soon grid on /feeds. */
+export const COMING_SOON_CATALOGUE: FeedCatalogueEntry[] = [];
 
 export type FeedCardStatus = "active" | "trial" | "included" | "locked" | "coming_soon";
 
