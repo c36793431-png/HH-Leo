@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import {
   insertPayment,
+  updatePayment,
+  deletePayment,
   PAYMENT_CATEGORIES,
   PAYMENT_DIRECTIONS,
   type PaymentCategory,
@@ -83,6 +85,75 @@ export async function addPaymentAction(
     if (direction === "in" && category === "customer") {
       await maybeCreateReferralEarning(paymentId);
     }
+
+    revalidatePath("/admin/finance");
+    revalidatePath("/admin/dashboard");
+    revalidatePath("/admin/referrals");
+  });
+}
+
+export async function editPaymentAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to update payment", async () => {
+    const { userId: adminUserId } = await requireAdminUsersPanel();
+
+    const paymentId = formData.get("paymentId") as string;
+    const amountRaw = formData.get("amountUsd") as string;
+    const currency = ((formData.get("currency") as string) || "USD").trim().toUpperCase();
+    const direction = formData.get("direction") as string;
+    const category = formData.get("category") as string;
+    const counterparty = ((formData.get("counterparty") as string) || "").trim() || null;
+    const memo = ((formData.get("memo") as string) || "").trim() || null;
+
+    if (!paymentId) throw new Error("Missing payment ID");
+    if (!PAYMENT_DIRECTIONS.includes(direction as PaymentDirection)) {
+      throw new Error("Invalid direction");
+    }
+    if (!PAYMENT_CATEGORIES.includes(category as PaymentCategory)) {
+      throw new Error("Invalid category");
+    }
+    const amountUsd = Number(amountRaw);
+    if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+      throw new Error("Amount must be a positive number");
+    }
+
+    await updatePayment(paymentId, {
+      amountUsd,
+      currency,
+      direction: direction as PaymentDirection,
+      category: category as PaymentCategory,
+      counterparty,
+      memo,
+    });
+
+    await logAdminAction(adminUserId, "admin_finance_edit_payment", null, {
+      paymentId,
+      amountUsd,
+      direction,
+      category,
+    });
+
+    revalidatePath("/admin/finance");
+    revalidatePath("/admin/dashboard");
+    revalidatePath("/admin/referrals");
+  });
+}
+
+export async function deletePaymentAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to delete payment", async () => {
+    const { userId: adminUserId } = await requireAdminUsersPanel();
+
+    const paymentId = formData.get("paymentId") as string;
+    if (!paymentId) throw new Error("Missing payment ID");
+
+    await deletePayment(paymentId);
+
+    await logAdminAction(adminUserId, "admin_finance_delete_payment", null, { paymentId });
 
     revalidatePath("/admin/finance");
     revalidatePath("/admin/dashboard");

@@ -9,6 +9,8 @@ import {
   listClients,
   getGroupTarget,
   getLicenseExpiresAt,
+  LICENSE_TIERS,
+  type LicenseTier,
 } from "@/lib/licenses";
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { sendPaidGroupInvite, removeFromPaidGroup } from "@/lib/group-membership";
@@ -34,15 +36,22 @@ export async function issueLicenseAction(
     const email = (formData.get("email") as string | null) || undefined;
     const telegramUserIdRaw = (formData.get("telegramUserId") as string | null) || undefined;
     const expiresAt = resolveExpiresAt(parseDurationFormData(formData));
+    const tierRaw = (formData.get("tier") as string | null) || undefined;
+    if (tierRaw && !LICENSE_TIERS.includes(tierRaw as LicenseTier)) throw new Error("Invalid tier");
+    const tier = tierRaw as LicenseTier | undefined;
 
     const license = await issueLicense({
       userId,
       claimEmail: !userId ? email : undefined,
       claimTelegramUserId: !userId && telegramUserIdRaw ? Number(telegramUserIdRaw) : undefined,
       expiresAt,
+      tier,
     });
 
-    await logAdminAction(session.user.id, "issue_license", userId ?? null, { licenseId: license.id });
+    await logAdminAction(session.user.id, "issue_license", userId ?? null, {
+      licenseId: license.id,
+      tier: tier ?? "paid",
+    });
 
     if (userId) {
       const client = (await listClients()).find((c) => c.userId === userId);

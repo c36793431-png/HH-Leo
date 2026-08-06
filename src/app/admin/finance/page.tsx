@@ -1,6 +1,7 @@
 import { listPayments, getPaymentTotals, listUserEmailsForAutocomplete } from "@/lib/payments";
 import { formatAbsoluteUtc } from "@/lib/format-time";
 import { AddPaymentForm } from "@/components/admin/add-payment-form";
+import { PaymentRowActions } from "@/components/admin/payment-row-actions";
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -76,7 +77,8 @@ export default async function AdminFinancePage() {
                 <th className="pb-2 pr-4">Amount</th>
                 <th className="pb-2 pr-4">Category</th>
                 <th className="pb-2 pr-4">Counterparty</th>
-                <th className="pb-2">Memo</th>
+                <th className="pb-2 pr-4">Memo</th>
+                <th className="pb-2">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
@@ -96,12 +98,15 @@ export default async function AdminFinancePage() {
                     {CATEGORY_LABELS[p.category] ?? p.category}
                   </td>
                   <td className="py-2 pr-4 text-zinc-400">{p.counterparty ?? "—"}</td>
-                  <td className="py-2 text-zinc-500">{p.memo ?? "—"}</td>
+                  <td className="py-2 pr-4 text-zinc-500">{p.memo ?? "—"}</td>
+                  <td className="py-2">
+                    <PaymentRowActions payment={p} />
+                  </td>
                 </tr>
               ))}
               {payments.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-4 text-center text-zinc-500">
+                  <td colSpan={7} className="py-4 text-center text-zinc-500">
                     No payments logged yet.
                   </td>
                 </tr>

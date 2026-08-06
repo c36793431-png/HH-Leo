@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listClients, maskLicenseKey } from "@/lib/licenses";
+import { listClients, maskLicenseKey, LICENSE_TIERS } from "@/lib/licenses";
 import { DurationForm } from "@/components/admin/duration-form";
 import { ActionButton } from "@/components/admin/action-button";
 import {
@@ -54,6 +54,20 @@ export default async function AdminPage() {
               type="number"
               className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
             />
+          </div>
+          <div>
+            <label className="block text-xs text-zinc-500">Tier</label>
+            <select
+              name="tier"
+              defaultValue="paid"
+              className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
+            >
+              {LICENSE_TIERS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
           </div>
         </DurationForm>
       </section>
@@ -118,7 +132,22 @@ export default async function AdminPage() {
                             ? `User has active license (expires ${new Date(c.expiresAt).toLocaleString()}). Revoke it first to issue a new one.`
                             : undefined
                         }
-                      />
+                      >
+                        <div>
+                          <label className="block text-[11px] text-zinc-500">Tier</label>
+                          <select
+                            name="tier"
+                            defaultValue="paid"
+                            className="rounded border border-zinc-700 bg-black/40 px-1.5 py-0.5 text-xs text-zinc-200"
+                          >
+                            {LICENSE_TIERS.map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </DurationForm>
                       {c.licenseId && (
                         <>
                           <DurationForm

@@ -164,6 +164,28 @@ export async function insertPayment(input: AddPaymentInput): Promise<string> {
   return result.rows[0].id;
 }
 
+export interface UpdatePaymentInput {
+  amountUsd: number;
+  currency: string;
+  direction: PaymentDirection;
+  category: PaymentCategory;
+  counterparty: string | null;
+  memo: string | null;
+}
+
+export async function updatePayment(id: string, input: UpdatePaymentInput): Promise<void> {
+  await pool.query(
+    `update payments
+     set amount_usd = $2, currency = $3, direction = $4, category = $5, counterparty = $6, memo = $7
+     where id = $1`,
+    [id, input.amountUsd, input.currency, input.direction, input.category, input.counterparty, input.memo]
+  );
+}
+
+export async function deletePayment(id: string): Promise<void> {
+  await pool.query(`delete from payments where id = $1`, [id]);
+}
+
 /** Powers the counterparty <datalist> on the Add payment form when category=customer. */
 export async function listUserEmailsForAutocomplete(limit = 500): Promise<string[]> {
   const result = await pool.query<{ email: string }>(
