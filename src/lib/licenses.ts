@@ -649,6 +649,7 @@ export interface UserDetail {
   signins: SigninEventRow[];
   adminActions: UserDetailAdminActionRow[];
   groupMemberships: UserGroupMembershipRow[];
+  activeIp: string | null;
   adminNotes: string | null;
   notesLastEditedBy: string | null;
   notesLastEditedAt: Date | null;
@@ -676,7 +677,7 @@ function computeTierLabel(role: string, activeTier: string | null): UserTierLabe
  * history, admin actions taken against them, Telegram group memberships, and tier badge. */
 export async function getUserDetail(userId: string): Promise<UserDetail | null> {
   const userResult = await pool.query(
-    `select id, email, display_name, telegram_username, telegram_user_id, telegram_bot_started_at, role, created_at, admin_notes
+    `select id, email, display_name, telegram_username, telegram_user_id, telegram_bot_started_at, role, created_at, admin_notes, active_ip
      from users where id = $1`,
     [userId]
   );
@@ -763,6 +764,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
       joinedAt: r.joined_at,
       removedAt: r.removed_at,
     })),
+    activeIp: user.active_ip,
     adminNotes: user.admin_notes,
     notesLastEditedBy: lastNoteEdit?.actor_email ?? null,
     notesLastEditedAt: lastNoteEdit?.created_at ?? null,

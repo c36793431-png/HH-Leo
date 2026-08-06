@@ -130,7 +130,7 @@ export async function updateLicenseFeedsAction(
   });
 }
 
-const ADMIN_EDITABLE_USER_FIELDS = ["display_name", "email", "role", "telegram_username"] as const;
+const ADMIN_EDITABLE_USER_FIELDS = ["display_name", "email", "role", "telegram_username", "active_ip"] as const;
 type AdminEditableUserField = (typeof ADMIN_EDITABLE_USER_FIELDS)[number];
 
 export async function updateUserFieldAction(
@@ -154,7 +154,7 @@ export async function updateUserFieldAction(
     const nextValue =
       field === "telegram_username"
         ? value.replace(/^@/, "") || null
-        : field === "display_name" && value === ""
+        : (field === "display_name" || field === "active_ip") && value === ""
           ? null
           : value;
 

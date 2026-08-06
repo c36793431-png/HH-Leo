@@ -169,6 +169,18 @@ export default async function AdminUserDetailPage({
               />
             </dd>
           </div>
+          <div>
+            <dt className="text-xs text-zinc-500">Active IP</dt>
+            <dd className="text-zinc-200">
+              <InlineEditField
+                action={updateUserFieldAction}
+                hiddenFields={{ userId: user.userId }}
+                field="active_ip"
+                value={user.activeIp ?? ""}
+                label="Active IP"
+              />
+            </dd>
+          </div>
         </dl>
         <div className="mt-4">
           <DurationForm
