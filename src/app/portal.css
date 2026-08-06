@@ -34,6 +34,7 @@
   --hz-grey: #8a9ba0;
   --hz-blue: #4c8dff;
   --hz-blue-soft: rgba(76, 141, 255, 0.62);
+  --hz-blue-bright: #8fbaff;
   --hz-sans: var(--font-inter), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   --hz-disp: var(--font-saira), "Saira Condensed", var(--hz-sans);
   --hz-mono: var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -105,8 +106,8 @@
 
 /* Paid+/team/deal/admin sidebar theme — brand blue replaces the default muted grey,
    the color difference is the reward so free/trial keep the plain look untouched. */
-.portal-shell .nav.paid-theme a { color: var(--hz-blue-soft); }
-.portal-shell .nav.paid-theme a .ic { opacity: 0.75; }
+.portal-shell .nav.paid-theme a { color: var(--hz-blue-bright); text-shadow: 0 0 10px rgba(76, 141, 255, 0.35); }
+.portal-shell .nav.paid-theme a .ic { opacity: 0.95; }
 .portal-shell .nav.paid-theme a:hover { background: rgba(76, 141, 255, 0.08); color: var(--hz-blue); }
 .portal-shell .nav.paid-theme a:hover .ic { opacity: 1; }
 .portal-shell .nav.paid-theme a.on { background: rgba(76, 141, 255, 0.14); color: var(--hz-blue); }
