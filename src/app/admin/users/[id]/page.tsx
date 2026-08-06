@@ -145,8 +145,14 @@ export default async function AdminUserDetailPage({
           </div>
           <div>
             <dt className="text-xs text-zinc-500">Telegram</dt>
-            <dd className="text-zinc-200">
-              {user.telegramUsername ? `@${user.telegramUsername}` : "—"}{" "}
+            <dd className="text-zinc-200 inline-flex items-center gap-2">
+              <InlineEditField
+                action={updateUserFieldAction}
+                hiddenFields={{ userId: user.userId }}
+                field="telegram_username"
+                value={user.telegramUsername ?? ""}
+                label="Telegram username"
+              />
               {user.telegramUserId && <span className="text-zinc-600">({user.telegramUserId})</span>}
             </dd>
           </div>
