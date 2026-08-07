@@ -7,7 +7,7 @@ import { verifyTelegramLogin, type TelegramLoginPayload } from "./telegram-auth"
 import { claimPendingLicense, recordSigninEvent } from "./licenses";
 import { sendTelegramMessage } from "./telegram-bot";
 import { getPortalConfig } from "./portal-config";
-import { notifyFreeSignup } from "./telemetry-sink";
+import { notifyFreeSignup, notifyFirstLogin } from "./telemetry-sink";
 import { getOrCreateReferralCode } from "./referrals";
 import { attributeReferralFromCookie } from "./referrals-cookie";
 
@@ -153,10 +153,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         await claimPendingLicense({ userId: user.id!, email: user.email });
       }
       if (user?.id) {
+        const priorSignins = await pool
+          .query<{ count: string }>("select count(*) from signin_events where user_id = $1", [user.id])
+          .catch(() => null);
+        const isFirstLogin = priorSignins?.rows[0]?.count === "0";
+
         await recordSigninEvent(user.id, account?.provider ?? "unknown").catch((err) => {
           // Signin must succeed even if the history log write fails.
           console.error("recordSigninEvent failed", err);
         });
+
+        if (isFirstLogin) {
+          notifyFirstLogin({
+            email: user.email ?? null,
+            loggedInAt: new Date(),
+            source: account?.provider,
+          }).catch(() => {});
+        }
       }
       return true;
     },

@@ -6,6 +6,7 @@ import { pool } from "@/lib/db";
 import { verifyTelegramLogin, type TelegramLoginPayload } from "@/lib/telegram-auth";
 import { claimPendingLicense, getLicenseForUser, computeLicenseDisplayStatus, getGroupTarget } from "@/lib/licenses";
 import { sendPaidGroupInvite } from "@/lib/group-membership";
+import { notifyTelegramLinked } from "@/lib/telemetry-sink";
 import type { ActionResult } from "@/lib/action-result";
 
 const INVITE_RATE_LIMIT_MS = 60_000;
@@ -27,6 +28,12 @@ export async function linkTelegramAction(payload: TelegramLoginPayload): Promise
     throw new Error("This Telegram account is already linked to another user");
   }
 
+  const before = await pool.query<{ telegram_user_id: string | null; email: string | null }>(
+    "select telegram_user_id, email from users where id = $1",
+    [session.user.id]
+  );
+  const wasUnlinked = before.rows[0]?.telegram_user_id === null;
+
   const displayNameFallback =
     [payload.first_name, payload.last_name].filter(Boolean).join(" ") ||
     payload.username ||
@@ -39,6 +46,14 @@ export async function linkTelegramAction(payload: TelegramLoginPayload): Promise
      where id = $4`,
     [payload.id, payload.username ?? null, displayNameFallback, session.user.id]
   );
+
+  if (wasUnlinked) {
+    notifyTelegramLinked({
+      email: before.rows[0]?.email ?? null,
+      telegramUsername: payload.username ?? null,
+      linkedAt: new Date(),
+    }).catch(() => {});
+  }
 
   await claimPendingLicense({ userId: session.user.id, telegramUserId: payload.id });
 

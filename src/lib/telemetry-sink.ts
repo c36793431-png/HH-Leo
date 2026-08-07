@@ -110,6 +110,123 @@ export async function notifyPaidActivation(opts: {
   }
 }
 
+/** Shared low-level send — all lifecycle notify* functions below post to the same
+ * coxwell sink chat as notifyFreeSignup/notifyPaidActivation. Best-effort, non-blocking. */
+async function sendSinkMessage(text: string): Promise<void> {
+  const token = process.env.TELEMETRY_BOT_TOKEN;
+  if (!token) return; // Not configured yet — coxwell sets this in Vercel.
+
+  try {
+    const res = await fetch(`${API_ROOT}/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: SIGNUP_NOTIFY_CHAT_ID, text }),
+    });
+    if (!res.ok) console.error("telemetry-sink: sink send failed", res.status);
+  } catch (err) {
+    console.error("telemetry-sink: sink send failed", err);
+  }
+}
+
+function keyTail(licenseKey: string): string {
+  return licenseKey.length > 4 ? licenseKey.slice(-4) : licenseKey;
+}
+
+export async function notifyTrialIssued(opts: {
+  email: string | null;
+  licenseKey: string;
+  issuedAt: Date;
+  expiresAt: Date;
+}): Promise<void> {
+  await sendSinkMessage(
+    `🎁 trial issued\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `license: …${keyTail(opts.licenseKey)}\n` +
+      `issued: ${opts.issuedAt.toISOString()}\n` +
+      `expires: ${opts.expiresAt.toISOString()}`
+  );
+}
+
+export async function notifyLicenseUpgraded(opts: {
+  email: string | null;
+  licenseKey: string;
+  fromTier: string;
+  toTier: string;
+}): Promise<void> {
+  await sendSinkMessage(
+    `⬆️ license upgraded\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `license: …${keyTail(opts.licenseKey)}\n` +
+      `from: ${opts.fromTier}\n` +
+      `to: ${opts.toTier}`
+  );
+}
+
+export async function notifyLicenseExpiringSoon(opts: {
+  email: string | null;
+  licenseKey: string;
+  expiresAt: Date;
+}): Promise<void> {
+  await sendSinkMessage(
+    `⏰ license expiring soon\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `license: …${keyTail(opts.licenseKey)}\n` +
+      `expires: ${opts.expiresAt.toISOString()}`
+  );
+}
+
+export async function notifyLicenseExpired(opts: {
+  email: string | null;
+  licenseKey: string;
+  expiredAt: Date;
+}): Promise<void> {
+  await sendSinkMessage(
+    `⏱️ license expired\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `license: …${keyTail(opts.licenseKey)}\n` +
+      `expired: ${opts.expiredAt.toISOString()}`
+  );
+}
+
+export async function notifyLicenseRevoked(opts: {
+  email: string | null;
+  licenseKey: string;
+  revokedAt: Date;
+}): Promise<void> {
+  await sendSinkMessage(
+    `🚫 license revoked\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `license: …${keyTail(opts.licenseKey)}\n` +
+      `revoked: ${opts.revokedAt.toISOString()}`
+  );
+}
+
+export async function notifyTelegramLinked(opts: {
+  email: string | null;
+  telegramUsername: string | null;
+  linkedAt: Date;
+}): Promise<void> {
+  await sendSinkMessage(
+    `🔗 telegram linked\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `telegram: ${opts.telegramUsername ? "@" + opts.telegramUsername : "-"}\n` +
+      `linked: ${opts.linkedAt.toISOString()}`
+  );
+}
+
+export async function notifyFirstLogin(opts: {
+  email: string | null;
+  loggedInAt: Date;
+  source?: string;
+}): Promise<void> {
+  await sendSinkMessage(
+    `👋 first login\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `first login: ${opts.loggedInAt.toISOString()}` +
+      (opts.source ? `\nsource: ${opts.source}` : "")
+  );
+}
+
 function fmt(v: unknown): string {
   if (v === undefined || v === null) return "-";
   if (typeof v === "object") return JSON.stringify(v);

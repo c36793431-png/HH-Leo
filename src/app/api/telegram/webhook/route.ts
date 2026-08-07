@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { sendTelegramMessage } from "@/lib/telegram-bot";
+import { notifyTelegramLinked } from "@/lib/telemetry-sink";
 
 interface TelegramUpdate {
   message?: {
@@ -47,8 +48,8 @@ export async function POST(req: NextRequest) {
   const userId = tokenRow.rows[0]?.user_id;
   if (!userId) return NextResponse.json({ ok: true });
 
-  const userRow = await pool.query<{ telegram_user_id: string | null }>(
-    "select telegram_user_id from users where id = $1",
+  const userRow = await pool.query<{ telegram_user_id: string | null; email: string | null }>(
+    "select telegram_user_id, email from users where id = $1",
     [userId]
   );
   const currentLink = userRow.rows[0]?.telegram_user_id;
@@ -74,6 +75,14 @@ export async function POST(req: NextRequest) {
      where id = $3`,
     [fromId, fromUsername ?? null, userId]
   );
+
+  if (currentLink === null || currentLink === undefined) {
+    notifyTelegramLinked({
+      email: userRow.rows[0]?.email ?? null,
+      telegramUsername: fromUsername ?? null,
+      linkedAt: new Date(),
+    }).catch(() => {});
+  }
 
   try {
     await sendTelegramMessage(

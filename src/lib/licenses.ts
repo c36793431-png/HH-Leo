@@ -1,6 +1,11 @@
 import crypto from "crypto";
 import { pool } from "./db";
-import { notifyPaidActivation } from "./telemetry-sink";
+import {
+  notifyPaidActivation,
+  notifyTrialIssued,
+  notifyLicenseUpgraded,
+  notifyLicenseRevoked,
+} from "./telemetry-sink";
 import { insertPayment } from "./payments";
 import { maybeCreateReferralEarning } from "./referrals";
 
@@ -132,6 +137,7 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
         newLicenseId: row.id,
         licenseKey: row.license_key,
         tier: row.tier,
+        expiresAt: row.expires_at,
         userId: args.userId,
         claimEmail: args.claimEmail,
         claimTelegramUserId: args.claimTelegramUserId,
@@ -154,13 +160,14 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
   throw new Error("issueLicense: failed to generate a unique license key after 5 attempts");
 }
 
-/** Fires the paid-signup sink notify, gated on this being a genuine new activation
- * (see isFirstActiveLicense) — never on a renewal or re-issue landing alongside an
- * already-active license. Best-effort: must never throw into issueLicense's caller. */
+/** Fires the trial-issued/paid-signup sink notify, gated on this being a genuine new
+ * activation (see isFirstActiveLicense) — never on a renewal or re-issue landing alongside
+ * an already-active license. Best-effort: must never throw into issueLicense's caller. */
 async function notifyNewPaidActivation(args: {
   newLicenseId: string;
   licenseKey: string;
   tier: string;
+  expiresAt: Date;
   userId?: string;
   claimEmail?: string;
   claimTelegramUserId?: number;
@@ -172,6 +179,16 @@ async function notifyNewPaidActivation(args: {
   if (!email && args.userId) {
     const result = await pool.query<{ email: string | null }>("select email from users where id = $1", [args.userId]);
     email = result.rows[0]?.email ?? null;
+  }
+
+  if (args.tier === "trial") {
+    await notifyTrialIssued({
+      email,
+      licenseKey: args.licenseKey,
+      issuedAt: new Date(),
+      expiresAt: args.expiresAt,
+    });
+    return;
   }
 
   await notifyPaidActivation({
@@ -250,17 +267,57 @@ export async function getLicenseExpiresAt(licenseId: string): Promise<Date | nul
 }
 
 export async function revokeLicense(licenseId: string): Promise<void> {
-  await pool.query(
-    `update licenses set status = 'revoked', lifecycle_state = 'expired_processed' where id = $1`,
+  const result = await pool.query<{ license_key: string; user_id: string | null; email: string | null }>(
+    `update licenses l set status = 'revoked', lifecycle_state = 'expired_processed'
+     from users u
+     where l.id = $1 and l.user_id = u.id
+     returning l.license_key, l.user_id, u.email`,
     [licenseId]
   );
+  const row = result.rows[0];
+  if (!row) {
+    // No matching user row (claim-pending license, never activated) — still revoke it.
+    await pool.query(
+      `update licenses set status = 'revoked', lifecycle_state = 'expired_processed' where id = $1`,
+      [licenseId]
+    );
+    return;
+  }
+
+  notifyLicenseRevoked({
+    email: row.email,
+    licenseKey: row.license_key,
+    revokedAt: new Date(),
+  }).catch(() => {});
 }
 
 export type LicenseTier = "trial" | "paid" | "team" | "deal";
 export const LICENSE_TIERS: LicenseTier[] = ["trial", "paid", "team", "deal"];
 
+/** Changes an existing license's tier (e.g. trial → paid, or a plain tier bump). Fires the
+ * lifecycle sink notify when the tier actually changes and the license belongs to a real
+ * (non-claim-pending) user — best-effort, must never throw into the caller. */
 export async function setLicenseTier(licenseId: string, tier: LicenseTier): Promise<void> {
+  const current = await pool.query<{ tier: string; license_key: string; user_id: string | null }>(
+    `select tier, license_key, user_id from licenses where id = $1`,
+    [licenseId]
+  );
+  const before = current.rows[0];
+
   await pool.query(`update licenses set tier = $2 where id = $1`, [licenseId, tier]);
+
+  if (before && before.tier !== tier && before.user_id) {
+    const userResult = await pool.query<{ email: string | null }>(
+      "select email from users where id = $1",
+      [before.user_id]
+    );
+    notifyLicenseUpgraded({
+      email: userResult.rows[0]?.email ?? null,
+      licenseKey: before.license_key,
+      fromTier: before.tier,
+      toTier: tier,
+    }).catch(() => {});
+  }
 }
 
 export interface GroupTarget {
