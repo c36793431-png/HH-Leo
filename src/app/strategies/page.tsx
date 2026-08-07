@@ -1,0 +1,118 @@
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { auth } from "@/lib/auth";
+import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import { getPortalConfig } from "@/lib/portal-config";
+import { PortalShell } from "@/components/portal/portal-shell";
+import { isAdminUser } from "@/lib/admin-users-panel";
+import { listActiveSetfiles, type SetfileRow, type StrategyKey } from "@/lib/setfiles";
+import {
+  STRATEGY_ORDER,
+  STRATEGY_DISPLAY_META,
+  computeStrategyCardStatus,
+  type StrategyCardStatus,
+} from "@/lib/strategy-catalogue";
+import { StrategyRequestForm } from "@/components/strategies/strategy-request-form";
+
+const STATUS_LABEL: Record<StrategyCardStatus, string> = {
+  active: "Active",
+  trial: "Trial",
+  included: "Included",
+  locked: "Locked",
+};
+
+function groupSetfiles(rows: SetfileRow[]): Partial<Record<StrategyKey, SetfileRow[]>> {
+  const groups: Partial<Record<StrategyKey, SetfileRow[]>> = {};
+  for (const row of rows) {
+    (groups[row.strategyKey] ??= []).push(row);
+  }
+  return groups;
+}
+
+/** Prefer the verified variant for the catalogue card's short blurb; falls back to the first
+ * published example when a strategy has no verified setfile yet. */
+function pickRepresentative(rows: SetfileRow[] | undefined): SetfileRow | null {
+  if (!rows || rows.length === 0) return null;
+  return rows.find((r) => r.source === "verified") ?? rows[0];
+}
+
+export default async function StrategiesPage() {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+  if (isAdminUser(session.user)) redirect("/admin/dashboard");
+
+  const [paid, licenseDetail, config, setfiles] = await Promise.all([
+    isPaidUser(session.user.id).catch(() => false),
+    getLicenseForUser(session.user.id).catch(() => null),
+    getPortalConfig(),
+    listActiveSetfiles().catch(() => []),
+  ]);
+  const isAdmin = isAdminUser(session.user);
+  const tier = computePortalTier(isAdmin, licenseDetail);
+  const userName = session.user.name ?? session.user.email ?? "trader";
+  const userEmail = session.user.email ?? "";
+  const groups = groupSetfiles(setfiles);
+  const status = computeStrategyCardStatus({ paid, licenseTier: licenseDetail?.tier ?? null, isAdmin });
+
+  return (
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+      <div className="comm-head">
+        <h1>Strategies</h1>
+        <p>Every strategy Horizon runs — what it does, how it&apos;s tuned, and what feed it wants.</p>
+      </div>
+
+      <div className="fp-grid">
+        {STRATEGY_ORDER.map((key) => {
+          const meta = STRATEGY_DISPLAY_META[key];
+          const rep = pickRepresentative(groups[key]);
+
+          return (
+            <Link key={key} href={`/strategies/${key}`} className={`card fp-card fp-${status}`}>
+              <div className="fp-top">
+                <span className="fp-flag">{meta.flag}</span>
+                <span className={`fp-pill fp-pill-${status}`}>{STATUS_LABEL[status]}</span>
+              </div>
+              <h3 className="fp-name">{meta.name}</h3>
+              <p className="fp-desc">{meta.hook}</p>
+              <span className="fp-latency">{meta.marketFocus}</span>
+
+              {status === "included" && <span className="fp-note">Admin access</span>}
+              {status === "locked" && <span className="fp-note">🔒 Upgrade to unlock</span>}
+              {!rep && <span className="fp-note">Setfile detail coming soon</span>}
+            </Link>
+          );
+        })}
+      </div>
+
+      {status === "locked" && (
+        <p className="fp-footnote">
+          Strategies are bundled with your license. Message us on Telegram to talk through which fit your setup.
+        </p>
+      )}
+
+      <div className="fp-ctas">
+        <div className="card fp-cta-card">
+          <h3 className="fp-cta-title">Request a strategy</h3>
+          <p className="fp-cta-copy">
+            Have an idea for a strategy we don&apos;t run yet? Tell us what you&apos;re thinking and we&apos;ll
+            scope it.
+          </p>
+          <StrategyRequestForm />
+        </div>
+
+        <div className="card fp-consult-card">
+          <span className="fp-consult-badge">CONSULTING</span>
+          <h3 className="fp-cta-title">Custom strategy, built for you</h3>
+          <p className="fp-cta-copy">
+            We design, build, and tune a strategy around your instrument, timeframe, and risk appetite.
+          </p>
+          <a className="btn primary sm" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
+            Talk to us →
+          </a>
+        </div>
+      </div>
+
+      <div className="foot">HORIZON HFT · customer portal</div>
+    </PortalShell>
+  );
+}

@@ -12,6 +12,7 @@ const PORTAL_LINKS = [
   { href: "/downloads", label: "Downloads", icon: "▤", paidOnly: true },
   { href: "/community", label: "Community", icon: "◍" },
   { href: "/feeds", label: "Feeds", icon: "≈", paidOnly: true, lockedStaysOnPage: true },
+  { href: "/strategies", label: "Strategies", icon: "⚡", paidOnly: true, lockedStaysOnPage: true },
   { href: "/setfiles", label: "Setfiles", icon: "⌘", paidOnly: true, lockedStaysOnPage: true },
   { href: "/education", label: "Education", icon: "◈" },
   { href: "/education/advanced", label: "Advanced Education", icon: "◈", paidOnly: true, lockedStaysOnPage: true },
@@ -35,6 +36,7 @@ const ADMIN_LINKS = [
   { href: "/admin/downloads", label: "Publish builds", icon: "⇧" },
   { href: "/admin/applications", label: "Applications", icon: "▣" },
   { href: "/admin/feed-requests", label: "Feed requests", icon: "≈" },
+  { href: "/admin/strategy-requests", label: "Strategy requests", icon: "⚡" },
   { href: "/admin/history", label: "History", icon: "↻" },
 ] as const;
 
