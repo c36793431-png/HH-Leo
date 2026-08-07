@@ -53,9 +53,19 @@ export const FEED_CATALOGUE: FeedCatalogueEntry[] = [
   },
 ];
 
-/** Placeholder "what's coming" slots — coxwell to supply the real roadmap list. Adding a
- * feed here with isLive: false renders it in the coming-soon grid on /feeds. */
-export const COMING_SOON_CATALOGUE: FeedCatalogueEntry[] = [];
+/** "What's coming" roadmap — coxwell supplies entries as they're confirmed. Adding a feed
+ * here with isLive: false renders it in the coming-soon grid on /feeds. */
+export const COMING_SOON_CATALOGUE: FeedCatalogueEntry[] = [
+  {
+    slug: "singapore",
+    feedType: null,
+    name: "Singapore Feed",
+    countryFlag: "🇸🇬",
+    description: "SG1 co-lo.",
+    latencyBand: "Coming soon",
+    isLive: false,
+  },
+];
 
 export type FeedCardStatus = "active" | "trial" | "included" | "locked" | "coming_soon";
 

@@ -34,6 +34,7 @@ const ADMIN_LINKS = [
   { href: "/admin/licenses", label: "Licenses", icon: "⬡" },
   { href: "/admin/downloads", label: "Publish builds", icon: "⇧" },
   { href: "/admin/applications", label: "Applications", icon: "▣" },
+  { href: "/admin/feed-requests", label: "Feed requests", icon: "≈" },
   { href: "/admin/history", label: "History", icon: "↻" },
 ] as const;
 

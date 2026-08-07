@@ -10,6 +10,7 @@ import {
   computeFeedCardStatus,
   type FeedCardStatus,
 } from "@/lib/feeds-catalogue";
+import { FeedRequestForm } from "@/components/feeds/feed-request-form";
 
 const STATUS_LABEL: Record<FeedCardStatus, string> = {
   active: "Active",
@@ -118,9 +119,7 @@ export default async function FeedsPage() {
           <p className="fp-cta-copy">
             Need a feed we don&apos;t offer yet? Tell us what you need and we&apos;ll evaluate adding it.
           </p>
-          <a className="btn ghost sm" href="mailto:feeds@horizonhft.com?subject=Feed%20request">
-            Request a feed →
-          </a>
+          <FeedRequestForm />
         </div>
 
         <div className="card fp-consult-card">
