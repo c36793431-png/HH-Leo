@@ -1,14 +1,14 @@
 import type { StrategyKey } from "@/lib/setfiles";
+import { FEED_TYPE_META, type FeedType } from "@/lib/licenses";
 
 export interface StrategyDisplayMeta {
   /** Full display name — kept here rather than derived from a setfile row so the card
    * still renders sensibly if a strategy_key ever has zero setfile rows published. */
   name: string;
   hook: string;
-  flag: string;
   marketFocus: string;
   /** Cross-link target on /feeds — the feed whose latency profile this strategy depends on. */
-  recommendedFeedSlug: string;
+  recommendedFeedSlug: FeedType;
 }
 
 export const STRATEGY_ORDER: StrategyKey[] = ["1leg", "2leg_lock", "trend_impulse", "obi", "grid"];
@@ -17,39 +17,40 @@ export const STRATEGY_DISPLAY_META: Record<StrategyKey, StrategyDisplayMeta> = {
   "1leg": {
     name: "1 LEG — Latency Arbitrage",
     hook: "Trades the gap the instant the broker feed lags behind the Fast Feed.",
-    flag: "🇺🇸",
     marketFocus: "FX majors — London/NY overlap",
     recommendedFeedSlug: "ny",
   },
   "2leg_lock": {
     name: "2 LEG LOCK — Hedge Arbitrage",
     hook: "Opens both sides at once, keeps the winner, cuts the loser fast.",
-    flag: "🇬🇧",
     marketFocus: "FX majors — hedge-enabled brokers only",
     recommendedFeedSlug: "london",
   },
   trend_impulse: {
     name: "Trend Impulse — Fast-Feed Momentum",
     hook: "Catches sharp Fast Feed impulses before the broker catches up.",
-    flag: "🇺🇸",
     marketFocus: "FX majors, gold — London open + NY morning",
     recommendedFeedSlug: "ny",
   },
   obi: {
     name: "OBI — Order Block Imbalance",
     hook: "Trades genuine CME depth-of-book imbalance, not just latency.",
-    flag: "🇺🇸",
     marketFocus: "CME futures — ES, NQ, GC, CL",
     recommendedFeedSlug: "futures",
   },
   grid: {
     name: "Grid Arbitrage — Progressive Basket",
     hook: "Trend-filtered basket that averages in with progressively larger legs.",
-    flag: "🇬🇧",
     marketFocus: "FX/CFD — London + NY overlap",
     recommendedFeedSlug: "london",
   },
 };
+
+/** Co-lo code badge (e.g. "NY4") for a strategy's recommended feed — same vocabulary /feeds
+ * already teaches the user, so no separate legend or tooltip is needed. */
+export function strategyColoCode(meta: StrategyDisplayMeta): string {
+  return FEED_TYPE_META[meta.recommendedFeedSlug].coloCode;
+}
 
 export type StrategyCardStatus = "active" | "trial" | "included" | "locked";
 

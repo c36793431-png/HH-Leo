@@ -10,6 +10,7 @@ import {
   STRATEGY_ORDER,
   STRATEGY_DISPLAY_META,
   computeStrategyCardStatus,
+  strategyColoCode,
   type StrategyCardStatus,
 } from "@/lib/strategy-catalogue";
 import { StrategyRequestForm } from "@/components/strategies/strategy-request-form";
@@ -69,7 +70,7 @@ export default async function StrategiesPage() {
           return (
             <Link key={key} href={`/strategies/${key}`} className={`card fp-card fp-${status}`}>
               <div className="fp-top">
-                <span className="fp-flag">{meta.flag}</span>
+                <span className="fp-colo">{strategyColoCode(meta)}</span>
                 <span className={`fp-pill fp-pill-${status}`}>{STATUS_LABEL[status]}</span>
               </div>
               <h3 className="fp-name">{meta.name}</h3>

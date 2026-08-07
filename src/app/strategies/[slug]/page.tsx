@@ -12,6 +12,7 @@ import {
   STRATEGY_ORDER,
   STRATEGY_DISPLAY_META,
   computeStrategyCardStatus,
+  strategyColoCode,
 } from "@/lib/strategy-catalogue";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 
@@ -51,7 +52,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
           ← All strategies
         </Link>
         <h1>
-          {meta.flag} {meta.name}
+          <span className="fp-colo fp-colo-inline">{strategyColoCode(meta)}</span> {meta.name}
         </h1>
         <p>{meta.hook}</p>
       </div>

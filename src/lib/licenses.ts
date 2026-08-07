@@ -951,14 +951,17 @@ export interface FeedTypeMeta {
   id: FeedType;
   name: string;
   description: string;
+  /** Short co-lo code shown as a compact badge (e.g. on /strategies cards) — matches the
+   * vocabulary already spelled out in `description` so the two stay consistent. */
+  coloCode: string;
 }
 
 // text[] column (not enum) — new feed types append here without a schema change.
 export const FEED_TYPE_META: Record<FeedType, FeedTypeMeta> = {
-  futures: { id: "futures", name: "CME Futures Feed", description: "Chicago · CH1 co-lo — CME Group futures, indices, metals & energy" },
-  london: { id: "london", name: "London Feed", description: "London · LD4 co-lo — European ECN aggregator, FX, gold & indices" },
-  ny: { id: "ny", name: "New York Feed", description: "New York · NY4 co-lo — Institutional FX aggregator, majors, metals & US indices" },
-  crypto: { id: "crypto", name: "Crypto Tokyo Feed", description: "Tokyo · TY3 co-lo — Institutional crypto aggregator, spot & perpetual futures" },
+  futures: { id: "futures", name: "CME Futures Feed", description: "Chicago · CH1 co-lo — CME Group futures, indices, metals & energy", coloCode: "CH1" },
+  london: { id: "london", name: "London Feed", description: "London · LD4 co-lo — European ECN aggregator, FX, gold & indices", coloCode: "LD4" },
+  ny: { id: "ny", name: "New York Feed", description: "New York · NY4 co-lo — Institutional FX aggregator, majors, metals & US indices", coloCode: "NY4" },
+  crypto: { id: "crypto", name: "Crypto Tokyo Feed", description: "Tokyo · TY3 co-lo — Institutional crypto aggregator, spot & perpetual futures", coloCode: "TY3" },
 };
 
 function isFeedType(value: string): value is FeedType {
