@@ -6,6 +6,7 @@ export interface FeedCatalogueEntry {
   feedType: FeedType | null;
   name: string;
   countryFlag: string;
+  countryCode: string;
   description: string;
   latencyBand: string;
   isLive: boolean;
@@ -20,8 +21,9 @@ export const FEED_CATALOGUE: FeedCatalogueEntry[] = [
     feedType: "futures",
     name: FEED_TYPE_META.futures.name,
     countryFlag: "🇺🇸",
+    countryCode: "US",
     description: FEED_TYPE_META.futures.description,
-    latencyBand: "~15ms typical",
+    latencyBand: "<1ms typical",
     isLive: true,
   },
   {
@@ -29,8 +31,9 @@ export const FEED_CATALOGUE: FeedCatalogueEntry[] = [
     feedType: "ny",
     name: FEED_TYPE_META.ny.name,
     countryFlag: "🇺🇸",
+    countryCode: "US",
     description: FEED_TYPE_META.ny.description,
-    latencyBand: "~15ms typical",
+    latencyBand: "<1ms typical",
     isLive: true,
   },
   {
@@ -38,8 +41,9 @@ export const FEED_CATALOGUE: FeedCatalogueEntry[] = [
     feedType: "london",
     name: FEED_TYPE_META.london.name,
     countryFlag: "🇬🇧",
+    countryCode: "GB",
     description: FEED_TYPE_META.london.description,
-    latencyBand: "~15ms typical",
+    latencyBand: "<1ms typical",
     isLive: true,
   },
   {
@@ -47,7 +51,10 @@ export const FEED_CATALOGUE: FeedCatalogueEntry[] = [
     feedType: "crypto",
     name: FEED_TYPE_META.crypto.name,
     countryFlag: "🇯🇵",
+    countryCode: "JP",
     description: FEED_TYPE_META.crypto.description,
+    // Tokyo TY3 latency pending coxwell confirmation (crypto venue may be a different
+    // regime than the FX/futures co-lo cross-connects) — held per marcus, do not overwrite.
     latencyBand: "~50ms typical",
     isLive: true,
   },
@@ -61,6 +68,7 @@ export const COMING_SOON_CATALOGUE: FeedCatalogueEntry[] = [
     feedType: null,
     name: "Singapore Feed",
     countryFlag: "🇸🇬",
+    countryCode: "SG",
     description: "SG1 co-lo.",
     latencyBand: "Coming soon",
     isLive: false,
