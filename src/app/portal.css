@@ -104,15 +104,15 @@
 .portal-shell .nav a .lock { margin-left: auto; font-size: 12px; opacity: 0.7; }
 .portal-shell .nav a .crown { margin-left: auto; font-size: 12px; opacity: 0.9; }
 
-/* Paid+/team/deal/admin sidebar theme — brand blue replaces the default muted grey,
+/* Paid+/team/deal/admin sidebar theme — brand teal replaces the default muted grey,
    the color difference is the reward so free/trial keep the plain look untouched. */
-.portal-shell .nav.paid-theme a { color: var(--hz-blue-bright); text-shadow: 0 0 10px rgba(76, 141, 255, 0.35); }
+.portal-shell .nav.paid-theme a { color: var(--hz-cyan); text-shadow: 0 0 10px rgba(45, 226, 230, 0.35); }
 .portal-shell .nav.paid-theme a .ic { opacity: 0.95; }
-.portal-shell .nav.paid-theme a:hover { background: rgba(76, 141, 255, 0.08); color: var(--hz-blue); }
+.portal-shell .nav.paid-theme a:hover { background: rgba(45, 226, 230, 0.08); color: var(--hz-cyan); }
 .portal-shell .nav.paid-theme a:hover .ic { opacity: 1; }
-.portal-shell .nav.paid-theme a.on { background: rgba(76, 141, 255, 0.07); color: var(--hz-blue); text-shadow: none; }
+.portal-shell .nav.paid-theme a.on { background: rgba(45, 226, 230, 0.07); color: var(--hz-cyan); text-shadow: none; }
 .portal-shell .nav.paid-theme a.on .ic { opacity: 1; }
-.portal-shell .nav.paid-theme a.on::before { background: var(--hz-blue); box-shadow: 0 0 6px rgba(76, 141, 255, 0.5); }
+.portal-shell .nav.paid-theme a.on::before { background: var(--hz-cyan); box-shadow: 0 0 6px rgba(45, 226, 230, 0.5); }
 .portal-shell .nav.paid-theme a.on.edu { color: var(--emerald-500); }
 .portal-shell .nav.paid-theme a.on.edu::before { background: var(--emerald-500); box-shadow: 0 0 12px var(--emerald-500); }
 
