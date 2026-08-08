@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Saira_Condensed, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { Footer } from "@/components/footer";
+import "flag-icons/css/flag-icons.min.css";
 import "./globals.css";
 import "./portal.css";
 

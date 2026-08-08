@@ -524,7 +524,7 @@
 .portal-shell .fp-card { display: flex; flex-direction: column; gap: 6px; }
 .portal-shell .fp-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 .portal-shell .fp-flag-group { display: flex; align-items: center; gap: 6px; }
-.portal-shell .fp-flag { font-size: 24px; line-height: 1; }
+.portal-shell .fp-flag { display: inline-block; width: 24px; height: 18px; border-radius: 3px; background-size: cover; background-position: center; }
 .portal-shell .fp-code {
   font-family: var(--hz-mono); font-size: 11px; font-weight: 700;
   letter-spacing: 0.06em; color: var(--hz-ink-2);

@@ -55,7 +55,11 @@ export default async function FeedsPage() {
             <div key={entry.slug} className={`card fp-card fp-${status}`}>
               <div className="fp-top">
                 <span className="fp-flag-group">
-                  <span className="fp-flag">{entry.countryFlag}</span>
+                  <span
+                    className={`fp-flag fi fi-${entry.countryCode.toLowerCase()}`}
+                    role="img"
+                    aria-label={`${entry.countryCode} flag`}
+                  />
                   <span className="fp-code">{entry.countryCode}</span>
                 </span>
                 <span className={`fp-pill fp-pill-${status}`}>{STATUS_LABEL[status]}</span>
@@ -102,9 +106,13 @@ export default async function FeedsPage() {
               <div key={entry.slug} className="card fp-card fp-coming_soon">
                 <div className="fp-top">
                   <span className="fp-flag-group">
-                  <span className="fp-flag">{entry.countryFlag}</span>
-                  <span className="fp-code">{entry.countryCode}</span>
-                </span>
+                    <span
+                      className={`fp-flag fi fi-${entry.countryCode.toLowerCase()}`}
+                      role="img"
+                      aria-label={`${entry.countryCode} flag`}
+                    />
+                    <span className="fp-code">{entry.countryCode}</span>
+                  </span>
                   <span className="fp-pill fp-pill-coming_soon">{STATUS_LABEL.coming_soon}</span>
                 </div>
                 <h3 className="fp-name">{entry.name}</h3>

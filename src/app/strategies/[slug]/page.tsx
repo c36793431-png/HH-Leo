@@ -90,8 +90,14 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
               {recommendedFeed && (
                 <div>
                   <b style={{ display: "block", fontSize: 12, color: "var(--hz-ink-3)", marginBottom: 4 }}>Recommended feed</b>
-                  <Link href="/feeds" style={{ fontSize: 13 }}>
-                    {recommendedFeed.countryFlag} {recommendedFeed.name} →
+                  <Link href="/feeds" style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span
+                      className={`fi fi-${recommendedFeed.countryCode.toLowerCase()}`}
+                      role="img"
+                      aria-label={`${recommendedFeed.countryCode} flag`}
+                      style={{ display: "inline-block", width: 16, height: 12, borderRadius: 2, backgroundSize: "cover", backgroundPosition: "center" }}
+                    />
+                    {recommendedFeed.name} →
                   </Link>
                 </div>
               )}
