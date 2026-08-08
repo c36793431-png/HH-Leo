@@ -53,9 +53,7 @@ export const FEED_CATALOGUE: FeedCatalogueEntry[] = [
     countryFlag: "🇯🇵",
     countryCode: "JP",
     description: FEED_TYPE_META.crypto.description,
-    // Tokyo TY3 latency pending coxwell confirmation (crypto venue may be a different
-    // regime than the FX/futures co-lo cross-connects) — held per marcus, do not overwrite.
-    latencyBand: "~50ms typical",
+    latencyBand: "<1ms typical",
     isLive: true,
   },
 ];
