@@ -4,41 +4,65 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import {
+  LayoutDashboard,
+  Download,
+  Users,
+  Rss,
+  Zap,
+  Sliders,
+  GraduationCap,
+  BookMarked,
+  Server,
+  Briefcase,
+  Building2,
+  TrendingUp,
+  Gift,
+  Settings,
+  CircleUser,
+  DollarSign,
+  Award,
+  UserSquare2,
+  Upload,
+  ClipboardList,
+  History,
+  type LucideIcon,
+} from "lucide-react";
 
 export type PortalTier = "free" | "trial" | "paid" | "team" | "admin";
 
 const PORTAL_LINKS = [
-  { href: "/dashboard", label: "Dashboard", icon: "▨" },
-  { href: "/downloads", label: "Downloads", icon: "▤", paidOnly: true },
-  { href: "/community", label: "Community", icon: "◍" },
-  { href: "/feeds", label: "Feeds", icon: "≈", paidOnly: true, lockedStaysOnPage: true },
-  { href: "/strategies", label: "Strategies", icon: "⚡", paidOnly: true, lockedStaysOnPage: true },
-  { href: "/setfiles", label: "Setfiles", icon: "⌘", paidOnly: true, lockedStaysOnPage: true },
-  { href: "/education", label: "Education", icon: "◈" },
-  { href: "/education/advanced", label: "Advanced Education", icon: "◈", paidOnly: true, lockedStaysOnPage: true },
-  { href: "/vps", label: "VPS", icon: "◎" },
-  { href: "/careers", label: "Careers", icon: "▣" },
-  { href: "/brokers", label: "Brokers", icon: "⬢", paidOnly: true, lockedStaysOnPage: true },
-  { href: "/prop-firm", label: "Prop Firm", icon: "◭", paidOnly: true, lockedStaysOnPage: true },
-  { href: "/account/refer", label: "Refer & earn", icon: "$" },
-  { href: "/account/my-setup", label: "My setup", icon: "⚙", paidOnly: true, lockedStaysOnPage: true },
-  { href: "/account", label: "Account", icon: "◔" },
-] as const;
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/downloads", label: "Downloads", icon: Download, paidOnly: true },
+  { href: "/community", label: "Community", icon: Users },
+  { href: "/feeds", label: "Feeds", icon: Rss, paidOnly: true, lockedStaysOnPage: true },
+  { href: "/strategies", label: "Strategies", icon: Zap, paidOnly: true, lockedStaysOnPage: true },
+  { href: "/setfiles", label: "Setfiles", icon: Sliders, paidOnly: true, lockedStaysOnPage: true },
+  { href: "/education", label: "Education", icon: GraduationCap },
+  { href: "/education/advanced", label: "Advanced Education", icon: BookMarked, paidOnly: true, lockedStaysOnPage: true },
+  { href: "/vps", label: "VPS", icon: Server },
+  { href: "/careers", label: "Careers", icon: Briefcase },
+  { href: "/brokers", label: "Brokers", icon: Building2, paidOnly: true, lockedStaysOnPage: true },
+  { href: "/prop-firm", label: "Prop Firm", icon: TrendingUp, paidOnly: true, lockedStaysOnPage: true },
+  { href: "/account/refer", label: "Refer & earn", icon: Gift },
+  { href: "/account/my-setup", label: "My setup", icon: Settings, paidOnly: true, lockedStaysOnPage: true },
+  { href: "/account", label: "Account", icon: CircleUser },
+] as const satisfies readonly { href: string; label: string; icon: LucideIcon; paidOnly?: boolean; lockedStaysOnPage?: boolean }[];
 
 const ADMIN_LINKS = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: "◫" },
-  { href: "/admin/finance", label: "Finance", icon: "$" },
-  { href: "/admin/referrals", label: "Referrals", icon: "◈" },
-  { href: "/admin/users", label: "Users", icon: "◱" },
-  { href: "/admin/setups", label: "Setups", icon: "⚙" },
-  { href: "/admin/setfiles", label: "Setfiles", icon: "⌘" },
-  { href: "/admin/licenses", label: "Licenses", icon: "⬡" },
-  { href: "/admin/downloads", label: "Publish builds", icon: "⇧" },
-  { href: "/admin/applications", label: "Applications", icon: "▣" },
-  { href: "/admin/feed-requests", label: "Feed requests", icon: "≈" },
-  { href: "/admin/strategy-requests", label: "Strategy requests", icon: "⚡" },
-  { href: "/admin/history", label: "History", icon: "↻" },
-] as const;
+  { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/finance", label: "Finance", icon: DollarSign },
+  { href: "/admin/referrals", label: "Referrals", icon: Award },
+  { href: "/admin/users", label: "Users", icon: UserSquare2 },
+  { href: "/admin/setups", label: "Setups", icon: Settings },
+  { href: "/admin/setfiles", label: "Setfiles", icon: Sliders },
+  { href: "/admin/licenses", label: "Licenses", icon: Server },
+  { href: "/admin/downloads", label: "Publish builds", icon: Upload },
+  { href: "/admin/applications", label: "Applications", icon: ClipboardList },
+  { href: "/admin/feed-requests", label: "Feed requests", icon: Rss },
+  { href: "/admin/strategy-requests", label: "Strategy requests", icon: Zap },
+  { href: "/admin/history", label: "History", icon: History },
+] as const satisfies readonly { href: string; label: string; icon: LucideIcon }[];
 
 function isActive(pathname: string, href: string): boolean {
   const [path] = href.split("#");
@@ -101,13 +125,14 @@ export function PortalSidebar({
               const lockedStaysOnPage = "lockedStaysOnPage" in link && link.lockedStaysOnPage;
               const active = isActive(pathname, link.href);
               const isEdu = link.href === "/education";
+              const Icon = link.icon;
               return (
                 <Link
                   key={link.href}
                   href={locked && !lockedStaysOnPage ? "/dashboard#downloads" : link.href}
                   className={locked ? "locked" : active ? (isEdu ? "on edu" : "on") : undefined}
                 >
-                  <span className="ic">{link.icon}</span> {link.label}
+                  <span className="ic"><Icon size={18} strokeWidth={1.75} /></span> {link.label}
                   {locked && <span className="lock">🔒</span>}
                   {unlocked && <span className="crown" aria-label="Included in your plan">👑</span>}
                 </Link>
@@ -121,11 +146,14 @@ export function PortalSidebar({
             <div className="grp">
               <span className="shield">🛡</span> Admin
             </div>
-            {ADMIN_LINKS.map((link) => (
-              <Link key={link.href} href={link.href} className={isActive(pathname, link.href) ? "on" : undefined}>
-                <span className="ic">{link.icon}</span> {link.label}
-              </Link>
-            ))}
+            {ADMIN_LINKS.map((link) => {
+              const Icon = link.icon;
+              return (
+                <Link key={link.href} href={link.href} className={isActive(pathname, link.href) ? "on" : undefined}>
+                  <span className="ic"><Icon size={18} strokeWidth={1.75} /></span> {link.label}
+                </Link>
+              );
+            })}
           </div>
         )}
       </nav>
