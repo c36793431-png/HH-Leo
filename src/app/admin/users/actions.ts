@@ -10,6 +10,8 @@ import {
   getLicenseExpiresAt,
   setLicenseTier,
   setLicenseFeedTypes,
+  getGroupTarget,
+  isPaidTier,
   LICENSE_TIERS,
   FEED_TYPES,
   type LicenseTier,
@@ -19,6 +21,9 @@ import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
+import { sendPaidGroupInvite } from "@/lib/group-membership";
+import { notifyUser } from "@/lib/notify";
+import { getPortalConfig } from "@/lib/portal-config";
 import {
   saveConfigSummary,
   parseConfigParamsText,
@@ -251,6 +256,20 @@ export async function issueNewLicenseAction(
       { licenseId: license.id, expiresAt: expiresAt.toISOString(), feedTypes, tier: tier ?? "paid" },
       license.id
     );
+
+    const target = await getGroupTarget(userId);
+    if (target) {
+      const config = await getPortalConfig();
+      await notifyUser(
+        { telegramUserId: target.telegramUserId, email: target.email },
+        "Your Horizon HFT license is ready",
+        `Your license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
+      );
+      if (isPaidTier(tier ?? "paid")) {
+        await sendPaidGroupInvite(target);
+      }
+    }
+
     revalidateUsers(userId);
   });
 }

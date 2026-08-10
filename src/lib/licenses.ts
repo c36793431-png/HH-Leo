@@ -294,6 +294,13 @@ export async function revokeLicense(licenseId: string): Promise<void> {
 export type LicenseTier = "trial" | "paid" | "team" | "deal";
 export const LICENSE_TIERS: LicenseTier[] = ["trial", "paid", "team", "deal"];
 
+/** Paid-adjacent tiers that should land the customer in the paid Telegram group — everything
+ * except trial. NOT used for revenue accounting (recordAutoPaymentForNewLicense stays paid-only:
+ * team is comped and deal is barter/non-revenue, see commits 9718252 / afafdd7). */
+export function isPaidTier(tier: LicenseTier | string): boolean {
+  return tier === "paid" || tier === "team" || tier === "deal";
+}
+
 /** Changes an existing license's tier (e.g. trial → paid, or a plain tier bump). Fires the
  * lifecycle sink notify when the tier actually changes and the license belongs to a real
  * (non-claim-pending) user — best-effort, must never throw into the caller. */
