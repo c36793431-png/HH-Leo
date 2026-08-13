@@ -3,6 +3,7 @@ import { verifyLicenseKey, getAlertTargetForLicense } from "@/lib/licenses";
 import { checkHftAlertRateLimit } from "@/lib/rate-limit";
 import { httpsViolation, clientIp } from "@/lib/client-endpoints";
 import { sendHftAlertMessage, hftAlertBotConfigured, getHftAlertBotUsername } from "@/lib/telegram-hft-alert-bot";
+import { insertTradingAlert } from "@/lib/trading-alerts";
 
 /**
  * /v1/hft-alert — desktop-client alert relay (spec: horizon-portal-tg-relay-endpoint-2026-08-12).
@@ -80,10 +81,8 @@ export async function POST(req: NextRequest) {
   }
 
   const target = result.licenseId ? await getAlertTargetForLicense(result.licenseId) : null;
-  if (!target || !target.telegramUserId || !hftAlertBotConfigured()) {
-    console.log(
-      `hft-alert: not_linked license=…${licenseKey.slice(-4)} user=${target?.userId ?? "unknown"}`
-    );
+  if (!target) {
+    console.log(`hft-alert: not_linked license=…${licenseKey.slice(-4)} user=unknown`);
     return NextResponse.json({ status: "not_linked" });
   }
 
@@ -94,6 +93,23 @@ export async function POST(req: NextRequest) {
     typeof body.metadata?.strategy === "string" ? truncate(body.metadata.strategy, MAX_METADATA_STRING_LENGTH) : null;
   const pnl =
     typeof body.metadata?.pnl === "number" || typeof body.metadata?.pnl === "string" ? String(body.metadata.pnl) : null;
+
+  // Persisted for the portal Dashboard's Recent Alerts panel regardless of Telegram
+  // link state — a not_linked user still sees their alert history in-portal.
+  insertTradingAlert({
+    userId: target.userId,
+    licenseId: result.licenseId,
+    alertType,
+    message,
+    symbol,
+    pnl,
+    strategy,
+  }).catch((err) => console.error("hft-alert: failed to persist trading_alerts row", err));
+
+  if (!target.telegramUserId || !hftAlertBotConfigured()) {
+    console.log(`hft-alert: not_linked license=…${licenseKey.slice(-4)} user=${target.userId}`);
+    return NextResponse.json({ status: "not_linked" });
+  }
 
   const lines = [`<b>⚡ ${htmlEscape(alertType)}</b>`, htmlEscape(message)];
   const metaParts: string[] = [];

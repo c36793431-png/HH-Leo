@@ -19,9 +19,13 @@ import { LinkTelegramButton } from "@/components/link-telegram-button";
 import { RequestInviteButton } from "@/components/request-invite-button";
 import { DownloadButton } from "@/components/download-button";
 import { LicenseStatusCard } from "@/components/license-status-card";
+import { RecentAlertsPanel } from "@/components/recent-alerts-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { humanizeTimeUntil } from "@/lib/format-time";
+import { getRecentAlertsForUser, countDistinctAlertLicenses } from "@/lib/trading-alerts";
+
+const DASHBOARD_ALERTS_LIMIT = 10;
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -60,6 +64,10 @@ export default async function DashboardPage() {
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
   const activeFeeds = await computeUserActiveFeeds(session.user.id).catch((): typeof FEED_TYPES => []);
   const isAdmin = isAdminUser(session.user);
+  const [recentAlerts, distinctAlertLicenses] = await Promise.all([
+    getRecentAlertsForUser(session.user.id, DASHBOARD_ALERTS_LIMIT).catch(() => []),
+    countDistinctAlertLicenses(session.user.id).catch(() => 0),
+  ]);
   const displayStatus = computeLicenseDisplayStatus(licenseDetail);
   const isExpired = displayStatus === "expired";
   const isExpiringSoon = displayStatus === "expiring";
@@ -424,6 +432,15 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
+
+        {unlocked && (
+          <RecentAlertsPanel
+            alerts={recentAlerts}
+            showLicenseTag={distinctAlertLicenses > 1}
+            viewAllHref="/alerts"
+            emptyStateHref="#community"
+          />
+        )}
 
         {unlocked && (
           <div className="grid full">

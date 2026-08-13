@@ -4,6 +4,7 @@ import { removeFromPaidGroup } from "@/lib/group-membership";
 import { notifyUser } from "@/lib/notify";
 import { getPortalConfig } from "@/lib/portal-config";
 import { notifyLicenseExpired, notifyLicenseExpiringSoon } from "@/lib/telemetry-sink";
+import { pruneOldTradingAlerts } from "@/lib/trading-alerts";
 
 interface ExpiredRow {
   license_id: string;
@@ -116,5 +117,10 @@ export async function GET(req: NextRequest) {
     return 0;
   });
 
-  return NextResponse.json({ processed, checked: expired.rowCount ?? 0, expiringSoonNotified });
+  const alertsPruned = await pruneOldTradingAlerts().catch((err) => {
+    console.error("expire-licenses: pruneOldTradingAlerts failed", err);
+    return 0;
+  });
+
+  return NextResponse.json({ processed, checked: expired.rowCount ?? 0, expiringSoonNotified, alertsPruned });
 }

@@ -322,6 +322,24 @@
 .portal-shell .rw .rcta-btn:disabled { opacity: 0.6; cursor: default; }
 .portal-shell .rw .rcta-err { font-size: 11px; color: var(--hz-warn); white-space: nowrap; }
 
+/* ---- RECENT ALERTS ---- */
+.portal-shell .card .chead a.cap { margin-left: auto; color: var(--hz-cyan); text-transform: none; letter-spacing: normal; font-weight: 600; font-size: 12px; }
+.portal-shell .alert-rows .alert-row .rmeta b { display: flex; align-items: center; gap: 8px; }
+.portal-shell .alert-ic.profit { color: var(--hz-ok); }
+.portal-shell .alert-ic.loss { color: var(--hz-bad); }
+.portal-shell .alert-ic.info { color: var(--hz-info); }
+.portal-shell .alert-lic-tag {
+  font-family: var(--hz-mono); font-size: 10px; font-weight: 500; color: var(--hz-ink-3);
+  background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft); border-radius: 6px; padding: 1px 6px;
+}
+.portal-shell .alert-rcta-col { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; }
+.portal-shell .alert-pnl { font-family: var(--hz-mono); font-size: 13px; font-weight: 700; }
+.portal-shell .alert-pnl.profit { color: var(--hz-ok); }
+.portal-shell .alert-pnl.loss { color: var(--hz-bad); }
+.portal-shell .alert-pnl.info { color: var(--hz-ink-2); }
+.portal-shell .alert-ts { font-size: 11px; color: var(--hz-ink-3); white-space: nowrap; }
+.portal-shell .empty a { color: var(--hz-cyan); font-weight: 600; }
+
 /* ---- COURSE TILES ---- */
 .portal-shell .courses { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .portal-shell .courses.two { grid-template-columns: 1fr 1fr; }
