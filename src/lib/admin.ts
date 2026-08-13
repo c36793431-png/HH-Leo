@@ -28,6 +28,26 @@ export async function resolveAdminUserId(sessionUserId: string): Promise<string>
   return inserted.rows[0].id;
 }
 
+/**
+ * Machine-triggered write paths (CI publish, cron) have no session user to resolve.
+ * Attributes the admin_actions row to the same admin account resolveAdminUserId()
+ * falls back to for a stale session, creating it if this is the very first write.
+ */
+export async function resolveServiceAccountUserId(): Promise<string> {
+  const byEmail = await pool.query("select id from users where email = $1", [
+    ADMIN_USERS_PANEL_EMAIL,
+  ]);
+  if (byEmail.rowCount) return byEmail.rows[0].id;
+
+  const inserted = await pool.query(
+    `insert into users (id, email, display_name, role)
+     values (gen_random_uuid(), $1, $1, 'admin')
+     returning id`,
+    [ADMIN_USERS_PANEL_EMAIL]
+  );
+  return inserted.rows[0].id;
+}
+
 export async function logAdminAction(
   adminUserId: string,
   actionType: string,
