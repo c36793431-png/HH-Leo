@@ -47,3 +47,13 @@ export function tiersForRegion(region: FeedRegion): FeedTierMeta[] {
 export function isFeedRegion(value: string): value is FeedRegion {
   return (FEED_REGIONS as string[]).includes(value);
 }
+
+/** Reverse of FEED_REGION_TYPE -- lets /feeds cards (keyed by feeds-catalogue.ts slug/feedType)
+ * find their tier-signup region without the two catalogues needing matching slugs. */
+export function regionForFeedType(feedType: FeedType | null): FeedRegion | null {
+  if (!feedType) return null;
+  const match = (Object.entries(FEED_REGION_TYPE) as [FeedRegion, FeedType | null][]).find(
+    ([, ft]) => ft === feedType
+  );
+  return match ? match[0] : null;
+}

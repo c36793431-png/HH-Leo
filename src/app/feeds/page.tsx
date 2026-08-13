@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isPaidUser, getLicenseForUser, computeUserActiveFeeds, computePortalTier } from "@/lib/licenses";
@@ -10,6 +11,8 @@ import {
   computeFeedCardStatus,
   type FeedCardStatus,
 } from "@/lib/feeds-catalogue";
+import { regionForFeedType } from "@/lib/feed-tier-catalogue";
+import { getTierCountsByRegion } from "@/lib/feed-tiers";
 import { FeedRequestForm } from "@/components/feeds/feed-request-form";
 
 const STATUS_LABEL: Record<FeedCardStatus, string> = {
@@ -31,6 +34,7 @@ export default async function FeedsPage() {
     getPortalConfig(),
   ]);
   const activeFeeds = await computeUserActiveFeeds(session.user.id).catch(() => []);
+  const tierCounts = await getTierCountsByRegion().catch(() => ({} as Awaited<ReturnType<typeof getTierCountsByRegion>>));
   const isAdmin = isAdminUser(session.user);
   const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
@@ -50,6 +54,9 @@ export default async function FeedsPage() {
             licenseTier: licenseDetail?.tier ?? null,
             isAdmin,
           });
+          const region = regionForFeedType(entry.feedType);
+          const tierCount = region ? tierCounts[region] ?? 0 : 0;
+          const hasTiers = tierCount > 1;
 
           return (
             <div key={entry.slug} className={`card fp-card fp-${status}`}>
@@ -62,7 +69,10 @@ export default async function FeedsPage() {
                   />
                   <span className="fp-code">{entry.countryCode}</span>
                 </span>
-                <span className={`fp-pill fp-pill-${status}`}>{STATUS_LABEL[status]}</span>
+                <span>
+                  <span className={`fp-pill fp-pill-${status}`}>{STATUS_LABEL[status]}</span>
+                  {hasTiers && <span className="fp-pill fp-pill-tiers">{tierCount} tiers</span>}
+                </span>
               </div>
               <h3 className="fp-name">{entry.name}</h3>
               <p className="fp-desc">{entry.description}</p>
@@ -81,12 +91,18 @@ export default async function FeedsPage() {
                 </a>
               )}
               {status === "included" && <span className="fp-note">Admin access</span>}
-              {status === "locked" && (
+              {status === "locked" && !hasTiers && (
                 <a className="btn primary sm fp-cta" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
                   🔒 Upgrade to unlock
                 </a>
               )}
               {status === "coming_soon" && <span className="fp-note">Planned — not live yet</span>}
+
+              {hasTiers && region && (
+                <Link href={`/feeds/${region}/tiers`} className="btn ghost sm fp-see-tiers">
+                  See tiers →
+                </Link>
+              )}
             </div>
           );
         })}
