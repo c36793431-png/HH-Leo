@@ -1,7 +1,11 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createFeedRequest } from "@/lib/feed-requests";
+import { createFeedTierRequest } from "@/lib/feed-tier-requests";
+import { feedTierMeta, isFeedRegion } from "@/lib/feed-tier-catalogue";
+import { getActiveLicenseForUser } from "@/lib/licenses";
 import { runAction, type ActionResult } from "@/lib/action-result";
 
 export async function submitFeedRequestAction(
@@ -20,5 +24,36 @@ export async function submitFeedRequestAction(
     if (!useCaseText) throw new Error("Tell us what you're trying to trade, hedge, or arb");
 
     await createFeedRequest({ userId: session.user.id, venueText, useCaseText, preferredLocation });
+  });
+}
+
+/** Backend for the tier-signup flow (region + tier -> admin review queue). No UI wired
+ * to this yet -- client side waits on Iris's /feeds region-detail mock; this is here so
+ * that page can call straight into it once it lands. */
+export async function submitFeedTierRequestAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to submit feed request", async () => {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("You must be signed in to request feed access");
+
+    const region = (formData.get("region") as string) ?? "";
+    const tierKey = (formData.get("tierKey") as string) ?? "";
+    if (!isFeedRegion(region)) throw new Error("Invalid region");
+    const tier = feedTierMeta(tierKey);
+    if (!tier || tier.region !== region) throw new Error("Invalid tier");
+
+    const license = await getActiveLicenseForUser(session.user.id);
+    if (!license) throw new Error("No active license on this account");
+
+    await createFeedTierRequest({
+      userId: session.user.id,
+      licenseId: license.id,
+      region,
+      tierKey,
+      adminUrl: "/admin/feed-tier-requests",
+    });
+    revalidatePath("/feeds");
   });
 }

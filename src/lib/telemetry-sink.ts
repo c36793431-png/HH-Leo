@@ -282,6 +282,23 @@ export async function notifyCountryChange(opts: {
   );
 }
 
+export async function notifyFeedTierRequestSubmitted(opts: {
+  email: string | null;
+  tierName: string;
+  licenseKey: string;
+  serverIp: string | null;
+  adminUrl: string;
+}): Promise<void> {
+  await sendSinkMessage(
+    `📡 new feed request\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `tier: ${opts.tierName}\n` +
+      `license: …${keyTail(opts.licenseKey)}\n` +
+      `server: ${opts.serverIp ?? "-"}\n` +
+      `${opts.adminUrl}`
+  );
+}
+
 function fmt(v: unknown): string {
   if (v === undefined || v === null) return "-";
   if (typeof v === "object") return JSON.stringify(v);
