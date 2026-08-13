@@ -1,10 +1,10 @@
 /**
  * Bot for /v1/hft-alert DMs — deliberately separate token from telegram-bot.ts
  * (HORIZON_PORTAL_BOT_TOKEN, used for login/onboarding/group-invite) so a leak or
- * rotation of one never touches the other's blast radius. Users link by opening this
- * bot and sending /start; Telegram then permits this bot (and only this bot) to DM
- * them going forward. No new DB column — the webhook resolves the same
- * users.telegram_user_id every other Telegram feature already uses.
+ * rotation of one never touches the other's blast radius. Users link via the Community
+ * page's Trading Alerts card, which mints a one-time `?start=<token>` deep link
+ * (telegram-hft-alert-onboarding.ts); the webhook binds the token to
+ * users.telegram_user_id, the same column every other Telegram feature already uses.
  */
 
 const API_ROOT = "https://api.telegram.org";

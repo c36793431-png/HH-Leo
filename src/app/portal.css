@@ -505,6 +505,12 @@
 .portal-shell .comm-icon.channel { border-color: var(--hz-card-line); box-shadow: 0 0 20px rgba(6, 182, 212, 0.12); }
 .portal-shell .comm-icon.free { border-color: var(--emerald-line); box-shadow: 0 0 20px rgba(16, 185, 129, 0.12); }
 .portal-shell .comm-icon.paid { border-color: var(--hz-amber-line); box-shadow: 0 0 20px rgba(255, 194, 75, 0.14); }
+.portal-shell .comm-icon.alerts { border-color: var(--hz-amber-line); box-shadow: 0 0 20px rgba(255, 194, 75, 0.14); }
+.portal-shell .comm-linked-pill {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; white-space: nowrap;
+  font-size: 12px; font-weight: 700; padding: 6px 15px; border-radius: 999px;
+  background: rgba(55, 245, 160, 0.14); border: 1px solid rgba(55, 245, 160, 0.36); color: var(--hz-ok);
+}
 .portal-shell .comm-body { flex: 1; min-width: 260px; }
 .portal-shell .comm-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .portal-shell .comm-title-row h3 { font-family: var(--hz-disp); font-weight: 700; font-size: 19px; }

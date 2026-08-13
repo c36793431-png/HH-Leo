@@ -5,6 +5,8 @@ import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
 import { getBotUsername, getChatMemberCount } from "@/lib/telegram-bot";
 import { createOnboardingToken } from "@/lib/telegram-onboarding";
+import { getHftAlertBotUsername } from "@/lib/telegram-hft-alert-bot";
+import { createHftAlertOnboardingToken } from "@/lib/telegram-hft-alert-onboarding";
 import { LinkTelegramButton } from "@/components/link-telegram-button";
 import { RequestInviteButton } from "@/components/request-invite-button";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -28,34 +30,41 @@ export default async function CommunityPage() {
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [paid, licenseDetail, config, telegramStatus, groupMembershipStatus, botUsername] = await Promise.all([
-    isPaidUser(session.user.id).catch(() => false),
-    getLicenseForUser(session.user.id).catch(() => null),
-    getPortalConfig(),
-    pool
-      .query<{ telegram_user_id: string | null; telegram_bot_started_at: Date | null }>(
-        "select telegram_user_id, telegram_bot_started_at from users where id = $1",
-        [session.user.id]
-      )
-      .then((r) => ({
-        linked: r.rows[0]?.telegram_user_id !== null && r.rows[0]?.telegram_user_id !== undefined,
-        botStarted: r.rows[0]?.telegram_bot_started_at != null,
-      }))
-      .catch(() => ({ linked: false, botStarted: false })),
-    pool
-      .query<{ status: string }>(
-        `select status from group_memberships where user_id = $1
+  const [paid, licenseDetail, config, telegramStatus, groupMembershipStatus, botUsername, hftAlertBotUsername] =
+    await Promise.all([
+      isPaidUser(session.user.id).catch(() => false),
+      getLicenseForUser(session.user.id).catch(() => null),
+      getPortalConfig(),
+      pool
+        .query<{ telegram_user_id: string | null; telegram_bot_started_at: Date | null; telegram_username: string | null }>(
+          "select telegram_user_id, telegram_bot_started_at, telegram_username from users where id = $1",
+          [session.user.id]
+        )
+        .then((r) => ({
+          linked: r.rows[0]?.telegram_user_id !== null && r.rows[0]?.telegram_user_id !== undefined,
+          botStarted: r.rows[0]?.telegram_bot_started_at != null,
+          username: r.rows[0]?.telegram_username ?? null,
+        }))
+        .catch(() => ({ linked: false, botStarted: false, username: null })),
+      pool
+        .query<{ status: string }>(
+          `select status from group_memberships where user_id = $1
          order by coalesce(joined_at, invited_at) desc limit 1`,
-        [session.user.id]
-      )
-      .then((r): string | null => r.rows[0]?.status ?? null)
-      .catch((): string | null => null),
-    getBotUsername(),
-  ]);
-  const { linked: telegramLinked, botStarted: telegramBotStarted } = telegramStatus;
+          [session.user.id]
+        )
+        .then((r): string | null => r.rows[0]?.status ?? null)
+        .catch((): string | null => null),
+      getBotUsername(),
+      getHftAlertBotUsername(),
+    ]);
+  const { linked: telegramLinked, botStarted: telegramBotStarted, username: telegramUsername } = telegramStatus;
   const onboarding =
     paid && telegramLinked && !telegramBotStarted
       ? await createOnboardingToken(session.user.id).catch(() => null)
+      : null;
+  const hftAlertOnboarding =
+    paid && !telegramLinked && hftAlertBotUsername
+      ? await createHftAlertOnboardingToken(session.user.id).catch(() => null)
       : null;
 
   const channelUsername = publicUsernameFromUrl(config.telegramChannelUrl);
@@ -164,6 +173,42 @@ export default async function CommunityPage() {
             <div className="comm-cta">
               <RequestInviteButton label="Start the bot →" />
             </div>
+          )}
+        </div>
+
+        {/* TRADING ALERTS */}
+        <div className="card comm-card">
+          <div className="comm-icon alerts">🔔</div>
+          <div className="comm-body">
+            <div className="comm-title-row">
+              <h3>Trading Alerts</h3>
+              <span className="comm-tag paid">Direct DM · subscribers only</span>
+            </div>
+            <p className="comm-tagline">Get real-time trade DMs from your Horizon client</p>
+            {paid && telegramLinked ? (
+              <p className="comm-desc">
+                ✅ Linked to {telegramUsername ? `@${telegramUsername}` : "your Telegram"} — alerts active.
+              </p>
+            ) : (
+              <p className="comm-desc">
+                Every fill, close, and pnl update from your Horizon HFT client, DM&apos;d to you the moment it
+                happens. Start the bot to link your account.
+              </p>
+            )}
+          </div>
+
+          {!paid ? (
+            <a className="btn ghost comm-cta lockcta" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
+              🔒 Upgrade to join
+            </a>
+          ) : telegramLinked ? (
+            <span className="comm-linked-pill comm-cta">Alerts active</span>
+          ) : hftAlertOnboarding ? (
+            <a className="btn primary comm-cta" href={hftAlertOnboarding.link} target="_blank" rel="noopener noreferrer">
+              Start the bot →
+            </a>
+          ) : (
+            <span className="comm-unavailable">Telegram alerts unavailable — bot not configured.</span>
           )}
         </div>
       </div>
