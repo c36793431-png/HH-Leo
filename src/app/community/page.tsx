@@ -135,11 +135,17 @@ export default async function CommunityPage() {
               <span className="comm-tag paid">Paid group · subscribers only</span>
             </div>
             <p className="comm-tagline">Signals, desk support, bot-gated invite</p>
-            <p className="comm-desc">
-              Live signal drops, direct desk support, and the inner circle of active Horizon HFT
-              subscribers. Access is tied to your license — start the bot to get your single-use
-              invite.
-            </p>
+            {groupMembershipStatus === "joined" ? (
+              <p className="comm-desc">
+                ✅ {telegramUsername ? `Member — @${telegramUsername}` : "In HH-Traders"}
+              </p>
+            ) : (
+              <p className="comm-desc">
+                Live signal drops, direct desk support, and the inner circle of active Horizon HFT
+                subscribers. Access is tied to your license — start the bot to get your single-use
+                invite.
+              </p>
+            )}
             {formatMemberCount(paidCount) && <span className="comm-count">{formatMemberCount(paidCount)}</span>}
           </div>
 
@@ -164,7 +170,7 @@ export default async function CommunityPage() {
               <span className="comm-unavailable">Telegram linking unavailable — bot not configured.</span>
             )
           ) : groupMembershipStatus === "joined" ? (
-            <span className="join-pill comm-cta">Active</span>
+            <span className="comm-linked-pill comm-cta">Joined</span>
           ) : groupMembershipStatus === "removed_on_lapse" ? (
             <div className="comm-cta">
               <RequestInviteButton label="Start the bot again →" />
