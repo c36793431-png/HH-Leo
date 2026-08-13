@@ -344,6 +344,22 @@ export async function getGroupTarget(userId: string): Promise<GroupTarget | null
   return { userId: row.id, telegramUserId: row.telegram_user_id, email: row.email };
 }
 
+/** /v1/hft-alert resolves straight from the license key (no session), so it needs a
+ * license-id -> user lookup rather than getGroupTarget's userId -> user one. Returns
+ * null only if the license has no owning user yet (pre-provisioned, unclaimed). */
+export async function getAlertTargetForLicense(licenseId: string): Promise<GroupTarget | null> {
+  const result = await pool.query<{ user_id: string | null; telegram_user_id: string | null; email: string | null }>(
+    `select u.id as user_id, u.telegram_user_id, u.email
+     from licenses l
+     join users u on u.id = l.user_id
+     where l.id = $1`,
+    [licenseId]
+  );
+  const row = result.rows[0];
+  if (!row || !row.user_id) return null;
+  return { userId: row.user_id, telegramUserId: row.telegram_user_id, email: row.email };
+}
+
 export interface ClientRow {
   userId: string;
   email: string | null;
