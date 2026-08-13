@@ -26,6 +26,7 @@ import {
   Upload,
   ClipboardList,
   History,
+  Radar,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,6 +47,7 @@ const PORTAL_LINKS = [
   { href: "/prop-firm", label: "Prop Firm", icon: TrendingUp, paidOnly: true, lockedStaysOnPage: true },
   { href: "/account/refer", label: "Refer & earn", icon: Gift },
   { href: "/account/my-setup", label: "My setup", icon: Settings, paidOnly: true, lockedStaysOnPage: true },
+  { href: "/account/servers", label: "Servers", icon: Server, paidOnly: true, lockedStaysOnPage: true },
   { href: "/account", label: "Account", icon: CircleUser },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; paidOnly?: boolean; lockedStaysOnPage?: boolean }[];
 
@@ -54,6 +56,7 @@ const ADMIN_LINKS = [
   { href: "/admin/finance", label: "Finance", icon: DollarSign },
   { href: "/admin/referrals", label: "Referrals", icon: Award },
   { href: "/admin/users", label: "Users", icon: UserSquare2 },
+  { href: "/admin/connections", label: "Connections", icon: Radar },
   { href: "/admin/setups", label: "Setups", icon: Settings },
   { href: "/admin/setfiles", label: "Setfiles", icon: Sliders },
   { href: "/admin/licenses", label: "Licenses", icon: Server },

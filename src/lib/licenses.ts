@@ -408,6 +408,7 @@ export async function getActiveLicenseForUser(userId: string): Promise<ActiveLic
 export interface VerifyLicenseResult {
   status: "active" | "expired" | "revoked" | "not_found";
   expiresAt: Date | null;
+  licenseId: string | null;
 }
 
 /** Canonical /api/verify-license lookup — also stamps last_verified_at for phone-home telemetry. */
@@ -415,14 +416,15 @@ export async function verifyLicenseKey(licenseKey: string): Promise<VerifyLicens
   const result = await pool.query(
     `update licenses set last_verified_at = now()
      where license_key = $1
-     returning status, expires_at`,
+     returning id, status, expires_at`,
     [licenseKey]
   );
   const row = result.rows[0];
-  if (!row) return { status: "not_found", expiresAt: null };
-  if (row.status === "revoked") return { status: "revoked", expiresAt: row.expires_at };
-  if (new Date(row.expires_at) <= new Date()) return { status: "expired", expiresAt: row.expires_at };
-  return { status: "active", expiresAt: row.expires_at };
+  if (!row) return { status: "not_found", expiresAt: null, licenseId: null };
+  if (row.status === "revoked") return { status: "revoked", expiresAt: row.expires_at, licenseId: row.id };
+  if (new Date(row.expires_at) <= new Date())
+    return { status: "expired", expiresAt: row.expires_at, licenseId: row.id };
+  return { status: "active", expiresAt: row.expires_at, licenseId: row.id };
 }
 
 /**

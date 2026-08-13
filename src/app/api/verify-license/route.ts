@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyLicenseKey } from "@/lib/licenses";
 import { checkVerifyLicenseRateLimit } from "@/lib/rate-limit";
+import { captureConnectionIp } from "@/lib/server-registration";
 
 /** Phone-home endpoint the C# client bakes in — frozen contract, see spec §API endpoints. */
 export async function POST(req: NextRequest) {
@@ -25,6 +26,15 @@ export async function POST(req: NextRequest) {
   const result = await verifyLicenseKey(licenseKey);
   if (result.status === "not_found") {
     return NextResponse.json({ status: "not_found" }, { status: 404 });
+  }
+
+  if (result.licenseId) {
+    captureConnectionIp(
+      result.licenseId,
+      ip,
+      "verify-license",
+      `/admin/connections?license=${result.licenseId}`
+    ).catch(() => {});
   }
 
   return NextResponse.json({ status: result.status, expires_at: result.expiresAt });

@@ -227,6 +227,61 @@ export async function notifyFirstLogin(opts: {
   );
 }
 
+export async function notifyServerRegistered(opts: {
+  email: string | null;
+  serverName: string;
+  vpsProvider: string;
+  declaredIp: string;
+  declaredLocation: string;
+  adminUrl: string;
+}): Promise<void> {
+  await sendSinkMessage(
+    `🖥 new server registration\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `server: ${opts.serverName}\n` +
+      `provider: ${opts.vpsProvider}\n` +
+      `declared ip: ${opts.declaredIp}\n` +
+      `declared location: ${opts.declaredLocation}\n` +
+      `${opts.adminUrl}`
+  );
+}
+
+export async function notifyIpMismatch(opts: {
+  email: string | null;
+  serverName: string;
+  declaredIp: string;
+  actualIp: string;
+  actualLocation: string | null;
+  adminUrl: string;
+}): Promise<void> {
+  await sendSinkMessage(
+    `🚩 declared/actual IP mismatch\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `server: ${opts.serverName}\n` +
+      `declared ip: ${opts.declaredIp}\n` +
+      `actual ip: ${opts.actualIp}${opts.actualLocation ? ` (${opts.actualLocation})` : ""}\n` +
+      `${opts.adminUrl}`
+  );
+}
+
+export async function notifyCountryChange(opts: {
+  email: string | null;
+  serverName: string;
+  fromCountry: string;
+  toCountry: string;
+  newIp: string;
+  adminUrl: string;
+}): Promise<void> {
+  await sendSinkMessage(
+    `🌍 captured IP changed country\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `server: ${opts.serverName}\n` +
+      `${opts.fromCountry} -> ${opts.toCountry}\n` +
+      `new ip: ${opts.newIp}\n` +
+      `${opts.adminUrl}`
+  );
+}
+
 function fmt(v: unknown): string {
   if (v === undefined || v === null) return "-";
   if (typeof v === "object") return JSON.stringify(v);

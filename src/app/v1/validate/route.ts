@@ -3,6 +3,7 @@ import { verifyLicenseKey } from "@/lib/licenses";
 import { checkValidateRateLimit } from "@/lib/rate-limit";
 import { httpsViolation, clientIp } from "@/lib/client-endpoints";
 import { signResponse, signingConfigured } from "@/lib/response-signing";
+import { captureConnectionIp } from "@/lib/server-registration";
 
 /**
  * /v1/validate — desktop-client activation call.
@@ -45,6 +46,12 @@ export async function POST(req: NextRequest) {
   const result = await verifyLicenseKey(licenseKey);
   if (result.status === "not_found") {
     return NextResponse.json({ status: "not_found" }, { status: 404 });
+  }
+
+  if (result.licenseId) {
+    captureConnectionIp(result.licenseId, ip, "validate", `/admin/connections?license=${result.licenseId}`).catch(
+      () => {}
+    );
   }
 
   // TODO(hwid-binding): the hardware_id column exists as of migration 0004. Once the

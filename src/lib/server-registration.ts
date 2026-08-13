@@ -1,0 +1,284 @@
+import { pool } from "./db";
+import { resolveGeoIp } from "./geoip";
+import { notifyServerRegistered, notifyIpMismatch, notifyCountryChange } from "./telemetry-sink";
+
+export const VPS_PROVIDERS = ["Beeks", "Contabo", "UltraFX Cloud", "personal", "other"] as const;
+export type VpsProvider = (typeof VPS_PROVIDERS)[number];
+
+export interface ServerRegistration {
+  licenseId: string;
+  serverName: string;
+  vpsProvider: string;
+  vpsProviderOther: string | null;
+  serverLocation: string;
+  declaredIp: string;
+  multipleIpsOk: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ServerRegistrationInput {
+  serverName: string;
+  vpsProvider: string;
+  vpsProviderOther: string | null;
+  serverLocation: string;
+  declaredIp: string;
+}
+
+interface RegistrationRow {
+  license_id: string;
+  server_name: string;
+  vps_provider: string;
+  vps_provider_other: string | null;
+  server_location: string;
+  declared_ip: string;
+  multiple_ips_ok: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+function mapRegistration(row: RegistrationRow): ServerRegistration {
+  return {
+    licenseId: row.license_id,
+    serverName: row.server_name,
+    vpsProvider: row.vps_provider,
+    vpsProviderOther: row.vps_provider_other,
+    serverLocation: row.server_location,
+    declaredIp: row.declared_ip,
+    multipleIpsOk: row.multiple_ips_ok,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function getServerRegistration(licenseId: string): Promise<ServerRegistration | null> {
+  const result = await pool.query<RegistrationRow>(
+    "select * from server_registrations where license_id = $1",
+    [licenseId]
+  );
+  return result.rowCount ? mapRegistration(result.rows[0]) : null;
+}
+
+/** Upserts the registration and fires the "new registration" alert only on first insert
+ * (an edit shouldn't re-fire it). adminUrl is passed in by the caller since this lib has
+ * no request context to build one from. */
+export async function saveServerRegistration(
+  licenseId: string,
+  input: ServerRegistrationInput,
+  adminUrl: string,
+  ownerEmail: string | null
+): Promise<void> {
+  const result = await pool.query(
+    `insert into server_registrations
+       (license_id, server_name, vps_provider, vps_provider_other, server_location, declared_ip, updated_at)
+     values ($1, $2, $3, $4, $5, $6, now())
+     on conflict (license_id) do update set
+       server_name = excluded.server_name,
+       vps_provider = excluded.vps_provider,
+       vps_provider_other = excluded.vps_provider_other,
+       server_location = excluded.server_location,
+       declared_ip = excluded.declared_ip,
+       updated_at = now()
+     returning (xmax = 0) as inserted`,
+    [licenseId, input.serverName, input.vpsProvider, input.vpsProviderOther, input.serverLocation, input.declaredIp]
+  );
+
+  if (result.rows[0]?.inserted) {
+    await notifyServerRegistered({
+      email: ownerEmail,
+      serverName: input.serverName,
+      vpsProvider: input.vpsProviderOther ? `${input.vpsProvider} (${input.vpsProviderOther})` : input.vpsProvider,
+      declaredIp: input.declaredIp,
+      declaredLocation: input.serverLocation,
+      adminUrl,
+    }).catch(() => {});
+  }
+}
+
+export async function setMultipleIpsOk(licenseId: string, value: boolean): Promise<void> {
+  await pool.query(
+    "update server_registrations set multiple_ips_ok = $2, updated_at = now() where license_id = $1",
+    [licenseId, value]
+  );
+}
+
+interface ConnectionRow {
+  ip: string;
+  captured_at: Date;
+}
+
+/** Dedupes against the most recent capture for this license — every desktop-client call
+ * hitting this on an unchanged IP would otherwise flood connection_ips for no signal. A
+ * row only lands when the IP actually changed, which is also exactly the trigger point
+ * for the mismatch/country-change alerts below. Fire-and-forget from route handlers. */
+export async function captureConnectionIp(
+  licenseId: string,
+  ip: string,
+  source: string,
+  adminUrl: string
+): Promise<void> {
+  if (!ip || ip === "unknown") return;
+
+  const last = await pool.query<ConnectionRow>(
+    `select ip, captured_at from connection_ips where license_id = $1 order by captured_at desc limit 1`,
+    [licenseId]
+  );
+  const previous = last.rows[0] ?? null;
+  if (previous && previous.ip === ip) return; // unchanged, nothing to log or alert on
+
+  await pool.query(
+    `insert into connection_ips (license_id, ip, source) values ($1, $2, $3)`,
+    [licenseId, ip, source]
+  );
+
+  const [registration, geo, prevGeo, owner] = await Promise.all([
+    getServerRegistration(licenseId),
+    resolveGeoIp(ip),
+    previous ? resolveGeoIp(previous.ip) : Promise.resolve(null),
+    pool.query<{ email: string | null }>(
+      `select u.email from licenses l join users u on u.id = l.user_id where l.id = $1`,
+      [licenseId]
+    ),
+  ]);
+  const ownerEmail = owner.rows[0]?.email ?? null;
+  if (!registration || registration.multipleIpsOk) return;
+
+  if (registration.declaredIp && registration.declaredIp !== ip) {
+    await notifyIpMismatch({
+      email: ownerEmail,
+      serverName: registration.serverName,
+      declaredIp: registration.declaredIp,
+      actualIp: ip,
+      actualLocation: geo ? [geo.city, geo.country].filter(Boolean).join(", ") || null : null,
+      adminUrl,
+    }).catch(() => {});
+  }
+
+  if (prevGeo?.country && geo?.country && prevGeo.country !== geo.country) {
+    await notifyCountryChange({
+      email: ownerEmail,
+      serverName: registration.serverName,
+      fromCountry: prevGeo.country,
+      toCountry: geo.country,
+      newIp: ip,
+      adminUrl,
+    }).catch(() => {});
+  }
+}
+
+export interface ConnectionHistoryEntry {
+  ip: string;
+  capturedAt: Date;
+  country: string | null;
+  city: string | null;
+  isp: string | null;
+}
+
+export async function getConnectionHistory(licenseId: string, limit = 10): Promise<ConnectionHistoryEntry[]> {
+  const result = await pool.query<{ ip: string; captured_at: Date }>(
+    `select ip, captured_at from connection_ips where license_id = $1 order by captured_at desc limit $2`,
+    [licenseId, limit]
+  );
+  return Promise.all(
+    result.rows.map(async (row) => {
+      const geo = await resolveGeoIp(row.ip);
+      return {
+        ip: row.ip,
+        capturedAt: row.captured_at,
+        country: geo?.country ?? null,
+        city: geo?.city ?? null,
+        isp: geo?.isp ?? null,
+      };
+    })
+  );
+}
+
+export interface ConnectionOverviewRow {
+  licenseId: string;
+  userId: string | null;
+  email: string | null;
+  serverName: string | null;
+  vpsProvider: string | null;
+  declaredIp: string | null;
+  declaredLocation: string | null;
+  multipleIpsOk: boolean;
+  latestIp: string | null;
+  latestCapturedAt: Date | null;
+  latestCountry: string | null;
+  latestCity: string | null;
+  latestIsp: string | null;
+  mismatch: boolean;
+}
+
+/** /admin/connections source of truth — one row per license that has EITHER a
+ * registration or at least one captured connection, newest capture first. */
+export async function listConnectionOverview(): Promise<ConnectionOverviewRow[]> {
+  const result = await pool.query<{
+    license_id: string;
+    user_id: string | null;
+    email: string | null;
+    server_name: string | null;
+    vps_provider: string | null;
+    declared_ip: string | null;
+    server_location: string | null;
+    multiple_ips_ok: boolean | null;
+    latest_ip: string | null;
+    latest_captured_at: Date | null;
+  }>(
+    `with latest as (
+       select distinct on (license_id) license_id, ip, captured_at
+       from connection_ips
+       order by license_id, captured_at desc
+     ),
+     license_ids as (
+       select license_id from server_registrations
+       union
+       select license_id from latest
+     )
+     select
+       li.license_id,
+       u.id as user_id,
+       u.email,
+       sr.server_name,
+       sr.vps_provider,
+       sr.declared_ip,
+       sr.server_location,
+       sr.multiple_ips_ok,
+       latest.ip as latest_ip,
+       latest.captured_at as latest_captured_at
+     from license_ids li
+     left join server_registrations sr on sr.license_id = li.license_id
+     left join latest on latest.license_id = li.license_id
+     left join licenses l on l.id = li.license_id
+     left join users u on u.id = l.user_id
+     order by latest.captured_at desc nulls last`
+  );
+
+  return Promise.all(
+    result.rows.map(async (row) => {
+      const geo = row.latest_ip ? await resolveGeoIp(row.latest_ip) : null;
+      const mismatch = !!(
+        row.declared_ip &&
+        row.latest_ip &&
+        row.declared_ip !== row.latest_ip &&
+        !row.multiple_ips_ok
+      );
+      return {
+        licenseId: row.license_id,
+        userId: row.user_id,
+        email: row.email,
+        serverName: row.server_name,
+        vpsProvider: row.vps_provider,
+        declaredIp: row.declared_ip,
+        declaredLocation: row.server_location,
+        multipleIpsOk: row.multiple_ips_ok ?? false,
+        latestIp: row.latest_ip,
+        latestCapturedAt: row.latest_captured_at,
+        latestCountry: geo?.country ?? null,
+        latestCity: geo?.city ?? null,
+        latestIsp: geo?.isp ?? null,
+        mismatch,
+      };
+    })
+  );
+}
