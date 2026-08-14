@@ -19,6 +19,7 @@ export interface FeedTierRequestRow {
   tierName: string;
   serverName: string | null;
   serverIp: string | null;
+  serverRegistered: boolean;
   status: FeedTierRequestStatus;
   reason: string | null;
   createdAt: Date;
@@ -37,6 +38,7 @@ interface RequestRow {
   tier_key: string;
   server_name: string | null;
   declared_ip: string | null;
+  captured_ip: string | null;
   status: string;
   reason: string | null;
   created_at: Date;
@@ -57,7 +59,8 @@ function mapRow(row: RequestRow): FeedTierRequestRow {
     tierKey: row.tier_key,
     tierName: meta?.name ?? row.tier_key,
     serverName: row.server_name,
-    serverIp: row.declared_ip,
+    serverIp: row.declared_ip ?? row.captured_ip,
+    serverRegistered: row.declared_ip != null,
     status: row.status as FeedTierRequestStatus,
     reason: row.reason,
     createdAt: row.created_at,
@@ -69,11 +72,17 @@ const SELECT_BASE = `
   select ftr.id, ftr.user_id, u.display_name as user_name, u.email as user_email, u.telegram_user_id,
          ftr.license_id, l.license_key, ftr.region, ftr.tier_key, ftr.status, ftr.reason,
          ftr.created_at, ftr.actioned_at,
-         sr.server_name, sr.declared_ip
+         sr.server_name, sr.declared_ip, ci.ip as captured_ip
   from feed_tier_requests ftr
   join users u on u.id = ftr.user_id
   join licenses l on l.id = ftr.license_id
   left join server_registrations sr on sr.license_id = ftr.license_id
+  left join lateral (
+    select ip from connection_ips
+    where license_id = ftr.license_id
+    order by captured_at desc
+    limit 1
+  ) ci on true
 `;
 
 interface CreateArgs {
@@ -98,7 +107,9 @@ export async function createFeedTierRequest(args: CreateArgs): Promise<FeedTierR
     email: row.userEmail,
     tierName: row.tierName,
     licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
+    serverName: row.serverName,
     serverIp: row.serverIp,
+    serverRegistered: row.serverRegistered,
     adminUrl: args.adminUrl,
   }).catch(() => {});
 

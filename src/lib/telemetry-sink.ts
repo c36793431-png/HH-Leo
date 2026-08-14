@@ -286,15 +286,23 @@ export async function notifyFeedTierRequestSubmitted(opts: {
   email: string | null;
   tierName: string;
   licenseKey: string;
+  serverName: string | null;
   serverIp: string | null;
+  serverRegistered: boolean;
   adminUrl: string;
 }): Promise<void> {
+  let server = "-";
+  if (opts.serverRegistered && opts.serverIp) {
+    server = opts.serverName ? `${opts.serverName} (${opts.serverIp})` : opts.serverIp;
+  } else if (opts.serverIp) {
+    server = `${opts.serverIp} (unregistered)`;
+  }
   await sendSinkMessage(
     `📡 new feed request\n` +
       `email: ${opts.email ?? "-"}\n` +
       `tier: ${opts.tierName}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
-      `server: ${opts.serverIp ?? "-"}\n` +
+      `server: ${server}\n` +
       `${opts.adminUrl}`
   );
 }
@@ -304,13 +312,23 @@ export async function notifyFeedTierTrialStarted(opts: {
   tierName: string;
   licenseKey: string;
   trialEndsAt: Date;
+  serverName: string | null;
+  serverIp: string | null;
+  serverRegistered: boolean;
   adminUrl: string;
 }): Promise<void> {
+  let server = "-";
+  if (opts.serverRegistered && opts.serverIp) {
+    server = opts.serverName ? `${opts.serverName} (${opts.serverIp})` : opts.serverIp;
+  } else if (opts.serverIp) {
+    server = `${opts.serverIp} (unregistered)`;
+  }
   await sendSinkMessage(
     `🧪 trial started\n` +
       `email: ${opts.email ?? "-"}\n` +
       `tier: ${opts.tierName}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
+      `server: ${server}\n` +
       `ends: ${opts.trialEndsAt.toISOString()}\n` +
       `${opts.adminUrl}`
   );

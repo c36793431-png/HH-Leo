@@ -23,6 +23,9 @@ export interface FeedTierTrialRow {
   trialEndsAt: Date;
   convertedAt: Date | null;
   cancelledAt: Date | null;
+  serverName: string | null;
+  serverIp: string | null;
+  serverRegistered: boolean;
 }
 
 interface TrialRow {
@@ -40,6 +43,9 @@ interface TrialRow {
   trial_ends_at: Date;
   converted_at: Date | null;
   cancelled_at: Date | null;
+  server_name: string | null;
+  declared_ip: string | null;
+  captured_ip: string | null;
 }
 
 function mapRow(row: TrialRow): FeedTierTrialRow {
@@ -60,16 +66,27 @@ function mapRow(row: TrialRow): FeedTierTrialRow {
     trialEndsAt: row.trial_ends_at,
     convertedAt: row.converted_at,
     cancelledAt: row.cancelled_at,
+    serverName: row.server_name,
+    serverIp: row.declared_ip ?? row.captured_ip,
+    serverRegistered: row.declared_ip != null,
   };
 }
 
 const SELECT_BASE = `
   select ftt.id, ftt.user_id, u.display_name as user_name, u.email as user_email, u.telegram_user_id,
          ftt.license_id, l.license_key, ftt.region, ftt.tier_key, ftt.trial_status,
-         ftt.trial_started_at, ftt.trial_ends_at, ftt.converted_at, ftt.cancelled_at
+         ftt.trial_started_at, ftt.trial_ends_at, ftt.converted_at, ftt.cancelled_at,
+         sr.server_name, sr.declared_ip, ci.ip as captured_ip
   from feed_tier_trials ftt
   join users u on u.id = ftt.user_id
   join licenses l on l.id = ftt.license_id
+  left join server_registrations sr on sr.license_id = ftt.license_id
+  left join lateral (
+    select ip from connection_ips
+    where license_id = ftt.license_id
+    order by captured_at desc
+    limit 1
+  ) ci on true
 `;
 
 export class TrialAlreadyClaimedError extends Error {
@@ -128,6 +145,9 @@ export async function startFeedTierTrial(args: StartTrialArgs): Promise<FeedTier
     tierName: row.tierName,
     licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
     trialEndsAt: row.trialEndsAt,
+    serverName: row.serverName,
+    serverIp: row.serverIp,
+    serverRegistered: row.serverRegistered,
     adminUrl: args.adminUrl,
   }).catch(() => {});
 
