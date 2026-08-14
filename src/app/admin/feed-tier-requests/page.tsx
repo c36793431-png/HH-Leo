@@ -36,7 +36,18 @@ export default async function AdminFeedTierRequestsPage({
     ? (sp.status as FeedTierRequestStatus)
     : undefined;
 
-  const requests = await listFeedTierRequests({ status });
+  const [requests, allRequests] = await Promise.all([
+    listFeedTierRequests({ status }),
+    status ? listFeedTierRequests() : Promise.resolve(null),
+  ]);
+  const statsSource = allRequests ?? requests;
+  const stats = FEED_TIER_REQUEST_STATUSES.reduce(
+    (acc, s) => {
+      acc[s] = statsSource.filter((r) => r.status === s).length;
+      return acc;
+    },
+    {} as Record<FeedTierRequestStatus, number>
+  );
 
   return (
     <div className="flex flex-1 flex-col">
@@ -49,6 +60,15 @@ export default async function AdminFeedTierRequestsPage({
           Region + tier access requests from paid users, against their registered server.
         </p>
       </header>
+
+      <div className="fttr-stats">
+        {FEED_TIER_REQUEST_STATUSES.map((s) => (
+          <div key={s} className={`fttr-stat ${s}`}>
+            <div className="n">{stats[s]}</div>
+            <div className="l">{s}</div>
+          </div>
+        ))}
+      </div>
 
       <div className="mb-6 flex flex-wrap gap-2">
         <Link

@@ -7,7 +7,9 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { isFeedRegion } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
-import { TierUnlockButton } from "@/components/feeds/tier-unlock-button";
+import { TierRequestControl } from "@/components/feeds/tier-request-control";
+import { getServerRegistration } from "@/lib/server-registration";
+import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 
 const COMPARE_ROWS = [
   { key: "latency", label: "Feed latency" },
@@ -41,6 +43,17 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
+  const [serverRegistration, existingRequests] = await Promise.all([
+    licenseDetail ? getServerRegistration(licenseDetail.id) : Promise.resolve(null),
+    listFeedTierRequests({ userId: session.user.id }),
+  ]);
+  const requestedTierKeys = new Set(
+    existingRequests
+      .filter((r) => r.region === region && r.status !== "rejected")
+      .map((r) => r.tierKey)
+  );
+  const licenseTail = licenseDetail?.licenseKey ? `…${licenseDetail.licenseKey.slice(-4)}` : "—";
+
   const catalogueEntry = FEED_CATALOGUE.find((f) => f.slug === region) ?? null;
   const regionName = catalogueEntry?.name ?? region;
   const countryCode = catalogueEntry?.countryCode ?? "";
@@ -67,6 +80,26 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
         </p>
       </div>
 
+      {serverRegistration ? (
+        <div className="ftd-server-banner">
+          <span className="lbl">Server</span>
+          <span className="val">{serverRegistration.serverName}</span>
+          <span className="val">· {serverRegistration.declaredIp}</span>
+          <span className="verified">✓ Verified</span>
+          <Link href="/account/servers" className="change-link">
+            Change server →
+          </Link>
+        </div>
+      ) : (
+        <div className="ftd-server-banner no-server">
+          <span className="lbl">Server</span>
+          <span className="val">No server registered yet</span>
+          <Link href="/account/servers" className="change-link">
+            Register a server →
+          </Link>
+        </div>
+      )}
+
       <div className="ftd-tier-row">
         {tiers.map((t) => (
           <div key={t.tierKey} className={`card ftd-tier-card${t.isFlagship ? " ftd-flagship" : ""}`}>
@@ -79,7 +112,15 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             </div>
             <p className="ftd-desc">{t.description}</p>
             <span className="ftd-price">{priceLabel(t.priceCents)}</span>
-            <TierUnlockButton region={region} tierKey={t.tierKey} />
+            <TierRequestControl
+              region={region}
+              tierKey={t.tierKey}
+              tierName={t.name}
+              alreadyRequested={requestedTierKeys.has(t.tierKey)}
+              serverName={serverRegistration?.serverName ?? null}
+              serverIp={serverRegistration?.declaredIp ?? null}
+              licenseTail={licenseTail}
+            />
           </div>
         ))}
       </div>
