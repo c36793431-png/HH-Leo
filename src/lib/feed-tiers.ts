@@ -76,3 +76,17 @@ export async function getMultiTierRegions(): Promise<FeedRegion[]> {
   const counts = await getTierCountsByRegion();
   return FEED_REGIONS.filter((r) => (counts[r] ?? 0) > 1);
 }
+
+/** Region -> lowest known latency_us, for the Dashboard compact feed cards' stat line.
+ * Tiers with no confirmed figure yet (latency_us null, e.g. flagship "MIN" tiers or NY's
+ * pending rows) are excluded rather than treated as 0. */
+export async function getBestLatencyByRegion(): Promise<Partial<Record<FeedRegion, number>>> {
+  const result = await pool.query<{ region_key: string; min_latency: number | null }>(
+    `select region_key, min(latency_us) as min_latency from feed_tiers where latency_us is not null group by region_key`
+  );
+  const best: Partial<Record<FeedRegion, number>> = {};
+  for (const row of result.rows) {
+    if (isFeedRegion(row.region_key) && row.min_latency != null) best[row.region_key] = row.min_latency;
+  }
+  return best;
+}

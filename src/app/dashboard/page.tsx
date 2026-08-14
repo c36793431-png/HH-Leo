@@ -10,6 +10,9 @@ import {
   FEED_TYPES,
   FEED_TYPE_META,
 } from "@/lib/licenses";
+import { FEED_CATALOGUE, computeFeedCardStatus } from "@/lib/feeds-catalogue";
+import { regionForFeedType } from "@/lib/feed-tier-catalogue";
+import { getTierCountsByRegion, getBestLatencyByRegion } from "@/lib/feed-tiers";
 import { getPortalConfig } from "@/lib/portal-config";
 import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { pool } from "@/lib/db";
@@ -32,7 +35,8 @@ export default async function DashboardPage() {
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [paid, config, telegramStatus, groupMembershipStatus, botUsername, downloads] = await Promise.all([
+  const [paid, config, telegramStatus, groupMembershipStatus, botUsername, downloads, feedTierCounts, feedBestLatency] =
+    await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
     getPortalConfig(),
     pool
@@ -55,6 +59,8 @@ export default async function DashboardPage() {
       .catch((): string | null => null),
     getBotUsername(),
     getLatestDownloads().catch((): LatestDownloads => ({})),
+    getTierCountsByRegion().catch(() => ({}) as Awaited<ReturnType<typeof getTierCountsByRegion>>),
+    getBestLatencyByRegion().catch(() => ({}) as Awaited<ReturnType<typeof getBestLatencyByRegion>>),
   ]);
   const { linked: telegramLinked, botStarted: telegramBotStarted } = telegramStatus;
   const onboarding =
@@ -64,6 +70,43 @@ export default async function DashboardPage() {
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
   const activeFeeds = await computeUserActiveFeeds(session.user.id).catch((): typeof FEED_TYPES => []);
   const isAdmin = isAdminUser(session.user);
+
+  const feedCatalogueByType = new Map(FEED_CATALOGUE.map((entry) => [entry.feedType, entry]));
+  const signalFeedCards = FEED_TYPES.map((feedType) => {
+    const catalogueEntry = feedCatalogueByType.get(feedType);
+    const meta = FEED_TYPE_META[feedType];
+    const status = catalogueEntry
+      ? computeFeedCardStatus(catalogueEntry, { activeFeeds, licenseTier: licenseDetail?.tier ?? null, isAdmin })
+      : "locked";
+    const region = regionForFeedType(feedType);
+    const tierCount = region ? feedTierCounts[region] ?? 0 : 0;
+    const hasTierCatalogue = tierCount >= 1;
+    const hasDrillIn = tierCount > 1;
+    const isOwned = status === "active" || status === "trial" || status === "included";
+
+    const pill: { color: "green" | "cyan" | "red"; label: string } = isOwned
+      ? { color: "green", label: "ACTIVE" }
+      : hasTierCatalogue
+        ? { color: "cyan", label: `${tierCount} TIER${tierCount === 1 ? "" : "S"}` }
+        : { color: "red", label: "LOCKED" };
+
+    const action =
+      pill.color === "red"
+        ? { label: "Upgrade →", href: config.telegramChannelUrl, external: true }
+        : { label: "See tiers →", href: hasDrillIn && region ? `/feeds/${region}/tiers` : "/feeds", external: false };
+
+    const bestLatency = region ? feedBestLatency[region] : undefined;
+    const stat = bestLatency != null ? `${bestLatency}µs · ${meta.coloCode} co-lo` : `${meta.coloCode} co-lo`;
+
+    return {
+      feedType,
+      name: meta.name,
+      countryCode: catalogueEntry?.countryCode ?? "US",
+      stat,
+      pill,
+      action,
+    };
+  });
   const [recentAlerts, distinctAlertLicenses] = await Promise.all([
     getRecentAlertsForUser(session.user.id, DASHBOARD_ALERTS_LIMIT).catch(() => []),
     countDistinctAlertLicenses(session.user.id).catch(() => 0),
@@ -140,33 +183,25 @@ export default async function DashboardPage() {
             <span className="cap">{activeFeeds.length} of {FEED_TYPES.length} active</span>
           </div>
           <div className="feed-grid">
-            {FEED_TYPES.map((f) => {
-              const meta = FEED_TYPE_META[f];
-              const isActive = activeFeeds.includes(f);
-              return (
-                <div key={f} className={`feed-card${isActive ? " active" : ""}`}>
-                  <div className="fc-head">
-                    <b>{meta.name}</b>
-                    {isActive && <span className="fc-check">✓</span>}
-                  </div>
-                  <p>{meta.description}</p>
-                  {isActive ? (
-                    <span className="fc-status">
-                      Active until {licenseDetail ? licenseDetail.expiresAt.toLocaleDateString() : "—"}
-                    </span>
-                  ) : (
-                    <a
-                      className="fc-cta"
-                      href={config.telegramChannelUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Not included — contact us to add
-                    </a>
-                  )}
+            {signalFeedCards.map((f) => (
+              <div key={f.feedType} className="sf-card">
+                <div className="sf-top">
+                  <span className={`sf-flag fi fi-${f.countryCode.toLowerCase()}`} role="img" aria-label={`${f.countryCode} flag`} />
+                  <b className="sf-name">{f.name.replace(/ Feed$/, "")}</b>
+                  <span className={`sf-pill sf-pill-${f.pill.color}`}>● {f.pill.label}</span>
                 </div>
-              );
-            })}
+                <span className="sf-stat">{f.stat}</span>
+                {f.action.external ? (
+                  <a className="sf-action" href={f.action.href} target="_blank" rel="noopener noreferrer">
+                    {f.action.label}
+                  </a>
+                ) : (
+                  <Link className="sf-action" href={f.action.href}>
+                    {f.action.label}
+                  </Link>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
