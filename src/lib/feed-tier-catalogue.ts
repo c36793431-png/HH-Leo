@@ -34,6 +34,14 @@ export const FEED_TIERS: FeedTierMeta[] = [
   { key: "ny-fast", name: "NY Fast", region: "ny" },
 ];
 
+/** Only the entry tier and the flagship get a trial CTA (coxwell, trial feature add-on,
+ * horizon-portal-v2051-polish-2026-08-13) -- middle tiers stay paid-only. */
+export const TRIAL_ELIGIBLE_TIER_KEYS: readonly string[] = ["ld-alpha-85", "ld-ultra"];
+
+export function isTrialEligibleTier(tierKey: string): boolean {
+  return TRIAL_ELIGIBLE_TIER_KEYS.includes(tierKey);
+}
+
 const TIERS_BY_KEY: Map<string, FeedTierMeta> = new Map(FEED_TIERS.map((t) => [t.key, t]));
 
 export function feedTierMeta(tierKey: string): FeedTierMeta | null {

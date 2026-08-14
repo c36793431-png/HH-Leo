@@ -299,6 +299,36 @@ export async function notifyFeedTierRequestSubmitted(opts: {
   );
 }
 
+export async function notifyFeedTierTrialStarted(opts: {
+  email: string | null;
+  tierName: string;
+  licenseKey: string;
+  trialEndsAt: Date;
+  adminUrl: string;
+}): Promise<void> {
+  await sendSinkMessage(
+    `🧪 trial started\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `tier: ${opts.tierName}\n` +
+      `license: …${keyTail(opts.licenseKey)}\n` +
+      `ends: ${opts.trialEndsAt.toISOString()}\n` +
+      `${opts.adminUrl}`
+  );
+}
+
+export async function notifyFeedTierTrialConverted(opts: {
+  email: string | null;
+  tierName: string;
+  licenseKey: string;
+}): Promise<void> {
+  await sendSinkMessage(
+    `💳 trial converted\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `tier: ${opts.tierName}\n` +
+      `license: …${keyTail(opts.licenseKey)}`
+  );
+}
+
 function fmt(v: unknown): string {
   if (v === undefined || v === null) return "-";
   if (typeof v === "object") return JSON.stringify(v);
