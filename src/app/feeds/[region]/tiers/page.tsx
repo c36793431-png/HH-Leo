@@ -4,12 +4,14 @@ import { auth } from "@/lib/auth";
 import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { isFeedRegion } from "@/lib/feed-tier-catalogue";
+import { isFeedRegion, isTrialEligibleTier } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
+import { TrialCtaControl } from "@/components/feeds/trial-cta-control";
 import { getServerRegistration } from "@/lib/server-registration";
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
+import { listFeedTierTrials } from "@/lib/feed-tier-trials";
 
 const COMPARE_ROWS = [
   { key: "latency", label: "Feed latency" },
@@ -43,15 +45,17 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
-  const [serverRegistration, existingRequests] = await Promise.all([
+  const [serverRegistration, existingRequests, existingTrials] = await Promise.all([
     licenseDetail ? getServerRegistration(licenseDetail.id) : Promise.resolve(null),
     listFeedTierRequests({ userId: session.user.id }),
+    listFeedTierTrials({ userId: session.user.id }),
   ]);
   const requestedTierKeys = new Set(
     existingRequests
       .filter((r) => r.region === region && r.status !== "rejected")
       .map((r) => r.tierKey)
   );
+  const trialsByTierKey = new Map(existingTrials.filter((t) => t.region === region).map((t) => [t.tierKey, t]));
   const licenseTail = licenseDetail?.licenseKey ? `…${licenseDetail.licenseKey.slice(-4)}` : "—";
 
   const catalogueEntry = FEED_CATALOGUE.find((f) => f.slug === region) ?? null;
@@ -112,6 +116,22 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             </div>
             <p className="ftd-desc">{t.description}</p>
             <span className="ftd-price">{priceLabel(t.priceCents)}</span>
+            {isTrialEligibleTier(t.tierKey) && (
+              <TrialCtaControl
+                region={region}
+                tierKey={t.tierKey}
+                tierName={t.name}
+                existingTrial={
+                  trialsByTierKey.has(t.tierKey)
+                    ? {
+                        id: trialsByTierKey.get(t.tierKey)!.id,
+                        status: trialsByTierKey.get(t.tierKey)!.trialStatus,
+                        endsAt: trialsByTierKey.get(t.tierKey)!.trialEndsAt.toISOString(),
+                      }
+                    : null
+                }
+              />
+            )}
             <TierRequestControl
               region={region}
               tierKey={t.tierKey}
