@@ -82,39 +82,46 @@
 .portal-shell .nav { flex: 1; overflow-y: auto; padding: 6px 14px; }
 .portal-shell .nav .grp { font-size: 10px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hz-ink-4); padding: 16px 12px 8px; }
 .portal-shell .nav a {
+  --item-color: var(--hz-cyan);
   display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px;
   color: var(--hz-ink-2); font-size: 14px; font-weight: 500; position: relative; margin-bottom: 2px;
   transition: background 0.12s, color 0.12s;
 }
-.portal-shell .nav a .ic { width: 18px; height: 18px; flex: 0 0 18px; opacity: 0.85; display: inline-flex; align-items: center; justify-content: center; }
-.portal-shell .nav a:hover { background: rgba(45, 226, 230, 0.07); color: var(--hz-ink); }
-.portal-shell .nav a.on { background: rgba(45, 226, 230, 0.07); color: var(--hz-cyan); }
+.portal-shell .nav a .ic {
+  width: 18px; height: 18px; flex: 0 0 18px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--item-color); opacity: 0.9;
+}
+.portal-shell .nav a:hover { background: color-mix(in srgb, var(--item-color) 7%, transparent); color: var(--hz-ink); }
+.portal-shell .nav a:hover .ic { opacity: 1; }
+.portal-shell .nav a.on {
+  background: color-mix(in srgb, var(--item-color) 9%, transparent);
+  color: var(--item-color);
+}
+.portal-shell .nav a.on .ic { opacity: 1; }
 .portal-shell .nav a.on::before {
   content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px;
-  background: var(--hz-cyan); box-shadow: 0 0 6px rgba(45, 226, 230, 0.5);
+  background: var(--item-color); box-shadow: 0 0 8px color-mix(in srgb, var(--item-color) 60%, transparent);
 }
 .portal-shell .nav a .pill {
   margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
   background: rgba(45, 226, 230, 0.14); color: var(--hz-cyan); border-radius: 999px; padding: 2px 7px; text-transform: uppercase;
 }
-.portal-shell .nav a.on.edu { color: var(--emerald-500); }
-.portal-shell .nav a.on.edu::before { background: var(--emerald-500); box-shadow: 0 0 12px var(--emerald-500); }
+.portal-shell .nav a .pill.new {
+  background: rgba(255, 194, 75, 0.16); color: var(--hz-warn); border: 1px solid rgba(255, 194, 75, 0.4);
+}
 .portal-shell .nav a.locked { color: var(--hz-ink-3); }
+.portal-shell .nav a.locked .ic { color: var(--hz-ink-3); opacity: 0.7; }
 .portal-shell .nav a.locked:hover { background: rgba(138, 155, 160, 0.06); }
 .portal-shell .nav a .lock { margin-left: auto; font-size: 12px; opacity: 0.7; }
 .portal-shell .nav a .crown { margin-left: auto; font-size: 12px; opacity: 0.9; }
 
-/* Paid+/team/deal/admin sidebar theme — brand teal replaces the default muted grey,
-   the color difference is the reward so free/trial keep the plain look untouched. */
-.portal-shell .nav.paid-theme a { color: var(--hz-cyan); text-shadow: 0 0 10px rgba(45, 226, 230, 0.35); }
-.portal-shell .nav.paid-theme a .ic { opacity: 0.95; }
-.portal-shell .nav.paid-theme a:hover { background: rgba(45, 226, 230, 0.08); color: var(--hz-cyan); }
-.portal-shell .nav.paid-theme a:hover .ic { opacity: 1; }
-.portal-shell .nav.paid-theme a.on { background: rgba(45, 226, 230, 0.07); color: var(--hz-cyan); text-shadow: none; }
-.portal-shell .nav.paid-theme a.on .ic { opacity: 1; }
-.portal-shell .nav.paid-theme a.on::before { background: var(--hz-cyan); box-shadow: 0 0 6px rgba(45, 226, 230, 0.5); }
-.portal-shell .nav.paid-theme a.on.edu { color: var(--emerald-500); }
-.portal-shell .nav.paid-theme a.on.edu::before { background: var(--emerald-500); box-shadow: 0 0 12px var(--emerald-500); }
+/* Paid+/team/deal/admin sidebar theme — icons already carry their own per-item color
+   (see the color-mix rules above), so the paid theme now only affects hover/active wash,
+   not a blanket cyan tint on every rest-state label. Cyan chrome (topbar, cards, buttons)
+   stays untouched outside the nav. */
+.portal-shell .nav.paid-theme a:hover { background: color-mix(in srgb, var(--item-color) 8%, transparent); color: var(--hz-ink); }
+.portal-shell .nav.paid-theme a.on { background: color-mix(in srgb, var(--item-color) 9%, transparent); color: var(--item-color); }
+.portal-shell .nav.paid-theme a.on::before { background: var(--item-color); box-shadow: 0 0 8px color-mix(in srgb, var(--item-color) 60%, transparent); }
 
 .portal-shell .admin-block { margin: 8px 4px 4px; padding-top: 12px; border-top: 1px solid var(--hz-zinc-line); }
 .portal-shell .admin-block .grp { color: var(--hz-zinc-ink); display: flex; align-items: center; gap: 7px; }

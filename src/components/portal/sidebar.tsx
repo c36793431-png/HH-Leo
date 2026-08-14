@@ -19,7 +19,10 @@ import {
   TrendingUp,
   Gift,
   Settings,
+  Wrench,
+  HardDrive,
   CircleUser,
+  CandlestickChart,
   DollarSign,
   Award,
   UserSquare2,
@@ -33,24 +36,29 @@ import {
 
 export type PortalTier = "free" | "trial" | "paid" | "team" | "admin";
 
+// Ship date for the "NEW" pill on Trading — shown for 30 days from wave-BB colored-sidebar launch.
+// Computed at module scope (not render) so it stays a pure value for the component body.
+const TRADING_IS_NEW = Date.now() < new Date("2026-09-12T00:00:00Z").getTime();
+
 const PORTAL_LINKS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/downloads", label: "Downloads", icon: Download, paidOnly: true },
-  { href: "/community", label: "Community", icon: Users },
-  { href: "/feeds", label: "Feeds", icon: Rss, paidOnly: true, lockedStaysOnPage: true },
-  { href: "/strategies", label: "Strategies", icon: Zap, paidOnly: true, lockedStaysOnPage: true },
-  { href: "/setfiles", label: "Setfiles", icon: Sliders, paidOnly: true, lockedStaysOnPage: true },
-  { href: "/education", label: "Education", icon: GraduationCap },
-  { href: "/education/advanced", label: "Advanced Education", icon: BookMarked, paidOnly: true, lockedStaysOnPage: true },
-  { href: "/vps", label: "VPS", icon: Server },
-  { href: "/careers", label: "Careers", icon: Briefcase },
-  { href: "/brokers", label: "Brokers", icon: Building2, paidOnly: true, lockedStaysOnPage: true },
-  { href: "/prop-firm", label: "Prop Firm", icon: TrendingUp, paidOnly: true, lockedStaysOnPage: true },
-  { href: "/account/refer", label: "Refer & earn", icon: Gift },
-  { href: "/account/my-setup", label: "My setup", icon: Settings, paidOnly: true, lockedStaysOnPage: true },
-  { href: "/account/servers", label: "Servers", icon: Server, paidOnly: true, lockedStaysOnPage: true },
-  { href: "/account", label: "Account", icon: CircleUser },
-] as const satisfies readonly { href: string; label: string; icon: LucideIcon; paidOnly?: boolean; lockedStaysOnPage?: boolean }[];
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "#34D17A" },
+  { href: "/downloads", label: "Downloads", icon: Download, paidOnly: true, color: "#7BE06A" },
+  { href: "/community", label: "Community", icon: Users, color: "#2DE2E6" },
+  { href: "/feeds", label: "Feeds", icon: Rss, paidOnly: true, lockedStaysOnPage: true, color: "#17D0B0" },
+  { href: "/alerts", label: "Trading", icon: CandlestickChart, paidOnly: true, lockedStaysOnPage: true, color: "#FFC24B", isNew: true },
+  { href: "/strategies", label: "Strategies", icon: Zap, paidOnly: true, lockedStaysOnPage: true, color: "#37F5A0" },
+  { href: "/setfiles", label: "Setfiles", icon: Sliders, paidOnly: true, lockedStaysOnPage: true, color: "#2FBE8E" },
+  { href: "/education", label: "Education", icon: GraduationCap, color: "#38BDF8" },
+  { href: "/education/advanced", label: "Advanced Education", icon: BookMarked, paidOnly: true, lockedStaysOnPage: true, color: "#5B8DEF" },
+  { href: "/vps", label: "VPS", icon: Server, color: "#14B8A6" },
+  { href: "/careers", label: "Careers", icon: Briefcase, color: "#7C9CB8" },
+  { href: "/brokers", label: "Brokers", icon: Building2, paidOnly: true, lockedStaysOnPage: true, color: "#6E8FC7" },
+  { href: "/prop-firm", label: "Prop Firm", icon: TrendingUp, paidOnly: true, lockedStaysOnPage: true, color: "#8A86D6" },
+  { href: "/account/refer", label: "Refer & earn", icon: Gift, color: "#F0A94B" },
+  { href: "/account/my-setup", label: "My setup", icon: Wrench, paidOnly: true, lockedStaysOnPage: true, color: "#5FC8BE" },
+  { href: "/account/servers", label: "Servers", icon: HardDrive, paidOnly: true, lockedStaysOnPage: true, color: "#189FC9" },
+  { href: "/account", label: "Account", icon: CircleUser, color: "#6FB0D8" },
+] as const satisfies readonly { href: string; label: string; icon: LucideIcon; color: string; paidOnly?: boolean; lockedStaysOnPage?: boolean; isNew?: boolean }[];
 
 const ADMIN_LINKS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -129,15 +137,17 @@ export function PortalSidebar({
               const unlocked = paidOnly && isPaidPlus;
               const lockedStaysOnPage = "lockedStaysOnPage" in link && link.lockedStaysOnPage;
               const active = isActive(pathname, link.href);
-              const isEdu = link.href === "/education";
+              const isNew = "isNew" in link && link.isNew && TRADING_IS_NEW;
               const Icon = link.icon;
               return (
                 <Link
                   key={link.href}
                   href={locked && !lockedStaysOnPage ? "/dashboard#downloads" : link.href}
-                  className={locked ? "locked" : active ? (isEdu ? "on edu" : "on") : undefined}
+                  className={locked ? "locked" : active ? "on" : undefined}
+                  style={{ "--item-color": link.color } as React.CSSProperties}
                 >
                   <span className="ic"><Icon size={18} strokeWidth={1.75} /></span> {link.label}
+                  {isNew && <span className="pill new">New</span>}
                   {locked && <span className="lock">🔒</span>}
                   {unlocked && <span className="crown" aria-label="Included in your plan">👑</span>}
                 </Link>
