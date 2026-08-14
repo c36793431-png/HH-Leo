@@ -126,7 +126,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
       </div>
 
       <div className="ftd-compare card full">
-        <h3 className="fp-section-title">Compare tiers</h3>
+        <h3 className="fp-section-title">Horizon Feed Comparison</h3>
         <table className="ref-table">
           <thead>
             <tr>
