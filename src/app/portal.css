@@ -644,6 +644,26 @@
   border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
 }
 
+.portal-shell .ftd-rank-badge {
+  position: absolute; top: -9px; left: 14px; font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--hz-ink-2); background: rgba(10, 12, 18, 0.9); border: 1px solid var(--hz-line);
+  border-radius: 999px; padding: 3px 8px;
+}
+.portal-shell .ftd-rank-badge.ftd-rank-black { color: var(--hz-warn); border-color: var(--hz-amber-line); }
+
+/* Onyx/platinum lockup for the Black flagship card (Iris mock, black-trial-signup.png) */
+.portal-shell .ftd-tier-card.ftd-black {
+  border-color: rgba(255, 194, 75, 0.35);
+  background: linear-gradient(160deg, #0a0a0c, #14141a 60%, #0a0a0c);
+}
+.portal-shell .ftd-name-black {
+  background: linear-gradient(135deg, #f4f4f7, #9a9aa4 45%, #e8e8ee 55%, #8a8a94);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  letter-spacing: 0.02em;
+}
+.portal-shell .ftd-black-ctas { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.portal-shell .ftd-black-ctas .btn { justify-content: center; }
+
 /* ---- FEED COMPARISON SCORES (leaderboard) ---- */
 .portal-shell .fcs { margin-top: 24px; }
 .portal-shell .fcs-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 18px; }
