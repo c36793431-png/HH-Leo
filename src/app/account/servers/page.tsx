@@ -5,9 +5,11 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { ServerRegistrationForm } from "@/components/account/server-registration-form";
 import { getServerRegistration } from "@/lib/server-registration";
+import { getBlackTrialForLicense } from "@/lib/black-trials";
 import { getPortalConfig } from "@/lib/portal-config";
 import { formatAbsoluteUtc } from "@/lib/format-time";
-import { saveServerRegistrationAction } from "./actions";
+import { BlackTrialCard } from "@/components/account/black-trial-card";
+import { saveServerRegistrationAction, requestBlackTrialAction, requestBlackTrialConvertAction } from "./actions";
 
 export default async function ServersPage() {
   const session = await auth();
@@ -25,6 +27,7 @@ export default async function ServersPage() {
   const unlocked = paid || isAdmin;
 
   const registration = licenseDetail ? await getServerRegistration(licenseDetail.id).catch(() => null) : null;
+  const blackTrial = licenseDetail ? await getBlackTrialForLicense(licenseDetail.id).catch(() => null) : null;
 
   return (
     <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
@@ -65,6 +68,17 @@ export default async function ServersPage() {
             </div>
           )}
         </div>
+
+        {unlocked && licenseDetail && registration && (
+          <BlackTrialCard
+            status={blackTrial?.status ?? "none"}
+            expiresAt={blackTrial?.expiresAt ? blackTrial.expiresAt.toISOString() : null}
+            endpoint={blackTrial?.endpoint ?? null}
+            credentials={blackTrial?.credentials ?? null}
+            requestAction={requestBlackTrialAction}
+            convertAction={requestBlackTrialConvertAction}
+          />
+        )}
       </div>
     </PortalShell>
   );

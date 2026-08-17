@@ -347,6 +347,35 @@ export async function notifyFeedTierTrialConverted(opts: {
   );
 }
 
+export async function notifyBlackTrialRequested(opts: {
+  email: string | null;
+  licenseKey: string;
+  serverName: string | null;
+  serverIp: string | null;
+  adminUrl: string;
+}): Promise<void> {
+  await sendSinkMessage(
+    `⚫️ Black trial requested\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `license: …${keyTail(opts.licenseKey)}\n` +
+      `server: ${opts.serverName ?? "-"} (${opts.serverIp ?? "-"})\n` +
+      `${opts.adminUrl}`
+  );
+}
+
+export async function notifyBlackTrialConvertRequested(opts: {
+  email: string | null;
+  licenseKey: string;
+  expiresAt: Date | null;
+}): Promise<void> {
+  await sendSinkMessage(
+    `⬆️ Black trial convert requested\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `license: …${keyTail(opts.licenseKey)}` +
+      (opts.expiresAt ? `\ntrial expires: ${opts.expiresAt.toISOString()}` : "")
+  );
+}
+
 function fmt(v: unknown): string {
   if (v === undefined || v === null) return "-";
   if (typeof v === "object") return JSON.stringify(v);

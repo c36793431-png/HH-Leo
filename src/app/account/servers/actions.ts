@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { getLicenseForUser } from "@/lib/licenses";
-import { saveServerRegistration, VPS_PROVIDERS, type VpsProvider } from "@/lib/server-registration";
+import { getLicenseForUser, isPaidUser } from "@/lib/licenses";
+import { saveServerRegistration, VPS_PROVIDERS, type VpsProvider, getServerRegistration } from "@/lib/server-registration";
+import { requestBlackTrial, requestBlackTrialConversion } from "@/lib/black-trials";
 
 async function requireLicenseId(): Promise<{ licenseId: string; email: string | null }> {
   const session = await auth();
@@ -39,6 +40,31 @@ export async function saveServerRegistrationAction(
       `/admin/connections?license=${licenseId}`,
       email
     );
+    revalidatePath("/account/servers");
+  });
+}
+
+export async function requestBlackTrialAction(): Promise<ActionResult> {
+  return runAction("Failed to request Black trial", async () => {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Not signed in");
+
+    const paid = await isPaidUser(session.user.id).catch(() => false);
+    if (!paid) throw new Error("Black trial is available to paid users.");
+
+    const { licenseId } = await requireLicenseId();
+    const registration = await getServerRegistration(licenseId).catch(() => null);
+    if (!registration) throw new Error("Register your server before requesting a Black trial.");
+
+    await requestBlackTrial({ userId: session.user.id, licenseId, adminUrl: `/admin/black-trials` });
+    revalidatePath("/account/servers");
+  });
+}
+
+export async function requestBlackTrialConvertAction(): Promise<ActionResult> {
+  return runAction("Failed to request conversion", async () => {
+    const { licenseId } = await requireLicenseId();
+    await requestBlackTrialConversion(licenseId);
     revalidatePath("/account/servers");
   });
 }
