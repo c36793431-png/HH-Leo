@@ -153,17 +153,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         await claimPendingLicense({ userId: user.id!, email: user.email });
       }
       if (user?.id) {
-        const priorSignins = await pool
-          .query<{ count: string }>("select count(*) from signin_events where user_id = $1", [user.id])
-          .catch(() => null);
-        const isFirstLogin = priorSignins?.rows[0]?.count === "0";
-
         await recordSigninEvent(user.id, account?.provider ?? "unknown").catch((err) => {
           // Signin must succeed even if the history log write fails.
           console.error("recordSigninEvent failed", err);
         });
 
-        if (isFirstLogin) {
+        // Atomic claim: only the caller whose INSERT actually lands (rowCount 1)
+        // gets to fire the alert, so two concurrent signIns for the same
+        // brand-new user (e.g. a resend link clicked twice) can't both win a
+        // count()-based race and double-send.
+        const claimed = await pool
+          .query("insert into first_login_alerts (user_id) values ($1) on conflict do nothing", [user.id])
+          .catch((err) => {
+            console.error("first_login_alerts claim failed", err);
+            return null;
+          });
+
+        if (claimed && claimed.rowCount === 1) {
           notifyFirstLogin({
             email: user.email ?? null,
             loggedInAt: new Date(),
