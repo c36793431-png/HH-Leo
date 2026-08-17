@@ -141,13 +141,13 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
       <div className="ftd-tier-row">
         {tiers.map((t) => (
           <div key={t.tierKey} className={`card ftd-tier-card${t.isFlagship ? " ftd-flagship" : ""}`}>
-            {LONDON_TIER_RANK[t.tierKey] != null ? (
+            {LONDON_TIER_RANK[t.tierKey] != null && (
               <span className="ftd-rank-badge">#{LONDON_TIER_RANK[t.tierKey]}</span>
+            )}
+            {t.isFlagship ? (
+              <span className="ftd-flagship-badge">{t.subtitle}</span>
             ) : (
-              <>
-                {t.isFlagship && <span className="ftd-flagship-badge">FLAGSHIP</span>}
-                <span className="ftd-subtitle">{t.subtitle}</span>
-              </>
+              <span className="ftd-subtitle">{t.subtitle}</span>
             )}
             <h3 className="ftd-name">{t.name}</h3>
             <div className="ftd-speed">
