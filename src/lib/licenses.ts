@@ -805,7 +805,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
     ),
     pool.query(
       `select id, chat_id, status, invited_at, joined_at, removed_at
-       from group_memberships where user_id = $1
+       from group_memberships where user_id = $1 and tier = 'paid'
        order by invited_at desc`,
       [userId]
     ),

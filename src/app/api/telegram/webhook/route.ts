@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
       );
     } else {
       const membership = await pool.query<{ status: string; invited_at: Date | null }>(
-        `select status, invited_at from group_memberships where user_id = $1
+        `select status, invited_at from group_memberships where user_id = $1 and tier = 'paid'
          order by coalesce(joined_at, invited_at) desc limit 1`,
         [userId]
       );

@@ -51,7 +51,7 @@ export default async function DashboardPage() {
       .catch(() => ({ linked: false, botStarted: false })),
     pool
       .query<{ status: string }>(
-        `select status from group_memberships where user_id = $1
+        `select status from group_memberships where user_id = $1 and tier = 'paid'
          order by coalesce(joined_at, invited_at) desc limit 1`,
         [session.user.id]
       )
