@@ -339,7 +339,7 @@ export default async function DashboardPage() {
               <a className="rw" href={config.communityGroupUrl} target="_blank" rel="noopener noreferrer">
                 <div className="ricon">◔</div>
                 <div className="rmeta">
-                  <b>Market Chatter</b>
+                  <b>Horizon Testers</b>
                   <span>Free group</span>
                 </div>
                 <span className="join-pill">Join</span>
