@@ -35,8 +35,9 @@ export const FEED_TIERS: FeedTierMeta[] = [
 ];
 
 /** Only the entry tier and the flagship get a trial CTA (coxwell, trial feature add-on,
- * horizon-portal-v2051-polish-2026-08-13) -- middle tiers stay paid-only. */
-export const TRIAL_ELIGIBLE_TIER_KEYS: readonly string[] = ["ld-alpha-85", "ld-ultra"];
+ * horizon-portal-v2051-polish-2026-08-13) -- middle tiers stay paid-only. NY has no middle
+ * tier (2 tiers total), so both are trial-eligible (coxwell, leo-ny-feed-trial-option-2026-08-15). */
+export const TRIAL_ELIGIBLE_TIER_KEYS: readonly string[] = ["ld-alpha-85", "ld-ultra", "ny-normal", "ny-fast"];
 
 export function isTrialEligibleTier(tierKey: string): boolean {
   return TRIAL_ELIGIBLE_TIER_KEYS.includes(tierKey);
