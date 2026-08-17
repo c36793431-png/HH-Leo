@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { sendHftAlertMessage } from "@/lib/telegram-hft-alert-bot";
+import { sendEmail } from "@/lib/email";
 import { feedTierMeta } from "@/lib/feed-tier-catalogue";
 
 interface TrialRow {
   id: string;
   telegram_user_id: string | null;
+  email: string | null;
   tier_key: string;
   trial_ends_at: Date;
 }
@@ -18,7 +20,7 @@ function authorized(req: NextRequest): boolean {
 
 async function sendReminders(): Promise<number> {
   const rows = await pool.query<TrialRow>(
-    `select ftt.id, u.telegram_user_id, ftt.tier_key, ftt.trial_ends_at
+    `select ftt.id, u.telegram_user_id, u.email, ftt.tier_key, ftt.trial_ends_at
      from feed_tier_trials ftt
      join users u on u.id = ftt.user_id
      where ftt.trial_status = 'active'
@@ -52,7 +54,7 @@ async function sendReminders(): Promise<number> {
 
 async function expireTrials(): Promise<number> {
   const rows = await pool.query<TrialRow>(
-    `select ftt.id, u.telegram_user_id, ftt.tier_key, ftt.trial_ends_at
+    `select ftt.id, u.telegram_user_id, u.email, ftt.tier_key, ftt.trial_ends_at
      from feed_tier_trials ftt
      join users u on u.id = ftt.user_id
      where ftt.trial_status = 'active'
@@ -68,11 +70,21 @@ async function expireTrials(): Promise<number> {
         [row.id]
       );
       if (!claim.rowCount) continue;
+      const tierName = feedTierMeta(row.tier_key)?.name ?? row.tier_key;
       if (row.telegram_user_id) {
-        const tierName = feedTierMeta(row.tier_key)?.name ?? row.tier_key;
         await sendHftAlertMessage(
           row.telegram_user_id,
-          `<b>Trial ended · Upgrade to keep ${tierName} →</b>`
+          `<b>Trial ended · Upgrade to keep ${tierName} →</b>\nLog in at horizonhft.com to convert to a paid plan or request an extension.`
+        ).catch(() => {});
+      }
+      if (row.email) {
+        await sendEmail(
+          row.email,
+          `Your ${tierName} trial has ended`,
+          `Your ${tierName} trial ended today.\n\n` +
+            `Access to ${tierName} has been paused. To keep streaming this feed, upgrade to a ` +
+            `paid plan or request an extension from your Dashboard.\n\n` +
+            `Log in at horizonhft.com to convert to paid or request an extension.`
         ).catch(() => {});
       }
       expired++;

@@ -1,6 +1,7 @@
 import { pool } from "./db";
 import { notifyFeedTierTrialStarted, notifyFeedTierTrialConverted } from "./telemetry-sink";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
+import { sendEmail } from "./email";
 import { feedTierMeta, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
 
 export const TRIAL_DURATION_DAYS = 7;
@@ -166,14 +167,47 @@ export async function startFeedTierTrial(args: StartTrialArgs): Promise<FeedTier
     adminUrl: args.adminUrl,
   }).catch(() => {});
 
-  if (row.telegramUserId) {
-    await sendHftAlertMessage(
-      row.telegramUserId,
-      `<b>🎁 Your ${TRIAL_DURATION_DAYS}-day trial of ${row.tierName} is live!</b>\nEnds ${row.trialEndsAt.toISOString().slice(0, 10)}.`
+  await notifyTrialClientActivated(row);
+
+  return row;
+}
+
+/** Client-facing (not the coxwell admin sink) activation notification -- email + portal DM,
+ * shared by self-serve trial start and admin-approve of a trial-eligible feed-tier-request
+ * (leo-feed-activation-notification-2026-08-17 scope expansion: coxwell wants the client
+ * notified directly, not just the admin ping). Best-effort, never throws. */
+export async function notifyTrialClientActivated(row: FeedTierTrialRow): Promise<void> {
+  const endsDate = row.trialEndsAt.toISOString().slice(0, 10);
+  const serverLine =
+    row.serverRegistered && row.serverIp
+      ? `${row.serverName ? `${row.serverName} (${row.serverIp})` : row.serverIp}`
+      : "not yet registered -- add one at /account/servers so we can track your IP";
+
+  if (row.userEmail) {
+    await sendEmail(
+      row.userEmail,
+      `Your ${row.tierName} trial is live`,
+      `Your ${TRIAL_DURATION_DAYS}-day trial of ${row.tierName} is now active.\n\n` +
+        `License: ****${row.licenseKeyTail ?? "----"}\n` +
+        `Server: ${serverLine}\n` +
+        `Trial ends: ${endsDate}\n\n` +
+        `Getting started:\n` +
+        `1. Log in at horizonhft.com and open your Dashboard.\n` +
+        `2. Confirm your server IP is registered under Account > Servers.\n` +
+        `3. Your feed will start streaming to that IP immediately.\n\n` +
+        `Want to keep ${row.tierName} after the trial? Upgrade any time from your Dashboard.`
     ).catch(() => {});
   }
 
-  return row;
+  if (row.telegramUserId) {
+    await sendHftAlertMessage(
+      row.telegramUserId,
+      `<b>🎁 Your ${TRIAL_DURATION_DAYS}-day trial of ${row.tierName} is live!</b>\n` +
+        `License ****${row.licenseKeyTail ?? "----"}\n` +
+        `Server: ${serverLine}\n` +
+        `Ends ${endsDate}.`
+    ).catch(() => {});
+  }
 }
 
 export async function getFeedTierTrial(id: string): Promise<FeedTierTrialRow | null> {

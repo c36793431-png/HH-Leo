@@ -2,7 +2,12 @@ import { pool } from "./db";
 import { notifyFeedTierRequestSubmitted, notifyFeedTierTrialActivated } from "./telemetry-sink";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
 import { feedTierMeta, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
-import { insertFeedTierTrial, TrialAlreadyClaimedError, TrialNotEligibleError } from "./feed-tier-trials";
+import {
+  insertFeedTierTrial,
+  notifyTrialClientActivated,
+  TrialAlreadyClaimedError,
+  TrialNotEligibleError,
+} from "./feed-tier-trials";
 
 export const FEED_TIER_REQUEST_STATUSES = ["pending", "approved", "rejected", "provisioned"] as const;
 export type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number];
@@ -190,6 +195,7 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
       serverRegistered: trial.serverRegistered,
       adminUrl,
     }).catch(() => {});
+    await notifyTrialClientActivated(trial);
   } catch (err) {
     if (err instanceof TrialAlreadyClaimedError || err instanceof TrialNotEligibleError) return;
     console.error("approveFeedTierRequest: failed to activate trial", err);
