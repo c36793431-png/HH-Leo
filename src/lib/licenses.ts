@@ -314,17 +314,17 @@ export async function setLicenseTier(licenseId: string, tier: LicenseTier): Prom
   await pool.query(`update licenses set tier = $2 where id = $1`, [licenseId, tier]);
 
   if (before && before.tier !== tier) {
-    // Keep the auto-payment row's is_trial flag in sync with reality — this is the durable
+    // Keep the auto-payment row's activation_source in sync with reality — this is the durable
     // fix for the leak where tier gets reclassified post-issuance (e.g. paid -> trial/deal)
     // without ever touching the payment inserted by recordAutoPaymentForNewLicense at
     // issuance time, which is what caused the Aug 2026 finance ledger discrepancy.
     // Auto-payment rows are matched by memo (no license_id FK on payments) — see
     // recordAutoPaymentForNewLicense for the memo format this depends on.
     await pool.query(
-      `update payments set is_trial = $1
+      `update payments set activation_source = $1
        where memo = $2
        and category = 'customer'`,
-      [tier !== "paid", `Auto: Paid tier license activation ${licenseId.slice(0, 8)}`]
+      [tier, `Auto: Paid tier license activation ${licenseId.slice(0, 8)}`]
     );
 
     if (before.user_id) {

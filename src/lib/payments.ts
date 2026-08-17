@@ -21,6 +21,9 @@ export const PAYMENT_CATEGORIES: PaymentCategory[] = [
   "referral_payout",
 ];
 
+export type ActivationSource = "paid" | "trial" | "deal" | "team";
+export const ACTIVATION_SOURCES: ActivationSource[] = ["paid", "trial", "deal", "team"];
+
 export interface PaymentRow {
   id: string;
   receivedAt: Date;
@@ -33,7 +36,7 @@ export interface PaymentRow {
   memo: string | null;
   createdBy: string | null;
   createdAt: Date;
-  isTrial: boolean;
+  activationSource: ActivationSource;
 }
 
 interface PaymentDbRow {
@@ -48,7 +51,7 @@ interface PaymentDbRow {
   memo: string | null;
   created_by: string | null;
   created_at: Date;
-  is_trial: boolean;
+  activation_source: ActivationSource;
 }
 
 function mapRow(r: PaymentDbRow): PaymentRow {
@@ -64,13 +67,13 @@ function mapRow(r: PaymentDbRow): PaymentRow {
     memo: r.memo,
     createdBy: r.created_by,
     createdAt: r.created_at,
-    isTrial: r.is_trial,
+    activationSource: r.activation_source,
   };
 }
 
 export async function listPayments(limit = 200): Promise<PaymentRow[]> {
   const result = await pool.query<PaymentDbRow>(
-    `select id, received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, created_at, is_trial
+    `select id, received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, created_at, activation_source
      from payments
      order by received_at desc
      limit $1`,
@@ -82,7 +85,7 @@ export async function listPayments(limit = 200): Promise<PaymentRow[]> {
 /** Powers the Payments block on /admin/users/[id] — every payment tagged to this user_id. */
 export async function listPaymentsForUser(userId: string, limit = 50): Promise<PaymentRow[]> {
   const result = await pool.query<PaymentDbRow>(
-    `select id, received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, created_at, is_trial
+    `select id, received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, created_at, activation_source
      from payments
      where user_id = $1
      order by received_at desc
@@ -112,11 +115,11 @@ export async function getPaymentTotals(): Promise<PaymentTotals> {
     mrr_proxy: string;
   }>(`
     select
-      coalesce(sum(amount_usd) filter (where direction = 'in' and not is_trial), 0) as gross_in,
+      coalesce(sum(amount_usd) filter (where direction = 'in' and activation_source = 'paid'), 0) as gross_in,
       coalesce(sum(amount_usd) filter (where direction = 'out'), 0) as total_out,
-      coalesce(sum(amount_usd) filter (where direction = 'in' and not is_trial and received_at >= date_trunc('month', now())), 0) as gross_in_month,
+      coalesce(sum(amount_usd) filter (where direction = 'in' and activation_source = 'paid' and received_at >= date_trunc('month', now())), 0) as gross_in_month,
       coalesce(sum(amount_usd) filter (where direction = 'out' and received_at >= date_trunc('month', now())), 0) as total_out_month,
-      coalesce(sum(amount_usd) filter (where direction = 'in' and not is_trial and category = 'customer' and received_at >= date_trunc('month', now())), 0) as mrr_proxy
+      coalesce(sum(amount_usd) filter (where direction = 'in' and activation_source = 'paid' and category = 'customer' and received_at >= date_trunc('month', now())), 0) as mrr_proxy
     from payments
   `);
   const row = result.rows[0];

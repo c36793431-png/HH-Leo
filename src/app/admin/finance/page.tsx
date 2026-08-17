@@ -99,9 +99,9 @@ export default async function AdminFinancePage() {
                   </td>
                   <td className="py-2 pr-4 text-zinc-400">
                     {p.counterparty ?? "—"}
-                    {p.isTrial && (
+                    {p.activationSource !== "paid" && (
                       <span className="ml-2 rounded border border-zinc-600 px-1 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
-                        Trial
+                        {p.activationSource}
                       </span>
                     )}
                   </td>
