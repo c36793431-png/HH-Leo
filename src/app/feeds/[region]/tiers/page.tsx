@@ -141,11 +141,14 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
       <div className="ftd-tier-row">
         {tiers.map((t) => (
           <div key={t.tierKey} className={`card ftd-tier-card${t.isFlagship ? " ftd-flagship" : ""}`}>
-            {t.isFlagship && <span className="ftd-flagship-badge">FLAGSHIP</span>}
-            {LONDON_TIER_RANK[t.tierKey] != null && (
-              <span className="ftd-rank-badge">Rank #{LONDON_TIER_RANK[t.tierKey]}</span>
+            {LONDON_TIER_RANK[t.tierKey] != null ? (
+              <span className="ftd-rank-badge">#{LONDON_TIER_RANK[t.tierKey]}</span>
+            ) : (
+              <>
+                {t.isFlagship && <span className="ftd-flagship-badge">FLAGSHIP</span>}
+                <span className="ftd-subtitle">{t.subtitle}</span>
+              </>
             )}
-            <span className="ftd-subtitle">{t.subtitle}</span>
             <h3 className="ftd-name">{t.name}</h3>
             <div className="ftd-speed">
               <span className="ftd-speed-value">{t.speedDisplay}</span>
@@ -183,9 +186,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
 
         {region === "london" && (
           <div className="card ftd-tier-card ftd-flagship ftd-black">
-            <span className="ftd-flagship-badge">FLAGSHIP</span>
-            <span className="ftd-rank-badge ftd-rank-black">Rank #{BLACK_RANK}</span>
-            <span className="ftd-subtitle">{BLACK_TIER.subtitle}</span>
+            <span className="ftd-rank-badge ftd-rank-black">#{BLACK_RANK}</span>
             <h3 className="ftd-name ftd-name-black">{BLACK_TIER.name}</h3>
             <div className="ftd-speed">
               <span className="ftd-speed-value">{BLACK_TIER.speedDisplay}</span>
