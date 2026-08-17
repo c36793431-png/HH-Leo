@@ -19,7 +19,7 @@ export async function approveFeedTierRequestAction(
   return runAction("Failed to approve request", async () => {
     const adminId = await requireAdmin();
     const id = formData.get("id") as string;
-    await approveFeedTierRequest(id, adminId);
+    await approveFeedTierRequest(id, adminId, "/admin/feed-tier-trials");
     revalidatePath("/admin/feed-tier-requests");
   });
 }

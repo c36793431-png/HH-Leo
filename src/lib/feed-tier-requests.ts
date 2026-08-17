@@ -1,7 +1,8 @@
 import { pool } from "./db";
-import { notifyFeedTierRequestSubmitted } from "./telemetry-sink";
+import { notifyFeedTierRequestSubmitted, notifyFeedTierTrialActivated } from "./telemetry-sink";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
-import { feedTierMeta, isFeedRegion, type FeedRegion } from "./feed-tier-catalogue";
+import { feedTierMeta, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
+import { insertFeedTierTrial, TrialAlreadyClaimedError, TrialNotEligibleError } from "./feed-tier-trials";
 
 export const FEED_TIER_REQUEST_STATUSES = ["pending", "approved", "rejected", "provisioned"] as const;
 export type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number];
@@ -164,9 +165,41 @@ async function notifyClient(row: FeedTierRequestRow, text: string): Promise<void
   await sendHftAlertMessage(row.telegramUserId, text).catch(() => {});
 }
 
-export async function approveFeedTierRequest(id: string, actionedBy: string): Promise<FeedTierRequestRow> {
+/** Only trial-eligible tiers (ld-alpha-85, ld-ultra, ny-normal, ny-fast) get a real
+ * feed_tier_trials row + "trial activated" ping on approve -- the paid-only middle tiers
+ * (ld-beta-56 etc.) have no trial concept, so approving one of those stays a plain status
+ * flip + client DM, same as before (leo-feed-activation-notification-2026-08-17). A failure
+ * here (already claimed, race, etc.) must never fail the approve action itself. */
+async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string): Promise<void> {
+  if (!isTrialEligibleTier(row.tierKey)) return;
+  try {
+    const trial = await insertFeedTierTrial({
+      userId: row.userId,
+      licenseId: row.licenseId,
+      region: row.region,
+      tierKey: row.tierKey,
+    });
+    await notifyFeedTierTrialActivated({
+      email: trial.userEmail,
+      tierName: trial.tierName,
+      licenseKey: trial.licenseKeyTail ? `****${trial.licenseKeyTail}` : "unknown",
+      activatedAt: trial.trialStartedAt,
+      trialEndsAt: trial.trialEndsAt,
+      serverName: trial.serverName,
+      serverIp: trial.serverIp,
+      serverRegistered: trial.serverRegistered,
+      adminUrl,
+    }).catch(() => {});
+  } catch (err) {
+    if (err instanceof TrialAlreadyClaimedError || err instanceof TrialNotEligibleError) return;
+    console.error("approveFeedTierRequest: failed to activate trial", err);
+  }
+}
+
+export async function approveFeedTierRequest(id: string, actionedBy: string, adminUrl: string): Promise<FeedTierRequestRow> {
   const row = await actionRequest(id, "approved", actionedBy, null);
   await notifyClient(row, `<b>✅ Feed access approved</b>\n${row.tierName} is approved on your account.`);
+  await activateTrialIfEligible(row, adminUrl);
   return row;
 }
 

@@ -101,18 +101,20 @@ export class TrialNotEligibleError extends Error {
   }
 }
 
-interface StartTrialArgs {
+interface InsertTrialArgs {
   userId: string;
   licenseId: string;
   region: FeedRegion;
   tierKey: string;
-  adminUrl: string;
 }
 
 /** Rule #2 (marcus, trial feature add-on): any existing row for this (user, tier) blocks a
  * new trial regardless of its status -- enforced here for a clean error message, and again at
- * the DB level via feed_tier_trials_user_tier_uidx (0036) so a race can't double-book. */
-export async function startFeedTierTrial(args: StartTrialArgs): Promise<FeedTierTrialRow> {
+ * the DB level via feed_tier_trials_user_tier_uidx (0036) so a race can't double-book.
+ * Shared by self-serve trial start and admin-approve of a feed-tier-request for a
+ * trial-eligible tier (leo-feed-activation-notification-2026-08-17) so both converge on one
+ * source of truth for trial duration/uniqueness. */
+export async function insertFeedTierTrial(args: InsertTrialArgs): Promise<FeedTierTrialRow> {
   if (!isTrialEligibleTier(args.tierKey)) throw new TrialNotEligibleError();
 
   const existing = await pool.query(
@@ -139,6 +141,19 @@ export async function startFeedTierTrial(args: StartTrialArgs): Promise<FeedTier
 
   const row = await getFeedTierTrial(insertedId);
   if (!row) throw new Error("failed to load created feed tier trial");
+  return row;
+}
+
+interface StartTrialArgs {
+  userId: string;
+  licenseId: string;
+  region: FeedRegion;
+  tierKey: string;
+  adminUrl: string;
+}
+
+export async function startFeedTierTrial(args: StartTrialArgs): Promise<FeedTierTrialRow> {
+  const row = await insertFeedTierTrial(args);
 
   await notifyFeedTierTrialStarted({
     email: row.userEmail,

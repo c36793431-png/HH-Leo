@@ -334,6 +334,35 @@ export async function notifyFeedTierTrialStarted(opts: {
   );
 }
 
+export async function notifyFeedTierTrialActivated(opts: {
+  email: string | null;
+  tierName: string;
+  licenseKey: string;
+  activatedAt: Date;
+  trialEndsAt: Date;
+  serverName: string | null;
+  serverIp: string | null;
+  serverRegistered: boolean;
+  adminUrl: string;
+}): Promise<void> {
+  let server = "-";
+  if (opts.serverRegistered && opts.serverIp) {
+    server = opts.serverName ? `${opts.serverName} (${opts.serverIp})` : opts.serverIp;
+  } else if (opts.serverIp) {
+    server = `${opts.serverIp} (unregistered)`;
+  }
+  await sendSinkMessage(
+    `✅ trial activated\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `tier: ${opts.tierName}\n` +
+      `license: …${keyTail(opts.licenseKey)}\n` +
+      `server: ${server}\n` +
+      `activated: ${opts.activatedAt.toISOString()}\n` +
+      `expires: ${opts.trialEndsAt.toISOString()}\n` +
+      `${opts.adminUrl}`
+  );
+}
+
 export async function notifyFeedTierTrialConverted(opts: {
   email: string | null;
   tierName: string;
