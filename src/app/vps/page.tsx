@@ -54,7 +54,7 @@ function VpsContent() {
           <a href="https://t.me/coxwell2" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">
             @coxwell2
           </a>{" "}
-          on Telegram — free for HH-Traders.
+          on Telegram — free for Horizon Traders.
         </p>
       </div>
     </div>

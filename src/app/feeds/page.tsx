@@ -14,6 +14,7 @@ import {
 import { regionForFeedType } from "@/lib/feed-tier-catalogue";
 import { getTierCountsByRegion } from "@/lib/feed-tiers";
 import { FeedRequestForm } from "@/components/feeds/feed-request-form";
+import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
 
 const STATUS_LABEL: Record<FeedCardStatus, string> = {
   active: "Active",
@@ -113,6 +114,8 @@ export default async function FeedsPage() {
           Feeds are bundled with your license. Message us on Telegram to talk through which feeds fit your setup.
         </p>
       )}
+
+      <FeedComparisonScores />
 
       <div className="fp-section">
         <h2 className="fp-section-title">What&apos;s coming</h2>

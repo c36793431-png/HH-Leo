@@ -66,7 +66,7 @@ export default async function SetfilesPage() {
                   vary — expect to tune parameters for your specific setup.
                 </p>
                 <p style={{ marginTop: 8 }}>
-                  Want help tuning for your broker? Message @coxwell2 or the paid HH-Traders group — we
+                  Want help tuning for your broker? Message @coxwell2 or the paid Horizon Traders group — we
                   work with each trader individually to dial in their setup.
                 </p>
               </div>

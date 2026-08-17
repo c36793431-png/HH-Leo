@@ -112,7 +112,7 @@ export default async function CommunityPage() {
           <div className="comm-icon free">💬</div>
           <div className="comm-body">
             <div className="comm-title-row">
-              <h3>Market Chatter</h3>
+              <h3>Horizon Testers</h3>
               <span className="comm-tag">Free group · open chat</span>
             </div>
             <p className="comm-tagline">Real-time discussion — free for everyone</p>
@@ -131,13 +131,13 @@ export default async function CommunityPage() {
           <div className="comm-icon paid">⚡</div>
           <div className="comm-body">
             <div className="comm-title-row">
-              <h3>HH-Traders</h3>
+              <h3>Horizon Traders</h3>
               <span className="comm-tag paid">Paid group · subscribers only</span>
             </div>
             <p className="comm-tagline">Signals, desk support, bot-gated invite</p>
             {groupMembershipStatus === "joined" ? (
               <p className="comm-desc">
-                ✅ {telegramUsername ? `Member — @${telegramUsername}` : "In HH-Traders"}
+                ✅ {telegramUsername ? `Member — @${telegramUsername}` : "In Horizon Traders"}
               </p>
             ) : (
               <p className="comm-desc">
