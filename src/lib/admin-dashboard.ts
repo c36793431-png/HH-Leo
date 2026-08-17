@@ -77,6 +77,7 @@ export interface RecentSignupRow {
   userId: string;
   email: string | null;
   displayName: string | null;
+  telegramUsername: string | null;
   createdAt: Date;
   statusLabel: "Paid" | "Trial" | "Team" | "Deal" | "Lapsed" | "Free";
 }
@@ -86,11 +87,12 @@ export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
     id: string;
     email: string | null;
     display_name: string | null;
+    telegram_username: string | null;
     created_at: Date;
     active_tier: string | null;
     ever_licensed: boolean;
   }>(
-    `select u.id, u.email, u.display_name, u.created_at,
+    `select u.id, u.email, u.display_name, u.telegram_username, u.created_at,
             (
               select l.tier from licenses l
               where l.user_id = u.id and l.status = 'active' and l.expires_at > now()
@@ -108,6 +110,7 @@ export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
     userId: r.id,
     email: r.email,
     displayName: r.display_name,
+    telegramUsername: r.telegram_username,
     createdAt: r.created_at,
     statusLabel:
       r.active_tier === "paid"

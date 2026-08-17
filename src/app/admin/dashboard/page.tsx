@@ -142,6 +142,8 @@ export default async function AdminDashboardPage() {
               <thead className="text-zinc-500">
                 <tr>
                   <th className="pb-2 pr-4">Email</th>
+                  <th className="pb-2 pr-4">Name</th>
+                  <th className="pb-2 pr-4">Telegram</th>
                   <th className="pb-2 pr-4">Signed up</th>
                   <th className="pb-2">Tier</th>
                 </tr>
@@ -159,6 +161,16 @@ export default async function AdminDashboardPage() {
                     </td>
                     <td className="py-2 pr-4 text-zinc-400">
                       <Link href={`/admin/users/${s.userId}`} className="block">
+                        {s.displayName ?? "—"}
+                      </Link>
+                    </td>
+                    <td className="py-2 pr-4 text-zinc-400">
+                      <Link href={`/admin/users/${s.userId}`} className="block">
+                        {s.telegramUsername ? `@${s.telegramUsername}` : "—"}
+                      </Link>
+                    </td>
+                    <td className="py-2 pr-4 text-zinc-400">
+                      <Link href={`/admin/users/${s.userId}`} className="block">
                         {formatRelative(s.createdAt)}
                       </Link>
                     </td>
@@ -171,7 +183,7 @@ export default async function AdminDashboardPage() {
                 ))}
                 {signups.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="py-4 text-center text-zinc-500">
+                    <td colSpan={5} className="py-4 text-center text-zinc-500">
                       No signups yet.
                     </td>
                   </tr>
