@@ -33,6 +33,7 @@ export interface PaymentRow {
   memo: string | null;
   createdBy: string | null;
   createdAt: Date;
+  isTrial: boolean;
 }
 
 interface PaymentDbRow {
@@ -47,6 +48,7 @@ interface PaymentDbRow {
   memo: string | null;
   created_by: string | null;
   created_at: Date;
+  is_trial: boolean;
 }
 
 function mapRow(r: PaymentDbRow): PaymentRow {
@@ -62,12 +64,13 @@ function mapRow(r: PaymentDbRow): PaymentRow {
     memo: r.memo,
     createdBy: r.created_by,
     createdAt: r.created_at,
+    isTrial: r.is_trial,
   };
 }
 
 export async function listPayments(limit = 200): Promise<PaymentRow[]> {
   const result = await pool.query<PaymentDbRow>(
-    `select id, received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, created_at
+    `select id, received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, created_at, is_trial
      from payments
      order by received_at desc
      limit $1`,
@@ -79,7 +82,7 @@ export async function listPayments(limit = 200): Promise<PaymentRow[]> {
 /** Powers the Payments block on /admin/users/[id] — every payment tagged to this user_id. */
 export async function listPaymentsForUser(userId: string, limit = 50): Promise<PaymentRow[]> {
   const result = await pool.query<PaymentDbRow>(
-    `select id, received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, created_at
+    `select id, received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, created_at, is_trial
      from payments
      where user_id = $1
      order by received_at desc
@@ -109,11 +112,11 @@ export async function getPaymentTotals(): Promise<PaymentTotals> {
     mrr_proxy: string;
   }>(`
     select
-      coalesce(sum(amount_usd) filter (where direction = 'in'), 0) as gross_in,
+      coalesce(sum(amount_usd) filter (where direction = 'in' and not is_trial), 0) as gross_in,
       coalesce(sum(amount_usd) filter (where direction = 'out'), 0) as total_out,
-      coalesce(sum(amount_usd) filter (where direction = 'in' and received_at >= date_trunc('month', now())), 0) as gross_in_month,
+      coalesce(sum(amount_usd) filter (where direction = 'in' and not is_trial and received_at >= date_trunc('month', now())), 0) as gross_in_month,
       coalesce(sum(amount_usd) filter (where direction = 'out' and received_at >= date_trunc('month', now())), 0) as total_out_month,
-      coalesce(sum(amount_usd) filter (where direction = 'in' and category = 'customer' and received_at >= date_trunc('month', now())), 0) as mrr_proxy
+      coalesce(sum(amount_usd) filter (where direction = 'in' and not is_trial and category = 'customer' and received_at >= date_trunc('month', now())), 0) as mrr_proxy
     from payments
   `);
   const row = result.rows[0];

@@ -97,7 +97,14 @@ export default async function AdminFinancePage() {
                   <td className={`py-2 pr-4 ${CATEGORY_STYLES[p.category] ?? "text-zinc-400"}`}>
                     {CATEGORY_LABELS[p.category] ?? p.category}
                   </td>
-                  <td className="py-2 pr-4 text-zinc-400">{p.counterparty ?? "—"}</td>
+                  <td className="py-2 pr-4 text-zinc-400">
+                    {p.counterparty ?? "—"}
+                    {p.isTrial && (
+                      <span className="ml-2 rounded border border-zinc-600 px-1 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
+                        Trial
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 pr-4 text-zinc-500">{p.memo ?? "—"}</td>
                   <td className="py-2">
                     <PaymentRowActions payment={p} />
