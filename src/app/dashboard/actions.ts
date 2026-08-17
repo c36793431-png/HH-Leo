@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { verifyTelegramLogin, type TelegramLoginPayload } from "@/lib/telegram-auth";
 import { claimPendingLicense, getLicenseForUser, computeLicenseDisplayStatus, getGroupTarget } from "@/lib/licenses";
-import { sendPaidGroupInvite } from "@/lib/group-membership";
+import { sendGroupInvite, sendPaidGroupInvite } from "@/lib/group-membership";
 import { notifyTelegramLinked } from "@/lib/telemetry-sink";
 import type { ActionResult } from "@/lib/action-result";
 
@@ -92,6 +92,45 @@ export async function requestPaidGroupInviteAction(): Promise<ActionResult> {
   if (!target) return { ok: false, error: "Account not found." };
 
   const result = await sendPaidGroupInvite(target);
+  if (!result.sent) {
+    return {
+      ok: false,
+      error:
+        result.reason === "telegram_not_linked"
+          ? "Link your Telegram account first."
+          : "Failed to create your invite link. Try again shortly.",
+    };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/community");
+  return { ok: true };
+}
+
+/** Free-tier counterpart of requestPaidGroupInviteAction — Horizon Testers is open to every
+ * account, so this skips the license/paid check but keeps the same joined/rate-limit guards. */
+export async function requestFreeGroupInviteAction(): Promise<ActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Not authenticated." };
+  const userId = session.user.id;
+
+  const membership = await pool.query<{ status: string; invited_at: Date | null }>(
+    `select status, invited_at from group_memberships where user_id = $1 and tier = 'free'
+     order by coalesce(joined_at, invited_at) desc limit 1`,
+    [userId]
+  );
+  const latest = membership.rows[0];
+  if (latest?.status === "joined") {
+    return { ok: false, error: "You're already in the group." };
+  }
+  if (latest?.invited_at && Date.now() - latest.invited_at.getTime() < INVITE_RATE_LIMIT_MS) {
+    return { ok: false, error: "Please wait a moment before requesting another invite." };
+  }
+
+  const target = await getGroupTarget(userId);
+  if (!target) return { ok: false, error: "Account not found." };
+
+  const result = await sendGroupInvite(target, "free");
   if (!result.sent) {
     return {
       ok: false,

@@ -2,8 +2,15 @@
 
 import { useState, useTransition } from "react";
 import { requestPaidGroupInviteAction } from "@/app/dashboard/actions";
+import type { ActionResult } from "@/lib/action-result";
 
-export function RequestInviteButton({ label }: { label: string }) {
+export function RequestInviteButton({
+  label,
+  action = requestPaidGroupInviteAction,
+}: {
+  label: string;
+  action?: () => Promise<ActionResult>;
+}) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -17,7 +24,7 @@ export function RequestInviteButton({ label }: { label: string }) {
         onClick={() => {
           setError(null);
           startTransition(async () => {
-            const result = await requestPaidGroupInviteAction();
+            const result = await action();
             if (!result.ok) setError(result.error);
             else setSent(true);
           });

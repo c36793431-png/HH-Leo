@@ -9,6 +9,7 @@ import { getHftAlertBotUsername } from "@/lib/telegram-hft-alert-bot";
 import { createHftAlertOnboardingToken } from "@/lib/telegram-hft-alert-onboarding";
 import { LinkTelegramButton } from "@/components/link-telegram-button";
 import { RequestInviteButton } from "@/components/request-invite-button";
+import { requestFreeGroupInviteAction } from "@/app/dashboard/actions";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 
@@ -30,7 +31,7 @@ export default async function CommunityPage() {
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [paid, licenseDetail, config, telegramStatus, groupMembershipStatus, botUsername, hftAlertBotUsername] =
+  const [paid, licenseDetail, config, telegramStatus, groupMembershipStatus, freeGroupMembershipStatus, botUsername, hftAlertBotUsername] =
     await Promise.all([
       isPaidUser(session.user.id).catch(() => false),
       getLicenseForUser(session.user.id).catch(() => null),
@@ -54,12 +55,20 @@ export default async function CommunityPage() {
         )
         .then((r): string | null => r.rows[0]?.status ?? null)
         .catch((): string | null => null),
+      pool
+        .query<{ status: string }>(
+          `select status from group_memberships where user_id = $1 and tier = 'free'
+         order by coalesce(joined_at, invited_at) desc limit 1`,
+          [session.user.id]
+        )
+        .then((r): string | null => r.rows[0]?.status ?? null)
+        .catch((): string | null => null),
       getBotUsername(),
       getHftAlertBotUsername(),
     ]);
   const { linked: telegramLinked, botStarted: telegramBotStarted, username: telegramUsername } = telegramStatus;
   const onboarding =
-    paid && telegramLinked && !telegramBotStarted
+    telegramLinked && !telegramBotStarted
       ? await createOnboardingToken(session.user.id).catch(() => null)
       : null;
   const hftAlertOnboarding =
@@ -69,9 +78,11 @@ export default async function CommunityPage() {
 
   const channelUsername = publicUsernameFromUrl(config.telegramChannelUrl);
   const paidGroupChatId = process.env.TELEGRAM_PAID_GROUP_CHAT_ID ?? null;
-  const [channelCount, paidCount] = await Promise.all([
+  const freeGroupChatId = process.env.TELEGRAM_FREE_GROUP_CHAT_ID ?? null;
+  const [channelCount, paidCount, freeCount] = await Promise.all([
     channelUsername ? getChatMemberCount(channelUsername).catch(() => null) : Promise.resolve(null),
     paidGroupChatId ? getChatMemberCount(paidGroupChatId).catch(() => null) : Promise.resolve(null),
+    freeGroupChatId ? getChatMemberCount(freeGroupChatId).catch(() => null) : Promise.resolve(null),
   ]);
 
   const userName = session.user.name ?? session.user.email ?? "trader";
@@ -115,15 +126,49 @@ export default async function CommunityPage() {
               <h3>Horizon Testers</h3>
               <span className="comm-tag">Free group · open chat</span>
             </div>
-            <p className="comm-tagline">Real-time discussion — free for everyone</p>
-            <p className="comm-desc">
-              Trade ideas, market chatter, and community Q&amp;A with fellow Horizon traders. Open
-              to free and paid members alike — jump in, ask questions, compare notes.
-            </p>
+            {freeGroupMembershipStatus === "joined" ? (
+              <p className="comm-desc">
+                ✅ {telegramUsername ? `Member — @${telegramUsername}` : "In Horizon Testers"}
+              </p>
+            ) : (
+              <>
+                <p className="comm-tagline">Real-time discussion — free for everyone</p>
+                <p className="comm-desc">
+                  Trade ideas, market chatter, and community Q&amp;A with fellow Horizon traders. Open
+                  to free and paid members alike — start the bot to get your invite.
+                </p>
+              </>
+            )}
+            {formatMemberCount(freeCount) && <span className="comm-count">{formatMemberCount(freeCount)}</span>}
           </div>
-          <a className="btn primary comm-cta" href={config.communityGroupUrl} target="_blank" rel="noopener noreferrer">
-            Join group →
-          </a>
+
+          {!telegramLinked ? (
+            botUsername ? (
+              <div className="comm-cta">
+                <LinkTelegramButton botUsername={botUsername} />
+              </div>
+            ) : (
+              <span className="comm-unavailable">Telegram linking unavailable — bot not configured.</span>
+            )
+          ) : !telegramBotStarted ? (
+            onboarding ? (
+              <a className="btn primary comm-cta" href={onboarding.link} target="_blank" rel="noopener noreferrer">
+                Start the bot →
+              </a>
+            ) : (
+              <span className="comm-unavailable">Telegram linking unavailable — bot not configured.</span>
+            )
+          ) : freeGroupMembershipStatus === "joined" ? (
+            <span className="comm-linked-pill comm-cta">Joined</span>
+          ) : freeGroupMembershipStatus === "removed_on_lapse" ? (
+            <div className="comm-cta">
+              <RequestInviteButton label="Start the bot again →" action={requestFreeGroupInviteAction} />
+            </div>
+          ) : (
+            <div className="comm-cta">
+              <RequestInviteButton label="Start the bot →" action={requestFreeGroupInviteAction} />
+            </div>
+          )}
         </div>
 
         {/* PAID GROUP */}
