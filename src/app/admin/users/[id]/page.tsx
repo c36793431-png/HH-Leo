@@ -213,6 +213,24 @@ export default async function AdminUserDetailPage({
             </label>
             <FeedCheckboxes />
           </DurationForm>
+          <div className="mt-2">
+            <DurationForm
+              action={issueNewLicenseAction}
+              hiddenFields={{ userId: user.userId, tier: "trial" }}
+              submitLabel="Assign"
+              successMessage="Trial assigned"
+              compact
+              triggerLabel="Assign trial"
+              disabled={Boolean(activeLicense)}
+              disabledReason={
+                activeLicense
+                  ? `User has active license (expires ${formatAbsoluteUtc(activeLicense.expiresAt)}). Revoke it first to issue a new one.`
+                  : undefined
+              }
+            >
+              <FeedCheckboxes />
+            </DurationForm>
+          </div>
         </div>
       </section>
 

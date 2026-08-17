@@ -148,6 +148,20 @@ export default async function AdminPage() {
                           </select>
                         </div>
                       </DurationForm>
+                      <DurationForm
+                        action={issueLicenseAction}
+                        hiddenFields={{ userId: c.userId, tier: "trial" }}
+                        submitLabel="Assign"
+                        successMessage="Trial assigned"
+                        compact
+                        triggerLabel="Assign trial"
+                        disabled={c.paid}
+                        disabledReason={
+                          c.paid && c.expiresAt
+                            ? `User has active license (expires ${new Date(c.expiresAt).toLocaleString()}). Revoke it first to issue a new one.`
+                            : undefined
+                        }
+                      />
                       {c.licenseId && (
                         <>
                           <DurationForm
