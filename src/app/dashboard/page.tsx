@@ -348,7 +348,7 @@ export default async function DashboardPage() {
                 <div className="rw lockedrow">
                   <div className="ricon">🔒</div>
                   <div className="rmeta">
-                    <b>Paid Users Group</b>
+                    <b>Horizon Traders</b>
                     <span>Signals · desk support · Telegram</span>
                   </div>
                   <a className="lockcta" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
@@ -363,7 +363,7 @@ export default async function DashboardPage() {
                   ✈
                 </div>
                 <div className="rmeta">
-                  <b>Paid Users Group</b>
+                  <b>Horizon Traders</b>
                   <span>Link your Telegram to get your invite</span>
                 </div>
                 {botUsername ? (
@@ -381,7 +381,7 @@ export default async function DashboardPage() {
                   ✈
                 </div>
                 <div className="rmeta">
-                  <b>Paid Users Group</b>
+                  <b>Horizon Traders</b>
                   <span>Start the bot to get your invite</span>
                 </div>
                 {onboarding ? (
@@ -405,7 +405,7 @@ export default async function DashboardPage() {
                 <div className="rw">
                   <div className="ricon">★</div>
                   <div className="rmeta">
-                    <b>Paid Users Group</b>
+                    <b>Horizon Traders</b>
                     {groupMembershipStatus === "joined" ? (
                       <span>In the group</span>
                     ) : groupMembershipStatus === "removed_on_lapse" ? (
