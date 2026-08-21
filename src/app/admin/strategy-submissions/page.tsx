@@ -1,15 +1,20 @@
 import Link from "next/link";
-import { listStrategyRequests, STRATEGY_REQUEST_STATUSES, type StrategyRequestStatus } from "@/lib/strategy-requests";
+import {
+  listStrategySubmissions,
+  STRATEGY_SUBMISSION_STATUSES,
+  type StrategySubmissionStatus,
+} from "@/lib/strategy-submissions";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { StrategyRequestRowActions } from "@/components/admin/strategy-request-row-actions";
-import { setStrategyRequestStatusAction, setStrategyRequestNotesAction } from "./actions";
+import { StrategySubmissionRowActions } from "@/components/admin/strategy-submission-row-actions";
+import { setStrategySubmissionStatusAction, setStrategySubmissionNotesAction } from "./actions";
 
-const STATUS_STYLES: Record<StrategyRequestStatus, string> = {
-  new: "border-cyan-500/40 bg-cyan-500/15 text-cyan-300",
-  reviewing: "border-amber-500/40 bg-amber-500/15 text-amber-300",
+const STATUS_STYLES: Record<StrategySubmissionStatus, string> = {
+  pending: "border-cyan-500/40 bg-cyan-500/15 text-cyan-300",
+  under_review: "border-amber-500/40 bg-amber-500/15 text-amber-300",
+  approved_draft: "border-violet-500/40 bg-violet-500/15 text-violet-300",
+  listed: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
   declined: "border-red-500/40 bg-red-500/15 text-red-300",
-  scoping: "border-violet-500/40 bg-violet-500/15 text-violet-300",
-  shipped: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
+  withdrawn: "border-zinc-600 bg-zinc-800/60 text-zinc-400",
 };
 
 interface RawSearchParams {
@@ -20,29 +25,31 @@ function buildQuery(overrides: RawSearchParams): string {
   const params = new URLSearchParams();
   if (overrides.status) params.set("status", overrides.status);
   const qs = params.toString();
-  return qs ? `?${qs}` : "/admin/strategy-requests";
+  return qs ? `?${qs}` : "/admin/strategy-submissions";
 }
 
-export default async function AdminStrategyRequestsPage({
+export default async function AdminStrategySubmissionsPage({
   searchParams,
 }: {
   searchParams: Promise<RawSearchParams>;
 }) {
   const sp = await searchParams;
-  const status = STRATEGY_REQUEST_STATUSES.includes(sp.status as StrategyRequestStatus)
-    ? (sp.status as StrategyRequestStatus)
+  const status = STRATEGY_SUBMISSION_STATUSES.includes(sp.status as StrategySubmissionStatus)
+    ? (sp.status as StrategySubmissionStatus)
     : undefined;
 
-  const requests = await listStrategyRequests({ status });
+  const submissions = await listStrategySubmissions({ status });
 
   return (
     <div className="flex flex-1 flex-col">
       <header className="mb-8">
         <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-          Admin · Strategy requests
+          Admin · Strategy submissions
         </span>
-        <h1 className="mt-2 text-lg font-medium text-zinc-100">Strategy requests</h1>
-        <p className="mt-1 text-sm text-zinc-400">Strategies users have asked Horizon to build via /strategies.</p>
+        <h1 className="mt-2 text-lg font-medium text-zinc-100">Strategy submissions</h1>
+        <p className="mt-1 text-sm text-zinc-400">
+          Strategies authors have submitted for the catalog via /strategies &quot;Add your strategy&quot;.
+        </p>
       </header>
 
       <div className="mb-6 flex flex-wrap gap-2">
@@ -56,7 +63,7 @@ export default async function AdminStrategyRequestsPage({
         >
           All
         </Link>
-        {STRATEGY_REQUEST_STATUSES.map((s) => (
+        {STRATEGY_SUBMISSION_STATUSES.map((s) => (
           <Link
             key={s}
             href={buildQuery({ status: s })}
@@ -77,55 +84,59 @@ export default async function AdminStrategyRequestsPage({
             <thead className="text-zinc-500">
               <tr>
                 <th className="pb-2 pr-4">Submitted</th>
-                <th className="pb-2 pr-4">User</th>
-                <th className="pb-2 pr-4">Idea</th>
+                <th className="pb-2 pr-4">Author</th>
+                <th className="pb-2 pr-4">Strategy</th>
                 <th className="pb-2 pr-4">Details</th>
                 <th className="pb-2 pr-4">Status</th>
                 <th className="pb-2">Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
-              {requests.map((r) => (
-                <tr key={r.id}>
+              {submissions.map((s) => (
+                <tr key={s.id}>
                   <td className="py-2 pr-4 text-zinc-400">
-                    {formatAbsoluteUtc(r.submittedAt)} <span className="text-zinc-600">({formatRelative(r.submittedAt)})</span>
+                    {formatAbsoluteUtc(s.createdAt)} <span className="text-zinc-600">({formatRelative(s.createdAt)})</span>
                   </td>
                   <td className="py-2 pr-4 text-zinc-200">
-                    {r.userName ?? "—"}
-                    <div className="text-xs text-zinc-500">{r.userEmail ?? "—"}</div>
+                    {s.authorName ?? "—"}
+                    <div className="text-xs text-zinc-500">{s.authorEmail ?? "—"}</div>
                   </td>
-                  <td className="py-2 pr-4 max-w-xs text-zinc-300" title={r.ideaText}>
-                    {r.ideaText}
+                  <td className="py-2 pr-4 max-w-xs text-zinc-300">
+                    {s.name}
+                    <div className="mt-1 max-w-xs text-xs text-zinc-500" title={s.description}>
+                      {s.description}
+                    </div>
                   </td>
                   <td className="py-2 pr-4 max-w-xs text-zinc-400">
                     <div className="space-y-0.5 text-xs">
-                      <div>asset: {r.assetText ?? "—"}</div>
-                      <div>timeframe: {r.timeframeText ?? "—"}</div>
-                      <div title={r.referencesText ?? undefined}>refs: {r.referencesText ?? "—"}</div>
+                      <div>category: {s.category}</div>
+                      <div>instruments: {s.instruments.length ? s.instruments.join(", ") : "—"}</div>
+                      <div>feed: {s.feedRegion ?? "—"}</div>
+                      <div>contact: {s.contactPreference}</div>
                     </div>
                   </td>
                   <td className="py-2 pr-4">
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${STATUS_STYLES[r.status]}`}
+                      className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${STATUS_STYLES[s.status]}`}
                     >
-                      {r.status.toUpperCase()}
+                      {s.status.toUpperCase()}
                     </span>
                   </td>
                   <td className="py-2">
-                    <StrategyRequestRowActions
-                      strategyRequestId={r.id}
-                      status={r.status}
-                      notes={r.adminNotes ?? ""}
-                      setStatusAction={setStrategyRequestStatusAction}
-                      setNotesAction={setStrategyRequestNotesAction}
+                    <StrategySubmissionRowActions
+                      strategySubmissionId={s.id}
+                      status={s.status}
+                      notes={s.adminNotes ?? ""}
+                      setStatusAction={setStrategySubmissionStatusAction}
+                      setNotesAction={setStrategySubmissionNotesAction}
                     />
                   </td>
                 </tr>
               ))}
-              {requests.length === 0 && (
+              {submissions.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-zinc-500">
-                    No strategy requests yet.
+                    No strategy submissions yet.
                   </td>
                 </tr>
               )}

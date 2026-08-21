@@ -78,6 +78,7 @@ const ADMIN_LINKS = [
   { href: "/admin/feed-tier-trials", label: "Feed trials", icon: Gift },
   { href: "/admin/black-trials", label: "Black trials", icon: SatelliteDish },
   { href: "/admin/strategy-requests", label: "Strategy requests", icon: Zap },
+  { href: "/admin/strategy-submissions", label: "Strategy submissions", icon: BookMarked },
   { href: "/admin/history", label: "History", icon: History },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon }[];
 

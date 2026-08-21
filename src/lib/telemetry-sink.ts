@@ -284,13 +284,24 @@ export async function notifyCountryChange(opts: {
 
 export async function notifyStrategyRequestSubmitted(opts: {
   email: string | null;
-  submissionType: "pitch" | "structured";
   summary: string;
   adminUrl: string;
 }): Promise<void> {
-  const label = opts.submissionType === "structured" ? "add your strategy" : "strategy request";
   await sendSinkMessage(
-    `🧠 new ${label}\n` +
+    `🧠 new strategy request\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `${opts.summary}\n` +
+      `${opts.adminUrl}`
+  );
+}
+
+export async function notifyStrategySubmissionSubmitted(opts: {
+  email: string | null;
+  summary: string;
+  adminUrl: string;
+}): Promise<void> {
+  await sendSinkMessage(
+    `🧠 new add your strategy submission\n` +
       `email: ${opts.email ?? "-"}\n` +
       `${opts.summary}\n` +
       `${opts.adminUrl}`

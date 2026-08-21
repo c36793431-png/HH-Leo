@@ -7,7 +7,7 @@ import {
   STRATEGY_CONTACT_PREFERENCES,
   STRATEGY_FEED_REQUIREMENTS,
   STRATEGY_INSTRUMENTS,
-} from "@/lib/strategy-requests";
+} from "@/lib/strategy-submissions";
 import { emitToast } from "@/lib/toast-bus";
 
 const CATEGORY_LABELS: Record<(typeof STRATEGY_CATEGORIES)[number], string> = {
