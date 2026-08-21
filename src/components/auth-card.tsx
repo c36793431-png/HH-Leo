@@ -5,6 +5,7 @@ interface AuthCardProps {
   mode: "login" | "signup";
   botUsername: string | null;
   error?: string;
+  redirectTo: string;
 }
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
@@ -17,7 +18,7 @@ function authErrorMessage(code: string): string {
   return AUTH_ERROR_MESSAGES[code] ?? "Something went wrong signing you in — please try again.";
 }
 
-export function AuthCard({ mode, botUsername, error }: AuthCardProps) {
+export function AuthCard({ mode, botUsername, error, redirectTo }: AuthCardProps) {
   const heading =
     mode === "login" ? "Log in to Horizon HFT" : "Create your Horizon HFT account";
   const sub =
@@ -37,7 +38,7 @@ export function AuthCard({ mode, botUsername, error }: AuthCardProps) {
       )}
       <div className="mt-6 flex flex-col items-center gap-4">
         {botUsername ? (
-          <TelegramLoginButton botUsername={botUsername} redirectTo="/dashboard" />
+          <TelegramLoginButton botUsername={botUsername} redirectTo={redirectTo} />
         ) : (
           <p className="text-xs text-amber-400">
             Telegram login unavailable — bot not configured.
@@ -51,7 +52,7 @@ export function AuthCard({ mode, botUsername, error }: AuthCardProps) {
         <div className="h-px flex-1 bg-zinc-800" />
       </div>
 
-      <EmailLoginForm />
+      <EmailLoginForm redirectTo={redirectTo} />
 
       <p className="mt-6 text-center text-xs text-zinc-500">
         {mode === "login" ? (

@@ -1,13 +1,15 @@
 import { signIn } from "@/lib/auth";
 
-async function emailSignIn(formData: FormData) {
+async function emailSignIn(redirectTo: string, formData: FormData) {
   "use server";
-  await signIn("resend", { email: formData.get("email"), redirectTo: "/dashboard" });
+  await signIn("resend", { email: formData.get("email"), redirectTo });
 }
 
-export function EmailLoginForm() {
+export function EmailLoginForm({ redirectTo }: { redirectTo: string }) {
+  const emailSignInWithRedirect = emailSignIn.bind(null, redirectTo);
+
   return (
-    <form action={emailSignIn} className="flex flex-col gap-3">
+    <form action={emailSignInWithRedirect} className="flex flex-col gap-3">
       <label htmlFor="email" className="text-sm text-zinc-400">
         Email
       </label>
