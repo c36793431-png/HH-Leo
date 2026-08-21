@@ -1,14 +1,18 @@
-import { Logo } from "@/components/logo";
-
 /** Public landing for partner.horizonhft.com's root — no pricing, per the affiliate-only
  * pricing policy (bus thread horizon-contact-for-pricing-swap-2026-08-21). Visiting this host
  * auto-attributes a referral cookie (see proxy.ts withPartnerRefCookie), so the signup CTA
  * here is what actually credits the partner once attributeReferralFromCookie runs. The
- * partner's own dashboard lives at /partner/dashboard, session-gated separately. */
+ * partner's own dashboard lives at /partner/dashboard, session-gated separately.
+ *
+ * Header is a CSS-only text wordmark (not the shared <Logo> component) as a hot-patch for a
+ * broken /logo.png render on this subdomain — see bus thread
+ * leo-partner-landing-broken-logo-hotpatch-2026-08-21. Iris's V2 redesign will replace this. */
 export default function PartnerLandingPage() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 py-16 text-center text-zinc-100">
-      <Logo size="nav" />
+      <span className="text-sm font-semibold tracking-wide text-zinc-50">
+        HORIZON<span className="text-cyan-400"> HFT</span>
+      </span>
       <div className="max-w-lg space-y-3">
         <h1 className="text-2xl font-semibold">You&rsquo;ve been invited to Horizon HFT</h1>
         <p className="text-sm text-zinc-400">
