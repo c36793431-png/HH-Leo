@@ -55,7 +55,7 @@ const SIGNUP_NOTIFY_CHAT_ID = "7225949234"; // coxwell, per request — distinct
 
 // Coxwell DM group's "approvals" topic -- actionable admin pings land here instead of the
 // flat signup/activation sink (leo-admin-notify-topic-and-clickable-url-2026-08-21).
-const COXWELL_APPROVALS_CHAT_ID = "-1004073810085";
+const COXWELL_APPROVALS_CHAT_ID = "-1003914182493";
 const COXWELL_APPROVALS_THREAD_ID = 28865;
 
 /** Best-effort, non-blocking: a failed notify must never block signup. */
