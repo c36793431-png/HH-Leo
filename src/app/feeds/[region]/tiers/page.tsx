@@ -8,8 +8,10 @@ import { isFeedRegion } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
+import { BlackWaitlistControl } from "@/components/feeds/black-waitlist-control";
 import { getServerRegistration } from "@/lib/server-registration";
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
+import { hasJoinedTierWaitlist } from "@/lib/tier-waitlist";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
 import type { FeedTierDetail } from "@/lib/feed-tiers";
 
@@ -82,9 +84,10 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
-  const [serverRegistration, existingRequests] = await Promise.all([
+  const [serverRegistration, existingRequests, blackWaitlisted] = await Promise.all([
     licenseDetail ? getServerRegistration(licenseDetail.id) : Promise.resolve(null),
     listFeedTierRequests({ userId: session.user.id }),
+    region === "london" ? hasJoinedTierWaitlist(session.user.id, "london", "black") : Promise.resolve(false),
   ]);
   const requestedTierKeys = new Set(
     existingRequests.filter((r) => r.region === region && r.status !== "rejected").map((r) => r.tierKey)
@@ -155,9 +158,12 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             </div>
             <p className="ftd-desc">{BLACK_TIER.description}</p>
             <div className="ftd-black-ctas">
-              <Link href="/account/servers" className="btn amber sm">
-                Request access →
-              </Link>
+              <BlackWaitlistControl
+                region="london"
+                tierKey="black"
+                tierName={BLACK_TIER.name}
+                alreadyJoined={blackWaitlisted}
+              />
             </div>
           </div>
         )}

@@ -4,6 +4,7 @@ import {
   FEED_TIER_REQUEST_STATUSES,
   type FeedTierRequestStatus,
 } from "@/lib/feed-tier-requests";
+import { listTierWaitlist } from "@/lib/tier-waitlist";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { FeedTierRequestRowActions } from "@/components/admin/feed-tier-request-row-actions";
 import { approveFeedTierRequestAction, rejectFeedTierRequestAction } from "./actions";
@@ -17,10 +18,12 @@ const STATUS_STYLES: Record<FeedTierRequestStatus, string> = {
 
 interface RawSearchParams {
   status?: string;
+  view?: string;
 }
 
 function buildQuery(overrides: RawSearchParams): string {
   const params = new URLSearchParams();
+  if (overrides.view) params.set("view", overrides.view);
   if (overrides.status) params.set("status", overrides.status);
   const qs = params.toString();
   return qs ? `?${qs}` : "/admin/feed-tier-requests";
@@ -35,10 +38,12 @@ export default async function AdminFeedTierRequestsPage({
   const status = FEED_TIER_REQUEST_STATUSES.includes(sp.status as FeedTierRequestStatus)
     ? (sp.status as FeedTierRequestStatus)
     : undefined;
+  const view = sp.view === "waitlist" ? "waitlist" : "requests";
 
-  const [requests, allRequests] = await Promise.all([
+  const [requests, allRequests, waitlist] = await Promise.all([
     listFeedTierRequests({ status }),
     status ? listFeedTierRequests() : Promise.resolve(null),
+    listTierWaitlist(),
   ]);
   const statsSource = allRequests ?? requests;
   const stats = FEED_TIER_REQUEST_STATUSES.reduce(
@@ -48,6 +53,72 @@ export default async function AdminFeedTierRequestsPage({
     },
     {} as Record<FeedTierRequestStatus, number>
   );
+
+  if (view === "waitlist") {
+    return (
+      <div className="flex flex-1 flex-col">
+        <header className="mb-8">
+          <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+            Admin · Feed tier requests
+          </span>
+          <h1 className="mt-2 text-lg font-medium text-zinc-100">Tier waitlist</h1>
+          <p className="mt-1 text-sm text-zinc-400">Users waiting for a &quot;Coming Soon&quot; tier to open up.</p>
+        </header>
+
+        <div className="mb-6 flex flex-wrap gap-2">
+          <Link
+            href={buildQuery({})}
+            className="rounded-full border border-zinc-700 px-3 py-1 text-xs font-medium text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+          >
+            Requests
+          </Link>
+          <Link
+            href={buildQuery({ view: "waitlist" })}
+            className="rounded-full border border-cyan-400/60 bg-cyan-500/15 px-3 py-1 text-xs font-medium text-cyan-300"
+          >
+            Waitlist ({waitlist.length})
+          </Link>
+        </div>
+
+        <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-zinc-500">
+                <tr>
+                  <th className="pb-2 pr-4">Joined</th>
+                  <th className="pb-2 pr-4">User</th>
+                  <th className="pb-2">Region / tier</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {waitlist.map((w) => (
+                  <tr key={w.id}>
+                    <td className="py-2 pr-4 text-zinc-400">
+                      {formatAbsoluteUtc(w.createdAt)} <span className="text-zinc-600">({formatRelative(w.createdAt)})</span>
+                    </td>
+                    <td className="py-2 pr-4 text-zinc-200">
+                      {w.userName ?? "—"}
+                      <div className="text-xs text-zinc-500">{w.userEmail ?? "—"}</div>
+                    </td>
+                    <td className="py-2 text-zinc-300 uppercase">
+                      {w.region} / {w.tierKey}
+                    </td>
+                  </tr>
+                ))}
+                {waitlist.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="py-8 text-center text-zinc-500">
+                      No waitlist entries yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 flex-col">
@@ -94,6 +165,12 @@ export default async function AdminFeedTierRequestsPage({
             {s}
           </Link>
         ))}
+        <Link
+          href={buildQuery({ view: "waitlist" })}
+          className="rounded-full border border-zinc-700 px-3 py-1 text-xs font-medium text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+        >
+          Waitlist ({waitlist.length})
+        </Link>
       </div>
 
       <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">

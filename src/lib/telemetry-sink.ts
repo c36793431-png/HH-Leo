@@ -398,6 +398,21 @@ export async function notifyFeedTierRequestSubmitted(opts: {
   if (!sent) await sendApprovalsTopicMessage(text);
 }
 
+/** Waitlist joins are informational only (no approve/reject action), so this goes
+ * straight to the plain-text approvals-topic ping rather than the actionable-buttons
+ * path used for actual access requests. */
+export async function notifyBlackWaitlistJoined(opts: {
+  name: string | null;
+  email: string | null;
+  tierName: string;
+}): Promise<void> {
+  await sendApprovalsTopicMessage(
+    `📝 new ${opts.tierName} waitlist entry\n` +
+      `name: ${opts.name ?? "-"}\n` +
+      `email: ${opts.email ?? "-"}`
+  );
+}
+
 export async function notifyFeedTierTrialStarted(opts: {
   email: string | null;
   tierName: string;
