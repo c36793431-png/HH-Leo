@@ -3,7 +3,7 @@ import { FEED_COMPARISON_SCORES } from "@/lib/feed-comparison-scores";
 export function FeedComparisonScores() {
   return (
     <div className="card full fcs">
-      <h3 className="fp-section-title">Feed Comparison Scores</h3>
+      <h3 className="fp-section-title">🇬🇧 London Feed Comparison Scores</h3>
 
       <div className="fcs-legend">
         <span className="fcs-legend-item">
