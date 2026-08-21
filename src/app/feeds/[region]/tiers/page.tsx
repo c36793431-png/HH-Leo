@@ -4,12 +4,12 @@ import { auth } from "@/lib/auth";
 import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { isFeedRegion, isTrialEligibleTier } from "@/lib/feed-tier-catalogue";
+import { isFeedRegion } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
-import { TrialCtaControl } from "@/components/feeds/trial-cta-control";
+import { TierRequestControl } from "@/components/feeds/tier-request-control";
 import { getServerRegistration } from "@/lib/server-registration";
-import { listFeedTierTrials } from "@/lib/feed-tier-trials";
+import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
 import type { FeedTierDetail } from "@/lib/feed-tiers";
 
@@ -20,9 +20,11 @@ const COMPARE_ROWS = [
 ] as const;
 
 /** Ranking is FOC13's Feed Comparison Scores leaderboard (feed-comparison-scores.ts),
- * authoritative per marcus (leo-london-tier-page-overhaul-2026-08-17). Cards stay in
- * latency order (Option B) with the real rank surfaced as a secondary badge instead of
- * reordering, since reordering breaks the latency-ascending mental model. */
+ * authoritative per marcus (leo-london-tier-page-overhaul-2026-08-17). Promoted from a
+ * secondary badge to the actual card sort key per coxwell/marcus greenlight
+ * (leo-tiers-page-request-access-rank-order-2026-08-21) -- cards render #1 -> #6, London
+ * only. Kept as a JS constant rather than a DB column since London-only ranking with no
+ * per-region variance doesn't warrant a migration. */
 const LONDON_TIER_RANK: Record<string, number> = {
   "ld-alpha-85": 2,
   "ld-beta-56": 4,
@@ -72,11 +74,19 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
-  const [serverRegistration, existingTrials] = await Promise.all([
+  const [serverRegistration, existingRequests] = await Promise.all([
     licenseDetail ? getServerRegistration(licenseDetail.id) : Promise.resolve(null),
-    listFeedTierTrials({ userId: session.user.id }),
+    listFeedTierRequests({ userId: session.user.id }),
   ]);
-  const trialsByTierKey = new Map(existingTrials.filter((t) => t.region === region).map((t) => [t.tierKey, t]));
+  const requestedTierKeys = new Set(
+    existingRequests.filter((r) => r.region === region && r.status !== "rejected").map((r) => r.tierKey)
+  );
+  const licenseTail = licenseDetail?.licenseKey ? licenseDetail.licenseKey.slice(-4) : "—";
+
+  const displayTiers =
+    region === "london"
+      ? [...tiers].sort((a, b) => (LONDON_TIER_RANK[a.tierKey] ?? 99) - (LONDON_TIER_RANK[b.tierKey] ?? 99))
+      : tiers;
 
   const catalogueEntry = FEED_CATALOGUE.find((f) => f.slug === region) ?? null;
   const regionName = catalogueEntry?.name ?? region;
@@ -125,42 +135,6 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
       )}
 
       <div className="ftd-tier-row">
-        {tiers.map((t) => (
-          <div key={t.tierKey} className={`card ftd-tier-card${t.isFlagship ? " ftd-flagship" : ""}`}>
-            {LONDON_TIER_RANK[t.tierKey] != null && (
-              <span className="ftd-rank-badge">#{LONDON_TIER_RANK[t.tierKey]}</span>
-            )}
-            {t.isFlagship ? (
-              <span className="ftd-flagship-badge">{t.subtitle}</span>
-            ) : (
-              <span className="ftd-subtitle">{t.subtitle}</span>
-            )}
-            <h3 className="ftd-name">{t.name}</h3>
-            <div className="ftd-speed">
-              <span className="ftd-speed-value">{t.speedDisplay}</span>
-              {t.latencyUs != null && <span className="ftd-speed-unit">µs</span>}
-            </div>
-            <p className="ftd-desc">{t.description}</p>
-            {isTrialEligibleTier(t.tierKey) && (
-              <TrialCtaControl
-                region={region}
-                tierKey={t.tierKey}
-                tierName={t.name}
-                existingTrial={
-                  trialsByTierKey.has(t.tierKey)
-                    ? {
-                        id: trialsByTierKey.get(t.tierKey)!.id,
-                        status: trialsByTierKey.get(t.tierKey)!.trialStatus,
-                        endsAt: trialsByTierKey.get(t.tierKey)!.trialEndsAt.toISOString(),
-                      }
-                    : null
-                }
-              />
-            )}
-            <p className="ftd-contact-pricing">Contact for pricing</p>
-          </div>
-        ))}
-
         {region === "london" && (
           <div className="card ftd-tier-card ftd-flagship ftd-black">
             <span className="ftd-rank-badge ftd-rank-black">#{BLACK_RANK}</span>
@@ -179,9 +153,37 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             </div>
           </div>
         )}
+
+        {displayTiers.map((t) => (
+          <div key={t.tierKey} className={`card ftd-tier-card${t.isFlagship ? " ftd-flagship" : ""}`}>
+            {region === "london" && LONDON_TIER_RANK[t.tierKey] != null && (
+              <span className="ftd-rank-badge">#{LONDON_TIER_RANK[t.tierKey]}</span>
+            )}
+            {t.isFlagship ? (
+              <span className="ftd-flagship-badge">{t.subtitle}</span>
+            ) : (
+              <span className="ftd-subtitle">{t.subtitle}</span>
+            )}
+            <h3 className="ftd-name">{t.name}</h3>
+            <div className="ftd-speed">
+              <span className="ftd-speed-value">{t.speedDisplay}</span>
+              {t.latencyUs != null && <span className="ftd-speed-unit">µs</span>}
+            </div>
+            <p className="ftd-desc">{t.description}</p>
+            <TierRequestControl
+              region={region}
+              tierKey={t.tierKey}
+              tierName={t.name}
+              alreadyRequested={requestedTierKeys.has(t.tierKey)}
+              serverName={serverRegistration?.serverName ?? null}
+              serverIp={serverRegistration?.declaredIp ?? null}
+              licenseTail={licenseTail}
+            />
+          </div>
+        ))}
       </div>
 
-      <FeedComparisonScores />
+      {region === "london" && <FeedComparisonScores />}
 
       <div className="ftd-compare card full">
         <h3 className="fp-section-title">Horizon Feed Comparison</h3>
