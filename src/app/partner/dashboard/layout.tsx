@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { isAdminUser, isPartnerUser } from "@/lib/admin-users-panel";
+import { getPendingPartnerApplicationForUser } from "@/lib/partner-applications";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 
@@ -12,6 +13,16 @@ export default async function PartnerDashboardLayout({ children }: { children: R
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   if (!isPartnerUser(session.user) && !isAdminUser(session.user)) {
+    // A signed-in user with a pending partner application gets a distinct "under review"
+    // message instead of being bounced straight to the landing page (leo-partner-page-
+    // broken-auth-buttons-2026-08-22). Reuses /partner/apply's own confirmation UI rather
+    // than a whole new route -- see that page's ?status=pending branch.
+    const pendingApplication = await getPendingPartnerApplicationForUser(
+      session.user.id,
+      session.user.email ?? null
+    );
+    if (pendingApplication) redirect("/partner/apply?status=pending");
+
     // On partner.horizonhft.com, proxy.ts rewrites every non-/partner path (including
     // /dashboard) into this tree, so redirecting a non-partner user to "/dashboard" here
     // would just loop back through the same gate. Send them to that host's own landing

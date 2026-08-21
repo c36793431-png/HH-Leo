@@ -34,6 +34,13 @@ export default function PartnerLandingPage() {
       <a href="/partner/dashboard" className="text-xs text-zinc-600 hover:text-zinc-400 hover:underline">
         Partner login
       </a>
+      {/* "/partner/apply" (not the shorter "/apply") so this link resolves the same way
+          regardless of which host rendered this page -- on partner.horizonhft.com it still
+          matches directly since proxy.ts already passes through any "/partner"-prefixed
+          path unrewritten, and on portal.horizonhft.com there's no rewrite at all. */}
+      <a href="/partner/apply" className="text-xs text-cyan-400 hover:text-cyan-300 hover:underline">
+        Apply to become a partner
+      </a>
     </div>
   );
 }

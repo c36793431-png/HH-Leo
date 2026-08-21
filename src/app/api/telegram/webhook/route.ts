@@ -6,9 +6,11 @@ import { getLicenseForUser, computeLicenseDisplayStatus, getGroupTarget, isPaidT
 import { sendPaidGroupInvite } from "@/lib/group-membership";
 import { resolveAdminUserId } from "@/lib/admin-telegram-map";
 import { approveFeedTierRequest, rejectFeedTierRequest, getFeedTierRequest } from "@/lib/feed-tier-requests";
+import { approvePartnerApplication, declinePartnerApplication, getPartnerApplication } from "@/lib/partner-applications";
 
 const INVITE_RATE_LIMIT_MS = 60_000;
 const FEEDREQ_ADMIN_URL = "https://portal.horizonhft.com/admin/feed-tier-requests";
+const PARTNERAPP_ADMIN_URL = "https://portal.horizonhft.com/admin/partner-applications";
 
 interface TelegramUpdate {
   message?: {
@@ -46,6 +48,16 @@ const ADMIN_ACTION_DISPATCH: Record<
     },
     reject: async (id, actionedBy) => {
       await rejectFeedTierRequest(id, actionedBy, "declined via Telegram");
+    },
+  },
+  partnerapp: {
+    label: "partner application",
+    getStatus: async (id) => (await getPartnerApplication(id))?.status ?? null,
+    approve: async (id, actionedBy) => {
+      await approvePartnerApplication(id, actionedBy, "approved via Telegram");
+    },
+    reject: async (id, actionedBy) => {
+      await declinePartnerApplication(id, actionedBy, "declined via Telegram");
     },
   },
 };

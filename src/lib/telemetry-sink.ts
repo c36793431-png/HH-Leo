@@ -398,6 +398,34 @@ export async function notifyFeedTierRequestSubmitted(opts: {
   if (!sent) await sendApprovalsTopicMessage(text);
 }
 
+export async function notifyPartnerApplicationSubmitted(opts: {
+  id: string;
+  name: string;
+  email: string;
+  telegram: string | null;
+  notes: string | null;
+  adminUrl: string;
+}): Promise<void> {
+  const text =
+    `🤝 new partner application\n` +
+    `name: ${opts.name}\n` +
+    `email: ${opts.email}\n` +
+    `telegram: ${opts.telegram ?? "-"}\n` +
+    (opts.notes ? `notes: ${opts.notes}\n` : "") +
+    `${opts.adminUrl}`;
+
+  // Same actionable-buttons pattern as notifyFeedTierRequestSubmitted -- portal bot webhook
+  // owns the callback_query, falls back to the plain-text approvals-topic ping if that send
+  // fails so the notification is never silently dropped.
+  const sent = await sendActionableApprovalMessage(text, [
+    [
+      { text: "✅ Approve", callback_data: `partnerapp:approve:${opts.id}` },
+      { text: "❌ Decline", callback_data: `partnerapp:reject:${opts.id}` },
+    ],
+  ]);
+  if (!sent) await sendApprovalsTopicMessage(text);
+}
+
 /** Waitlist joins are informational only (no approve/reject action), so this goes
  * straight to the plain-text approvals-topic ping rather than the actionable-buttons
  * path used for actual access requests. */

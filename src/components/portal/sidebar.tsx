@@ -32,6 +32,7 @@ import {
   Radar,
   SatelliteDish,
   Handshake,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 
@@ -66,6 +67,7 @@ const ADMIN_LINKS = [
   { href: "/admin/finance", label: "Finance", icon: DollarSign },
   { href: "/admin/referrals", label: "Referrals", icon: Award },
   { href: "/admin/partners", label: "Partners", icon: Handshake },
+  { href: "/admin/partner-applications", label: "Partner applications", icon: UserPlus },
   { href: "/admin/users", label: "Users", icon: UserSquare2 },
   { href: "/admin/connections", label: "Connections", icon: Radar },
   { href: "/admin/setups", label: "Setups", icon: Settings },

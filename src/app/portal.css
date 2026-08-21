@@ -778,7 +778,7 @@
 .fttr-stat .l { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #71717a; margin-top: 2px; }
 .fttr-stat.pending .n { color: var(--hz-warn); }
 .fttr-stat.approved .n, .fttr-stat.provisioned .n { color: var(--hz-ok); }
-.fttr-stat.rejected .n { color: var(--hz-bad); }
+.fttr-stat.rejected .n, .fttr-stat.declined .n { color: var(--hz-bad); }
 
 /* ---- MOBILE DRAWER ---- */
 .portal-shell .scrim { display: none; }
