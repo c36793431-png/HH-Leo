@@ -37,8 +37,10 @@ const BLACK_RANK = 1;
 /** Institutional ($10k+) vs retail segment split (marcus/coxwell,
  * leo-tiers-institutional-retail-labels-2026-08-21). feed_tiers has no price_cents
  * populated yet, so this is a tier-key allowlist rather than a price/enum threshold --
- * swap for a market_segment column once pricing lands in the DB. */
-const INSTITUTIONAL_TIER_KEYS = new Set(["black", "ld-ultra"]);
+ * swap for a market_segment column once pricing lands in the DB. Alpha promoted into
+ * this set as #2 on the Feed Comparison score, bracketing top-3 as Institutional rather
+ * than just top-1 + flagship (coxwell, same thread, follow-up). */
+const INSTITUTIONAL_TIER_KEYS = new Set(["black", "ld-alpha-85", "ld-ultra"]);
 
 /** Black isn't in feed-tier-catalogue.ts / feed_tiers -- it's a separate paid-only,
  * one-per-desk gate (black-trials.ts, 9bbd5a3) with its own request flow on
@@ -173,7 +175,14 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               </span>
             )}
             {isInstitutional ? (
-              <span className="ftd-flagship-badge ftd-badge-amber">{t.subtitle}</span>
+              t.isFlagship ? (
+                <span className="ftd-flagship-badge ftd-badge-amber">{t.subtitle}</span>
+              ) : (
+                <>
+                  <span className="ftd-segment-badge ftd-badge-amber">INSTITUTIONAL LATENCY</span>
+                  <span className="ftd-subtitle">{t.subtitle}</span>
+                </>
+              )
             ) : t.isFlagship ? (
               <span className="ftd-flagship-badge">{t.subtitle}</span>
             ) : region === "london" ? (

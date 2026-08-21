@@ -670,6 +670,9 @@
   color: var(--hz-ink-3); background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hz-line);
   border-radius: 999px; padding: 2px 7px;
 }
+.portal-shell .ftd-segment-badge.ftd-badge-amber {
+  color: var(--hz-warn); background: rgba(255, 194, 75, 0.08); border-color: rgba(255, 194, 75, 0.5);
+}
 
 /* Onyx/platinum lockup for the Black flagship card (Iris mock, black-trial-signup.png) */
 .portal-shell .ftd-tier-card.ftd-black {
