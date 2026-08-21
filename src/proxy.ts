@@ -10,13 +10,14 @@ export default auth((req) => {
   const isPartnerHost = host === PARTNER_HOST || host.startsWith(`${PARTNER_HOST}:`);
 
   if (isPartnerHost) {
-    // partner.horizonhft.com serves only the partner dashboard, rewritten to
+    // partner.horizonhft.com serves the partner dashboard, rewritten to
     // /partner internally so it lands at the domain root, not /partner/partner.
-    // Admin routes must never become reachable on this host.
-    if (req.nextUrl.pathname.startsWith("/admin")) {
+    // The admin partner-management view also lives here (same admin as portal.horizonhft.com),
+    // but every other /admin/* route stays portal-only to avoid leaking unrelated admin surfaces.
+    if (req.nextUrl.pathname.startsWith("/admin") && !req.nextUrl.pathname.startsWith("/admin/partners")) {
       return new NextResponse("Not Found", { status: 404 });
     }
-    if (!req.nextUrl.pathname.startsWith("/partner")) {
+    if (!req.nextUrl.pathname.startsWith("/partner") && !req.nextUrl.pathname.startsWith("/admin/partners")) {
       const url = req.nextUrl.clone();
       url.pathname = `/partner${req.nextUrl.pathname === "/" ? "" : req.nextUrl.pathname}`;
       return NextResponse.rewrite(url);
