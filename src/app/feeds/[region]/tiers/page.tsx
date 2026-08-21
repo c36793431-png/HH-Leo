@@ -166,8 +166,16 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             )}
             <h3 className="ftd-name">{t.name}</h3>
             <div className="ftd-speed">
+              {region === "london" && t.latencyUs != null && (
+                <span className="ftd-speed-label">SCORE</span>
+              )}
               <span className="ftd-speed-value">{t.speedDisplay}</span>
-              {t.latencyUs != null && <span className="ftd-speed-unit">µs</span>}
+              {t.latencyUs != null &&
+                (region === "london" ? (
+                  <span className="ftd-speed-unit">/100</span>
+                ) : (
+                  <span className="ftd-speed-unit">µs</span>
+                ))}
             </div>
             <p className="ftd-desc">{t.description}</p>
             <TierRequestControl
@@ -203,7 +211,12 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                 <td>{row.label}</td>
                 {tiers.map((t) => (
                   <td key={t.tierKey}>
-                    {row.key === "latency" && (t.latencyUs != null ? `${t.speedDisplay}µs` : t.speedDisplay)}
+                    {row.key === "latency" &&
+                      (t.latencyUs != null
+                        ? region === "london"
+                          ? `${t.speedDisplay}/100 score`
+                          : `${t.speedDisplay}µs`
+                        : t.speedDisplay)}
                     {row.key === "redundancy" && t.pathRedundancy}
                     {row.key === "support" && t.supportLevel}
                   </td>
