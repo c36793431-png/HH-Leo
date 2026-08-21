@@ -21,3 +21,10 @@ export function isAdminUsersPanelEmail(email: string | null | undefined): boolea
 export function isAdminUser(user: { email?: string | null; role?: string | null } | null | undefined): boolean {
   return user?.role === "admin" || isAdminUsersPanelEmail(user?.email);
 }
+
+/** Partner gate for the Partner Referral Programme (bus thread
+ * leo-partner-referral-programme-build-2026-08-21) — manually-onboarded partners like
+ * Legitcashmaker, distinct from the self-serve referral_earnings system. */
+export function isPartnerUser(user: { role?: string | null } | null | undefined): boolean {
+  return user?.role === "partner";
+}

@@ -53,8 +53,8 @@ export async function addPaymentAction(
       throw new Error("Invalid category");
     }
     const amountUsd = Number(amountRaw);
-    if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
-      throw new Error("Amount must be a positive number");
+    if (!Number.isFinite(amountUsd) || amountUsd < 0) {
+      throw new Error("Amount must not be negative");
     }
     const receivedAt = receivedAtRaw ? new Date(receivedAtRaw) : new Date();
     if (Number.isNaN(receivedAt.getTime())) {
@@ -115,8 +115,8 @@ export async function editPaymentAction(
       throw new Error("Invalid category");
     }
     const amountUsd = Number(amountRaw);
-    if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
-      throw new Error("Amount must be a positive number");
+    if (!Number.isFinite(amountUsd) || amountUsd < 0) {
+      throw new Error("Amount must not be negative");
     }
 
     await updatePayment(paymentId, {

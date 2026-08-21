@@ -14,7 +14,7 @@ const DEFAULTS: PortalConfig = {
   telegramChannelUrl: "https://t.me/horizonhft",
   telegramFreeGroupUrl: "https://t.me/+2LSFHZbapbNlODhk",
   testingGroupUrl: "https://t.me/horizonhft",
-  pricingDisplay: "$100/mo — full access to Horizon HFT",
+  pricingDisplay: "Contact partner — full access to Horizon HFT",
   educationPreview: [
     {
       title: "Getting started with arbitrage execution",
