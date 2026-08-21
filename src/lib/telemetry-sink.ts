@@ -53,6 +53,11 @@ export async function forwardHeartbeat(t: HeartbeatTelemetry): Promise<void> {
 
 const SIGNUP_NOTIFY_CHAT_ID = "7225949234"; // coxwell, per request — distinct from TELEMETRY_CHAT_ID (heartbeat sink)
 
+// Coxwell DM group's "approvals" topic -- actionable admin pings land here instead of the
+// flat signup/activation sink (leo-admin-notify-topic-and-clickable-url-2026-08-21).
+const COXWELL_APPROVALS_CHAT_ID = "-1004073810085";
+const COXWELL_APPROVALS_THREAD_ID = 28865;
+
 /** Best-effort, non-blocking: a failed notify must never block signup. */
 export async function notifyFreeSignup(opts: {
   email: string | null;
@@ -125,6 +130,32 @@ async function sendSinkMessage(text: string): Promise<void> {
     if (!res.ok) console.error("telemetry-sink: sink send failed", res.status);
   } catch (err) {
     console.error("telemetry-sink: sink send failed", err);
+  }
+}
+
+/** Posts to the Coxwell approvals topic; falls back to the flat sink chat on failure so
+ * the notification is never silently dropped. Best-effort, non-blocking. */
+async function sendApprovalsTopicMessage(text: string): Promise<void> {
+  const token = process.env.TELEMETRY_BOT_TOKEN;
+  if (!token) return; // Not configured yet — coxwell sets this in Vercel.
+
+  try {
+    const res = await fetch(`${API_ROOT}/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: COXWELL_APPROVALS_CHAT_ID,
+        message_thread_id: COXWELL_APPROVALS_THREAD_ID,
+        text,
+      }),
+    });
+    if (!res.ok) {
+      console.error("telemetry-sink: approvals topic send failed", res.status);
+      await sendSinkMessage(text);
+    }
+  } catch (err) {
+    console.error("telemetry-sink: approvals topic send failed", err);
+    await sendSinkMessage(text);
   }
 }
 
@@ -323,7 +354,7 @@ export async function notifyFeedTierRequestSubmitted(opts: {
   } else if (opts.serverIp) {
     server = `${opts.serverIp} (unregistered)`;
   }
-  await sendSinkMessage(
+  await sendApprovalsTopicMessage(
     `📡 new feed request\n` +
       `email: ${opts.email ?? "-"}\n` +
       `tier: ${opts.tierName}\n` +
