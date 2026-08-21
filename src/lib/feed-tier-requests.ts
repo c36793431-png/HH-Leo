@@ -204,7 +204,12 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
 
 export async function approveFeedTierRequest(id: string, actionedBy: string, adminUrl: string): Promise<FeedTierRequestRow> {
   const row = await actionRequest(id, "approved", actionedBy, null);
-  await notifyClient(row, `<b>✅ Feed access approved</b>\n${row.tierName} is approved on your account.`);
+  // Trial-eligible tiers get the richer notifyTrialClientActivated() DM instead (see
+  // activateTrialIfEligible) -- sending both would double-DM the client
+  // (coxwell green-light, leo-feed-activation-notification-2026-08-17 / m22397).
+  if (!isTrialEligibleTier(row.tierKey)) {
+    await notifyClient(row, `<b>✅ Feed access approved</b>\n${row.tierName} is approved on your account.`);
+  }
   await activateTrialIfEligible(row, adminUrl);
   return row;
 }
