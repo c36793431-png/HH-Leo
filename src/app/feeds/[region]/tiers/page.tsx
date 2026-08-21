@@ -144,6 +144,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
         {region === "london" && (
           <div className="card ftd-tier-card ftd-flagship ftd-black ftd-institutional">
             <span className="ftd-rank-badge ftd-rank-black">#{BLACK_RANK}</span>
+            <span className="ftd-flagship-badge ftd-badge-amber">INSTITUTIONAL LATENCY</span>
             <h3 className="ftd-name ftd-name-black">{BLACK_TIER.name}</h3>
             <div className="ftd-speed">
               <span className="ftd-speed-value">{BLACK_TIER.speedDisplay}</span>
@@ -178,7 +179,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               <span className="ftd-flagship-badge">{t.subtitle}</span>
             ) : region === "london" ? (
               <>
-                <span className="ftd-segment-badge">RETAIL</span>
+                <span className="ftd-segment-badge">RETAIL LATENCY</span>
                 <span className="ftd-subtitle">{t.subtitle}</span>
               </>
             ) : (
