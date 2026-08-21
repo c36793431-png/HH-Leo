@@ -154,9 +154,6 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             <p className="ftd-desc">{BLACK_TIER.description}</p>
             <div className="ftd-black-ctas">
               <Link href="/account/servers" className="btn amber sm">
-                Start 7-day trial →
-              </Link>
-              <Link href="/account/servers" className="btn ghost sm">
                 Request access →
               </Link>
             </div>
