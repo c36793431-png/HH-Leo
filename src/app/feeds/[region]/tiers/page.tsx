@@ -7,10 +7,8 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { isFeedRegion, isTrialEligibleTier } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
-import { TierRequestControl } from "@/components/feeds/tier-request-control";
 import { TrialCtaControl } from "@/components/feeds/trial-cta-control";
 import { getServerRegistration } from "@/lib/server-registration";
-import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { listFeedTierTrials } from "@/lib/feed-tier-trials";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
 import type { FeedTierDetail } from "@/lib/feed-tiers";
@@ -74,18 +72,11 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
-  const [serverRegistration, existingRequests, existingTrials] = await Promise.all([
+  const [serverRegistration, existingTrials] = await Promise.all([
     licenseDetail ? getServerRegistration(licenseDetail.id) : Promise.resolve(null),
-    listFeedTierRequests({ userId: session.user.id }),
     listFeedTierTrials({ userId: session.user.id }),
   ]);
-  const requestedTierKeys = new Set(
-    existingRequests
-      .filter((r) => r.region === region && r.status !== "rejected")
-      .map((r) => r.tierKey)
-  );
   const trialsByTierKey = new Map(existingTrials.filter((t) => t.region === region).map((t) => [t.tierKey, t]));
-  const licenseTail = licenseDetail?.licenseKey ? `…${licenseDetail.licenseKey.slice(-4)}` : "—";
 
   const catalogueEntry = FEED_CATALOGUE.find((f) => f.slug === region) ?? null;
   const regionName = catalogueEntry?.name ?? region;
@@ -166,15 +157,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                 }
               />
             )}
-            <TierRequestControl
-              region={region}
-              tierKey={t.tierKey}
-              tierName={t.name}
-              alreadyRequested={requestedTierKeys.has(t.tierKey)}
-              serverName={serverRegistration?.serverName ?? null}
-              serverIp={serverRegistration?.declaredIp ?? null}
-              licenseTail={licenseTail}
-            />
+            <p className="ftd-contact-pricing">Contact for pricing</p>
           </div>
         ))}
 
