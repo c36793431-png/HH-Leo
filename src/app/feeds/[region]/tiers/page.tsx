@@ -19,12 +19,7 @@ const COMPARE_ROWS = [
   { key: "latency", label: "Feed latency" },
   { key: "redundancy", label: "Path redundancy" },
   { key: "support", label: "Support" },
-  { key: "price", label: "Price" },
 ] as const;
-
-function priceLabel(priceCents: number | null): string {
-  return priceCents == null ? "$—/mo" : `$${(priceCents / 100).toFixed(0)}/mo`;
-}
 
 /** Ranking is FOC13's Feed Comparison Scores leaderboard (feed-comparison-scores.ts),
  * authoritative per marcus (leo-london-tier-page-overhaul-2026-08-17). Cards stay in
@@ -155,7 +150,6 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               {t.latencyUs != null && <span className="ftd-speed-unit">µs</span>}
             </div>
             <p className="ftd-desc">{t.description}</p>
-            <span className="ftd-price">{priceLabel(t.priceCents)}</span>
             {isTrialEligibleTier(t.tierKey) && (
               <TrialCtaControl
                 region={region}
@@ -192,7 +186,6 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               <span className="ftd-speed-value">{BLACK_TIER.speedDisplay}</span>
             </div>
             <p className="ftd-desc">{BLACK_TIER.description}</p>
-            <span className="ftd-price">{priceLabel(BLACK_TIER.priceCents)}</span>
             <div className="ftd-black-ctas">
               <Link href="/account/servers" className="btn amber sm">
                 Start 7-day trial →
@@ -228,7 +221,6 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                     {row.key === "latency" && (t.latencyUs != null ? `${t.speedDisplay}µs` : t.speedDisplay)}
                     {row.key === "redundancy" && t.pathRedundancy}
                     {row.key === "support" && t.supportLevel}
-                    {row.key === "price" && priceLabel(t.priceCents)}
                   </td>
                 ))}
                 {region === "london" && (
@@ -236,7 +228,6 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                     {row.key === "latency" && BLACK_TIER.speedDisplay}
                     {row.key === "redundancy" && BLACK_TIER.pathRedundancy}
                     {row.key === "support" && BLACK_TIER.supportLevel}
-                    {row.key === "price" && priceLabel(BLACK_TIER.priceCents)}
                   </td>
                 )}
               </tr>
