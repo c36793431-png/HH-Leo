@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
@@ -31,6 +32,9 @@ export default async function ServersPage() {
 
   return (
     <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+      <Link href="/feeds" className="btn ghost sm" style={{ marginBottom: 12, display: "inline-block" }}>
+        ← All feeds
+      </Link>
       <div className="grid">
         <div className="card full">
           <div className="chead">
