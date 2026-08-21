@@ -13,6 +13,7 @@ import { getServerRegistration } from "@/lib/server-registration";
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { hasJoinedTierWaitlist } from "@/lib/tier-waitlist";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
+import { SectionPills } from "@/components/shared/section-pills";
 import type { FeedTierDetail } from "@/lib/feed-tiers";
 
 const COMPARE_ROWS = [
@@ -125,6 +126,13 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
         </p>
       </div>
 
+      <SectionPills
+        sections={[
+          { id: "tiers", label: `${regionName} Feeds` },
+          { id: "comparison", label: "Compare" },
+        ]}
+      />
+
       {serverRegistration ? (
         <div className="ftd-server-banner">
           <span className="lbl">Server</span>
@@ -145,7 +153,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
         </div>
       )}
 
-      <div className="ftd-tier-row">
+      <div id="tiers" className="ftd-tier-row">
         {region === "london" && (
           <div className="card ftd-tier-card ftd-flagship ftd-black ftd-institutional">
             <span className="ftd-rank-badge ftd-rank-black">#{BLACK_RANK}</span>
@@ -230,7 +238,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
 
       {region === "london" && <FeedComparisonScores />}
 
-      <div className="ftd-compare card full">
+      <div id="comparison" className="ftd-compare card full">
         <h3 className="fp-section-title">Horizon Feed Comparison</h3>
         <table className="ref-table">
           <thead>

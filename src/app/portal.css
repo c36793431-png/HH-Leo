@@ -421,6 +421,15 @@
 .portal-shell .chip.on { background: var(--emerald-soft); border-color: var(--emerald-line); color: var(--emerald); }
 .portal-shell .chip.on .n { color: var(--emerald); }
 
+.portal-shell .sec-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.portal-shell .sec-pill {
+  display: inline-flex; align-items: center; font-size: 13px; font-weight: 600; color: var(--hz-ink-2);
+  background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft); border-radius: 999px; padding: 8px 15px;
+  cursor: pointer; font-family: inherit; text-decoration: none;
+}
+.portal-shell .sec-pill:hover { color: var(--hz-cyan); border-color: rgba(45, 226, 230, 0.34); background: rgba(45, 226, 230, 0.1); }
+.portal-shell .sec-pill:active { background: rgba(45, 226, 230, 0.14); border-color: rgba(45, 226, 230, 0.4); color: var(--hz-cyan); }
+
 .portal-shell .edu-cat { margin-bottom: 30px; }
 .portal-shell .edu-cat-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .portal-shell .edu-cat-head .dot { width: 8px; height: 8px; border-radius: 2px; background: var(--emerald-500); flex: 0 0 8px; }
