@@ -1,30 +1,67 @@
 import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { REFERRAL_COOKIE, REFERRAL_COOKIE_MAX_AGE_DAYS } from "@/lib/referrals";
+import { getActivePartnerReferralCode } from "@/lib/partners";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 
-export default auth((req) => {
+// Auth.js session/csrf/callback cookies are scoped to this same domain in production
+// (see lib/auth.ts) so a signed-in session on one *.horizonhft.com host is visible on
+// the other. The ref-attribution cookie needs to match that scope or a partner-derived
+// hz_ref set here wouldn't survive a redirect from partner.horizonhft.com to portal's
+// /signup. Unset in dev so cookies still work against localhost.
+const REFERRAL_COOKIE_DOMAIN = process.env.NODE_ENV === "production" ? ".horizonhft.com" : undefined;
+
+/** Auto-attributes visits to partner.horizonhft.com to that partner's referral_code, so a
+ * signup that happens later in the same browser session lands in `referred_by_user_id` via
+ * the existing attributeReferralFromCookie flow — no ?ref= param needed. Only sets the cookie
+ * once (skips if the request or response already carries one), so an explicit ?ref= param
+ * elsewhere always wins and repeat visits don't re-query the DB. */
+async function withPartnerRefCookie(req: NextRequest, res: NextResponse): Promise<NextResponse> {
+  if (req.cookies.get(REFERRAL_COOKIE) || res.cookies.get(REFERRAL_COOKIE)) return res;
+  const code = await getActivePartnerReferralCode();
+  if (code) {
+    res.cookies.set(REFERRAL_COOKIE, code, {
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: REFERRAL_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60,
+      path: "/",
+      domain: REFERRAL_COOKIE_DOMAIN,
+    });
+  }
+  return res;
+}
+
+export default auth(async (req) => {
   const host = req.headers.get("host") || "";
   const isPartnerHost = host === PARTNER_HOST || host.startsWith(`${PARTNER_HOST}:`);
+  const pathname = req.nextUrl.pathname;
 
   if (isPartnerHost) {
-    // partner.horizonhft.com serves the partner dashboard, rewritten to
+    // partner.horizonhft.com serves the partner landing/dashboard, rewritten to
     // /partner internally so it lands at the domain root, not /partner/partner.
     // The admin partner-management view also lives here (same admin as portal.horizonhft.com),
     // but every other /admin/* route stays portal-only to avoid leaking unrelated admin surfaces.
-    if (req.nextUrl.pathname.startsWith("/admin") && !req.nextUrl.pathname.startsWith("/admin/partners")) {
+    if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/partners")) {
       return new NextResponse("Not Found", { status: 404 });
     }
-    if (!req.nextUrl.pathname.startsWith("/partner") && !req.nextUrl.pathname.startsWith("/admin/partners")) {
+    // /login and /signup pass through unrewritten so the real NextAuth pages render on this
+    // host instead of 404ing against a nonexistent /partner/login or /partner/signup.
+    const passthrough =
+      pathname === "/login" ||
+      pathname === "/signup" ||
+      pathname.startsWith("/partner") ||
+      pathname.startsWith("/admin/partners");
+
+    if (!passthrough) {
       const url = req.nextUrl.clone();
-      url.pathname = `/partner${req.nextUrl.pathname === "/" ? "" : req.nextUrl.pathname}`;
-      return NextResponse.rewrite(url);
+      url.pathname = `/partner${pathname === "/" ? "" : pathname}`;
+      return withPartnerRefCookie(req, NextResponse.rewrite(url));
     }
   }
 
-  if (req.nextUrl.pathname.startsWith("/admin")) {
+  if (pathname.startsWith("/admin")) {
     if (!req.auth?.user) {
       return NextResponse.redirect(new URL("/login", req.nextUrl));
     }
@@ -37,16 +74,19 @@ export default auth((req) => {
   // (Telegram widget or email magic link) actually creates the users row — see
   // lib/referrals.ts attributeReferralFromCookie for where it's resolved and consumed.
   const ref = req.nextUrl.searchParams.get("ref");
-  if (ref && (req.nextUrl.pathname === "/signup" || req.nextUrl.pathname === "/login")) {
+  if (ref && (pathname === "/signup" || pathname === "/login")) {
     const res = NextResponse.next();
     res.cookies.set(REFERRAL_COOKIE, ref.trim(), {
       httpOnly: true,
       sameSite: "lax",
       maxAge: REFERRAL_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60,
       path: "/",
+      domain: REFERRAL_COOKIE_DOMAIN,
     });
     return res;
   }
+
+  return isPartnerHost ? withPartnerRefCookie(req, NextResponse.next()) : NextResponse.next();
 });
 
 export const config = {

@@ -27,10 +27,35 @@ async function sendWelcomeDm(telegramUserId: number, displayName: string) {
   }
 }
 
+// Shares one session across portal.horizonhft.com and partner.horizonhft.com (bus thread
+// leo-partner-subdomain-auth-model-2026-08-21). Unset in dev so cookies still work against
+// localhost, which can't carry a ".horizonhft.com"-scoped cookie.
+const isProd = process.env.NODE_ENV === "production";
+const cookieDomain = isProd ? ".horizonhft.com" : undefined;
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PostgresAdapter(pool),
   session: { strategy: "jwt" },
   trustHost: true,
+  // Auth.js's csrf-token cookie defaults to a __Host- prefix under HTTPS, which the spec
+  // forbids from carrying a Domain attribute — so sharing the session across subdomains means
+  // every cookie in this trio needs an explicit, consistent domain/prefix, not just sessionToken.
+  cookies: cookieDomain
+    ? {
+        sessionToken: {
+          name: "__Secure-authjs.session-token",
+          options: { httpOnly: true, sameSite: "lax", path: "/", secure: true, domain: cookieDomain },
+        },
+        callbackUrl: {
+          name: "__Secure-authjs.callback-url",
+          options: { httpOnly: true, sameSite: "lax", path: "/", secure: true, domain: cookieDomain },
+        },
+        csrfToken: {
+          name: "__Secure-authjs.csrf-token",
+          options: { httpOnly: true, sameSite: "lax", path: "/", secure: true, domain: cookieDomain },
+        },
+      }
+    : undefined,
   providers: [
     Credentials({
       id: "telegram",

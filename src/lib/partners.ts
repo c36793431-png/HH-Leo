@@ -57,6 +57,81 @@ export async function getPartnerByUserId(userId: string): Promise<PartnerRow | n
   return result.rows[0] ? mapPartner(result.rows[0]) : null;
 }
 
+/** Resolves the single active partner's referral_code, for proxy.ts to auto-set the hz_ref
+ * cookie on partner.horizonhft.com visits (subdomain-derives-partner attribution). Only
+ * works while there's exactly one active partner — see proxy.ts PARTNER_HOST comment; once a
+ * second partner is onboarded this needs a host->partner lookup instead of "the one active row". */
+export async function getActivePartnerReferralCode(): Promise<string | null> {
+  const result = await pool.query<{ referral_code: string | null }>(
+    `select u.referral_code from partners p
+     join users u on u.id = p.user_id
+     where p.status = 'active'
+     order by p.created_at asc
+     limit 1`
+  );
+  return result.rows[0]?.referral_code ?? null;
+}
+
+/** Negotiated split for auto-created deals (item 5 of the leo-partner-subdomain-auth-model
+ * bundle) — matches the partner_deals column defaults and the one real deal on record
+ * (Legitcashmaker/aylrn, migration 0046). Revisit once partners can negotiate their own rate. */
+const DEFAULT_PARTNER_PCT = 0.6;
+const DEFAULT_COXWELL_PCT = 0.4;
+
+/** Bridges a customer payment from a partner-referred user into partner_deals/deal_payments
+ * instead of the flat-30% referral_earnings ledger, so partner-attributed revenue shows up on
+ * /partner/dashboard and /admin/partners. Finds-or-creates one active deal per (partner,
+ * client) pair and grows its gross_usd with each payment, so gross and received stay equal —
+ * same invariant the migration 0046 backfill established for a manually-entered deal.
+ * Idempotent per payment via deal_payments' unique(payment_id) (migration 0047). */
+export async function recordAutoPartnerPayment(input: {
+  partnerId: string;
+  clientUserId: string;
+  paymentId: string;
+  amountUsd: number;
+}): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const existing = await client.query<{ id: string }>(
+      `select id from partner_deals where partner_id = $1 and client_user_id = $2 and status = 'active' for update`,
+      [input.partnerId, input.clientUserId]
+    );
+    let dealId = existing.rows[0]?.id;
+    if (dealId) {
+      await client.query(`update partner_deals set gross_usd = gross_usd + $1 where id = $2`, [
+        input.amountUsd,
+        dealId,
+      ]);
+    } else {
+      const created = await client.query<{ id: string }>(
+        `insert into partner_deals (partner_id, client_user_id, gross_usd, partner_pct, coxwell_pct)
+         values ($1, $2, $3, $4, $5) returning id`,
+        [input.partnerId, input.clientUserId, input.amountUsd, DEFAULT_PARTNER_PCT, DEFAULT_COXWELL_PCT]
+      );
+      dealId = created.rows[0].id;
+    }
+    await client.query(
+      `insert into deal_payments (deal_id, payment_id, amount_usd, confirmed_by, notes)
+       values ($1, $2, $3, $4, $5)`,
+      [
+        dealId,
+        input.paymentId,
+        input.amountUsd,
+        "auto:referral-attribution",
+        "Auto-created from a customer payment via subdomain referral attribution",
+      ]
+    );
+    await client.query("commit");
+  } catch (err: unknown) {
+    await client.query("rollback");
+    if ((err as { code?: string })?.code === "23505") return; // already recorded for this payment
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function listPartners(): Promise<PartnerRow[]> {
   const result = await pool.query<PartnerDbRow>("select * from partners order by created_at desc");
   return result.rows.map(mapPartner);

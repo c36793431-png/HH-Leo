@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { pool } from "./db";
+import { getPartnerByUserId, recordAutoPartnerPayment } from "./partners";
 
 export const REFERRAL_COOKIE = "hz_ref";
 export const REFERRAL_COOKIE_MAX_AGE_DAYS = 30;
@@ -71,6 +72,19 @@ export async function maybeCreateReferralEarning(paymentId: string): Promise<voi
   );
   const referrerId = referred.rows[0]?.referred_by_user_id;
   if (!referrerId || referrerId === row.user_id) return;
+
+  // A partner-linked referrer (Legitcashmaker et al.) books into partner_deals instead of the
+  // flat-30% referral_earnings ledger — see recordAutoPartnerPayment for the bridge shape.
+  const partner = await getPartnerByUserId(referrerId);
+  if (partner) {
+    await recordAutoPartnerPayment({
+      partnerId: partner.id,
+      clientUserId: row.user_id,
+      paymentId: row.id,
+      amountUsd: Number(row.amount_usd),
+    });
+    return;
+  }
 
   const amountUsd = Number(row.amount_usd) * REFERRAL_RATE;
   try {
