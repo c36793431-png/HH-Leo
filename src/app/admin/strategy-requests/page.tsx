@@ -77,11 +77,10 @@ export default async function AdminStrategyRequestsPage({
             <thead className="text-zinc-500">
               <tr>
                 <th className="pb-2 pr-4">Submitted</th>
+                <th className="pb-2 pr-4">Type</th>
                 <th className="pb-2 pr-4">User</th>
-                <th className="pb-2 pr-4">Idea</th>
-                <th className="pb-2 pr-4">Asset</th>
-                <th className="pb-2 pr-4">Timeframe</th>
-                <th className="pb-2 pr-4">References</th>
+                <th className="pb-2 pr-4">Idea / Strategy</th>
+                <th className="pb-2 pr-4">Details</th>
                 <th className="pb-2 pr-4">Status</th>
                 <th className="pb-2">Notes</th>
               </tr>
@@ -92,17 +91,44 @@ export default async function AdminStrategyRequestsPage({
                   <td className="py-2 pr-4 text-zinc-400">
                     {formatAbsoluteUtc(r.submittedAt)} <span className="text-zinc-600">({formatRelative(r.submittedAt)})</span>
                   </td>
+                  <td className="py-2 pr-4">
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${
+                        r.submissionType === "structured"
+                          ? "border-blue-500/40 bg-blue-500/15 text-blue-300"
+                          : "border-zinc-600 bg-zinc-800/60 text-zinc-400"
+                      }`}
+                    >
+                      {r.submissionType === "structured" ? "BUILD" : "PITCH"}
+                    </span>
+                  </td>
                   <td className="py-2 pr-4 text-zinc-200">
                     {r.userName ?? "—"}
                     <div className="text-xs text-zinc-500">{r.userEmail ?? "—"}</div>
                   </td>
                   <td className="py-2 pr-4 max-w-xs text-zinc-300" title={r.ideaText}>
-                    {r.ideaText}
+                    {r.submissionType === "structured" ? r.strategyName ?? "—" : r.ideaText}
+                    {r.submissionType === "structured" && (
+                      <div className="mt-1 max-w-xs text-xs text-zinc-500" title={r.ideaText}>
+                        {r.ideaText}
+                      </div>
+                    )}
                   </td>
-                  <td className="py-2 pr-4 text-zinc-400">{r.assetText ?? "—"}</td>
-                  <td className="py-2 pr-4 text-zinc-400">{r.timeframeText ?? "—"}</td>
-                  <td className="py-2 pr-4 max-w-xs text-zinc-400" title={r.referencesText ?? undefined}>
-                    {r.referencesText ?? "—"}
+                  <td className="py-2 pr-4 max-w-xs text-zinc-400">
+                    {r.submissionType === "structured" ? (
+                      <div className="space-y-0.5 text-xs">
+                        <div>category: {r.category ?? "—"}</div>
+                        <div>instruments: {r.instruments?.length ? r.instruments.join(", ") : "—"}</div>
+                        <div>feed: {r.feedRequirement ?? "—"}</div>
+                        <div>contact: {r.contactPreference ?? "—"}</div>
+                      </div>
+                    ) : (
+                      <div className="space-y-0.5 text-xs">
+                        <div>asset: {r.assetText ?? "—"}</div>
+                        <div>timeframe: {r.timeframeText ?? "—"}</div>
+                        <div title={r.referencesText ?? undefined}>refs: {r.referencesText ?? "—"}</div>
+                      </div>
+                    )}
                   </td>
                   <td className="py-2 pr-4">
                     <span
@@ -124,7 +150,7 @@ export default async function AdminStrategyRequestsPage({
               ))}
               {requests.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-zinc-500">
+                  <td colSpan={7} className="py-8 text-center text-zinc-500">
                     No strategy requests yet.
                   </td>
                 </tr>

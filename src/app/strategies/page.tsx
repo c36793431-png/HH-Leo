@@ -14,6 +14,7 @@ import {
   type StrategyCardStatus,
 } from "@/lib/strategy-catalogue";
 import { StrategyRequestForm } from "@/components/strategies/strategy-request-form";
+import { AddYourStrategyForm } from "@/components/strategies/add-your-strategy-form";
 
 const STATUS_LABEL: Record<StrategyCardStatus, string> = {
   active: "Active",
@@ -99,6 +100,14 @@ export default async function StrategiesPage() {
             scope it.
           </p>
           <StrategyRequestForm />
+        </div>
+
+        <div className="card fp-cta-card">
+          <h3 className="fp-cta-title">Add your strategy</h3>
+          <p className="fp-cta-copy">
+            Already built something that works? Pitch it to us with the details and we&apos;ll review it.
+          </p>
+          <AddYourStrategyForm />
         </div>
 
         <div className="card fp-consult-card">
