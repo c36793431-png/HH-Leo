@@ -12,6 +12,7 @@ interface TierRequestControlProps {
   serverName: string | null;
   serverIp: string | null;
   licenseTail: string;
+  variant?: "primary" | "amber";
 }
 
 export function TierRequestControl({
@@ -22,6 +23,7 @@ export function TierRequestControl({
   serverName,
   serverIp,
   licenseTail,
+  variant = "primary",
 }: TierRequestControlProps) {
   const [open, setOpen] = useState(false);
   const [requested, setRequested] = useState(alreadyRequested);
@@ -52,7 +54,11 @@ export function TierRequestControl({
 
   return (
     <>
-      <button type="button" className="btn primary sm ftd-unlock" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className={`btn ${variant === "amber" ? "amber" : "primary"} sm ftd-unlock`}
+        onClick={() => setOpen(true)}
+      >
         Request access
       </button>
 
@@ -95,7 +101,12 @@ export function TierRequestControl({
               <button type="button" className="btn ghost sm" onClick={() => setOpen(false)} disabled={isPending}>
                 Cancel
               </button>
-              <button type="button" className="btn primary sm" onClick={handleConfirm} disabled={isPending}>
+              <button
+                type="button"
+                className={`btn ${variant === "amber" ? "amber" : "primary"} sm`}
+                onClick={handleConfirm}
+                disabled={isPending}
+              >
                 {isPending ? "Submitting…" : "Confirm request"}
               </button>
             </div>

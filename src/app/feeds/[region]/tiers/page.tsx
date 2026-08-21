@@ -34,6 +34,12 @@ const LONDON_TIER_RANK: Record<string, number> = {
 };
 const BLACK_RANK = 1;
 
+/** Institutional ($10k+) vs retail segment split (marcus/coxwell,
+ * leo-tiers-institutional-retail-labels-2026-08-21). feed_tiers has no price_cents
+ * populated yet, so this is a tier-key allowlist rather than a price/enum threshold --
+ * swap for a market_segment column once pricing lands in the DB. */
+const INSTITUTIONAL_TIER_KEYS = new Set(["black", "ld-ultra"]);
+
 /** Black isn't in feed-tier-catalogue.ts / feed_tiers -- it's a separate paid-only,
  * one-per-desk gate (black-trials.ts, 9bbd5a3) with its own request flow on
  * /account/servers. This card is display-only here; both CTAs hand off to that page
@@ -136,7 +142,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
 
       <div className="ftd-tier-row">
         {region === "london" && (
-          <div className="card ftd-tier-card ftd-flagship ftd-black">
+          <div className="card ftd-tier-card ftd-flagship ftd-black ftd-institutional">
             <span className="ftd-rank-badge ftd-rank-black">#{BLACK_RANK}</span>
             <h3 className="ftd-name ftd-name-black">{BLACK_TIER.name}</h3>
             <div className="ftd-speed">
@@ -154,13 +160,27 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
           </div>
         )}
 
-        {displayTiers.map((t) => (
-          <div key={t.tierKey} className={`card ftd-tier-card${t.isFlagship ? " ftd-flagship" : ""}`}>
+        {displayTiers.map((t) => {
+          const isInstitutional = region === "london" && INSTITUTIONAL_TIER_KEYS.has(t.tierKey);
+          return (
+          <div
+            key={t.tierKey}
+            className={`card ftd-tier-card${t.isFlagship ? " ftd-flagship" : ""}${isInstitutional ? " ftd-institutional" : ""}`}
+          >
             {region === "london" && LONDON_TIER_RANK[t.tierKey] != null && (
-              <span className="ftd-rank-badge">#{LONDON_TIER_RANK[t.tierKey]}</span>
+              <span className={`ftd-rank-badge${isInstitutional ? " ftd-rank-amber" : ""}`}>
+                #{LONDON_TIER_RANK[t.tierKey]}
+              </span>
             )}
-            {t.isFlagship ? (
+            {isInstitutional ? (
+              <span className="ftd-flagship-badge ftd-badge-amber">{t.subtitle}</span>
+            ) : t.isFlagship ? (
               <span className="ftd-flagship-badge">{t.subtitle}</span>
+            ) : region === "london" ? (
+              <>
+                <span className="ftd-segment-badge">RETAIL</span>
+                <span className="ftd-subtitle">{t.subtitle}</span>
+              </>
             ) : (
               <span className="ftd-subtitle">{t.subtitle}</span>
             )}
@@ -186,9 +206,11 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               serverName={serverRegistration?.serverName ?? null}
               serverIp={serverRegistration?.declaredIp ?? null}
               licenseTail={licenseTail}
+              variant={isInstitutional ? "amber" : "primary"}
             />
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {region === "london" && <FeedComparisonScores />}

@@ -654,6 +654,22 @@
   border-radius: 999px; padding: 3px 8px;
 }
 .portal-shell .ftd-rank-badge.ftd-rank-black { color: var(--hz-warn); border-color: var(--hz-amber-line); }
+.portal-shell .ftd-rank-badge.ftd-rank-amber { color: var(--hz-warn); border-color: var(--hz-amber-line); }
+
+/* Institutional segment ($10k+): Black + LD Ultra share the amber accent so they read as a pair
+   (marcus/coxwell, leo-tiers-institutional-retail-labels-2026-08-21). */
+.portal-shell .ftd-tier-card.ftd-institutional:not(.ftd-black) {
+  border-color: rgba(255, 194, 75, 0.5);
+  background: linear-gradient(135deg, rgba(255, 194, 75, 0.1), rgba(255, 194, 75, 0.02));
+}
+.portal-shell .ftd-flagship-badge.ftd-badge-amber {
+  color: var(--hz-warn); border-color: rgba(255, 194, 75, 0.5);
+}
+.portal-shell .ftd-segment-badge {
+  align-self: flex-start; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--hz-ink-3); background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hz-line);
+  border-radius: 999px; padding: 2px 7px;
+}
 
 /* Onyx/platinum lockup for the Black flagship card (Iris mock, black-trial-signup.png) */
 .portal-shell .ftd-tier-card.ftd-black {
