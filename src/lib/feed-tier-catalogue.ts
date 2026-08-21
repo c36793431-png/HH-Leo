@@ -30,8 +30,8 @@ export const FEED_TIERS: FeedTierMeta[] = [
   { key: "ld-gamma-19", name: "LD Gamma 19", region: "london" },
   { key: "ld-delta-18", name: "LD Delta 18", region: "london" },
   { key: "ld-ultra", name: "LD Ultra", region: "london" },
-  { key: "ny-normal", name: "NY Normal", region: "ny" },
-  { key: "ny-fast", name: "NY Fast", region: "ny" },
+  { key: "ny-normal", name: "NY Beta", region: "ny" },
+  { key: "ny-fast", name: "NY Alpha", region: "ny" },
 ];
 
 /** Only the entry tier and the flagship get a trial CTA (coxwell, trial feature add-on,
