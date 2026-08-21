@@ -49,8 +49,8 @@ const BLACK_TIER: FeedTierDetail = {
   tierKey: "black",
   name: "Black",
   subtitle: "FLAGSHIP",
-  speedDisplay: "MIN",
-  latencyUs: null,
+  speedDisplay: "94.8",
+  latencyUs: 94.8,
   description:
     "Our fastest institutional feed -- exchange-native, co-located, and #1 on the Horizon Feed Comparison.",
   priceCents: null,
@@ -147,7 +147,9 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             <span className="ftd-flagship-badge ftd-badge-amber">INSTITUTIONAL LATENCY</span>
             <h3 className="ftd-name ftd-name-black">{BLACK_TIER.name}</h3>
             <div className="ftd-speed">
+              <span className="ftd-speed-label">SCORE</span>
               <span className="ftd-speed-value">{BLACK_TIER.speedDisplay}</span>
+              <span className="ftd-speed-unit">/100</span>
             </div>
             <p className="ftd-desc">{BLACK_TIER.description}</p>
             <div className="ftd-black-ctas">
