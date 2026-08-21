@@ -29,7 +29,7 @@ export default async function DownloadsPage() {
 
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
-  const changelog = downloads.windows?.changelog ?? downloads.macos?.changelog ?? PLACEHOLDER_CHANGELOG;
+  const changelog = downloads.windows?.changelog ?? PLACEHOLDER_CHANGELOG;
   const tier = computePortalTier(isAdmin, licenseDetail);
 
   return (
@@ -53,23 +53,10 @@ export default async function DownloadsPage() {
               </div>
               <span className="ver">{downloads.windows ? `v${downloads.windows.version}` : "—"}</span>
             </div>
-            <div className="rw">
-              <div className="ricon">⤓</div>
-              <div className="rmeta">
-                <b>Horizon Terminal — macOS</b>
-                <span>
-                  {downloads.macos
-                    ? `${formatSize(downloads.macos.sizeBytes)} · SHA256 ${downloads.macos.sha256.slice(0, 12)}…`
-                    : "Not yet published"}
-                </span>
-              </div>
-              <span className="ver">{downloads.macos ? `v${downloads.macos.version}` : "—"}</span>
-            </div>
           </div>
           <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
             {downloads.windows && <DownloadButton version={downloads.windows.version} platform="windows" />}
-            {downloads.macos && <DownloadButton version={downloads.macos.version} platform="macos" />}
-            {!downloads.windows && !downloads.macos && (
+            {!downloads.windows && (
               <button type="button" disabled title="Build not yet published" className="btn primary sm">
                 Download installer
               </button>
