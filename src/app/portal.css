@@ -634,7 +634,7 @@
 .portal-shell .ftd-speed-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--hz-ink-3); align-self: flex-start; }
 .portal-shell .ftd-speed-value { font-family: var(--hz-mono); font-size: 28px; font-weight: 700; color: var(--hz-ink); }
 .portal-shell .ftd-speed-unit { font-family: var(--hz-mono); font-size: 12px; color: var(--hz-ink-3); }
-.portal-shell .ftd-desc { font-size: 12px; color: var(--hz-ink-3); line-height: 1.5; min-height: 48px; }
+.portal-shell .ftd-desc { font-size: 12px; color: var(--hz-ink-3); line-height: 1.5; min-height: 48px; flex: 1 0 auto; }
 .portal-shell .ftd-price { font-family: var(--hz-mono); font-size: 13px; color: var(--hz-ink-2); }
 .portal-shell .ftd-contact-pricing { font-size: 12px; font-weight: 600; color: var(--hz-ink-3); margin-top: 6px; }
 .portal-shell .ftd-unlock { margin-top: 4px; }
