@@ -11,6 +11,8 @@
  * telemetry bot rotation can't affect the portal's paid-group bot and vice versa.
  */
 
+import { sendTelegramMessageWithButtons, type InlineKeyboardButton } from "./telegram-bot";
+
 const API_ROOT = "https://api.telegram.org";
 
 export interface HeartbeatTelemetry {
@@ -156,6 +158,25 @@ async function sendApprovalsTopicMessage(text: string): Promise<void> {
   } catch (err) {
     console.error("telemetry-sink: approvals topic send failed", err);
     await sendSinkMessage(text);
+  }
+}
+
+/** Posts an actionable ping (inline Approve/Decline buttons) to the Coxwell approvals
+ * topic via the portal bot. Returns true on success; caller falls back to the plain
+ * telemetry-bot ping on failure so nothing is silently dropped. */
+async function sendActionableApprovalMessage(
+  text: string,
+  buttons: InlineKeyboardButton[][]
+): Promise<boolean> {
+  if (!process.env.HORIZON_PORTAL_BOT_TOKEN) return false; // not configured yet
+  try {
+    const messageId = await sendTelegramMessageWithButtons(COXWELL_APPROVALS_CHAT_ID, text, buttons, {
+      threadId: COXWELL_APPROVALS_THREAD_ID,
+    });
+    return messageId !== null;
+  } catch (err) {
+    console.error("telemetry-sink: actionable approval send failed", err);
+    return false;
   }
 }
 
@@ -340,6 +361,7 @@ export async function notifyStrategySubmissionSubmitted(opts: {
 }
 
 export async function notifyFeedTierRequestSubmitted(opts: {
+  id: string;
   email: string | null;
   tierName: string;
   licenseKey: string;
@@ -354,14 +376,26 @@ export async function notifyFeedTierRequestSubmitted(opts: {
   } else if (opts.serverIp) {
     server = `${opts.serverIp} (unregistered)`;
   }
-  await sendApprovalsTopicMessage(
+  const text =
     `📡 new feed request\n` +
-      `email: ${opts.email ?? "-"}\n` +
-      `tier: ${opts.tierName}\n` +
-      `license: …${keyTail(opts.licenseKey)}\n` +
-      `server: ${server}\n` +
-      `${opts.adminUrl}`
-  );
+    `email: ${opts.email ?? "-"}\n` +
+    `tier: ${opts.tierName}\n` +
+    `license: …${keyTail(opts.licenseKey)}\n` +
+    `server: ${server}\n` +
+    `${opts.adminUrl}`;
+
+  // Actionable pings need the buttons' callback_query to land on a webhook we own, so
+  // these go out via the portal bot (live webhook w/ secret validation) instead of the
+  // telemetry bot (outbound-only, no webhook) -- leo-admin-inline-actions-reusable-
+  // pattern-2026-08-21. Falls back to the old text-only telemetry-bot ping if that send
+  // fails, so the notification is never silently dropped.
+  const sent = await sendActionableApprovalMessage(text, [
+    [
+      { text: "✅ Approve", callback_data: `feedreq:approve:${opts.id}` },
+      { text: "❌ Decline", callback_data: `feedreq:reject:${opts.id}` },
+    ],
+  ]);
+  if (!sent) await sendApprovalsTopicMessage(text);
 }
 
 export async function notifyFeedTierTrialStarted(opts: {

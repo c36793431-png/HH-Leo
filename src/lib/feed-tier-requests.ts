@@ -110,6 +110,7 @@ export async function createFeedTierRequest(args: CreateArgs): Promise<FeedTierR
   if (!row) throw new Error("failed to load created feed tier request");
 
   await notifyFeedTierRequestSubmitted({
+    id: row.id,
     email: row.userEmail,
     tierName: row.tierName,
     licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",

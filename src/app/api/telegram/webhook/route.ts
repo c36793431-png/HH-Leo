@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
-import { sendTelegramMessage } from "@/lib/telegram-bot";
+import { sendTelegramMessage, answerCallbackQuery, editMessageText } from "@/lib/telegram-bot";
 import { notifyTelegramLinked } from "@/lib/telemetry-sink";
 import { getLicenseForUser, computeLicenseDisplayStatus, getGroupTarget, isPaidTier } from "@/lib/licenses";
 import { sendPaidGroupInvite } from "@/lib/group-membership";
+import { resolveAdminUserId } from "@/lib/admin-telegram-map";
+import { approveFeedTierRequest, rejectFeedTierRequest, getFeedTierRequest } from "@/lib/feed-tier-requests";
 
 const INVITE_RATE_LIMIT_MS = 60_000;
+const FEEDREQ_ADMIN_URL = "https://portal.horizonhft.com/admin/feed-tier-requests";
 
 interface TelegramUpdate {
   message?: {
@@ -13,6 +16,91 @@ interface TelegramUpdate {
     chat?: { id: number };
     from?: { id: number; first_name?: string; username?: string };
   };
+  callback_query?: {
+    id: string;
+    data?: string;
+    from: { id: number };
+    message?: { chat: { id: number }; message_id: number; text?: string };
+  };
+}
+
+/** Reusable inline approve/decline dispatch (leo-admin-inline-actions-reusable-pattern-
+ * 2026-08-21). Keyed by the callback_data surface prefix (`${surface}:${action}:${id}`).
+ * Each entry's mutation reuses the same portal-UI action functions -- no signature
+ * changes needed since `actionedBy` already resolves to a real portal user id via
+ * ADMIN_TELEGRAM_MAP. */
+const ADMIN_ACTION_DISPATCH: Record<
+  string,
+  {
+    label: string;
+    getStatus: (id: string) => Promise<string | null>;
+    approve: (id: string, actionedBy: string) => Promise<void>;
+    reject: (id: string, actionedBy: string) => Promise<void>;
+  }
+> = {
+  feedreq: {
+    label: "feed request",
+    getStatus: async (id) => (await getFeedTierRequest(id))?.status ?? null,
+    approve: async (id, actionedBy) => {
+      await approveFeedTierRequest(id, actionedBy, FEEDREQ_ADMIN_URL);
+    },
+    reject: async (id, actionedBy) => {
+      await rejectFeedTierRequest(id, actionedBy, "declined via Telegram");
+    },
+  },
+};
+
+async function handleCallbackQuery(cq: NonNullable<TelegramUpdate["callback_query"]>): Promise<void> {
+  const chatId = cq.message?.chat?.id;
+  const messageId = cq.message?.message_id;
+  const originalText = cq.message?.text ?? "";
+
+  const adminUserId = resolveAdminUserId(cq.from.id);
+  if (!adminUserId) {
+    console.warn(`telegram webhook: unauthorized callback_query attempt from ${cq.from.id}: ${cq.data}`);
+    await answerCallbackQuery(cq.id, { text: "Not authorized", showAlert: true });
+    return;
+  }
+
+  const [surface, action, recordId] = (cq.data ?? "").split(":");
+  const entry = ADMIN_ACTION_DISPATCH[surface];
+  if (!entry || !recordId || (action !== "approve" && action !== "reject")) {
+    await answerCallbackQuery(cq.id, { text: "Unrecognized action", showAlert: true });
+    return;
+  }
+
+  const status = await entry.getStatus(recordId);
+  if (status === null) {
+    await answerCallbackQuery(cq.id, { text: "Not found", showAlert: true });
+    return;
+  }
+  if (status !== "pending") {
+    await answerCallbackQuery(cq.id, { text: `Already actioned (${status})` });
+    return;
+  }
+
+  const adminRow = await pool.query<{ display_name: string | null; email: string | null }>(
+    "select display_name, email from users where id = $1",
+    [adminUserId]
+  );
+  const adminName = adminRow.rows[0]?.display_name || adminRow.rows[0]?.email || "admin";
+
+  if (action === "approve") {
+    await entry.approve(recordId, adminUserId);
+  } else {
+    await entry.reject(recordId, adminUserId);
+  }
+
+  await answerCallbackQuery(cq.id, { text: action === "approve" ? "Approved" : "Declined" });
+
+  if (chatId && messageId) {
+    const badge = action === "approve" ? "✅ APPROVED" : "❌ DECLINED";
+    await editMessageText(
+      chatId,
+      messageId,
+      `${badge} by ${adminName} · ${new Date().toISOString()}\n${originalText}`
+    );
+  }
 }
 
 function authorized(req: NextRequest): boolean {
@@ -34,6 +122,16 @@ export async function POST(req: NextRequest) {
   try {
     update = await req.json();
   } catch {
+    return NextResponse.json({ ok: true });
+  }
+
+  if (update.callback_query) {
+    try {
+      await handleCallbackQuery(update.callback_query);
+    } catch (err) {
+      console.error("telegram webhook: handleCallbackQuery failed", err);
+      await answerCallbackQuery(update.callback_query.id, { text: "Action failed", showAlert: true }).catch(() => {});
+    }
     return NextResponse.json({ ok: true });
   }
 

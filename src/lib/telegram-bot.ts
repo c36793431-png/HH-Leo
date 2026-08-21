@@ -136,3 +136,77 @@ export async function banChatMember(chatId: string, userId: number | string): Pr
 export async function unbanChatMember(chatId: string, userId: number | string): Promise<boolean> {
   return callTelegramApi("unbanChatMember", { chat_id: chatId, user_id: userId, only_if_banned: true });
 }
+
+export interface InlineKeyboardButton {
+  text: string;
+  callback_data: string;
+}
+
+/** Sends a message with an inline keyboard from the portal bot, optionally into a forum
+ * topic thread. Returns the sent message_id (needed to edit the message later from a
+ * callback_query), or null on failure. */
+export async function sendTelegramMessageWithButtons(
+  chatId: number | string,
+  text: string,
+  buttons: InlineKeyboardButton[][],
+  opts: { threadId?: number } = {}
+): Promise<number | null> {
+  const res = await fetch(`${API_ROOT}/bot${botToken()}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_thread_id: opts.threadId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: buttons },
+    }),
+  });
+  if (!res.ok) {
+    console.error("sendTelegramMessageWithButtons failed", await res.text());
+    return null;
+  }
+  const data = await res.json();
+  return data?.result?.message_id ?? null;
+}
+
+/** Replaces a message's text and strips its inline keyboard -- used after an admin taps an
+ * action button so the message itself becomes the audit trail. */
+export async function editMessageText(
+  chatId: number | string,
+  messageId: number,
+  text: string
+): Promise<void> {
+  const res = await fetch(`${API_ROOT}/bot${botToken()}/editMessageText`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: [] },
+    }),
+  });
+  if (!res.ok) console.error("editMessageText failed", await res.text());
+}
+
+/** Acks a callback_query -- Telegram shows a spinner on the tapped button until this is
+ * called, and will eventually retry the update if it never gets one. */
+export async function answerCallbackQuery(
+  callbackQueryId: string,
+  opts: { text?: string; showAlert?: boolean } = {}
+): Promise<void> {
+  const res = await fetch(`${API_ROOT}/bot${botToken()}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      callback_query_id: callbackQueryId,
+      text: opts.text,
+      show_alert: opts.showAlert ?? false,
+    }),
+  });
+  if (!res.ok) console.error("answerCallbackQuery failed", await res.text());
+}
