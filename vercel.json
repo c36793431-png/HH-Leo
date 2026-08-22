@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/expire-trials",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/migration-drift-check",
+      "schedule": "0 * * * *"
     }
   ]
 }

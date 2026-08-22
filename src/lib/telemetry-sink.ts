@@ -439,6 +439,16 @@ export async function notifyPartnerApplicationSubmitted(opts: {
 /** Waitlist joins are informational only (no approve/reject action), so this goes
  * straight to the plain-text approvals-topic ping rather than the actionable-buttons
  * path used for actual access requests. */
+/** Migration drift: a db/migrations/*.sql file has no schema_migrations row, meaning it
+ * shipped in code but was never applied (or applied without logging itself) -- the
+ * failure mode that let 0057_pending_signups.sql silently drop signup name/telegram
+ * fields for a week (leo-migration-drift-check-2026-08-22). */
+export async function notifyMigrationDrift(versions: string[]): Promise<void> {
+  await sendApprovalsTopicMessage(
+    `⚠️ migration drift: ${versions.length} file(s) not in schema_migrations\n` + versions.join(", ")
+  );
+}
+
 export async function notifyBlackWaitlistJoined(opts: {
   name: string | null;
   email: string | null;
