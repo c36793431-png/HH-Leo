@@ -11,6 +11,99 @@ import { notifyFreeSignup, notifyFirstLogin } from "./telemetry-sink";
 import { getOrCreateReferralCode } from "./referrals";
 import { attributeReferralFromCookie } from "./referrals-cookie";
 
+const PARTNER_HOST = "partner.horizonhft.com";
+
+/** Amber-branded magic-link email for partner.horizonhft.com sign-ins (bus thread
+ * leo-partner-magic-link-email-branding-2026-08-22). Kept separate from the member
+ * template below so portal.horizonhft.com sign-ins are untouched. */
+function partnerMagicLinkHtml(url: string, host: string) {
+  const escapedHost = host.replace(/\./g, "&#8203;.");
+  const logoUrl = `https://${host}/brand/horizon-logo-partner.png`;
+  return `
+<body style="background: #1a1206;">
+  <table width="100%" border="0" cellspacing="20" cellpadding="0"
+    style="background: #241704; max-width: 600px; margin: auto; border-radius: 10px;">
+    <tr>
+      <td align="center" style="padding: 20px 0 0 0;">
+        <img src="${logoUrl}" alt="Horizon HFT Partners" width="180" style="display: block; max-width: 180px;" />
+      </td>
+    </tr>
+    <tr>
+      <td align="center"
+        style="padding: 10px 0px; font-size: 22px; font-family: Helvetica, Arial, sans-serif; color: #f5e6c8;">
+        Sign in to <strong>${escapedHost}</strong>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center" style="border-radius: 5px;" bgcolor="#F5B547"><a href="${url}"
+                target="_blank"
+                style="font-size: 18px; font-family: Helvetica, Arial, sans-serif; color: #241704; text-decoration: none; border-radius: 5px; padding: 10px 20px; border: 1px solid #D48B1E; display: inline-block; font-weight: bold;">Sign
+                in</a></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center"
+        style="padding: 0px 0px 10px 0px; font-size: 16px; line-height: 22px; font-family: Helvetica, Arial, sans-serif; color: #cbb98f;">
+        If you did not request this email you can safely ignore it.
+      </td>
+    </tr>
+  </table>
+</body>
+`;
+}
+
+function partnerMagicLinkText(url: string, host: string) {
+  return `Sign in to ${host}\n${url}\n\n`;
+}
+
+/** Member (portal.horizonhft.com) magic-link email — mirrors @auth/core's default Resend
+ * template verbatim (that module isn't part of its public export map, so it can't be
+ * imported directly). Left untouched by the partner branding above. */
+function memberMagicLinkHtml(url: string, host: string) {
+  const escapedHost = host.replace(/\./g, "&#8203;.");
+  const brandColor = "#346df1";
+  return `
+<body style="background: #f9f9f9;">
+  <table width="100%" border="0" cellspacing="20" cellpadding="0"
+    style="background: #fff; max-width: 600px; margin: auto; border-radius: 10px;">
+    <tr>
+      <td align="center"
+        style="padding: 10px 0px; font-size: 22px; font-family: Helvetica, Arial, sans-serif; color: #444;">
+        Sign in to <strong>${escapedHost}</strong>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center" style="border-radius: 5px;" bgcolor="${brandColor}"><a href="${url}"
+                target="_blank"
+                style="font-size: 18px; font-family: Helvetica, Arial, sans-serif; color: #fff; text-decoration: none; border-radius: 5px; padding: 10px 20px; border: 1px solid ${brandColor}; display: inline-block; font-weight: bold;">Sign
+                in</a></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center"
+        style="padding: 0px 0px 10px 0px; font-size: 16px; line-height: 22px; font-family: Helvetica, Arial, sans-serif; color: #444;">
+        If you did not request this email you can safely ignore it.
+      </td>
+    </tr>
+  </table>
+</body>
+`;
+}
+
+function memberMagicLinkText(url: string, host: string) {
+  return `Sign in to ${host}\n${url}\n\n`;
+}
+
 async function sendWelcomeDm(telegramUserId: number, displayName: string) {
   try {
     const config = await getPortalConfig();
@@ -147,6 +240,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Resend({
       apiKey: process.env.AUTH_RESEND_KEY,
       from: process.env.EMAIL_FROM,
+      // Partner-branded (amber) template for partner.horizonhft.com sign-ins; every other
+      // host falls back to the provider's default member (blue) template, untouched.
+      async sendVerificationRequest({ identifier: to, provider, url }) {
+        const { host } = new URL(url);
+        const isPartnerHost = host === PARTNER_HOST || host.startsWith(`${PARTNER_HOST}:`);
+        const html = isPartnerHost ? partnerMagicLinkHtml(url, host) : memberMagicLinkHtml(url, host);
+        const text = isPartnerHost ? partnerMagicLinkText(url, host) : memberMagicLinkText(url, host);
+
+        const res = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${provider.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ from: provider.from, to, subject: `Sign in to ${host}`, html, text }),
+        });
+        if (!res.ok) throw new Error("Resend error: " + JSON.stringify(await res.json()));
+      },
     }),
   ],
   callbacks: {
