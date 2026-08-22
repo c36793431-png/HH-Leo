@@ -1,14 +1,20 @@
 import { signOut } from "@/lib/auth";
 
-async function signOutAction() {
-  "use server";
-  await signOut({ redirectTo: "/login" });
-}
+export function SignOutButton({
+  className = "btn ghost sm",
+  redirectTo = "/login",
+}: {
+  className?: string;
+  redirectTo?: string;
+}) {
+  async function signOutAction() {
+    "use server";
+    await signOut({ redirectTo });
+  }
 
-export function SignOutButton() {
   return (
     <form action={signOutAction}>
-      <button type="submit" className="btn ghost sm">
+      <button type="submit" className={className}>
         Sign out
       </button>
     </form>

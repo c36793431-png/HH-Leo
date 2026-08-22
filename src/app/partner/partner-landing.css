@@ -88,6 +88,12 @@
   font-family: var(--pv-disp); font-weight: 700; font-size: 11px; color: var(--pv-cyan);
 }
 .pv-nav-signed b { color: var(--pv-ink); font-weight: 600; }
+.pv-nav-signed form { display: inline-flex; }
+.pv-signout {
+  font: inherit; font-size: 12px; color: var(--pv-ink-2); background: transparent; border: 1px solid var(--pv-line);
+  border-radius: 999px; padding: 4px 10px; cursor: pointer;
+}
+.pv-signout:hover { color: var(--pv-ink); background: rgba(255, 255, 255, 0.05); }
 .pv-partner-link {
   display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--pv-amber);
   border: 1px solid var(--pv-amber-line); background: var(--pv-amber-soft); border-radius: 999px; padding: 8px 15px;

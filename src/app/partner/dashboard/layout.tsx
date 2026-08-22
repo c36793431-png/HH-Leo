@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { isAdminUser, isPartnerUser } from "@/lib/admin-users-panel";
 import { getPendingPartnerApplicationForUser } from "@/lib/partner-applications";
+import { SignOutButton } from "@/components/sign-out-button";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 
@@ -40,7 +41,13 @@ export default async function PartnerDashboardLayout({ children }: { children: R
   // is unchanged, only this cosmetic wrapper moved).
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-8 sm:px-8">
-      <div className="mx-auto max-w-5xl">{children}</div>
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-4 flex items-center justify-end gap-3 text-xs text-zinc-500">
+          <span>Signed in as {session.user.name?.trim() || session.user.email}</span>
+          <SignOutButton className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800" redirectTo="/partner" />
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { isAdminUser, isPartnerUser } from "@/lib/admin-users-panel";
 import { getPendingPartnerApplicationForUser } from "@/lib/partner-applications";
 import { PartnerApplyForm } from "@/components/partner/partner-apply-form";
+import { SignOutButton } from "@/components/sign-out-button";
 import "./partner-landing.css";
 
 interface RawSearchParams {
@@ -89,6 +90,7 @@ export default async function PartnerLandingPage({
             {loggedIn && (
               <span className="pv-nav-signed">
                 <span className="av">{memberInitial}</span>Signed in as <b>{memberLabel}</b>
+                <SignOutButton className="pv-signout" redirectTo="/" />
               </span>
             )}
             <a className="subtle" href="/login">
