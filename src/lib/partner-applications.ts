@@ -2,6 +2,7 @@ import { pool } from "./db";
 import { notifyPartnerApplicationSubmitted } from "./telemetry-sink";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
 import { sendEmail } from "./email";
+import { createPartner, getPartnerByUserId } from "./partners";
 
 export const PARTNER_APPLICATION_STATUSES = ["pending", "approved", "declined"] as const;
 export type PartnerApplicationStatus = (typeof PARTNER_APPLICATION_STATUSES)[number];
@@ -191,6 +192,16 @@ export async function approvePartnerApplication(
     const reloaded = await getPartnerApplication(row.id);
     if (!reloaded) throw new Error("partner application not found after user linkage");
     row = reloaded;
+  }
+
+  // Seed the deal-tracking `partners` row so /partner/dashboard has something to render --
+  // self-serve approval only flipped users.role above, which grants access but leaves the
+  // dashboard's "No partner record is linked" empty state showing (leo-partner-page-broken-
+  // auth-buttons-2026-08-22). Deals/commission split are set later, per-payment, by
+  // recordAutoPartnerPayment's DEFAULT_PARTNER_PCT/DEFAULT_COXWELL_PCT (60/40) -- there's no
+  // tier field on `partners` itself to default here.
+  if (row.userId && !(await getPartnerByUserId(row.userId))) {
+    await createPartner({ name: row.name, email: row.email, userId: row.userId });
   }
 
   await notifyApplicant(
