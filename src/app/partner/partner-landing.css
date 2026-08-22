@@ -66,11 +66,10 @@
 }
 .pv-brand { display: flex; align-items: center; gap: 12px; }
 .pv-brand .glyph {
-  width: 42px; height: 42px; flex: 0 0 42px; border-radius: 12px;
-  background: linear-gradient(135deg, var(--pv-cyan), #0b6e78);
-  box-shadow: 0 4px 20px rgba(45, 226, 230, 0.3); display: flex; align-items: center; justify-content: center;
+  width: 42px; height: 42px; flex: 0 0 42px;
+  display: flex; align-items: center; justify-content: center;
 }
-.pv-brand .glyph svg { width: 42px; height: 42px; display: block; }
+.pv-brand .glyph svg, .pv-brand .glyph img { width: 42px; height: 42px; display: block; }
 .pv-brand .txt { font-family: var(--pv-disp); font-weight: 800; font-size: 23px; letter-spacing: 0.05em; line-height: 1; }
 .pv-brand .txt small {
   display: block; font-family: var(--pv-sans); font-weight: 600; font-size: 9.5px;

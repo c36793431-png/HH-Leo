@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isAdminUser, isPartnerUser } from "@/lib/admin-users-panel";
@@ -77,14 +78,8 @@ export default async function PartnerLandingPage({
         <nav className="pv-nav">
           <a className="pv-brand" href="#">
             <span className="glyph">
-              <svg viewBox="0 0 48 48" fill="none" aria-label="Horizon HFT">
-                <g stroke="#041A1E" strokeWidth={3.2} strokeLinecap="round">
-                  <line x1="16" y1="13" x2="16" y2="35" />
-                  <line x1="32" y1="13" x2="32" y2="35" />
-                  <line x1="13.5" y1="24" x2="34.5" y2="24" />
-                </g>
-                <path d="M19 24a5 5 0 0 1 10 0" fill="none" stroke="#041A1E" strokeWidth={2.4} strokeLinecap="round" />
-              </svg>
+              {/* Same mark as portal.horizonhft.com's sidebar header (src/components/portal/sidebar.tsx) */}
+              <Image src="/brand/horizon-logo-paid.png" alt="Horizon HFT" width={42} height={42} priority />
             </span>
             <span className="txt">
               HORIZON
