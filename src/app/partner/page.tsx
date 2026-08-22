@@ -78,8 +78,7 @@ export default async function PartnerLandingPage({
         <nav className="pv-nav">
           <a className="pv-brand" href="#">
             <span className="glyph">
-              {/* Same mark as portal.horizonhft.com's sidebar header (src/components/portal/sidebar.tsx) */}
-              <Image src="/brand/horizon-logo-paid.png" alt="Horizon HFT" width={42} height={42} priority />
+              <Image src="/brand/horizon-logo-partner.png" alt="Horizon HFT" width={42} height={42} priority />
             </span>
             <span className="txt">
               HORIZON
