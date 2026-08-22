@@ -16,6 +16,14 @@ export interface PartnerRow {
   createdAt: Date;
 }
 
+/** Lifecycle (P1, mockups/horizon-referral-partner/P1-spec.md): repurposes the original
+ * status column (see migration 0056) instead of adding a parallel column. 'completed' from
+ * the original 0045 schema is retired in favour of 'closed'. */
+export type DealLifecycle = "proposed" | "approved" | "active" | "closed" | "cancelled";
+
+/** Settlement is derived per cycle (gross vs collected), never stored — see getDealCycle(). */
+export type DealSettlement = "promised" | "partial" | "settled";
+
 export interface PartnerDealRow {
   id: string;
   partnerId: string;
@@ -24,7 +32,12 @@ export interface PartnerDealRow {
   grossUsd: number;
   partnerPct: number;
   coxwellPct: number;
-  status: "active" | "completed" | "cancelled";
+  status: DealLifecycle;
+  cadence: "monthly" | "one_time";
+  tiers: string[];
+  proposalNote: string | null;
+  activatedAt: Date | null;
+  closedAt: Date | null;
   createdAt: Date;
   receivedUsd: number;
 }
@@ -146,6 +159,11 @@ interface PartnerDealDbRow {
   partner_pct: string;
   coxwell_pct: string;
   status: PartnerDealRow["status"];
+  cadence: PartnerDealRow["cadence"];
+  tiers: string[] | null;
+  proposal_note: string | null;
+  activated_at: Date | null;
+  closed_at: Date | null;
   created_at: Date;
   received_usd: string;
 }
@@ -160,6 +178,11 @@ function mapDeal(r: PartnerDealDbRow): PartnerDealRow {
     partnerPct: Number(r.partner_pct),
     coxwellPct: Number(r.coxwell_pct),
     status: r.status,
+    cadence: r.cadence,
+    tiers: r.tiers ?? [],
+    proposalNote: r.proposal_note,
+    activatedAt: r.activated_at,
+    closedAt: r.closed_at,
     createdAt: r.created_at,
     receivedUsd: Number(r.received_usd),
   };
@@ -167,7 +190,8 @@ function mapDeal(r: PartnerDealDbRow): PartnerDealRow {
 
 const DEAL_SELECT = `
   select pd.id, pd.partner_id, pd.client_user_id, u.email as client_email,
-         pd.gross_usd, pd.partner_pct, pd.coxwell_pct, pd.status, pd.created_at,
+         pd.gross_usd, pd.partner_pct, pd.coxwell_pct, pd.status, pd.cadence, pd.tiers,
+         pd.proposal_note, pd.activated_at, pd.closed_at, pd.created_at,
          coalesce((select sum(dp.amount_usd) from deal_payments dp where dp.deal_id = pd.id), 0) as received_usd
   from partner_deals pd
   join users u on u.id = pd.client_user_id
@@ -188,6 +212,8 @@ export async function listAllDeals(): Promise<PartnerDealRow[]> {
   return result.rows.map(mapDeal);
 }
 
+export type DealPaymentChannel = "portal" | "bank" | "payoneer" | "crypto" | "other";
+
 export interface DealPaymentRow {
   id: string;
   dealId: string;
@@ -196,6 +222,9 @@ export interface DealPaymentRow {
   receivedAt: Date;
   confirmedBy: string | null;
   notes: string | null;
+  channel: DealPaymentChannel;
+  evidence: string | null;
+  cycle: string | null;
 }
 
 interface DealPaymentDbRow {
@@ -206,6 +235,9 @@ interface DealPaymentDbRow {
   received_at: Date;
   confirmed_by: string | null;
   notes: string | null;
+  channel: DealPaymentChannel;
+  evidence: string | null;
+  cycle: string | null;
 }
 
 function mapDealPayment(r: DealPaymentDbRow): DealPaymentRow {
@@ -217,7 +249,40 @@ function mapDealPayment(r: DealPaymentDbRow): DealPaymentRow {
     receivedAt: r.received_at,
     confirmedBy: r.confirmed_by,
     notes: r.notes,
+    channel: r.channel,
+    evidence: r.evidence,
+    cycle: r.cycle,
   };
+}
+
+/** Current cycle tag for a monthly deal, e.g. "2026-08" — one-time deals don't cycle. */
+export function currentCycleTag(now: Date = new Date()): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export interface DealCycle {
+  cycle: string | null;
+  gross: number;
+  collected: number;
+  outstanding: number;
+  settlement: DealSettlement;
+  payments: DealPaymentRow[];
+}
+
+/** Derives the current cycle's Gross/Collected/Outstanding + settlement state for a deal.
+ * Settlement is never stored (see migration 0056's comment) — promised/partial/settled falls
+ * straight out of gross_usd vs the sum of this cycle's deal_payments rows. Monthly deals scope
+ * payments to the current calendar-month cycle tag; one_time deals use every payment on the
+ * deal (cycle stays null/n-a) since there's only ever one settlement window. */
+export function summarizeDealCycle(deal: PartnerDealRow, allPayments: DealPaymentRow[]): DealCycle {
+  const cycle = deal.cadence === "monthly" ? currentCycleTag() : null;
+  const payments =
+    deal.cadence === "monthly" ? allPayments.filter((p) => p.cycle === cycle) : allPayments;
+  const collected = payments.reduce((sum, p) => sum + p.amountUsd, 0);
+  const gross = deal.grossUsd;
+  const outstanding = Math.max(0, gross - collected);
+  const settlement: DealSettlement = collected <= 0 ? "promised" : outstanding > 0 ? "partial" : "settled";
+  return { cycle, gross, collected, outstanding, settlement, payments };
 }
 
 export async function listPaymentsForDeal(dealId: string): Promise<DealPaymentRow[]> {
@@ -260,20 +325,102 @@ export async function createDeal(input: CreateDealInput): Promise<string> {
   return result.rows[0].id;
 }
 
-/** Records a confirmed cash movement against a deal. Human-attested only — no channel/tx
- * tracking (per the 2026-08-21 correction). paymentId links it into the Finance ledger
- * when the admin has already logged a matching payments row; otherwise it's standalone. */
+/** Records a confirmed cash movement against a deal. Human-attested by default — the P1
+ * admin-approval-queue mockup (Marcus m22759, "dumb-simple") only captures amount + date and
+ * one-click-confirms, so channel/evidence are optional and default to 'other'/null; they exist
+ * for the locked data contract (portal auto-reconciled vs off-portal manual) without forcing
+ * the simplified UI to collect them. paymentId links it into the Finance ledger when the admin
+ * has already logged a matching payments row; otherwise it's standalone. */
 export async function recordDealPayment(input: {
   dealId: string;
   paymentId?: string | null;
   amountUsd: number;
   confirmedBy: string;
   notes?: string | null;
+  channel?: DealPaymentChannel;
+  evidence?: string | null;
+  cycle?: string | null;
 }): Promise<string> {
   const result = await pool.query<{ id: string }>(
-    `insert into deal_payments (deal_id, payment_id, amount_usd, confirmed_by, notes)
-     values ($1, $2, $3, $4, $5) returning id`,
-    [input.dealId, input.paymentId ?? null, input.amountUsd, input.confirmedBy, input.notes ?? null]
+    `insert into deal_payments (deal_id, payment_id, amount_usd, confirmed_by, notes, channel, evidence, cycle)
+     values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+    [
+      input.dealId,
+      input.paymentId ?? null,
+      input.amountUsd,
+      input.confirmedBy,
+      input.notes ?? null,
+      input.channel ?? "other",
+      input.evidence ?? null,
+      input.cycle ?? currentCycleTag(),
+    ]
   );
   return result.rows[0].id;
+}
+
+/** Partner-initiated deal proposal (P1 new-proposal form) — lands as lifecycle 'proposed',
+ * distinct from createDeal() which admin/partners.tsx uses to enter an already-agreed deal
+ * straight in as 'active'. */
+export interface CreateProposalInput {
+  partnerId: string;
+  clientUserId: string;
+  grossUsd: number;
+  partnerPct: number;
+  cadence: "monthly" | "one_time";
+  tiers: string[];
+  note?: string | null;
+}
+
+export async function createProposal(input: CreateProposalInput): Promise<string> {
+  const result = await pool.query<{ id: string }>(
+    `insert into partner_deals
+       (partner_id, client_user_id, gross_usd, partner_pct, coxwell_pct, status, cadence, tiers, proposal_note)
+     values ($1, $2, $3, $4, $5, 'proposed', $6, $7, $8) returning id`,
+    [
+      input.partnerId,
+      input.clientUserId,
+      input.grossUsd,
+      input.partnerPct,
+      1 - input.partnerPct,
+      input.cadence,
+      input.tiers,
+      input.note ?? null,
+    ]
+  );
+  return result.rows[0].id;
+}
+
+/** Deals awaiting admin review (admin-approval-queue). */
+export async function listProposedDeals(): Promise<PartnerDealRow[]> {
+  const result = await pool.query<PartnerDealDbRow>(
+    `${DEAL_SELECT} where pd.status = 'proposed' order by pd.created_at asc`
+  );
+  return result.rows.map(mapDeal);
+}
+
+/** Approve & activate — the P1 admin mockup collapses the spec's separate proposed->approved
+ * and approved->active hops into a single button ("Approve & activate"), so this jumps
+ * straight to 'active' and stamps activated_at. A distinct two-step approve-then-activate flow
+ * is left for a later phase if Horizon ever needs a review-without-activating state. */
+export async function approveAndActivateDeal(dealId: string): Promise<void> {
+  await pool.query(
+    `update partner_deals set status = 'active', activated_at = coalesce(activated_at, now()) where id = $1`,
+    [dealId]
+  );
+}
+
+export async function declineDeal(dealId: string): Promise<void> {
+  await pool.query(`update partner_deals set status = 'cancelled' where id = $1`, [dealId]);
+}
+
+export async function closeDeal(dealId: string): Promise<void> {
+  await pool.query(`update partner_deals set status = 'closed', closed_at = now() where id = $1`, [dealId]);
+}
+
+/** Looks up a users.id by email for the proposal form's client-matching step — mirrors
+ * admin/partners/actions.ts's resolveUserIdByEmail, kept here too since the proposal form is a
+ * partner (not admin) action and lives in a different actions.ts file. */
+export async function findUserIdByEmail(email: string): Promise<string | null> {
+  const result = await pool.query<{ id: string }>("select id from users where lower(email) = lower($1)", [email]);
+  return result.rows[0]?.id ?? null;
 }
