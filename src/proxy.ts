@@ -51,11 +51,16 @@ export default auth(async (req) => {
     }
     // /login and /signup pass through unrewritten so the real NextAuth pages render on this
     // host instead of 404ing against a nonexistent /partner/login or /partner/signup.
+    // Static files under public/ (brand/*, careers/*, logo.png, etc.) must also pass through
+    // unrewritten — otherwise e.g. /brand/horizon-logo-paid.png becomes /partner/brand/... and
+    // 404s, which the _next/image optimizer then surfaces as a broken logo.
+    const isStaticAsset = /\.[a-zA-Z0-9]+$/.test(pathname);
     const passthrough =
       pathname === "/login" ||
       pathname === "/signup" ||
       pathname.startsWith("/partner") ||
-      isAdminPartnerRoute;
+      isAdminPartnerRoute ||
+      isStaticAsset;
 
     if (!passthrough) {
       const url = req.nextUrl.clone();
