@@ -41,9 +41,12 @@ export default auth(async (req) => {
   if (isPartnerHost) {
     // partner.horizonhft.com serves the partner landing/dashboard, rewritten to
     // /partner internally so it lands at the domain root, not /partner/partner.
-    // The admin partner-management view also lives here (same admin as portal.horizonhft.com),
-    // but every other /admin/* route stays portal-only to avoid leaking unrelated admin surfaces.
-    if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/partners")) {
+    // The admin partner-management + partner-applications-review views also live here
+    // (same admin as portal.horizonhft.com), but every other /admin/* route stays
+    // portal-only to avoid leaking unrelated admin surfaces.
+    const isAdminPartnerRoute =
+      pathname.startsWith("/admin/partners") || pathname.startsWith("/admin/partner-applications");
+    if (pathname.startsWith("/admin") && !isAdminPartnerRoute) {
       return new NextResponse("Not Found", { status: 404 });
     }
     // /login and /signup pass through unrewritten so the real NextAuth pages render on this
@@ -52,7 +55,7 @@ export default auth(async (req) => {
       pathname === "/login" ||
       pathname === "/signup" ||
       pathname.startsWith("/partner") ||
-      pathname.startsWith("/admin/partners");
+      isAdminPartnerRoute;
 
     if (!passthrough) {
       const url = req.nextUrl.clone();
