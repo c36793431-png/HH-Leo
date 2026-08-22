@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { isAdminUser, isFeedProviderUser } from "@/lib/admin-users-panel";
 import { listPendingRequestsForProvider } from "@/lib/feed-providers";
@@ -7,6 +8,8 @@ import { FeedNavScrim } from "@/components/feed/feed-nav-toggle";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ToastHost } from "@/components/admin/toast-host";
 import "./feed-dashboard.css";
+
+const FEED_HOST = "feed.horizonhft.com";
 
 /** Auth gate + shell for the provider self-serve panel (feed.horizonhft.com), bus thread
  * leo-provider-panel-implementation-2026-08-22. Mirrors partner/dashboard/layout.tsx's
@@ -19,7 +22,15 @@ export default async function FeedDashboardLayout({ children }: { children: Reac
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   if (!isFeedProviderUser(session.user) && !isAdminUser(session.user)) {
-    redirect("/dashboard");
+    // On feed.horizonhft.com, proxy.ts rewrites every non-/feed path (including /dashboard)
+    // back into this tree, so redirecting a non-provider user to "/dashboard" here loops
+    // forever -- ERR_TOO_MANY_REDIRECTS (leo-feed-dashboard-redirect-loop-2026-08-22).
+    // There's no feed-host landing/apply page to bounce to instead (providers are
+    // admin-onboarded, no self-serve flow like partner/apply exists yet), so send them
+    // off-host to their real portal dashboard.
+    const host = (await headers()).get("host") || "";
+    const isFeedHost = host === FEED_HOST || host.startsWith(`${FEED_HOST}:`);
+    redirect(isFeedHost ? "https://portal.horizonhft.com/dashboard" : "/dashboard");
   }
 
   const providerLabel = session.user.name?.trim() || session.user.email?.trim() || "Provider";
