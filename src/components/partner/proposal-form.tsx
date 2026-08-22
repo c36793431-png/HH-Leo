@@ -38,9 +38,9 @@ export function ProposalForm() {
   return (
     <form action={formAction} className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
       <div className="min-w-0 space-y-5">
-        <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-5">
+        <section className="rounded-xl border border-[#f5b547]/35 bg-[#0a1019] p-5">
           <div className="mb-3 flex items-center gap-2">
-            <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 font-mono text-[11px] text-cyan-300">01</span>
+            <span className="rounded border border-[#f5b547]/30 bg-[#f5b547]/10 px-2 py-0.5 font-mono text-[11px] text-[#f5b547]">01</span>
             <b className="text-base">Client</b>
           </div>
           <p className="mb-3 text-xs text-zinc-500">Who is this deal for? Existing Horizon accounts link automatically.</p>
@@ -52,13 +52,13 @@ export function ProposalForm() {
             value={clientEmail}
             onChange={(e) => setClientEmail(e.target.value)}
             placeholder="name@email.com"
-            className="w-full rounded-lg border border-zinc-700 bg-black/40 px-3 py-2.5 font-mono text-sm text-zinc-100 outline-none focus:border-cyan-400/60"
+            className="w-full rounded-lg border border-zinc-700 bg-black/40 px-3 py-2.5 font-mono text-sm text-zinc-100 outline-none focus:border-[#f5b547]/60"
           />
         </section>
 
-        <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-5">
+        <section className="rounded-xl border border-[#f5b547]/35 bg-[#0a1019] p-5">
           <div className="mb-3 flex items-center gap-2">
-            <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 font-mono text-[11px] text-cyan-300">02</span>
+            <span className="rounded border border-[#f5b547]/30 bg-[#f5b547]/10 px-2 py-0.5 font-mono text-[11px] text-[#f5b547]">02</span>
             <b className="text-base">Tiers in this deal</b>
           </div>
           <p className="mb-3 text-xs text-zinc-500">
@@ -74,7 +74,7 @@ export function ProposalForm() {
                   key={t}
                   onClick={() => toggleTier(t)}
                   className={`rounded-lg border p-3 text-left ${
-                    on ? "border-cyan-400/60 bg-cyan-400/10" : "border-zinc-800 bg-black/30"
+                    on ? "border-[#f5b547]/60 bg-[#f5b547]/10" : "border-zinc-800 bg-black/30"
                   }`}
                 >
                   <div className="font-mono text-sm text-zinc-100">{t}</div>
@@ -92,9 +92,9 @@ export function ProposalForm() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-5">
+        <section className="rounded-xl border border-[#f5b547]/35 bg-[#0a1019] p-5">
           <div className="mb-3 flex items-center gap-2">
-            <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 font-mono text-[11px] text-cyan-300">03</span>
+            <span className="rounded border border-[#f5b547]/30 bg-[#f5b547]/10 px-2 py-0.5 font-mono text-[11px] text-[#f5b547]">03</span>
             <b className="text-base">Price &amp; billing</b>
           </div>
           <p className="mb-3 text-xs text-zinc-500">
@@ -111,7 +111,7 @@ export function ProposalForm() {
                 required
                 value={price}
                 onChange={(e) => setPrice(Number(e.target.value) || 0)}
-                className="w-full rounded-lg border border-zinc-700 bg-black/40 px-3 py-2.5 font-mono text-sm text-zinc-100 outline-none focus:border-cyan-400/60"
+                className="w-full rounded-lg border border-zinc-700 bg-black/40 px-3 py-2.5 font-mono text-sm text-zinc-100 outline-none focus:border-[#f5b547]/60"
               />
             </div>
             <div>
@@ -145,9 +145,9 @@ export function ProposalForm() {
           </p>
         </section>
 
-        <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-5">
+        <section className="rounded-xl border border-[#f5b547]/35 bg-[#0a1019] p-5">
           <div className="mb-3 flex items-center gap-2">
-            <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 font-mono text-[11px] text-cyan-300">04</span>
+            <span className="rounded border border-[#f5b547]/30 bg-[#f5b547]/10 px-2 py-0.5 font-mono text-[11px] text-[#f5b547]">04</span>
             <b className="text-base">Revenue split</b>
           </div>
           <p className="mb-3 text-xs text-zinc-500">
@@ -160,7 +160,7 @@ export function ProposalForm() {
             max={99}
             value={splitPct}
             onChange={(e) => setSplitPct(Number(e.target.value))}
-            className="w-full accent-cyan-400"
+            className="w-full accent-[#f5b547]"
           />
           <div className="mt-2 flex justify-between text-xs text-zinc-400">
             <span>
@@ -172,9 +172,9 @@ export function ProposalForm() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-5">
+        <section className="rounded-xl border border-[#f5b547]/35 bg-[#0a1019] p-5">
           <div className="mb-3 flex items-center gap-2">
-            <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 font-mono text-[11px] text-cyan-300">05</span>
+            <span className="rounded border border-[#f5b547]/30 bg-[#f5b547]/10 px-2 py-0.5 font-mono text-[11px] text-[#f5b547]">05</span>
             <b className="text-base">
               Note to Horizon <span className="ml-1 text-xs font-normal text-zinc-500">· optional</span>
             </b>
@@ -183,12 +183,12 @@ export function ProposalForm() {
             name="note"
             rows={3}
             placeholder="Context on the client, anything Horizon should know before approving…"
-            className="w-full rounded-lg border border-zinc-700 bg-black/40 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-cyan-400/60"
+            className="w-full rounded-lg border border-zinc-700 bg-black/40 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-[#f5b547]/60"
           />
         </section>
       </div>
 
-      <aside className="sticky top-6 h-fit rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-5">
+      <aside className="sticky top-6 h-fit rounded-xl border border-[#f5b547]/35 bg-[#0a1019] p-5">
         <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-zinc-500">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Live deal preview
         </div>
@@ -226,16 +226,16 @@ export function ProposalForm() {
         </div>
 
         <div className="mt-4 space-y-1 text-[11px] text-zinc-500">
-          <div><span className="text-cyan-400">→</span> Submit for Horizon review</div>
-          <div><span className="text-cyan-400">→</span> Approve &amp; confirm client price</div>
-          <div><span className="text-cyan-400">→</span> First payment activates the bundle</div>
-          <div><span className="text-cyan-400">→</span> Your share accrues every cycle</div>
+          <div><span className="text-[#f5b547]">→</span> Submit for Horizon review</div>
+          <div><span className="text-[#f5b547]">→</span> Approve &amp; confirm client price</div>
+          <div><span className="text-[#f5b547]">→</span> First payment activates the bundle</div>
+          <div><span className="text-[#f5b547]">→</span> Your share accrues every cycle</div>
         </div>
 
         <button
           type="submit"
           disabled={isPending}
-          className="mt-4 w-full rounded-lg bg-gradient-to-r from-cyan-400 to-teal-400 px-4 py-2.5 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-4 w-full rounded-lg bg-gradient-to-r from-[#f5b547] to-[#d48b1e] px-4 py-2.5 text-sm font-semibold text-[#241704] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? "Submitting…" : "Submit proposal"}
         </button>
