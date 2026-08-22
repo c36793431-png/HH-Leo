@@ -1,0 +1,55 @@
+/* Horizon HFT — feed.horizonhft.com /login (cyan/teal provider-branded sign-in).
+   No Iris mockup exists for this screen (per src/app/feed/page.tsx, the 7 Iris mockups
+   start at the dashboard and providers are admin-onboarded, not self-signup) -- this
+   reuses feed-dashboard.css's --pfp-* tokens and .btn/.card primitives 1:1 for chrome
+   parity with the provider panel, laid out as a single centered card since there's no
+   landing-page brand panel to mirror (unlike partner-login.css's two-column split). */
+
+.fll-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
+.fll-card {
+  max-width: 440px; width: 100%; border: 1px solid var(--pfp-card-line); border-radius: 18px;
+  padding: 40px 36px 34px; position: relative;
+  background: linear-gradient(180deg, #0a121c, #06090f);
+  box-shadow: 0 40px 110px rgba(0, 0, 0, 0.6);
+}
+.fll-seal {
+  width: 48px; height: 48px; border-radius: 13px; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--pfp-cyan), var(--pfp-teal)); color: #02171a;
+  font-family: var(--pfp-disp); font-weight: 800; font-size: 20px;
+  box-shadow: 0 6px 22px rgba(45, 226, 230, 0.32); margin-bottom: 20px;
+}
+.fll-eyebrow {
+  font-family: var(--pfp-mono); font-size: 10.5px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--pfp-cyan);
+  margin-bottom: 12px; display: flex; align-items: center; gap: 9px;
+}
+.fll-eyebrow .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--pfp-cyan); box-shadow: 0 0 9px var(--pfp-cyan); }
+.fll-card h1 { font-family: var(--pfp-disp); font-weight: 800; font-size: 27px; line-height: 1.08; letter-spacing: 0.01em; color: var(--pfp-ink); }
+.fll-sub { font-size: 13.5px; color: var(--pfp-ink-2); line-height: 1.55; margin-top: 10px; margin-bottom: 26px; }
+
+.fll-form .fll-field { margin-bottom: 15px; }
+.fll-field label { display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pfp-ink-3); font-family: var(--pfp-mono); margin-bottom: 8px; }
+.fll-field input {
+  width: 100%; background: var(--pfp-panel-2); border: 1px solid var(--pfp-line); border-radius: 11px;
+  padding: 13px 15px; color: var(--pfp-ink); font-family: var(--pfp-sans); font-size: 14.5px;
+}
+.fll-field input::placeholder { color: var(--pfp-ink-4); }
+.fll-field input:focus { outline: none; border-color: var(--pfp-card-line); box-shadow: 0 0 0 3px rgba(45, 226, 230, 0.12); }
+.fll-form .btn.full { width: 100%; justify-content: center; }
+.fll-note { font-size: 11.5px; color: var(--pfp-ink-3); margin-top: 14px; text-align: center; line-height: 1.5; }
+
+.fll-error {
+  margin-bottom: 18px; border: 1px solid rgba(255, 92, 122, 0.4); background: rgba(255, 92, 122, 0.08);
+  border-radius: 10px; padding: 10px 13px; font-size: 13px; color: var(--pfp-bad);
+}
+
+.fll-div { display: flex; align-items: center; gap: 14px; margin: 24px 0 18px; color: var(--pfp-ink-4); font-size: 11px; font-family: var(--pfp-mono); letter-spacing: 0.1em; }
+.fll-div::before, .fll-div::after { content: ""; flex: 1; height: 1px; background: var(--pfp-line-soft); }
+.fll-contact { text-align: center; font-size: 13px; color: var(--pfp-ink-2); }
+.fll-contact a { color: var(--pfp-cyan); font-weight: 600; }
+.fll-help { text-align: center; font-size: 11.5px; color: var(--pfp-ink-3); margin-top: 14px; }
+.fll-help a { color: var(--pfp-ink-2); text-decoration: underline; text-underline-offset: 2px; }
+
+@media (max-width: 480px) {
+  .fll-card { padding: 32px 24px 28px; }
+  .fll-card h1 { font-size: 24px; }
+}

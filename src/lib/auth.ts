@@ -12,6 +12,7 @@ import { getOrCreateReferralCode } from "./referrals";
 import { attributeReferralFromCookie } from "./referrals-cookie";
 
 const PARTNER_HOST = "partner.horizonhft.com";
+const FEED_HOST = "feed.horizonhft.com";
 
 /** Amber-branded magic-link email for partner.horizonhft.com sign-ins (bus thread
  * leo-partner-magic-link-email-branding-2026-08-22). Kept separate from the member
@@ -101,6 +102,48 @@ function memberMagicLinkHtml(url: string, host: string) {
 }
 
 function memberMagicLinkText(url: string, host: string) {
+  return `Sign in to ${host}\n${url}\n\n`;
+}
+
+/** Cyan/teal-branded magic-link email for feed.horizonhft.com sign-ins (bus thread
+ * leo-feed-provider-login-2026-08-22). Kept separate from the member/partner templates
+ * above so those hosts are untouched. */
+function feedMagicLinkHtml(url: string, host: string) {
+  const escapedHost = host.replace(/\./g, "&#8203;.");
+  return `
+<body style="background: #05070b;">
+  <table width="100%" border="0" cellspacing="20" cellpadding="0"
+    style="background: #0a121c; max-width: 600px; margin: auto; border-radius: 10px;">
+    <tr>
+      <td align="center"
+        style="padding: 20px 0px 10px 0px; font-size: 22px; font-family: Helvetica, Arial, sans-serif; color: #daf4f5;">
+        Sign in to <strong>${escapedHost}</strong>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center" style="border-radius: 5px;" bgcolor="#2de2e6"><a href="${url}"
+                target="_blank"
+                style="font-size: 18px; font-family: Helvetica, Arial, sans-serif; color: #02171a; text-decoration: none; border-radius: 5px; padding: 10px 20px; border: 1px solid #14b8a6; display: inline-block; font-weight: bold;">Sign
+                in</a></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center"
+        style="padding: 0px 0px 10px 0px; font-size: 16px; line-height: 22px; font-family: Helvetica, Arial, sans-serif; color: #8fb0b7;">
+        If you did not request this email you can safely ignore it.
+      </td>
+    </tr>
+  </table>
+</body>
+`;
+}
+
+function feedMagicLinkText(url: string, host: string) {
   return `Sign in to ${host}\n${url}\n\n`;
 }
 
@@ -245,8 +288,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       async sendVerificationRequest({ identifier: to, provider, url }) {
         const { host } = new URL(url);
         const isPartnerHost = host === PARTNER_HOST || host.startsWith(`${PARTNER_HOST}:`);
-        const html = isPartnerHost ? partnerMagicLinkHtml(url, host) : memberMagicLinkHtml(url, host);
-        const text = isPartnerHost ? partnerMagicLinkText(url, host) : memberMagicLinkText(url, host);
+        const isFeedHost = host === FEED_HOST || host.startsWith(`${FEED_HOST}:`);
+        const html = isPartnerHost
+          ? partnerMagicLinkHtml(url, host)
+          : isFeedHost
+            ? feedMagicLinkHtml(url, host)
+            : memberMagicLinkHtml(url, host);
+        const text = isPartnerHost
+          ? partnerMagicLinkText(url, host)
+          : isFeedHost
+            ? feedMagicLinkText(url, host)
+            : memberMagicLinkText(url, host);
 
         const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
