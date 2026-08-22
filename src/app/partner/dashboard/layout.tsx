@@ -1,15 +1,27 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import Image from "next/image";
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { isAdminUser, isPartnerUser } from "@/lib/admin-users-panel";
 import { getPendingPartnerApplicationForUser } from "@/lib/partner-applications";
 import { SignOutButton } from "@/components/sign-out-button";
+import "./partner-dashboard.css";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 
-/** Auth gate for the partner self-service dashboard, split out from the shared /partner
- * wrapper so partner.horizonhft.com's root can render a public landing page without
- * requiring a session — see src/app/partner/page.tsx. */
+function initial(s: string): string {
+  return s.trim().charAt(0).toUpperCase() || "?";
+}
+
+/** Auth gate + amber top-nav shell for the partner self-service dashboard, split out from
+ * the shared /partner wrapper so partner.horizonhft.com's root can render a public landing
+ * page without requiring a session — see src/app/partner/page.tsx.
+ *
+ * Reskinned from the plain cyan/zinc box to the V3-amber chrome (brief
+ * iris-partner-dashboard-design-2026-08-22, mockups/horizon-referral-partner/
+ * partner-dashboard.html) so landing -> login -> dashboard reads as one continuous amber
+ * partner surface, matching partner-landing-v3's nav 1:1. */
 export default async function PartnerDashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -35,18 +47,39 @@ export default async function PartnerDashboardLayout({ children }: { children: R
     redirect(isPartnerHost ? "/partner/apply?status=not-a-partner" : "/dashboard");
   }
 
-  // Padded/backgrounded container used to live in the shared src/app/partner/layout.tsx,
-  // but that wrapper now needs to be full-bleed for the public landing page (page.tsx) --
-  // moved here since dashboard/* is the only remaining consumer (auth-gate logic above
-  // is unchanged, only this cosmetic wrapper moved).
+  const label = session.user.name?.trim() || session.user.email?.trim() || "Partner";
+
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-8 sm:px-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-4 flex items-center justify-end gap-3 text-xs text-zinc-500">
-          <span>Signed in as {session.user.name?.trim() || session.user.email}</span>
-          <SignOutButton className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800" redirectTo="/partner" />
-        </div>
-        {children}
+    <div className="partner-dash">
+      <div className="pd-backdrop" aria-hidden="true">
+        <div className="glow" />
+      </div>
+      <div className="pd-wrap">
+        <nav className="pd-nav">
+          <Link className="pd-brand" href="/">
+            <span className="glyph">
+              <Image src="/brand/horizon-logo-partner.png" alt="Horizon HFT" width={42} height={42} priority />
+            </span>
+            <span className="txt">
+              HORIZON
+              <small>HFT · PARTNER PROGRAM</small>
+            </span>
+          </Link>
+          <span className="sp" />
+          <div className="pd-nav-acct">
+            <div className="pd-acct-chip">
+              <span className="av">{initial(label)}</span>
+              <span className="who">
+                <b>{label}</b>
+                <span className="tag">Partner</span>
+              </span>
+            </div>
+            <SignOutButton className="pd-signout" redirectTo="/" />
+          </div>
+        </nav>
+        <main className="pd-main">
+          <section className="pd-content">{children}</section>
+        </main>
       </div>
     </div>
   );

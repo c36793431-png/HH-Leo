@@ -85,6 +85,17 @@ export async function getActivePartnerReferralCode(): Promise<string | null> {
   return result.rows[0]?.referral_code ?? null;
 }
 
+/** Resolves a specific partner's own referral_code (via their linked users row), for the
+ * "Your referral link" card on /partner/dashboard. Unlike getActivePartnerReferralCode()
+ * this doesn't assume there's only one active partner. */
+export async function getPartnerReferralCode(userId: string): Promise<string | null> {
+  const result = await pool.query<{ referral_code: string | null }>(
+    "select referral_code from users where id = $1",
+    [userId]
+  );
+  return result.rows[0]?.referral_code ?? null;
+}
+
 /** Negotiated split for auto-created deals (item 5 of the leo-partner-subdomain-auth-model
  * bundle) — matches the partner_deals column defaults and the one real deal on record
  * (Legitcashmaker/aylrn, migration 0046). Revisit once partners can negotiate their own rate. */
