@@ -5,7 +5,13 @@ import { createPartnerApplicationAction } from "@/app/partner/apply/actions";
 import { emitToast } from "@/lib/toast-bus";
 
 /** Public partner-application form, mirrors black-waitlist-control.tsx's
- * useTransition/action pattern but as a plain page form (no modal chrome). */
+ * useTransition/action pattern but as a plain page form (no modal chrome).
+ *
+ * Markup/classNames follow the .partner-v3 scoped design (see
+ * app/partner/partner-landing.css, ported from mockups/horizon-referral-partner/
+ * partner-landing-v3.html's .form-card / .form-success) -- submit logic and the
+ * server action underneath are unchanged. Only intended to render inside a
+ * .partner-v3-scoped ancestor (currently just app/partner/page.tsx). */
 export function PartnerApplyForm() {
   const [submitted, setSubmitted] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -26,83 +32,87 @@ export function PartnerApplyForm() {
 
   if (submitted) {
     return (
-      <div className="rounded-lg border border-cyan-400/35 bg-cyan-950/30 px-6 py-8 text-center">
-        <p className="text-sm text-zinc-100">
-          Thanks — your application is under review, we&rsquo;ll be in touch.
-        </p>
+      <div className="pv-form-card pv-form-success">
+        <div className="pv-fs-seal" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        </div>
+        <h3>Application received</h3>
+        <p>Thanks — your application is under review. We&rsquo;ll be in touch on Telegram or email to get you set up.</p>
       </div>
     );
   }
 
   return (
-    <form action={handleSubmit} className="flex flex-col gap-4 text-left">
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="name" className="text-xs font-medium text-zinc-400">
-          Name
-        </label>
-        <input
-          id="name"
-          name="name"
-          type="text"
-          required
-          disabled={isPending}
-          className="rounded-lg border border-zinc-700 bg-black/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 disabled:opacity-50"
-          placeholder="Your name"
-        />
+    <form action={handleSubmit} className="pv-form-card">
+      <div className="pv-frow">
+        <div className="pv-field">
+          <label htmlFor="name">
+            Full name <span className="rq">*</span>
+          </label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            required
+            disabled={isPending}
+            className="ip"
+            placeholder="Your name"
+          />
+        </div>
+
+        <div className="pv-field">
+          <label htmlFor="email">
+            Email <span className="rq">*</span>
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            disabled={isPending}
+            className="ip"
+            placeholder="you@email.com"
+          />
+        </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="email" className="text-xs font-medium text-zinc-400">
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          disabled={isPending}
-          className="rounded-lg border border-zinc-700 bg-black/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 disabled:opacity-50"
-          placeholder="you@example.com"
-        />
+      <div className="pv-field">
+        <label htmlFor="telegram">Telegram handle</label>
+        <div className="ipwrap">
+          <span className="at">@</span>
+          <input
+            id="telegram"
+            name="telegram"
+            type="text"
+            disabled={isPending}
+            className="ip"
+            placeholder="yourhandle"
+          />
+        </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="telegram" className="text-xs font-medium text-zinc-400">
-          Telegram handle (optional)
-        </label>
-        <input
-          id="telegram"
-          name="telegram"
-          type="text"
-          disabled={isPending}
-          className="rounded-lg border border-zinc-700 bg-black/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 disabled:opacity-50"
-          placeholder="@yourhandle"
-        />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="notes" className="text-xs font-medium text-zinc-400">
-          Why do you want to partner with us?
-        </label>
+      <div className="pv-field">
+        <label htmlFor="notes">About your audience</label>
         <textarea
           id="notes"
           name="notes"
           rows={5}
           disabled={isPending}
-          className="rounded-lg border border-zinc-700 bg-black/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 disabled:opacity-50"
-          placeholder="Tell us about your audience/community, expected referral volume, and why you'd be a good fit."
+          className="ip"
+          placeholder="Where's your community, how big is it, and what do they trade? A couple of lines is plenty."
         />
       </div>
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="pv-form-error">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={isPending}
-        className="mt-2 rounded-lg bg-cyan-500 px-6 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isPending ? "Submitting…" : "Submit application"}
+      <button type="submit" disabled={isPending} className="pv-btn amber full">
+        {isPending ? "Submitting…" : "Submit application"} <span className="ar">→</span>
       </button>
+      <div className="pv-form-foot">
+        <span className="ic">✓</span> Goes straight to the Horizon partner team — nothing public.
+      </div>
     </form>
   );
 }

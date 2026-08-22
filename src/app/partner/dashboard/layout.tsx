@@ -34,5 +34,13 @@ export default async function PartnerDashboardLayout({ children }: { children: R
     redirect(isPartnerHost ? "/partner/apply?status=not-a-partner" : "/dashboard");
   }
 
-  return <>{children}</>;
+  // Padded/backgrounded container used to live in the shared src/app/partner/layout.tsx,
+  // but that wrapper now needs to be full-bleed for the public landing page (page.tsx) --
+  // moved here since dashboard/* is the only remaining consumer (auth-gate logic above
+  // is unchanged, only this cosmetic wrapper moved).
+  return (
+    <div className="min-h-screen bg-zinc-950 px-4 py-8 sm:px-8">
+      <div className="mx-auto max-w-5xl">{children}</div>
+    </div>
+  );
 }
