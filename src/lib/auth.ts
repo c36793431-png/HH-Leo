@@ -148,18 +148,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.role = user.role ?? "user";
         token.telegramUserId = user.telegramUserId;
+      }
 
-        // @auth/pg-adapter's updateUser() RETURNING clause omits `role`, so
-        // user.role comes back undefined on sign-ins it handles (email/Resend)
-        // even for admins. Fall back to a direct lookup in that case.
-        if (user.role === undefined && user.id) {
-          const dbUser = await pool.query(
-            `select role from users where id = $1`,
-            [user.id]
-          );
-          if (dbUser.rows[0]?.role) {
-            token.role = dbUser.rows[0].role;
-          }
+      // Re-read role from the DB on every refresh, not just at sign-in, so a
+      // role flip (e.g. partner approval) takes effect without forcing the
+      // user to log out/in first (bus thread
+      // leo-partner-page-broken-auth-buttons-2026-08-22).
+      if (token.sub) {
+        const dbUser = await pool.query(`select role from users where id = $1`, [token.sub]);
+        if (dbUser.rows[0]?.role) {
+          token.role = dbUser.rows[0].role;
         }
       }
       return token;
