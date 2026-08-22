@@ -436,6 +436,43 @@ export async function notifyPartnerApplicationSubmitted(opts: {
   if (!sent) await sendApprovalsTopicMessage(text);
 }
 
+/** Public feed-provider application (feed.horizonhft.com/providers/apply), mirrors
+ * notifyPartnerApplicationSubmitted's actionable-buttons pattern. callback_data uses a
+ * `providerapp:` prefix distinct from `partnerapp:` -- the approve/decline handler for these
+ * buttons isn't wired up in this pass (no admin review queue exists yet for
+ * provider_applications, see feed-apply-spec.md's admin-side delta note), this only sends the
+ * notify so the webhook has a stable callback_data shape to pick up when that follow-up lands. */
+export async function notifyProviderApplicationSubmitted(opts: {
+  id: string;
+  name: string;
+  email: string;
+  contactName: string | null;
+  website: string | null;
+  coverage: string | null;
+  tiersOffered: string | null;
+  notes: string | null;
+  adminUrl: string;
+}): Promise<void> {
+  const text =
+    `📡 new feed provider application\n` +
+    `company: ${opts.name}\n` +
+    `email: ${opts.email}\n` +
+    (opts.contactName ? `contact: ${opts.contactName}\n` : "") +
+    (opts.website ? `website: ${opts.website}\n` : "") +
+    (opts.coverage ? `coverage: ${opts.coverage}\n` : "") +
+    (opts.tiersOffered ? `tiers: ${opts.tiersOffered}\n` : "") +
+    (opts.notes ? `notes: ${opts.notes}\n` : "") +
+    `${opts.adminUrl}`;
+
+  const sent = await sendActionableApprovalMessage(text, [
+    [
+      { text: "✅ Approve", callback_data: `providerapp:approve:${opts.id}` },
+      { text: "❌ Decline", callback_data: `providerapp:reject:${opts.id}` },
+    ],
+  ]);
+  if (!sent) await sendApprovalsTopicMessage(text);
+}
+
 /** Waitlist joins are informational only (no approve/reject action), so this goes
  * straight to the plain-text approvals-topic ping rather than the actionable-buttons
  * path used for actual access requests. */

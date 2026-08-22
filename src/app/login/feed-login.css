@@ -1,55 +1,222 @@
-/* Horizon HFT — feed.horizonhft.com /login (cyan/teal provider-branded sign-in).
-   No Iris mockup exists for this screen (per src/app/feed/page.tsx, the 7 Iris mockups
-   start at the dashboard and providers are admin-onboarded, not self-signup) -- this
-   reuses feed-dashboard.css's --pfp-* tokens and .btn/.card primitives 1:1 for chrome
-   parity with the provider panel, laid out as a single centered card since there's no
-   landing-page brand panel to mirror (unlike partner-login.css's two-column split). */
+/* Horizon HFT — feed.horizonhft.com /login (amber split-panel provider sign-in).
+   Ported from mockups/horizon-feed-provider/feed-login.html (Iris/Atlas design, brief
+   iris-feed-provider-public-surface-2026-08-22) -- bus thread
+   leo-feed-login-and-apply-implementation-2026-08-22. Replaces the earlier cyan/teal
+   single-card version (b835279) now that Iris's provider-specific mockup exists. Scoped
+   under .feed-auth-v1 with an `fa-` class prefix, own --fa-* token set (distinct from
+   feed-dashboard.css's --pfp-* and feed-landing.css's --fl-* vars, all of which can be
+   active on this host) -- same convention as .feed-landing-v1/.partner-v3 scoping
+   elsewhere. CYAN stays the brand-glyph-only color; everything else is amber, per the
+   mockup's color-discipline note (feed providers ARE partners).
 
-.fll-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
-.fll-card {
-  max-width: 440px; width: 100%; border: 1px solid var(--pfp-card-line); border-radius: 18px;
-  padding: 40px 36px 34px; position: relative;
-  background: linear-gradient(180deg, #0a121c, #06090f);
-  box-shadow: 0 40px 110px rgba(0, 0, 0, 0.6);
+   Deviation from the mockup: no client-side "state-sent" toggle / .af-sent markup.
+   signIn("resend") (same mechanism PartnerLoginForm uses) redirects server-side to
+   NextAuth's built-in verify-request page on submit, so there's no in-page "check your
+   email" state to render here -- same deviation already documented in
+   app/login/partner-login.css for the sibling partner login. */
+
+.feed-auth-v1 {
+  --fa-bg: #05070b;
+  --fa-panel-2: #0d141f;
+  --fa-cyan: #2de2e6;
+  --fa-line: rgba(245, 181, 71, 0.16);
+  --fa-line-soft: rgba(218, 244, 245, 0.07);
+  --fa-ink: #daf4f5;
+  --fa-ink-2: #8fb0b7;
+  --fa-ink-3: #546e74;
+  --fa-ink-4: #3a5157;
+  --fa-ok: #37f5a0;
+  --fa-amber: #f5b547;
+  --fa-amber-2: #d48b1e;
+  --fa-amber-soft: rgba(245, 181, 71, 0.1);
+  --fa-amber-line: rgba(245, 181, 71, 0.34);
+  --fa-earn: #37f5a0;
+  --fa-earn-soft: rgba(55, 245, 160, 0.1);
+  --fa-earn-line: rgba(55, 245, 160, 0.32);
+  --fa-sans: var(--font-inter), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --fa-disp: var(--font-saira), "Saira Condensed", var(--fa-sans);
+  --fa-mono: var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  position: relative;
+  min-height: 100vh;
+  background: var(--fa-bg);
+  color: var(--fa-ink);
+  font-family: var(--fa-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
-.fll-seal {
-  width: 48px; height: 48px; border-radius: 13px; display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--pfp-cyan), var(--pfp-teal)); color: #02171a;
-  font-family: var(--pfp-disp); font-weight: 800; font-size: 20px;
-  box-shadow: 0 6px 22px rgba(45, 226, 230, 0.32); margin-bottom: 20px;
+.feed-auth-v1 a { color: inherit; text-decoration: none; }
+.feed-auth-v1 ::selection { background: rgba(245, 181, 71, 0.25); }
+
+.feed-auth-v1::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(78% 52% at 82% -14%, rgba(245, 181, 71, 0.16) 0%, rgba(5, 7, 11, 0) 55%),
+    radial-gradient(64% 46% at 6% 88%, rgba(245, 181, 71, 0.07) 0%, rgba(5, 7, 11, 0) 60%);
 }
-.fll-eyebrow {
-  font-family: var(--pfp-mono); font-size: 10.5px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--pfp-cyan);
+.feed-auth-v1::after {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(245, 181, 71, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 181, 71, 0.04) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(120% 78% at 50% 8%, #000 20%, transparent 74%);
+}
+.fa-wrap { position: relative; z-index: 2; display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ── top bar ── */
+.fa-nav {
+  height: 74px; flex: 0 0 74px; display: flex; align-items: center; gap: 16px; padding: 0 40px;
+  border-bottom: 1px solid var(--fa-line-soft); position: sticky; top: 0;
+  background: rgba(5, 7, 11, 0.72); backdrop-filter: blur(14px); z-index: 30;
+}
+.fa-brand { display: flex; align-items: center; gap: 12px; }
+.fa-glyph {
+  width: 42px; height: 42px; flex: 0 0 42px; border-radius: 12px; position: relative;
+  background: linear-gradient(135deg, var(--fa-cyan), #0b6e78);
+  box-shadow: 0 4px 20px rgba(45, 226, 230, 0.3); display: flex; align-items: center; justify-content: center;
+}
+.fa-glyph svg { width: 42px; height: 42px; display: block; }
+.fa-txt { font-family: var(--fa-disp); font-weight: 800; font-size: 23px; letter-spacing: 0.05em; line-height: 1; }
+.fa-txt small {
+  display: block; font-family: var(--fa-sans); font-weight: 600; font-size: 9.5px;
+  letter-spacing: 0.3em; color: var(--fa-amber); margin-top: 3px;
+}
+.fa-nav .fa-sp { flex: 1; }
+.fa-nav-apply {
+  display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--fa-amber);
+  border: 1px solid var(--fa-amber-line); background: var(--fa-amber-soft); border-radius: 999px; padding: 8px 15px;
+}
+.fa-nav-apply .ic { width: 16px; height: 16px; opacity: 0.9; }
+.fa-nav-apply:hover { background: rgba(245, 181, 71, 0.16); }
+.fa-nav-apply .lbl-short { display: none; }
+
+/* buttons */
+.fa-btn {
+  display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; border-radius: 12px;
+  padding: 14px 26px; cursor: pointer; border: 1px solid transparent; font-family: var(--fa-sans);
+}
+.fa-btn .ar { transition: transform 0.12s; }
+.fa-btn:hover .ar { transform: translateX(3px); }
+.fa-btn.amber {
+  background: linear-gradient(135deg, var(--fa-amber), var(--fa-amber-2)); color: #20140a;
+  box-shadow: 0 8px 26px rgba(245, 181, 71, 0.26);
+}
+
+/* ══════════ AUTH — centered split card ══════════ */
+.fa-authwrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 52px 40px 40px; }
+.fa-authcard {
+  max-width: 980px; width: 100%; display: grid; grid-template-columns: 1.02fr 0.98fr;
+  border: 1px solid var(--fa-amber-line); border-radius: 22px; overflow: hidden; position: relative;
+  background: linear-gradient(180deg, #0c0e13, #08090c); box-shadow: 0 40px 110px rgba(0, 0, 0, 0.6);
+}
+
+/* LEFT — amber provider-context panel */
+.fa-auth-brand {
+  position: relative; overflow: hidden; padding: 40px 40px 36px;
+  background:
+    radial-gradient(94% 120% at 88% -20%, rgba(245, 181, 71, 0.16) 0%, rgba(5, 7, 11, 0) 58%),
+    linear-gradient(180deg, #0f1116, #0a0b0e);
+  border-right: 1px solid var(--fa-amber-line);
+}
+.fa-ab-watermark { position: absolute; right: -58px; bottom: -72px; width: 280px; height: 280px; color: var(--fa-amber); opacity: 0.055; pointer-events: none; z-index: 0; }
+.fa-ab-watermark svg { width: 100%; height: 100%; display: block; }
+.fa-ab-in { position: relative; z-index: 1; }
+.fa-pb-seal {
+  width: 56px; height: 56px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center;
+  background: radial-gradient(120% 120% at 30% 18%, rgba(245, 181, 71, 0.22), rgba(245, 181, 71, 0.05));
+  border: 1px solid var(--fa-amber-line); box-shadow: 0 10px 30px rgba(245, 181, 71, 0.18); color: var(--fa-amber); margin-bottom: 20px;
+}
+.fa-pb-seal svg { width: 30px; height: 30px; display: block; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.fa-eyebrow {
+  font-family: var(--fa-mono); font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--fa-amber);
+  margin-bottom: 13px; display: flex; align-items: center; gap: 10px;
+}
+.fa-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fa-amber); box-shadow: 0 0 10px var(--fa-amber); }
+.fa-auth-brand h1 { font-family: var(--fa-disp); font-weight: 800; font-size: 38px; line-height: 1.04; letter-spacing: 0.01em; }
+.fa-auth-brand h1 em { font-style: normal; color: var(--fa-amber); }
+.fa-auth-brand .lead { color: var(--fa-ink-2); font-size: 14px; line-height: 1.6; margin-top: 14px; max-width: 360px; }
+.fa-auth-brand .lead b { color: var(--fa-ink); font-weight: 600; }
+.fa-ab-list { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+.fa-ab-list li { list-style: none; display: flex; align-items: center; gap: 13px; font-size: 13.5px; color: var(--fa-ink-2); }
+.fa-ab-list li b { color: var(--fa-ink); font-weight: 600; }
+.fa-ab-list .ii {
+  flex: 0 0 36px; width: 36px; height: 36px; border-radius: 10px; background: var(--fa-amber-soft);
+  border: 1px solid var(--fa-amber-line); display: flex; align-items: center; justify-content: center; color: var(--fa-amber);
+}
+.fa-ab-list .ii svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fa-ab-list li.earn .ii { background: var(--fa-earn-soft); border-color: var(--fa-earn-line); color: var(--fa-earn); }
+.fa-ab-trust { display: flex; gap: 22px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--fa-line-soft); flex-wrap: wrap; }
+.fa-ab-trust .tc .tv { font-family: var(--fa-disp); font-weight: 800; font-size: 18px; color: var(--fa-ink); line-height: 1; }
+.fa-ab-trust .tc .tv .u { font-size: 10px; color: var(--fa-amber); font-weight: 700; margin-left: 1px; }
+.fa-ab-trust .tc.earn .tv .u { color: var(--fa-earn); }
+.fa-ab-trust .tc .tl { font-size: 9.5px; color: var(--fa-ink-3); margin-top: 5px; letter-spacing: 0.03em; text-transform: uppercase; }
+
+/* RIGHT — the login form card */
+.fa-auth-form { padding: 44px 40px 38px; display: flex; flex-direction: column; justify-content: center; position: relative; }
+.fa-af-head { margin-bottom: 24px; }
+.fa-af-head .k {
+  font-family: var(--fa-mono); font-size: 10.5px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--fa-ink-3);
   margin-bottom: 12px; display: flex; align-items: center; gap: 9px;
 }
-.fll-eyebrow .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--pfp-cyan); box-shadow: 0 0 9px var(--pfp-cyan); }
-.fll-card h1 { font-family: var(--pfp-disp); font-weight: 800; font-size: 27px; line-height: 1.08; letter-spacing: 0.01em; color: var(--pfp-ink); }
-.fll-sub { font-size: 13.5px; color: var(--pfp-ink-2); line-height: 1.55; margin-top: 10px; margin-bottom: 26px; }
+.fa-af-head .k .d { width: 5px; height: 5px; border-radius: 50%; background: var(--fa-amber); box-shadow: 0 0 9px var(--fa-amber); }
+.fa-af-head h2 { font-family: var(--fa-disp); font-weight: 800; font-size: 30px; line-height: 1.05; letter-spacing: 0.01em; }
+.fa-af-head .sub { font-size: 13.5px; color: var(--fa-ink-2); line-height: 1.55; margin-top: 10px; max-width: 330px; }
 
-.fll-form .fll-field { margin-bottom: 15px; }
-.fll-field label { display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pfp-ink-3); font-family: var(--pfp-mono); margin-bottom: 8px; }
-.fll-field input {
-  width: 100%; background: var(--pfp-panel-2); border: 1px solid var(--pfp-line); border-radius: 11px;
-  padding: 13px 15px; color: var(--pfp-ink); font-family: var(--pfp-sans); font-size: 14.5px;
+/* form */
+.fa-field { margin-bottom: 15px; }
+.fa-field label { display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fa-ink-3); font-family: var(--fa-mono); margin-bottom: 8px; }
+.fa-ipwrap { position: relative; }
+.fa-ipwrap .lic { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--fa-ink-3); display: flex; pointer-events: none; }
+.fa-ipwrap .lic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fa-ip {
+  width: 100%; background: var(--fa-panel-2); border: 1px solid var(--fa-line); border-radius: 11px;
+  padding: 13px 15px 13px 42px; color: var(--fa-ink); font-family: var(--fa-sans); font-size: 14.5px;
 }
-.fll-field input::placeholder { color: var(--pfp-ink-4); }
-.fll-field input:focus { outline: none; border-color: var(--pfp-card-line); box-shadow: 0 0 0 3px rgba(45, 226, 230, 0.12); }
-.fll-form .btn.full { width: 100%; justify-content: center; }
-.fll-note { font-size: 11.5px; color: var(--pfp-ink-3); margin-top: 14px; text-align: center; line-height: 1.5; }
+.fa-ip::placeholder { color: var(--fa-ink-4); }
+.fa-ip:focus { outline: none; border-color: var(--fa-amber-line); box-shadow: 0 0 0 3px rgba(245, 181, 71, 0.1); }
+.fa-af-form .fa-btn { width: 100%; justify-content: center; margin-top: 4px; }
+.fa-af-note { font-size: 11.5px; color: var(--fa-ink-3); margin-top: 14px; text-align: center; line-height: 1.5; display: flex; align-items: center; justify-content: center; gap: 7px; }
+.fa-af-note .ic { color: var(--fa-ok); display: flex; }
+.fa-af-note .ic svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 
-.fll-error {
+.fa-af-error {
   margin-bottom: 18px; border: 1px solid rgba(255, 92, 122, 0.4); background: rgba(255, 92, 122, 0.08);
-  border-radius: 10px; padding: 10px 13px; font-size: 13px; color: var(--pfp-bad);
+  border-radius: 10px; padding: 10px 13px; font-size: 13px; color: #ff5c7a;
 }
 
-.fll-div { display: flex; align-items: center; gap: 14px; margin: 24px 0 18px; color: var(--pfp-ink-4); font-size: 11px; font-family: var(--pfp-mono); letter-spacing: 0.1em; }
-.fll-div::before, .fll-div::after { content: ""; flex: 1; height: 1px; background: var(--pfp-line-soft); }
-.fll-contact { text-align: center; font-size: 13px; color: var(--pfp-ink-2); }
-.fll-contact a { color: var(--pfp-cyan); font-weight: 600; }
-.fll-help { text-align: center; font-size: 11.5px; color: var(--pfp-ink-3); margin-top: 14px; }
-.fll-help a { color: var(--pfp-ink-2); text-decoration: underline; text-underline-offset: 2px; }
+/* divider + apply footer */
+.fa-af-div { display: flex; align-items: center; gap: 14px; margin: 26px 0 18px; color: var(--fa-ink-4); font-size: 11px; font-family: var(--fa-mono); letter-spacing: 0.1em; }
+.fa-af-div::before, .fa-af-div::after { content: ""; flex: 1; height: 1px; background: var(--fa-line-soft); }
+.fa-af-apply { text-align: center; font-size: 13px; color: var(--fa-ink-2); }
+.fa-af-apply a { color: var(--fa-amber); font-weight: 600; }
+.fa-af-help { text-align: center; font-size: 11.5px; color: var(--fa-ink-3); margin-top: 14px; }
+.fa-af-help a { color: var(--fa-ink-2); text-decoration: underline; text-underline-offset: 2px; }
 
-@media (max-width: 480px) {
-  .fll-card { padding: 32px 24px 28px; }
-  .fll-card h1 { font-size: 24px; }
+/* ── footer (slim) ── */
+.fa-foot { padding: 20px 40px 32px; display: flex; align-items: center; gap: 18px; border-top: 1px solid var(--fa-line-soft); flex-wrap: wrap; }
+.fa-foot .fbrand { font-family: var(--fa-mono); font-size: 12px; color: var(--fa-ink-3); }
+.fa-foot .fsp { flex: 1; }
+.fa-foot a { font-size: 12.5px; color: var(--fa-ink-3); }
+.fa-foot a:hover { color: var(--fa-ink-2); }
+.fa-foot .fpart { color: var(--fa-amber); }
+
+/* ── responsive ── */
+@media (max-width: 860px) {
+  .fa-nav { padding: 0 20px; height: 64px; flex: 0 0 64px; }
+  .fa-nav-apply .lbl-full { display: none; }
+  .fa-nav-apply .lbl-short { display: inline; }
+  .fa-txt { font-size: 20px; }
+  .fa-authwrap { padding: 30px 18px; }
+  .fa-authcard { grid-template-columns: 1fr; max-width: 460px; }
+  .fa-auth-brand { padding: 30px 26px 26px; border-right: none; border-bottom: 1px solid var(--fa-amber-line); }
+  .fa-auth-brand h1 { font-size: 30px; }
+  .fa-ab-list { gap: 10px; }
+  .fa-ab-trust { gap: 18px; }
+  .fa-auth-form { padding: 30px 26px 30px; }
+  .fa-af-head h2 { font-size: 26px; }
+  .fa-foot { padding: 18px 20px 26px; }
+}
+@media (max-width: 460px) {
+  .fa-ab-trust .tc:nth-child(4) { display: none; }
 }
