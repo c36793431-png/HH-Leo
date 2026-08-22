@@ -14,7 +14,7 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   Verification: "That sign-in link has expired or was already used — please request a new one.",
 };
 
-function authErrorMessage(code: string): string {
+export function authErrorMessage(code: string): string {
   return AUTH_ERROR_MESSAGES[code] ?? "Something went wrong signing you in — please try again.";
 }
 

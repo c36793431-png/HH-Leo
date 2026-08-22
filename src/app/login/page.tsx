@@ -4,20 +4,32 @@ import { auth } from "@/lib/auth";
 import { getBotUsername } from "@/lib/telegram-bot";
 import { AuthCard } from "@/components/auth-card";
 import { Logo } from "@/components/logo";
+import { PartnerLoginView } from "@/components/partner/partner-login-view";
 import { getPostAuthRedirect } from "@/lib/post-auth-redirect";
+
+// Kept in sync with proxy.ts / post-auth-redirect.ts / dashboard/layout.tsx's own
+// PARTNER_HOST checks (bus thread leo-partner-surface-p1-implementation-2026-08-22).
+const PARTNER_HOST = "partner.horizonhft.com";
 
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const redirectTo = getPostAuthRedirect((await headers()).get("host"));
+  const host = (await headers()).get("host");
+  const isPartnerHost = host === PARTNER_HOST || (host?.startsWith(`${PARTNER_HOST}:`) ?? false);
+  const redirectTo = getPostAuthRedirect(host);
 
   const session = await auth();
   if (session) redirect(redirectTo);
 
-  const botUsername = await getBotUsername();
   const { error } = await searchParams;
+
+  if (isPartnerHost) {
+    return <PartnerLoginView error={error} redirectTo={redirectTo} />;
+  }
+
+  const botUsername = await getBotUsername();
 
   return (
     <>
