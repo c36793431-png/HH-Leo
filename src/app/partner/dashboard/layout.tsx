@@ -25,12 +25,13 @@ export default async function PartnerDashboardLayout({ children }: { children: R
 
     // On partner.horizonhft.com, proxy.ts rewrites every non-/partner path (including
     // /dashboard) into this tree, so redirecting a non-partner user to "/dashboard" here
-    // would just loop back through the same gate. Send them to that host's own landing
-    // page instead; on portal.horizonhft.com (reached by visiting /partner directly,
-    // unrewritten) "/dashboard" is their real destination, unchanged from before.
+    // would just loop back through the same gate. Send them to the apply page with an
+    // explanatory banner instead of a silent bounce to "/" (leo-partner-page-broken-
+    // auth-buttons-2026-08-22, bug 2). On portal.horizonhft.com (reached by visiting
+    // /partner directly, unrewritten) "/dashboard" is their real destination, unchanged.
     const host = (await headers()).get("host") || "";
     const isPartnerHost = host === PARTNER_HOST || host.startsWith(`${PARTNER_HOST}:`);
-    redirect(isPartnerHost ? "/" : "/dashboard");
+    redirect(isPartnerHost ? "/partner/apply?status=not-a-partner" : "/dashboard");
   }
 
   return <>{children}</>;

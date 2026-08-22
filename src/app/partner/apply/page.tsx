@@ -18,6 +18,7 @@ export default async function PartnerApplyPage({
 }) {
   const sp = await searchParams;
   const pending = sp.status === "pending";
+  const notAPartner = sp.status === "not-a-partner";
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 py-16 text-center text-zinc-100">
@@ -33,6 +34,14 @@ export default async function PartnerApplyPage({
       </div>
 
       <div className="w-full max-w-lg">
+        {notAPartner && (
+          <div className="mb-6 rounded-lg border border-cyan-400/35 bg-cyan-950/20 px-6 py-4 text-center">
+            <p className="text-sm text-zinc-100">
+              You&rsquo;re logged in as a Horizon HFT member, but this area needs partner
+              approval. Apply below to get started.
+            </p>
+          </div>
+        )}
         {pending ? (
           <div className="rounded-lg border border-amber-400/35 bg-amber-950/20 px-6 py-8 text-center">
             <p className="text-sm text-zinc-100">

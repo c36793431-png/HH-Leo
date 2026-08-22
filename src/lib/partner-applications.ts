@@ -166,23 +166,39 @@ export async function approvePartnerApplication(
   actionedBy: string,
   adminNotes: string | null
 ): Promise<PartnerApplicationRow> {
-  const row = await actionApplication(id, "approved", actionedBy, adminNotes);
+  let row = await actionApplication(id, "approved", actionedBy, adminNotes);
 
-  // No matching account yet is a known, expected outcome (applicant applied before ever
-  // signing up) -- not an error. Just record the approval; there's no user row to promote
-  // to role='partner' until they create an account and re-match, which isn't automated here.
   if (row.userId) {
     await pool.query(`update users set role = 'partner', updated_at = now() where id = $1`, [row.userId]);
+  } else {
+    // Hybrid account-linkage (leo-partner-page-broken-auth-buttons-2026-08-22): re-check
+    // for an account created between apply-time and approve-time before creating a new
+    // one, to avoid forking a duplicate row against the same email (users.email is unique).
+    const matched = await pool.query<{ id: string }>(`select id from users where lower(email) = lower($1)`, [
+      row.email,
+    ]);
+    let userId = matched.rows[0]?.id ?? null;
+    if (userId) {
+      await pool.query(`update users set role = 'partner', updated_at = now() where id = $1`, [userId]);
+    } else {
+      const created = await pool.query<{ id: string }>(
+        `insert into users (email, display_name, role) values ($1, $2, 'partner') returning id`,
+        [row.email, row.name]
+      );
+      userId = created.rows[0].id;
+    }
+    await pool.query(`update partner_applications set user_id = $2 where id = $1`, [row.id, userId]);
+    const reloaded = await getPartnerApplication(row.id);
+    if (!reloaded) throw new Error("partner application not found after user linkage");
+    row = reloaded;
   }
 
   await notifyApplicant(
     row,
     "Your Horizon HFT partner application was approved",
-    `<b>✅ Partner application approved</b>\nWelcome aboard -- ${
-      row.userId
-        ? "your account now has partner access, log in at partner.horizonhft.com."
-        : "create a Horizon HFT account with this email, then log in at partner.horizonhft.com to get partner access."
-    }`
+    `<b>✅ Partner application approved</b>\nWelcome aboard -- your account now has partner access. ` +
+      `Log in at partner.horizonhft.com using this email address (${row.email}) and choose ` +
+      `"Sign in with email" to get a one-time link -- no password needed.`
   );
 
   return row;
