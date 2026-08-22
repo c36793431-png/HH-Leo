@@ -5,6 +5,7 @@ import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 interface RawSearchParams {
   q?: string;
   flagged?: string;
+  feed?: string;
 }
 
 export default async function AdminConnectionsPage({
@@ -15,10 +16,13 @@ export default async function AdminConnectionsPage({
   const sp = await searchParams;
   const search = sp.q?.trim().toLowerCase() || undefined;
   const flaggedOnly = sp.flagged === "1";
+  const feedFilter = sp.feed?.trim() || undefined;
 
   const allRows = await listConnectionOverview();
+  const feedOptions = Array.from(new Set(allRows.flatMap((r) => r.feeds))).sort();
   const rows = allRows.filter((r) => {
     if (flaggedOnly && !r.mismatch) return false;
+    if (feedFilter && !r.feeds.includes(feedFilter)) return false;
     if (search) {
       const haystack = `${r.email ?? ""} ${r.serverName ?? ""} ${r.declaredIp ?? ""} ${r.latestIp ?? ""}`.toLowerCase();
       if (!haystack.includes(search)) return false;
@@ -52,13 +56,28 @@ export default async function AdminConnectionsPage({
           <input type="checkbox" name="flagged" value="1" defaultChecked={flaggedOnly} />
           Mismatches only
         </label>
+        <div>
+          <label className="block text-xs text-zinc-500">Feed</label>
+          <select
+            name="feed"
+            defaultValue={feedFilter ?? ""}
+            className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
+          >
+            <option value="">All feeds</option>
+            {feedOptions.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </div>
         <button
           type="submit"
           className="rounded-md bg-cyan-500/90 px-3 py-1.5 text-sm font-medium text-black hover:bg-cyan-400"
         >
           Filter
         </button>
-        {(search || flaggedOnly) && (
+        {(search || flaggedOnly || feedFilter) && (
           <Link href="/admin/connections" className="text-xs text-zinc-500 hover:text-zinc-300 hover:underline">
             Clear filters
           </Link>
@@ -71,6 +90,7 @@ export default async function AdminConnectionsPage({
             <thead className="text-zinc-500">
               <tr>
                 <th className="pb-2 pr-4">User</th>
+                <th className="pb-2 pr-4">Feed</th>
                 <th className="pb-2 pr-4">Server name</th>
                 <th className="pb-2 pr-4">VPS provider</th>
                 <th className="pb-2 pr-4">Declared IP</th>
@@ -93,6 +113,7 @@ export default async function AdminConnectionsPage({
                       {r.email ?? "—"}
                     </Link>
                   </td>
+                  <td className="py-2 pr-4 text-zinc-400">{r.feeds.length ? r.feeds.join(", ") : "—"}</td>
                   <td className="py-2 pr-4 text-zinc-400">{r.serverName ?? "—"}</td>
                   <td className="py-2 pr-4 text-zinc-400">{r.vpsProvider ?? "—"}</td>
                   <td className="py-2 pr-4 font-mono text-xs text-zinc-400">{r.declaredIp ?? "—"}</td>
@@ -122,7 +143,7 @@ export default async function AdminConnectionsPage({
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-4 text-center text-zinc-500">
+                  <td colSpan={11} className="py-4 text-center text-zinc-500">
                     {search || flaggedOnly ? "No connections match these filters." : "No connections captured yet."}
                   </td>
                 </tr>

@@ -90,6 +90,11 @@ export default async function FeedsPage() {
                   Manage via Telegram →
                 </a>
               )}
+              {(status === "active" || status === "trial") && entry.feedType === "futures" && (
+                <Link href="/account/servers" className="btn ghost sm fp-cta">
+                  🖥 Register your server →
+                </Link>
+              )}
               {status === "included" && <span className="fp-note">Admin access</span>}
               {status === "locked" && !hasTiers && (
                 <a className="btn primary sm fp-cta" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">

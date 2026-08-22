@@ -1,6 +1,15 @@
 import { pool } from "./db";
 import { resolveGeoIp } from "./geoip";
 import { notifyServerRegistered, notifyIpMismatch, notifyCountryChange } from "./telemetry-sink";
+import { FEED_TYPE_META, type FeedType } from "./licenses";
+
+function isFeedType(value: string): value is FeedType {
+  return (["futures", "london", "ny", "crypto"] as const).includes(value as FeedType);
+}
+
+function feedLabels(feedTypes: string[] | null | undefined): string[] {
+  return (feedTypes ?? []).filter(isFeedType).map((ft) => FEED_TYPE_META[ft].name);
+}
 
 export const VPS_PROVIDERS = ["Beeks", "Contabo", "UltraFX Cloud", "personal", "other"] as const;
 export type VpsProvider = (typeof VPS_PROVIDERS)[number];
@@ -84,12 +93,17 @@ export async function saveServerRegistration(
   );
 
   if (result.rows[0]?.inserted) {
+    const license = await pool.query<{ feed_types: string[] }>(
+      `select feed_types from licenses where id = $1`,
+      [licenseId]
+    );
     await notifyServerRegistered({
       email: ownerEmail,
       serverName: input.serverName,
       vpsProvider: input.vpsProviderOther ? `${input.vpsProvider} (${input.vpsProviderOther})` : input.vpsProvider,
       declaredIp: input.declaredIp,
       declaredLocation: input.serverLocation,
+      feeds: feedLabels(license.rows[0]?.feed_types),
       adminUrl,
     }).catch(() => {});
   }
@@ -135,12 +149,13 @@ export async function captureConnectionIp(
     getServerRegistration(licenseId),
     resolveGeoIp(ip),
     previous ? resolveGeoIp(previous.ip) : Promise.resolve(null),
-    pool.query<{ email: string | null }>(
-      `select u.email from licenses l join users u on u.id = l.user_id where l.id = $1`,
+    pool.query<{ email: string | null; feed_types: string[] }>(
+      `select u.email, l.feed_types from licenses l join users u on u.id = l.user_id where l.id = $1`,
       [licenseId]
     ),
   ]);
   const ownerEmail = owner.rows[0]?.email ?? null;
+  const feeds = feedLabels(owner.rows[0]?.feed_types);
   if (!registration || registration.multipleIpsOk) return;
 
   if (registration.declaredIp && registration.declaredIp !== ip) {
@@ -150,6 +165,7 @@ export async function captureConnectionIp(
       declaredIp: registration.declaredIp,
       actualIp: ip,
       actualLocation: geo ? [geo.city, geo.country].filter(Boolean).join(", ") || null : null,
+      feeds,
       adminUrl,
     }).catch(() => {});
   }
@@ -161,6 +177,7 @@ export async function captureConnectionIp(
       fromCountry: prevGeo.country,
       toCountry: geo.country,
       newIp: ip,
+      feeds,
       adminUrl,
     }).catch(() => {});
   }
@@ -208,6 +225,7 @@ export interface ConnectionOverviewRow {
   latestCity: string | null;
   latestIsp: string | null;
   mismatch: boolean;
+  feeds: string[];
 }
 
 /** /admin/connections source of truth — one row per license that has EITHER a
@@ -224,6 +242,7 @@ export async function listConnectionOverview(): Promise<ConnectionOverviewRow[]>
     multiple_ips_ok: boolean | null;
     latest_ip: string | null;
     latest_captured_at: Date | null;
+    feed_types: string[] | null;
   }>(
     `with latest as (
        select distinct on (license_id) license_id, ip, captured_at
@@ -245,7 +264,8 @@ export async function listConnectionOverview(): Promise<ConnectionOverviewRow[]>
        sr.server_location,
        sr.multiple_ips_ok,
        latest.ip as latest_ip,
-       latest.captured_at as latest_captured_at
+       latest.captured_at as latest_captured_at,
+       l.feed_types
      from license_ids li
      left join server_registrations sr on sr.license_id = li.license_id
      left join latest on latest.license_id = li.license_id
@@ -278,6 +298,7 @@ export async function listConnectionOverview(): Promise<ConnectionOverviewRow[]>
         latestCity: geo?.city ?? null,
         latestIsp: geo?.isp ?? null,
         mismatch,
+        feeds: feedLabels(row.feed_types),
       };
     })
   );
