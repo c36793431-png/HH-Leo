@@ -119,7 +119,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             console.error("attributeReferralFromCookie failed (telegram)", err);
           });
           await sendWelcomeDm(payload.id, user.display_name);
-          notifyFreeSignup({ email: user.email, joinedAt: new Date(), source: "telegram" }).catch(() => {});
+          notifyFreeSignup({
+            email: user.email,
+            name: user.display_name,
+            telegramHandle: user.telegram_username,
+            joinedAt: new Date(),
+            source: "telegram",
+          }).catch(() => {});
         } else if (payload.photo_url && payload.photo_url !== user.image) {
           const updated = await pool.query(
             `update users set image = $1, updated_at = now() where id = $2 returning image`,
@@ -213,7 +219,39 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           console.error("attributeReferralFromCookie failed (email)", err);
         });
       }
-      notifyFreeSignup({ email: user.email ?? null, joinedAt: new Date(), source: "email" }).catch(() => {});
+
+      // The Resend magic-link only creates this row when the link is clicked,
+      // not at form-submit time — so any name/telegram the user typed on the
+      // signup form was stashed in pending_signups and is read back here.
+      let name = user.name ?? null;
+      let telegramHandle: string | null = null;
+      if (user.email) {
+        const pending = await pool
+          .query(`delete from pending_signups where email = $1 returning name, telegram_handle`, [user.email])
+          .catch((err) => {
+            console.error("pending_signups lookup failed", err);
+            return null;
+          });
+        const row = pending?.rows[0];
+        if (row) {
+          name = row.name ?? name;
+          telegramHandle = row.telegram_handle ?? null;
+          if (user.id && (row.name || row.telegram_handle)) {
+            await pool.query(
+              `update users set name = coalesce($1, name), telegram_username = coalesce($2, telegram_username) where id = $3`,
+              [row.name ?? null, row.telegram_handle ?? null, user.id]
+            );
+          }
+        }
+      }
+
+      notifyFreeSignup({
+        email: user.email ?? null,
+        name,
+        telegramHandle,
+        joinedAt: new Date(),
+        source: "email",
+      }).catch(() => {});
     },
   },
   pages: {

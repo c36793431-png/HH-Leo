@@ -63,6 +63,8 @@ const COXWELL_APPROVALS_THREAD_ID = 28865;
 /** Best-effort, non-blocking: a failed notify must never block signup. */
 export async function notifyFreeSignup(opts: {
   email: string | null;
+  name?: string | null;
+  telegramHandle?: string | null;
   joinedAt: Date;
   source?: string;
 }): Promise<void> {
@@ -71,6 +73,8 @@ export async function notifyFreeSignup(opts: {
 
   const text =
     `🌱 new free user\n` +
+    (opts.name ? `name: ${opts.name}\n` : "") +
+    (opts.telegramHandle ? `telegram: @${opts.telegramHandle}\n` : "") +
     `email: ${opts.email ?? "-"}\n` +
     `joined: ${opts.joinedAt.toISOString()}` +
     (opts.source ? `\nsource: ${opts.source}` : "");
