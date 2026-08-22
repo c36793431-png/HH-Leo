@@ -72,26 +72,20 @@ alter table deal_payments
   add column evidence text,
   add column cycle text;
 
--- Backfill the two real Aylrn payments from seed-aylrn.json (portal $100 auto-reconciled,
--- bank $140 attested by coxwell) -- matched by deal + amount since exact row ids aren't known
--- ahead of a live DB paste. evidence is left NULL rather than a fabricated reference id --
--- no real Stripe/receipt reference was available to this migration; FOC16/coxwell should
--- attach the actual evidence reference for these two rows after paste if one exists.
+-- Backfill the one real Aylrn payment: crypto $600, coxwell-confirmed 2026-08 -- matched by
+-- deal + amount since exact row ids aren't known ahead of a live DB paste. seed-aylrn.json's
+-- $100/$140 split was superseded by live production data (FOC16 pre-flight found a single
+-- $600 USDT row) and does not reflect what actually landed. evidence is left NULL rather than
+-- a fabricated reference id -- no real Stripe/receipt reference was available to this
+-- migration; FOC16/coxwell should attach the actual evidence reference for this row after
+-- paste if one exists.
 update deal_payments dp
-set channel = 'portal', cycle = '2026-08'
+set channel = 'crypto', cycle = '2026-08'
 from partner_deals pd, partners p, users u
 where dp.deal_id = pd.id and pd.partner_id = p.id and pd.client_user_id = u.id
   and lower(coalesce(p.handle, '')) like '%legitcashmaker%'
   and lower(u.email) = 'giang2000ln@gmail.com'
-  and dp.amount_usd = 100;
-
-update deal_payments dp
-set channel = 'bank', cycle = '2026-08'
-from partner_deals pd, partners p, users u
-where dp.deal_id = pd.id and pd.partner_id = p.id and pd.client_user_id = u.id
-  and lower(coalesce(p.handle, '')) like '%legitcashmaker%'
-  and lower(u.email) = 'giang2000ln@gmail.com'
-  and dp.amount_usd = 140;
+  and dp.amount_usd = 600;
 
 insert into schema_migrations (version, name) values
   ('0056', '0056_partner_deal_lifecycle_ledger.sql')
