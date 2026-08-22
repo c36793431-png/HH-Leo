@@ -45,7 +45,9 @@ export default auth(async (req) => {
     // (same admin as portal.horizonhft.com), but every other /admin/* route stays
     // portal-only to avoid leaking unrelated admin surfaces.
     const isAdminPartnerRoute =
-      pathname.startsWith("/admin/partners") || pathname.startsWith("/admin/partner-applications");
+      pathname.startsWith("/admin/partners") ||
+      pathname.startsWith("/admin/partner-applications") ||
+      pathname.startsWith("/admin/partner-approval-queue");
     if (pathname.startsWith("/admin") && !isAdminPartnerRoute) {
       return new NextResponse("Not Found", { status: 404 });
     }
