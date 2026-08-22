@@ -28,3 +28,10 @@ export function isAdminUser(user: { email?: string | null; role?: string | null 
 export function isPartnerUser(user: { role?: string | null } | null | undefined): boolean {
   return user?.role === "partner";
 }
+
+/** Feed Provider gate for the provider self-serve panel at feed.horizonhft.com (bus thread
+ * leo-provider-panel-implementation-2026-08-22) — vendors who own one or more feed_tiers
+ * rows (via feed_tiers.provider_user_id) and self-serve-approve their own subscriber queue. */
+export function isFeedProviderUser(user: { role?: string | null } | null | undefined): boolean {
+  return user?.role === "feed_provider";
+}

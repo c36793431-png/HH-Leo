@@ -5,6 +5,7 @@ import { REFERRAL_COOKIE, REFERRAL_COOKIE_MAX_AGE_DAYS } from "@/lib/referrals";
 import { getActivePartnerReferralCode } from "@/lib/partners";
 
 const PARTNER_HOST = "partner.horizonhft.com";
+const FEED_HOST = "feed.horizonhft.com";
 
 // Auth.js session/csrf/callback cookies are scoped to this same domain in production
 // (see lib/auth.ts) so a signed-in session on one *.horizonhft.com host is visible on
@@ -68,6 +69,26 @@ export default auth(async (req) => {
       const url = req.nextUrl.clone();
       url.pathname = `/partner${pathname === "/" ? "" : pathname}`;
       return withPartnerRefCookie(req, NextResponse.rewrite(url));
+    }
+  }
+
+  const isFeedHost = host === FEED_HOST || host.startsWith(`${FEED_HOST}:`);
+  if (isFeedHost) {
+    // feed.horizonhft.com serves the provider self-serve panel, rewritten to /feed
+    // internally so it lands at the domain root (mirrors the partner-host block above).
+    // No admin surface lives on this host yet -- provider tier assignment stays an
+    // admin.horizonhft.com/portal-host-only operation for now.
+    if (pathname.startsWith("/admin")) {
+      return new NextResponse("Not Found", { status: 404 });
+    }
+    const isStaticAsset = /\.[a-zA-Z0-9]+$/.test(pathname);
+    const passthrough =
+      pathname === "/login" || pathname === "/signup" || pathname.startsWith("/feed") || isStaticAsset;
+
+    if (!passthrough) {
+      const url = req.nextUrl.clone();
+      url.pathname = `/feed${pathname === "/" ? "" : pathname}`;
+      return NextResponse.rewrite(url);
     }
   }
 
