@@ -52,7 +52,7 @@ export default async function FeedLandingPage() {
         <nav className="fl-nav">
           <a className="fl-brand" href="#">
             <span className="fl-glyph">
-              <Image src="/logo.png" alt="Horizon HFT" width={42} height={42} priority />
+              <Image src="/logo-feed.png" alt="Horizon HFT" width={42} height={42} priority />
             </span>
             <span className="fl-txt">
               HORIZON
@@ -86,7 +86,7 @@ export default async function FeedLandingPage() {
         <section className="fl-hero">
           <div className="fl-h-left">
             <span className="fl-seal" aria-hidden="true">
-              <Image src="/logo.png" alt="" width={32} height={32} />
+              <Image src="/logo-feed.png" alt="" width={32} height={32} />
             </span>
 
             <div className="fl-eyebrow">
@@ -156,7 +156,7 @@ export default async function FeedLandingPage() {
               <div className="fl-pc-head">
                 <div className="fl-pc-brand">
                   <span className="fl-g" aria-hidden="true">
-                    <Image src="/logo.png" alt="" width={16} height={16} />
+                    <Image src="/logo-feed.png" alt="" width={16} height={16} />
                   </span>
                   <span className="fl-nm">
                     Your Feed

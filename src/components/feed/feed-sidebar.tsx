@@ -18,11 +18,13 @@ export function FeedSidebar({
   providerLabel,
   providerEmail,
   pendingCount,
+  role,
   signOutButton,
 }: {
   providerLabel: string;
   providerEmail: string | null;
   pendingCount: number;
+  role: string;
   signOutButton: ReactNode;
 }) {
   const pathname = usePathname();
@@ -62,7 +64,7 @@ export function FeedSidebar({
             <b>{providerLabel}</b>
             <span>{providerEmail ?? ""}</span>
           </div>
-          <span className="tier">Provider</span>
+          <span className="tier">{role === "admin" ? "Admin" : "Provider"}</span>
         </div>
         {signOutButton}
       </div>

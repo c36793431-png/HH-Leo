@@ -44,6 +44,7 @@ export default async function FeedDashboardLayout({ children }: { children: Reac
           providerLabel={providerLabel}
           providerEmail={session.user.email ?? null}
           pendingCount={pending.length}
+          role={session.user.role ?? "user"}
           signOutButton={<SignOutButton className="btn ghost sm fp-signout" redirectTo="/" />}
         />
         <main className="fp-main">{children}</main>
