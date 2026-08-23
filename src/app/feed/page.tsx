@@ -168,7 +168,16 @@ export default async function FeedLandingPage() {
             <div className="fl-provcard" aria-hidden="true">
               <div className="fl-pc-head">
                 <div className="fl-pc-brand">
-                  <span className="fl-g" />
+                  <span className="fl-g" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" fill="none">
+                      <g stroke="#041A1E" strokeWidth={3.2} strokeLinecap="round">
+                        <line x1="16" y1="13" x2="16" y2="35" />
+                        <line x1="32" y1="13" x2="32" y2="35" />
+                        <line x1="13.5" y1="24" x2="34.5" y2="24" />
+                      </g>
+                      <path d="M19 24a5 5 0 0 1 10 0" fill="none" stroke="#041A1E" strokeWidth={2.4} strokeLinecap="round" />
+                    </svg>
+                  </span>
                   <span className="fl-nm">
                     Your Feed
                     <s>feed.horizonhft.com / provider</s>

@@ -137,7 +137,8 @@
 .fl-provcard { width: 100%; max-width: 430px; background: linear-gradient(180deg, var(--fl-panel), #070c13); border: 1px solid var(--fl-card-line); border-radius: 18px; padding: 18px 18px 16px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); }
 .fl-pc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
 .fl-pc-brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.fl-pc-brand .fl-g { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 8px; background: linear-gradient(135deg, var(--fl-cyan), #0b6e78); box-shadow: 0 2px 10px rgba(45, 226, 230, 0.3); }
+.fl-pc-brand .fl-g { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 8px; background: linear-gradient(135deg, var(--fl-cyan), #0b6e78); box-shadow: 0 2px 10px rgba(45, 226, 230, 0.3); display: flex; align-items: center; justify-content: center; }
+.fl-pc-brand .fl-g svg { width: 16px; height: 16px; display: block; }
 .fl-pc-brand .fl-nm { font-family: var(--fl-disp); font-weight: 700; font-size: 15px; color: var(--fl-ink); letter-spacing: 0.01em; line-height: 1; }
 .fl-pc-brand .fl-nm s { display: block; text-decoration: none; font-family: var(--fl-mono); font-weight: 500; font-size: 8.5px; letter-spacing: 0.14em; color: var(--fl-ink-3); margin-top: 3px; }
 .fl-pc-pill { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fl-amber); background: var(--fl-amber-soft); border: 1px solid var(--fl-amber-line); border-radius: 999px; padding: 4px 10px; }
