@@ -18,7 +18,7 @@ export default async function AdminProviderApplicationsPage() {
         </p>
       </header>
 
-      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
+      <section className="rounded-xl border border-teal-400/35 bg-teal-950/60 p-6">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-zinc-500">
