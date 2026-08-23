@@ -24,9 +24,9 @@ import "./feed-landing.css";
  *  - "Provider login" / dashboard preview / docs links point at /dashboard and /dashboard/docs
  *    (rewritten to /feed/dashboard, /feed/dashboard/docs by proxy.ts on this host) instead of
  *    the mockup's non-existent /providers/login, /providers/docs routes.
- *  - "Apply to publish" CTAs go to mailto:providers@horizonhft.com (the contact address already
- *    surfaced on the provider docs page) instead of a /providers/apply route -- no self-serve
- *    apply flow exists yet (providers are admin-onboarded per feed/dashboard/layout.tsx).
+ *  - "Apply to publish" CTAs link to /providers/apply, the self-serve application page shipped
+ *    in the login/apply pass (leo-feed-login-and-apply-implementation-2026-08-22) -- this file
+ *    predates that discovery and had wrongly pointed them at a mailto: link instead.
  *  - Mockup's own footer + Terms/Privacy links dropped -- the global <Footer/> from
  *    app/layout.tsx covers this page too, and no /terms or /privacy routes exist.
  *  - Small "signed in as" chip + sign-out added to the nav for a signed-in non-provider member,
@@ -82,7 +82,7 @@ export default async function FeedLandingPage() {
             <a className="fl-subtle" href="/dashboard">
               Provider login
             </a>
-            <a className="fl-btn fl-primary fl-small" href="mailto:providers@horizonhft.com">
+            <a className="fl-btn fl-primary fl-small" href="/providers/apply">
               Apply to publish
             </a>
           </span>
@@ -151,7 +151,7 @@ export default async function FeedLandingPage() {
             </ul>
 
             <div className="fl-cta">
-              <a className="fl-btn fl-primary" href="mailto:providers@horizonhft.com">
+              <a className="fl-btn fl-primary" href="/providers/apply">
                 Apply to publish your feed <span className="fl-ar">→</span>
               </a>
               <a className="fl-btn fl-ghost" href="/dashboard">
@@ -404,7 +404,7 @@ export default async function FeedLandingPage() {
                 </div>
               </div>
               <div className="fl-pb-cta">
-                <a className="fl-btn fl-primary" href="mailto:providers@horizonhft.com">
+                <a className="fl-btn fl-primary" href="/providers/apply">
                   Start your application <span className="fl-ar">→</span>
                 </a>
                 <a className="fl-btn fl-ghost" href="/dashboard/docs">
@@ -546,7 +546,7 @@ export default async function FeedLandingPage() {
               pay for quality, and share the revenue you earn.
             </p>
             <div className="fl-ab-cta">
-              <a className="fl-btn fl-primary" href="mailto:providers@horizonhft.com">
+              <a className="fl-btn fl-primary" href="/providers/apply">
                 Apply to publish your feed <span className="fl-ar">→</span>
               </a>
               <a className="fl-btn fl-ghost" href="/dashboard">
