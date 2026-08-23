@@ -153,3 +153,81 @@ export async function getProviderApplication(id: string): Promise<ProviderApplic
   const result = await pool.query<Row>(`${SELECT_BASE} where id = $1`, [id]);
   return result.rowCount ? mapRow(result.rows[0]) : null;
 }
+
+export interface ListProviderApplicationsOptions {
+  status?: ProviderApplicationStatus;
+}
+
+export async function listProviderApplications(
+  options: ListProviderApplicationsOptions = {}
+): Promise<ProviderApplicationRow[]> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  if (options.status) {
+    params.push(options.status);
+    conditions.push(`status = $${params.length}`);
+  }
+  const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
+  const result = await pool.query<Row>(`${SELECT_BASE} ${where} order by applied_at desc`, params);
+  return result.rows.map(mapRow);
+}
+
+/** Approve = flip the applicant's user.role to 'feed_provider' + stamp the application row, in a
+ * single transaction (mirrors approvePartnerApplication's account-linkage fallback: match an
+ * existing user by user_id, else by email, else create one -- but as one atomic unit per the
+ * admin-provider-applications-2026-08-23 spec, unlike the partner flow's sequential queries). */
+export async function approveProviderApplication(id: string, actionedBy: string): Promise<ProviderApplicationRow> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+
+    const existing = await client.query<Row>(`${SELECT_BASE} where id = $1 for update`, [id]);
+    if (!existing.rowCount) throw new Error("provider application not found");
+    const application = mapRow(existing.rows[0]);
+
+    let userId = application.userId;
+    if (!userId) {
+      const matched = await client.query<{ id: string }>(`select id from users where lower(email) = lower($1)`, [
+        application.email,
+      ]);
+      userId = matched.rows[0]?.id ?? null;
+    }
+    if (userId) {
+      await client.query(`update users set role = 'feed_provider', updated_at = now() where id = $1`, [userId]);
+    } else {
+      const created = await client.query<{ id: string }>(
+        `insert into users (email, display_name, role) values ($1, $2, 'feed_provider') returning id`,
+        [application.email, application.name]
+      );
+      userId = created.rows[0].id;
+    }
+
+    await client.query(
+      `update provider_applications
+       set status = 'approved', reviewed_at = now(), reviewed_by = $2, user_id = $3
+       where id = $1`,
+      [id, actionedBy, userId]
+    );
+
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  const row = await getProviderApplication(id);
+  if (!row) throw new Error("provider application not found after approval");
+  return row;
+}
+
+export async function declineProviderApplication(id: string, actionedBy: string): Promise<ProviderApplicationRow> {
+  await pool.query(
+    `update provider_applications set status = 'declined', reviewed_at = now(), reviewed_by = $2 where id = $1`,
+    [id, actionedBy]
+  );
+  const row = await getProviderApplication(id);
+  if (!row) throw new Error("provider application not found after decline");
+  return row;
+}

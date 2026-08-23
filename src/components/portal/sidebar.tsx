@@ -33,6 +33,7 @@ import {
   SatelliteDish,
   Handshake,
   UserPlus,
+  ClipboardCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -68,6 +69,7 @@ const ADMIN_LINKS = [
   { href: "/admin/referrals", label: "Referrals", icon: Award },
   { href: "/admin/partners", label: "Partners", icon: Handshake },
   { href: "/admin/partner-applications", label: "Partner applications", icon: UserPlus },
+  { href: "/admin/provider-applications", label: "Provider applications", icon: ClipboardCheck },
   { href: "/admin/users", label: "Users", icon: UserSquare2 },
   { href: "/admin/connections", label: "Connections", icon: Radar },
   { href: "/admin/setups", label: "Setups", icon: Settings },
