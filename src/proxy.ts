@@ -76,14 +76,20 @@ export default auth(async (req) => {
   if (isFeedHost) {
     // feed.horizonhft.com serves the provider self-serve panel, rewritten to /feed
     // internally so it lands at the domain root (mirrors the partner-host block above).
-    // No admin surface lives on this host yet -- provider tier assignment stays an
-    // admin.horizonhft.com/portal-host-only operation for now.
-    if (pathname.startsWith("/admin")) {
+    // Feed-ops admin (provider applications review) also lives here, unrewritten, same
+    // /admin/* route file as portal.horizonhft.com (decision_split_portal_admin_and_feed_admin_surfaces_2026-08-23).
+    // Every other /admin/* route stays portal-only to avoid leaking unrelated admin surfaces.
+    const isAdminFeedRoute = pathname.startsWith("/admin/provider-applications");
+    if (pathname.startsWith("/admin") && !isAdminFeedRoute) {
       return new NextResponse("Not Found", { status: 404 });
     }
     const isStaticAsset = /\.[a-zA-Z0-9]+$/.test(pathname);
     const passthrough =
-      pathname === "/login" || pathname === "/signup" || pathname.startsWith("/feed") || isStaticAsset;
+      pathname === "/login" ||
+      pathname === "/signup" ||
+      pathname.startsWith("/feed") ||
+      isAdminFeedRoute ||
+      isStaticAsset;
 
     if (!passthrough) {
       const url = req.nextUrl.clone();

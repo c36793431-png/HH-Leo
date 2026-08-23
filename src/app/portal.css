@@ -131,6 +131,15 @@
 .portal-shell .admin-block a:hover { background: rgba(161, 161, 170, 0.08); color: #e4e4e7; }
 .portal-shell .admin-block a.on { background: rgba(161, 161, 170, 0.12); color: #f4f4f5; }
 .portal-shell .admin-block a.on::before { background: var(--hz-zinc-ink); box-shadow: none; }
+.portal-shell .admin-block .soon {
+  display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px;
+  font-size: 14px; font-weight: 500; margin-bottom: 2px; color: var(--hz-ink-3); cursor: default;
+}
+.portal-shell .admin-block .soon .ic { opacity: 0.5; }
+.portal-shell .admin-block .soon .soon-pill {
+  margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+  background: rgba(161, 161, 170, 0.14); color: var(--hz-zinc-ink); border-radius: 999px; padding: 2px 7px; text-transform: uppercase;
+}
 
 .portal-shell .side-foot { padding: 14px; border-top: 1px solid var(--hz-line-soft); }
 .portal-shell .acct { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 10px; }

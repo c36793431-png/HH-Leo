@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { PortalSidebar, type PortalTier } from "./sidebar";
+import { PortalSidebar, type AdminSurface, type PortalTier } from "./sidebar";
 import { PortalTopbar } from "./topbar";
 
 export function PortalShell({
@@ -9,12 +9,14 @@ export function PortalShell({
   isAdmin,
   userName,
   userEmail,
+  adminSurface,
   children,
 }: {
   tier: PortalTier;
   isAdmin: boolean;
   userName: string;
   userEmail: string;
+  adminSurface?: AdminSurface;
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
@@ -23,7 +25,7 @@ export function PortalShell({
     <div className={`portal-shell${navOpen ? " nav-open" : ""}`}>
       <div className="scrim" onClick={() => setNavOpen(false)} />
       <div className="app">
-        <PortalSidebar tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} />
+        <PortalSidebar tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} adminSurface={adminSurface} />
         <main className="main">
           <PortalTopbar isAdmin={isAdmin} onBurgerClick={() => setNavOpen((v) => !v)} />
           <section className="content">{children}</section>

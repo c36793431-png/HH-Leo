@@ -63,13 +63,14 @@ const PORTAL_LINKS = [
   { href: "/account", label: "Account", icon: CircleUser, color: "#6FB0D8" },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; color: string; paidOnly?: boolean; lockedStaysOnPage?: boolean; isNew?: boolean }[];
 
-const ADMIN_LINKS = [
+// portal.horizonhft.com/admin/* — everything except provider-applications, which moved
+// to the feed-admin surface below (decision_split_portal_admin_and_feed_admin_surfaces_2026-08-23).
+const PORTAL_ADMIN_LINKS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/finance", label: "Finance", icon: DollarSign },
   { href: "/admin/referrals", label: "Referrals", icon: Award },
   { href: "/admin/partners", label: "Partners", icon: Handshake },
   { href: "/admin/partner-applications", label: "Partner applications", icon: UserPlus },
-  { href: "/admin/provider-applications", label: "Provider applications", icon: ClipboardCheck },
   { href: "/admin/users", label: "Users", icon: UserSquare2 },
   { href: "/admin/connections", label: "Connections", icon: Radar },
   { href: "/admin/setups", label: "Setups", icon: Settings },
@@ -86,22 +87,35 @@ const ADMIN_LINKS = [
   { href: "/admin/history", label: "History", icon: History },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon }[];
 
+// feed.horizonhft.com/admin/* — feed-ops surface. "Providers" / "Feed health" / "Revenue split"
+// are visible-but-disabled placeholders so the IA is legible before those routes exist.
+const FEED_ADMIN_LINKS = [
+  { href: "/admin/provider-applications", label: "Provider applications", icon: ClipboardCheck },
+  { href: "/admin/providers", label: "Providers", icon: SatelliteDish, soon: true },
+  { href: "/admin/feed-health", label: "Feed health", icon: Radar, soon: true },
+  { href: "/admin/revenue-split", label: "Revenue split", icon: DollarSign, soon: true },
+] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
+
 function isActive(pathname: string, href: string): boolean {
   const [path] = href.split("#");
   if (path === "/dashboard" || path === "/account") return pathname === path;
   return pathname === path || pathname.startsWith(`${path}/`);
 }
 
+export type AdminSurface = "portal" | "feed";
+
 export function PortalSidebar({
   tier,
   isAdmin,
   userName,
   userEmail,
+  adminSurface = "portal",
 }: {
   tier: PortalTier;
   isAdmin: boolean;
   userName: string;
   userEmail: string;
+  adminSurface?: AdminSurface;
 }) {
   const pathname = usePathname();
   const initial = (userName.trim()[0] ?? "?").toUpperCase();
@@ -170,8 +184,17 @@ export function PortalSidebar({
             <div className="grp">
               <span className="shield">🛡</span> Admin
             </div>
-            {ADMIN_LINKS.map((link) => {
+            {(adminSurface === "feed" ? FEED_ADMIN_LINKS : PORTAL_ADMIN_LINKS).map((link) => {
               const Icon = link.icon;
+              const soon = "soon" in link && link.soon;
+              if (soon) {
+                return (
+                  <span key={link.href} className="soon" aria-disabled="true">
+                    <span className="ic"><Icon size={18} strokeWidth={1.75} /></span> {link.label}
+                    <span className="pill soon-pill">Soon</span>
+                  </span>
+                );
+              }
               return (
                 <Link key={link.href} href={link.href} className={isActive(pathname, link.href) ? "on" : undefined}>
                   <span className="ic"><Icon size={18} strokeWidth={1.75} /></span> {link.label}
