@@ -31,7 +31,7 @@ export function FeedLoginView({ error, redirectTo }: { error?: string; redirectT
             </span>
             <span className="fa-txt">
               HORIZON
-              <small>HFT · FEED NETWORK</small>
+              <small>HFT <span className="fa-net">· FEED NETWORK</span></small>
             </span>
           </Link>
           <span className="fa-sp" />
