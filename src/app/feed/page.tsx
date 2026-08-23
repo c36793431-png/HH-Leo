@@ -62,7 +62,7 @@ export default async function FeedLandingPage() {
             </span>
             <span className="fl-txt">
               HORIZON
-              <small>HFT · FEED NETWORK</small>
+              <small>HFT <span className="fl-net">· FEED NETWORK</span></small>
             </span>
           </a>
           <span className="fl-sp" />
