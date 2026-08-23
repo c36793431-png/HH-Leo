@@ -92,12 +92,13 @@ export default async function FeedLandingPage() {
         <section className="fl-hero">
           <div className="fl-h-left">
             <span className="fl-seal" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
-                <path d="m11 17 2 2a1 1 0 1 0 3-3" />
-                <path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4" />
-                <path d="m21 3 1 11h-2" />
-                <path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3" />
-                <path d="M3 4h8" />
+              <svg viewBox="0 0 48 48" fill="none">
+                <g stroke="currentColor" strokeWidth={3.2} strokeLinecap="round">
+                  <line x1="16" y1="13" x2="16" y2="35" />
+                  <line x1="32" y1="13" x2="32" y2="35" />
+                  <line x1="13.5" y1="24" x2="34.5" y2="24" />
+                </g>
+                <path d="M19 24a5 5 0 0 1 10 0" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" />
               </svg>
             </span>
 
