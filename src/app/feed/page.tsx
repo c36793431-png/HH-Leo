@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isAdminUser, isFeedProviderUser } from "@/lib/admin-users-panel";
@@ -51,14 +52,7 @@ export default async function FeedLandingPage() {
         <nav className="fl-nav">
           <a className="fl-brand" href="#">
             <span className="fl-glyph">
-              <svg viewBox="0 0 48 48" fill="none" aria-label="Horizon HFT">
-                <g stroke="#041A1E" strokeWidth={3.2} strokeLinecap="round">
-                  <line x1="16" y1="13" x2="16" y2="35" />
-                  <line x1="32" y1="13" x2="32" y2="35" />
-                  <line x1="13.5" y1="24" x2="34.5" y2="24" />
-                </g>
-                <path d="M19 24a5 5 0 0 1 10 0" fill="none" stroke="#041A1E" strokeWidth={2.4} strokeLinecap="round" />
-              </svg>
+              <Image src="/logo.png" alt="Horizon HFT" width={42} height={42} priority />
             </span>
             <span className="fl-txt">
               HORIZON
@@ -92,14 +86,7 @@ export default async function FeedLandingPage() {
         <section className="fl-hero">
           <div className="fl-h-left">
             <span className="fl-seal" aria-hidden="true">
-              <svg viewBox="0 0 48 48" fill="none">
-                <g stroke="currentColor" strokeWidth={3.2} strokeLinecap="round">
-                  <line x1="16" y1="13" x2="16" y2="35" />
-                  <line x1="32" y1="13" x2="32" y2="35" />
-                  <line x1="13.5" y1="24" x2="34.5" y2="24" />
-                </g>
-                <path d="M19 24a5 5 0 0 1 10 0" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" />
-              </svg>
+              <Image src="/logo.png" alt="" width={32} height={32} />
             </span>
 
             <div className="fl-eyebrow">
@@ -169,14 +156,7 @@ export default async function FeedLandingPage() {
               <div className="fl-pc-head">
                 <div className="fl-pc-brand">
                   <span className="fl-g" aria-hidden="true">
-                    <svg viewBox="0 0 48 48" fill="none">
-                      <g stroke="#041A1E" strokeWidth={3.2} strokeLinecap="round">
-                        <line x1="16" y1="13" x2="16" y2="35" />
-                        <line x1="32" y1="13" x2="32" y2="35" />
-                        <line x1="13.5" y1="24" x2="34.5" y2="24" />
-                      </g>
-                      <path d="M19 24a5 5 0 0 1 10 0" fill="none" stroke="#041A1E" strokeWidth={2.4} strokeLinecap="round" />
-                    </svg>
+                    <Image src="/logo.png" alt="" width={16} height={16} />
                   </span>
                   <span className="fl-nm">
                     Your Feed
