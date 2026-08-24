@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Lock } from "lucide-react";
 import type { ActionResult } from "@/lib/action-result";
 import { emitToast } from "@/lib/toast-bus";
 
@@ -114,12 +115,21 @@ export function TermsReviewCardActions({
           </button>
         ) : (
           <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-black/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                <Lock size={10} />
+                Admins only
+              </span>
+              <span className="text-[11px] text-zinc-500">
+                Private · visible to admins only · not sent. Your annotation in the round history — never emailed, never rendered provider-side.
+              </span>
+            </div>
             <textarea
               value={declinedNote}
               onChange={(e) => setDeclinedNote(e.target.value)}
               disabled={pending}
               rows={3}
-              placeholder="Private note — never shown to the provider, never emailed. Steer them on Telegram."
+              placeholder="Your record only — why you're returning it. e.g. 'price too high for LD4-only depth. told him on TG to do 400.'"
               className="w-full rounded border border-zinc-700 bg-black/40 px-2 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-600 disabled:opacity-50"
             />
             <div className="flex items-center gap-2">
