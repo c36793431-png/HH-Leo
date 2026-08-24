@@ -1,4 +1,5 @@
 import { pool } from "./db";
+import { sendEmail } from "./email";
 
 // Round lineage is scoped by (application_id, tier_name), never application_id alone.
 // A provider can have several tiers negotiating in parallel (spec §3.5 -- "each proposal
@@ -51,6 +52,25 @@ function mapAdminRow(row: AdminRow): ProposalRoundRow {
     decidedAt: row.decided_at,
     createdAt: row.created_at,
   };
+}
+
+/** Review card entry point: look up one round plus the provider's display name, so the
+ * page can then pull the full lineage via listProposalRoundsForTierAdmin. */
+export async function getProposalRoundAdmin(
+  proposalId: string
+): Promise<(ProposalRoundRow & { providerName: string }) | null> {
+  const result = await pool.query<AdminRow & { provider_name: string }>(
+    `select p.id, p.application_id, p.provider_user_id, p.tier_name, p.client_price_cents,
+            p.provider_split_pct, p.trial_length_days, p.terms_status, p.declined_note,
+            p.decided_by, p.decided_at, p.created_at, pa.name as provider_name
+     from provider_tier_proposals p
+     join provider_applications pa on pa.id = p.application_id
+     where p.id = $1`,
+    [proposalId]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return { ...mapAdminRow(row), providerName: row.provider_name };
 }
 
 /** Admin/coxwell review lineage: the full round history for one tier's negotiation,
@@ -122,17 +142,27 @@ export async function listProposalRoundsForTierProvider(
   return result.rows.map(mapProviderRow);
 }
 
-/** The queue's inline "Confirm" hot path (§2): agrees a proposed round as-is, no card
- * open required. Stamps the round confirmed, then mirrors its terms onto provider_tiers
- * -- update in place if a row for this (application_id, tier_name) already exists
- * (renegotiation of a live tier), otherwise insert one (first confirmation).
- *
- * NOTE: the full §4 confirm/decline spec text wasn't in context when this was written --
- * this mutation shape (stamp the round + upsert provider_tiers.confirmed_at) is the
- * obvious reading of "Confirm" against the 0061 schema, not verified against Iris's
- * actual §4 copy. Flagged to marcus on the bus; re-check against §4 before trusting this
- * for anything beyond the queue smoke test. */
-export async function confirmProposalRound(proposalId: string, adminUserId: string): Promise<void> {
+/** Confirmed money never gets stored -- derive it at read time from the reviewed round.
+ * Retained = client price minus the provider's cut of it (spec §6). */
+export function calcRetainedCents(clientPriceCents: number, providerSplitPct: number): number {
+  return clientPriceCents - Math.round((clientPriceCents * providerSplitPct) / 100);
+}
+
+/** The queue's inline "Confirm" hot path (§2), and the review card's Confirm action:
+ * agrees a proposed round, optionally overriding provider_split_pct ("adjust the share
+ * before confirming" -- per-confirm edit only, not a persistent admin-owned-rate mode;
+ * the reviewed proposal row itself is never mutated beyond its own status/decision
+ * fields, so the override never touches the audit trail). Stamps the round confirmed
+ * (this is also what arms the trial clock -- provider_tiers.confirmed_at), then mirrors
+ * terms onto provider_tiers -- update in place if a row for this (application_id,
+ * tier_name) already exists (renegotiation of a live tier), otherwise insert one (first
+ * confirmation). Built against marcus's authoritative §5/§6 spec, bus thread
+ * provider-terms-negotiation-2026-08-24 (m29333/m29343 reconciled). */
+export async function confirmProposalRound(
+  proposalId: string,
+  adminUserId: string,
+  providerSplitPctOverride?: number
+): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("begin");
@@ -147,6 +177,8 @@ export async function confirmProposalRound(proposalId: string, adminUserId: stri
     const proposal = proposalResult.rows[0];
     if (!proposal) throw new Error("Proposal round not found");
     if (proposal.terms_status !== "proposed") throw new Error("Proposal round is no longer proposed");
+
+    const effectiveSplitPct = providerSplitPctOverride ?? proposal.provider_split_pct;
 
     await client.query(
       `update provider_tier_proposals
@@ -165,7 +197,7 @@ export async function confirmProposalRound(proposalId: string, adminUserId: stri
         `update provider_tiers
          set client_price_cents = $2, provider_split_pct = $3, trial_length_days = $4, confirmed_at = now()
          where id = $1`,
-        [existingTier.rows[0].id, proposal.client_price_cents, proposal.provider_split_pct, proposal.trial_length_days]
+        [existingTier.rows[0].id, proposal.client_price_cents, effectiveSplitPct, proposal.trial_length_days]
       );
     } else {
       await client.query(
@@ -178,13 +210,102 @@ export async function confirmProposalRound(proposalId: string, adminUserId: stri
           proposal.provider_user_id,
           proposal.tier_name,
           proposal.client_price_cents,
-          proposal.provider_split_pct,
+          effectiveSplitPct,
           proposal.trial_length_days,
         ]
       );
     }
 
     await client.query("commit");
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+interface FullProposalRow extends AdminRow {
+  protocol: string | null;
+  endpoint_host: string | null;
+  endpoint_port: string | null;
+  compid: string | null;
+  regions: string[] | null;
+  coverage: string[] | null;
+}
+
+/** Decline (§5) -- a single write plus an appended round, never a mutation of the
+ * reviewed snapshot in place: the declined round keeps its own terms_status/
+ * declined_note/decided_by/decided_at, and a fresh round N+1 is inserted pre-filled
+ * from it (back at terms_status='proposed') for the provider to revise. declined_note
+ * is the only decline field, admin-only, and is never selected by
+ * listProposalRoundsForTierProvider and never interpolated into the notification --
+ * the email below is a static template with no slots, so it structurally cannot leak
+ * a reason. Steering happens on Telegram, not in-app or by email. */
+export async function declineProposalRound(
+  proposalId: string,
+  adminUserId: string,
+  declinedNote: string
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+
+    const proposalResult = await client.query<FullProposalRow>(
+      `select id, application_id, provider_user_id, tier_name, client_price_cents,
+              provider_split_pct, trial_length_days, terms_status, declined_note,
+              decided_by, decided_at, created_at, protocol, endpoint_host, endpoint_port,
+              compid, regions, coverage
+       from provider_tier_proposals where id = $1 for update`,
+      [proposalId]
+    );
+    const proposal = proposalResult.rows[0];
+    if (!proposal) throw new Error("Proposal round not found");
+    if (proposal.terms_status !== "proposed") throw new Error("Proposal round is no longer proposed");
+
+    await client.query(
+      `update provider_tier_proposals
+       set terms_status = 'declined', declined_note = $2, decided_by = $3, decided_at = now()
+       where id = $1`,
+      [proposalId, declinedNote, adminUserId]
+    );
+
+    await client.query(
+      `insert into provider_tier_proposals
+         (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
+          trial_length_days, protocol, endpoint_host, endpoint_port, compid, regions, coverage)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [
+        proposal.application_id,
+        proposal.provider_user_id,
+        proposal.tier_name,
+        proposal.client_price_cents,
+        proposal.provider_split_pct,
+        proposal.trial_length_days,
+        proposal.protocol,
+        proposal.endpoint_host,
+        proposal.endpoint_port,
+        proposal.compid,
+        proposal.regions,
+        proposal.coverage,
+      ]
+    );
+
+    const recipient = await client.query<{ email: string | null }>(
+      `select email from users where id = $1`,
+      [proposal.provider_user_id]
+    );
+
+    await client.query("commit");
+
+    const email = recipient.rows[0]?.email;
+    if (email) {
+      await sendEmail(
+        email,
+        "Update on your Horizon feed-provider terms",
+        "Your submitted terms weren't confirmed this round. A new draft round is ready for you to review and resubmit from your Horizon provider dashboard."
+      ).catch(() => {});
+    }
   } catch (err) {
     await client.query("rollback");
     throw err;
