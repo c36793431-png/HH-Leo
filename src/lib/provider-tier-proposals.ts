@@ -142,6 +142,45 @@ export async function listProposalRoundsForTierProvider(
   return result.rows.map(mapProviderRow);
 }
 
+export interface SiblingProposedTierRow {
+  tierName: string;
+  clientPriceCents: number;
+  providerSplitPct: number;
+}
+
+interface SiblingRow {
+  tier_name: string;
+  client_price_cents: number;
+  provider_split_pct: number;
+}
+
+/** Spec §3.5 sibling-tier strip: this provider's other tiers still sitting at
+ * terms_status = 'proposed', latest round each, excluding the tier the review card
+ * is currently open on. Same-application scoping only -- this never crosses into
+ * another provider's proposals (that's the §1a isolation rule; irrelevant here since
+ * it's already scoped to one application_id). */
+export async function listSiblingProposedTiersAdmin(
+  applicationId: string,
+  excludeTierName: string
+): Promise<SiblingProposedTierRow[]> {
+  const result = await pool.query<SiblingRow>(
+    `select tier_name, client_price_cents, provider_split_pct from (
+       select distinct on (tier_name)
+         tier_name, client_price_cents, provider_split_pct, terms_status
+       from provider_tier_proposals
+       where application_id = $1 and tier_name <> $2
+       order by tier_name, created_at desc
+     ) latest
+     where terms_status = 'proposed'`,
+    [applicationId, excludeTierName]
+  );
+  return result.rows.map((r) => ({
+    tierName: r.tier_name,
+    clientPriceCents: r.client_price_cents,
+    providerSplitPct: r.provider_split_pct,
+  }));
+}
+
 /** Confirmed money never gets stored -- derive it at read time from the reviewed round.
  * Retained = client price minus the provider's cut of it (spec §6). */
 export function calcRetainedCents(clientPriceCents: number, providerSplitPct: number): number {

@@ -5,6 +5,7 @@ import {
   calcRetainedCents,
   getProposalRoundAdmin,
   listProposalRoundsForTierAdmin,
+  listSiblingProposedTiersAdmin,
 } from "@/lib/provider-tier-proposals";
 import { TermsReviewCardActions } from "@/components/admin/terms-review-card-actions";
 import { confirmProposalAction, declineProposalAction } from "../actions";
@@ -30,6 +31,7 @@ export default async function AdminProviderTermsReviewCard({
   if (!round) notFound();
 
   const lineage = await listProposalRoundsForTierAdmin(round.applicationId, round.tierName);
+  const siblingTiers = await listSiblingProposedTiersAdmin(round.applicationId, round.tierName);
   const retainedCents = calcRetainedCents(round.clientPriceCents, round.providerSplitPct);
   const retainedPct = 100 - round.providerSplitPct;
 
@@ -53,6 +55,24 @@ export default async function AdminProviderTermsReviewCard({
           Round submitted {formatAbsoluteUtc(round.createdAt)} ({formatRelative(round.createdAt)})
         </p>
       </div>
+
+      {siblingTiers.length > 0 && (
+        <div className="rounded-lg border border-teal-400/30 bg-teal-950/20 p-3 text-sm text-teal-300">
+          <span className="font-medium">{round.providerName}</span> also has{" "}
+          {siblingTiers.map((t, i) => (
+            <span key={t.tierName}>
+              {i > 0 && (i === siblingTiers.length - 1 ? " and " : ", ")}
+              <span className="font-medium">{t.tierName}</span> ({fmtUsd(t.clientPriceCents)}/mo · provider share{" "}
+              {t.providerSplitPct}%)
+            </span>
+          ))}{" "}
+          still pending.
+          <p className="mt-1 text-[11px] text-teal-400/70">
+            Deciding {round.tierName} doesn&rsquo;t touch {siblingTiers.map((t) => t.tierName).join(" or ")} — see
+            both before you confirm or decline.
+          </p>
+        </div>
+      )}
 
       <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-cyan-400">This round</h2>
