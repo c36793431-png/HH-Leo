@@ -13,6 +13,7 @@ import {
 } from "./actions";
 import { listProviderApplications } from "@/lib/provider-applications";
 import { getProviderMarketplaceSummary } from "@/lib/provider-tiers";
+import { getTermsQueueStats } from "@/lib/provider-terms-queue";
 
 // Same route file serves portal.horizonhft.com/admin and feed.horizonhft.com/admin (see
 // admin/layout.tsx's host-detection comment) -- this file host-branches at the page level
@@ -35,12 +36,14 @@ function fmtUsd(cents: number): string {
  * gross) per coxwell's still-open headline-metric question; both are computed in
  * getProviderMarketplaceSummary() so swapping the headline later is a one-line change. */
 async function FeedAdminDashboard() {
-  const [pendingApplications, marketplace] = await Promise.all([
+  const [pendingApplications, marketplace, termsQueueStats] = await Promise.all([
     listProviderApplications({ status: "pending" }),
     getProviderMarketplaceSummary(),
+    getTermsQueueStats(),
   ]);
   const pendingCount = pendingApplications.length;
   const marketplaceEmpty = marketplace.liveProviderCount === 0;
+  const needsReviewCount = termsQueueStats.needsTermsReviewCount;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -93,11 +96,13 @@ async function FeedAdminDashboard() {
           className="rounded-xl border border-teal-400/35 bg-teal-950/20 p-4 hover:border-teal-400/60"
         >
           <div className="text-xs uppercase tracking-wide text-zinc-500">Providers</div>
-          <div className="mt-1 text-2xl font-semibold text-teal-300">{marketplace.liveProviderCount}</div>
+          <div className="mt-1 text-2xl font-semibold text-teal-300">{needsReviewCount}</div>
           <div className="mt-0.5 text-xs text-zinc-500">
-            {marketplace.liveProviderCount === 0
-              ? "No live providers yet"
-              : `${marketplace.liveTierCount} live tier${marketplace.liveTierCount === 1 ? "" : "s"}`}
+            {needsReviewCount === 0
+              ? marketplace.liveProviderCount === 0
+                ? "No live providers yet"
+                : `${marketplace.liveTierCount} live tier${marketplace.liveTierCount === 1 ? "" : "s"}`
+              : `${needsReviewCount} needs terms review`}
           </div>
         </Link>
 
