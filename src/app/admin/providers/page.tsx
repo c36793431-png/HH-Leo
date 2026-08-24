@@ -6,21 +6,24 @@ import { TermsQueueRowActions } from "@/components/admin/terms-queue-row-actions
 import { confirmProposalAction } from "./actions";
 
 interface ProviderQueueGroup {
-  applicationId: string;
+  providerUserId: string;
   providerName: string;
   rows: TermsQueueRow[];
 }
 
 /** Spec §3.5: a provider with >1 pending proposal renders as one grouped block --
- * provider identity once, decided per tier. Groups keep the queue's existing
+ * provider identity once, decided per tier. Grouped by providerUserId, not
+ * applicationId: provider_applications has no unique constraint on email/user_id,
+ * so the same provider can hold two application rows -- grouping by applicationId
+ * would split one provider across two blocks. Groups keep the queue's existing
  * oldest-waiting-first order by sorting on each group's earliest row. */
 function groupQueueByProvider(queue: TermsQueueRow[]): ProviderQueueGroup[] {
   const groups = new Map<string, ProviderQueueGroup>();
   for (const row of queue) {
-    let group = groups.get(row.applicationId);
+    let group = groups.get(row.providerUserId);
     if (!group) {
-      group = { applicationId: row.applicationId, providerName: row.providerName, rows: [] };
-      groups.set(row.applicationId, group);
+      group = { providerUserId: row.providerUserId, providerName: row.providerName, rows: [] };
+      groups.set(row.providerUserId, group);
     }
     group.rows.push(row);
   }
@@ -109,7 +112,7 @@ export default async function AdminProvidersPage({
         <section className="flex flex-col gap-3">
           {groupQueueByProvider(queue).map((group) => (
             <div
-              key={group.applicationId}
+              key={group.providerUserId}
               className={group.rows.length > 1 ? "rounded-xl border border-teal-400/25 bg-teal-950/10 p-2" : undefined}
             >
               {group.rows.length > 1 && (
