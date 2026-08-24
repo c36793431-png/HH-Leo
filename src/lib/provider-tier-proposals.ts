@@ -121,3 +121,74 @@ export async function listProposalRoundsForTierProvider(
   );
   return result.rows.map(mapProviderRow);
 }
+
+/** The queue's inline "Confirm" hot path (§2): agrees a pending round as-is, no card
+ * open required. Stamps the round confirmed, then mirrors its terms onto provider_tiers
+ * -- update in place if a row for this (application_id, tier_name) already exists
+ * (renegotiation of a live tier), otherwise insert one (first confirmation).
+ *
+ * NOTE: the full §4 confirm/decline spec text wasn't in context when this was written --
+ * this mutation shape (stamp the round + upsert provider_tiers.confirmed_at) is the
+ * obvious reading of "Confirm" against the 0061 schema, not verified against Iris's
+ * actual §4 copy. Flagged to marcus on the bus; re-check against §4 before trusting this
+ * for anything beyond the queue smoke test. */
+export async function confirmProposalRound(proposalId: string, adminUserId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+
+    const proposalResult = await client.query<AdminRow>(
+      `select id, application_id, provider_user_id, tier_name, client_price_cents,
+              provider_split_pct, trial_length_days, terms_status, declined_note,
+              decided_by, decided_at, created_at
+       from provider_tier_proposals where id = $1 for update`,
+      [proposalId]
+    );
+    const proposal = proposalResult.rows[0];
+    if (!proposal) throw new Error("Proposal round not found");
+    if (proposal.terms_status !== "pending") throw new Error("Proposal round is no longer pending");
+
+    await client.query(
+      `update provider_tier_proposals
+       set terms_status = 'confirmed', decided_by = $2, decided_at = now()
+       where id = $1`,
+      [proposalId, adminUserId]
+    );
+
+    const existingTier = await client.query<{ id: string }>(
+      `select id from provider_tiers where application_id = $1 and tier_name = $2`,
+      [proposal.application_id, proposal.tier_name]
+    );
+
+    if (existingTier.rows[0]) {
+      await client.query(
+        `update provider_tiers
+         set client_price_cents = $2, provider_split_pct = $3, trial_length_days = $4, confirmed_at = now()
+         where id = $1`,
+        [existingTier.rows[0].id, proposal.client_price_cents, proposal.provider_split_pct, proposal.trial_length_days]
+      );
+    } else {
+      await client.query(
+        `insert into provider_tiers
+           (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
+            trial_length_days, confirmed_at)
+         values ($1, $2, $3, $4, $5, $6, now())`,
+        [
+          proposal.application_id,
+          proposal.provider_user_id,
+          proposal.tier_name,
+          proposal.client_price_cents,
+          proposal.provider_split_pct,
+          proposal.trial_length_days,
+        ]
+      );
+    }
+
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
+}

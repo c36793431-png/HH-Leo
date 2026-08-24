@@ -91,7 +91,7 @@ const PORTAL_ADMIN_LINKS = [
 // are visible-but-disabled placeholders so the IA is legible before those routes exist.
 const FEED_ADMIN_LINKS = [
   { href: "/admin/provider-applications", label: "Provider applications", icon: ClipboardCheck },
-  { href: "/admin/providers", label: "Providers", icon: SatelliteDish, soon: true },
+  { href: "/admin/providers", label: "Providers", icon: SatelliteDish },
   { href: "/admin/feed-health", label: "Feed health", icon: Radar, soon: true },
   { href: "/admin/revenue-split", label: "Revenue split", icon: DollarSign, soon: true },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
