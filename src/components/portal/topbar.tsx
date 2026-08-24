@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import type { AdminSurface } from "./sidebar";
 
 const TITLES: Record<string, { title: string; crumb: string }> = {
   "/dashboard": { title: "Dashboard", crumb: "dashboard" },
@@ -25,9 +26,18 @@ function resolveTitle(pathname: string): { title: string; crumb: string } {
   return { title, crumb: segments.join(" / ") };
 }
 
-export function PortalTopbar({ isAdmin, onBurgerClick }: { isAdmin: boolean; onBurgerClick: () => void }) {
+export function PortalTopbar({
+  isAdmin,
+  adminSurface = "portal",
+  onBurgerClick,
+}: {
+  isAdmin: boolean;
+  adminSurface?: AdminSurface;
+  onBurgerClick: () => void;
+}) {
   const pathname = usePathname();
   const { title, crumb } = resolveTitle(pathname);
+  const host = adminSurface === "feed" ? "feed.horizonhft.com" : "portal.horizonhft.com";
 
   return (
     <header className="topbar">
@@ -36,7 +46,7 @@ export function PortalTopbar({ isAdmin, onBurgerClick }: { isAdmin: boolean; onB
       </button>
       <div>
         <h1>{title}</h1>
-        <div className="crumb">portal.horizonhft.com / {crumb}</div>
+        <div className="crumb">{host} / {crumb}</div>
       </div>
       <div className="sp" />
       {isAdmin && <span className="adminchip">🛡 Admin mode</span>}

@@ -27,7 +27,7 @@ export function PortalShell({
       <div className="app">
         <PortalSidebar tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} adminSurface={adminSurface} />
         <main className="main">
-          <PortalTopbar isAdmin={isAdmin} onBurgerClick={() => setNavOpen((v) => !v)} />
+          <PortalTopbar isAdmin={isAdmin} adminSurface={adminSurface} onBurgerClick={() => setNavOpen((v) => !v)} />
           <section className="content">{children}</section>
         </main>
       </div>

@@ -146,7 +146,7 @@ export function PortalSidebar({
         />
         <div className="txt">
           HORIZON
-          <small>HFT PORTAL</small>
+          <small>{adminSurface === "feed" ? "HFT · FEED NETWORK" : "HFT PORTAL"}</small>
           <span className={`brand-pill${tierClass ? ` ${tierClass}` : ""}`}>{tierLabel.toUpperCase()}</span>
         </div>
       </Link>
