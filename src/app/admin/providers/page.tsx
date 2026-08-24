@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatRelative } from "@/lib/format-time";
 import { getBookContext, getTermsQueueStats, listTermsReviewQueue } from "@/lib/provider-terms-queue";
 import type { TermsQueueRow } from "@/lib/provider-terms-queue";
+import { listProviderRoster } from "@/lib/provider-tiers";
 import { TermsQueueRowActions } from "@/components/admin/terms-queue-row-actions";
 import { confirmProposalAction } from "./actions";
 
@@ -51,20 +52,32 @@ export default async function AdminProvidersPage({
   const { filter: filterParam } = await searchParams;
   const filter = FILTER_SEGMENTS.some((s) => s.key === filterParam) ? filterParam! : "needs-review";
 
-  const [stats, bookContext, queue] = await Promise.all([
+  const [stats, bookContext, queue, roster] = await Promise.all([
     getTermsQueueStats(),
     getBookContext(),
     listTermsReviewQueue(),
+    listProviderRoster(),
   ]);
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="mb-8">
-        <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-          Admin · Providers
-        </span>
-        <h1 className="mt-2 text-lg font-medium text-zinc-100">Providers</h1>
-        <p className="mt-1 text-sm text-zinc-400">Terms negotiation queue and live feed-provider book.</p>
+      <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+            Admin · Providers
+          </span>
+          <h1 className="mt-2 text-lg font-medium text-zinc-100">Providers</h1>
+          <p className="mt-1 text-sm text-zinc-400">
+            {roster.length} active provider{roster.length === 1 ? "" : "s"} · terms negotiation queue and live
+            feed-provider book.
+          </p>
+        </div>
+        <Link
+          href="/admin/register-provider"
+          className="rounded-lg border border-teal-400/40 bg-teal-950/30 px-3 py-2 text-sm font-medium text-teal-300 hover:bg-teal-950/50"
+        >
+          Register provider
+        </Link>
       </header>
 
       <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -103,10 +116,53 @@ export default async function AdminProvidersPage({
         ))}
       </div>
 
-      {filter !== "needs-review" ? (
+      {stats.needsTermsReviewCount > 0 && filter !== "needs-review" && (
+        <Link
+          href="/admin/providers?filter=needs-review"
+          className="mb-4 flex items-center justify-between rounded-lg border border-red-500/40 bg-red-950/20 px-4 py-2.5 text-sm text-red-300 hover:bg-red-950/30"
+        >
+          <span>
+            {stats.needsTermsReviewCount} tier{stats.needsTermsReviewCount === 1 ? "" : "s"} need terms review
+          </span>
+          <span className="text-red-400/70">review now →</span>
+        </Link>
+      )}
+
+      {filter === "trial" ? (
         <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-sm text-zinc-500">
-          {FILTER_SEGMENTS.find((s) => s.key === filter)?.label} isn&apos;t built yet — only the terms-review queue
-          ships in this pass.
+          In trial isn&apos;t built yet — no trial state exists on a provider tier today.
+        </section>
+      ) : filter === "all" || filter === "live" ? (
+        <section className="flex flex-col gap-2">
+          {roster.map((entry) => (
+            <div key={entry.providerUserId} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-sm font-medium text-teal-400">{entry.providerName}</span>
+                <span className="text-[11px] text-zinc-500">
+                  {entry.tiers.length} tier{entry.tiers.length === 1 ? "" : "s"} live
+                </span>
+              </div>
+              <div className="mt-2 flex flex-col gap-1">
+                {entry.tiers.map((tier) => (
+                  <div
+                    key={tier.tierName}
+                    className="flex items-center justify-between border-t border-zinc-800 pt-1.5 text-xs text-zinc-400"
+                  >
+                    <span>{tier.tierName}</span>
+                    <span className="text-zinc-300">
+                      {fmtUsd(tier.clientPriceCents)}/mo · provider share {tier.providerSplitPct}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {roster.length === 0 && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-sm text-zinc-500">
+              No providers onboarded yet.
+            </div>
+          )}
         </section>
       ) : (
         <section className="flex flex-col gap-3">

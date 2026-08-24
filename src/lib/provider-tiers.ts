@@ -138,6 +138,50 @@ export async function listAllLiveTiers(): Promise<LiveTierRevenueRow[]> {
   });
 }
 
+export interface ProviderRosterEntry {
+  providerUserId: string;
+  providerName: string;
+  tiers: { tierName: string; clientPriceCents: number; providerSplitPct: number }[];
+}
+
+/** /admin/providers roster table (bus thread feed-admin-dashboard-build-2026-08-24,
+ * Iris's "roster is the index, terms-review is a filtered view inside it" reconciliation).
+ * One row per provider, tiers nested -- same live-only-by-construction invariant as
+ * listAllLiveTiers(), just grouped by provider instead of flattened per-tier. Status
+ * (live/trial/paused) and uptime are deliberately not modeled: no backing column exists
+ * anywhere in provider_tiers (verified against 0060-0064), flagged to Iris rather than
+ * fabricated -- same gap as the aggregate dashboard's dropped connections-state tile. */
+export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
+  const result = await pool.query<{
+    provider_user_id: string;
+    provider_name: string;
+    tier_name: string;
+    client_price_cents: number;
+    provider_split_pct: number;
+  }>(
+    `select t.provider_user_id, pa.name as provider_name, t.tier_name,
+            t.client_price_cents, t.provider_split_pct
+     from provider_tiers t
+     join provider_applications pa on pa.id = t.application_id
+     order by pa.name, t.tier_name`
+  );
+
+  const byProvider = new Map<string, ProviderRosterEntry>();
+  for (const row of result.rows) {
+    let entry = byProvider.get(row.provider_user_id);
+    if (!entry) {
+      entry = { providerUserId: row.provider_user_id, providerName: row.provider_name, tiers: [] };
+      byProvider.set(row.provider_user_id, entry);
+    }
+    entry.tiers.push({
+      tierName: row.tier_name,
+      clientPriceCents: row.client_price_cents,
+      providerSplitPct: row.provider_split_pct,
+    });
+  }
+  return Array.from(byProvider.values());
+}
+
 export interface RegisterTierInput {
   tierName: string;
   clientPriceCents: number;
