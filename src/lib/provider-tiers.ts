@@ -52,6 +52,50 @@ export async function listTiersForApplication(applicationId: string): Promise<Pr
   return result.rows.map(mapRow);
 }
 
+export interface ProviderMarketplaceSummary {
+  liveProviderCount: number;
+  liveTierCount: number;
+  retainedRunRateCents: number;
+  grossRunRateCents: number;
+}
+
+/** Feed-admin dashboard Providers/Revenue tiles (bus thread
+ * feed-admin-dashboard-build-2026-08-24). provider_tiers is confirmed-only by construction
+ * (no status column -- see 0061's migration comment), so every row here is a live, real
+ * data point -- same invariant getTermsQueueStats()/getBookContext() in
+ * provider-terms-queue.ts rely on for the /admin/providers surface. This is a separate,
+ * narrower query (dashboard only needs provider/tier counts + run-rate, not the terms-queue's
+ * proposal/median-margin stats), not a reuse -- keep both in sync if provider_tiers' shape
+ * changes.
+ *
+ * No paid-subscriber-count or payment/subscription table exists anywhere in this schema for
+ * provider_tiers (verified against db/migrations/0060-0064 and every provider_tier* call
+ * site) -- deliberately NOT surfaced here per Iris's spec's "real counts only" requirement.
+ * Gross is computed alongside retained so the dashboard can swap its headline metric later
+ * without a lib change (coxwell hasn't picked the permanent headline yet). */
+export async function getProviderMarketplaceSummary(): Promise<ProviderMarketplaceSummary> {
+  const result = await pool.query<{
+    live_providers: string;
+    live_tiers: string;
+    gross: string | null;
+    retained: string | null;
+  }>(
+    `select
+       count(distinct provider_user_id) as live_providers,
+       count(*) as live_tiers,
+       sum(client_price_cents) as gross,
+       sum(client_price_cents * (100 - provider_split_pct) / 100.0) as retained
+     from provider_tiers`
+  );
+  const row = result.rows[0];
+  return {
+    liveProviderCount: Number(row?.live_providers ?? 0),
+    liveTierCount: Number(row?.live_tiers ?? 0),
+    grossRunRateCents: Math.round(Number(row?.gross ?? 0)),
+    retainedRunRateCents: Math.round(Number(row?.retained ?? 0)),
+  };
+}
+
 export interface RegisterTierInput {
   tierName: string;
   clientPriceCents: number;

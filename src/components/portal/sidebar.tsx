@@ -90,6 +90,7 @@ const PORTAL_ADMIN_LINKS = [
 // feed.horizonhft.com/admin/* — feed-ops surface. "Providers" / "Feed health" / "Revenue split"
 // are visible-but-disabled placeholders so the IA is legible before those routes exist.
 const FEED_ADMIN_LINKS = [
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/provider-applications", label: "Provider applications", icon: ClipboardCheck },
   { href: "/admin/providers", label: "Providers", icon: SatelliteDish },
   { href: "/admin/feed-health", label: "Feed health", icon: Radar, soon: true },
@@ -98,7 +99,7 @@ const FEED_ADMIN_LINKS = [
 
 function isActive(pathname: string, href: string): boolean {
   const [path] = href.split("#");
-  if (path === "/dashboard" || path === "/account") return pathname === path;
+  if (path === "/dashboard" || path === "/account" || path === "/admin") return pathname === path;
   return pathname === path || pathname.startsWith(`${path}/`);
 }
 
