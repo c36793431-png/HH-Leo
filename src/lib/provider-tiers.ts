@@ -96,6 +96,48 @@ export async function getProviderMarketplaceSummary(): Promise<ProviderMarketpla
   };
 }
 
+export interface LiveTierRevenueRow {
+  id: string;
+  providerName: string;
+  tierName: string;
+  clientPriceCents: number;
+  providerSplitPct: number;
+  providerPayoutCents: number;
+  retainedCents: number;
+}
+
+/** Per-tier breakdown backing /admin/revenue (spec §9) -- the auditable detail behind
+ * getProviderMarketplaceSummary()'s rollup. Same "provider_tiers is live-only by
+ * construction" invariant applies, so no status filter is needed here either. */
+export async function listAllLiveTiers(): Promise<LiveTierRevenueRow[]> {
+  const result = await pool.query<{
+    id: string;
+    provider_name: string;
+    tier_name: string;
+    client_price_cents: number;
+    provider_split_pct: number;
+  }>(
+    `select t.id, pa.name as provider_name, t.tier_name, t.client_price_cents, t.provider_split_pct
+     from provider_tiers t
+     join provider_applications pa on pa.id = t.application_id
+     order by pa.name, t.tier_name`
+  );
+  return result.rows.map((row) => {
+    const providerPayoutCents = Math.round(
+      (row.client_price_cents * row.provider_split_pct) / 100
+    );
+    return {
+      id: row.id,
+      providerName: row.provider_name,
+      tierName: row.tier_name,
+      clientPriceCents: row.client_price_cents,
+      providerSplitPct: row.provider_split_pct,
+      providerPayoutCents,
+      retainedCents: row.client_price_cents - providerPayoutCents,
+    };
+  });
+}
+
 export interface RegisterTierInput {
   tierName: string;
   clientPriceCents: number;

@@ -77,15 +77,21 @@ async function FeedAdminDashboard() {
       )}
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-amber-400/35 bg-amber-950/20 p-4">
+        <Link
+          href="/admin/provider-applications"
+          className="rounded-xl border border-amber-400/35 bg-amber-950/20 p-4 hover:border-amber-400/60"
+        >
           <div className="text-xs uppercase tracking-wide text-zinc-500">Applications</div>
           <div className="mt-1 text-2xl font-semibold text-amber-300">{pendingCount}</div>
           <div className="mt-0.5 text-xs text-zinc-500">
             {pendingCount === 0 ? "No pending applications" : "Awaiting review"}
           </div>
-        </div>
+        </Link>
 
-        <div className="rounded-xl border border-teal-400/35 bg-teal-950/20 p-4">
+        <Link
+          href="/admin/providers"
+          className="rounded-xl border border-teal-400/35 bg-teal-950/20 p-4 hover:border-teal-400/60"
+        >
           <div className="text-xs uppercase tracking-wide text-zinc-500">Providers</div>
           <div className="mt-1 text-2xl font-semibold text-teal-300">{marketplace.liveProviderCount}</div>
           <div className="mt-0.5 text-xs text-zinc-500">
@@ -93,9 +99,12 @@ async function FeedAdminDashboard() {
               ? "No live providers yet"
               : `${marketplace.liveTierCount} live tier${marketplace.liveTierCount === 1 ? "" : "s"}`}
           </div>
-        </div>
+        </Link>
 
-        <div className="rounded-xl border border-emerald-400/35 bg-emerald-950/20 p-4">
+        <Link
+          href="/admin/revenue"
+          className="rounded-xl border border-emerald-400/35 bg-emerald-950/20 p-4 hover:border-emerald-400/60"
+        >
           <div className="text-xs uppercase tracking-wide text-zinc-500">Revenue</div>
           <div className="mt-1 text-2xl font-semibold text-emerald-300">
             {marketplaceEmpty ? "—" : fmtUsd(marketplace.retainedRunRateCents)}
@@ -103,7 +112,7 @@ async function FeedAdminDashboard() {
           <div className="mt-0.5 text-xs text-zinc-500">
             {marketplaceEmpty ? "No revenue yet" : "Horizon-retained run-rate / mo"}
           </div>
-        </div>
+        </Link>
       </section>
 
       {!marketplaceEmpty && (
@@ -118,6 +127,9 @@ async function FeedAdminDashboard() {
             </Link>
             <Link href="/admin/providers" className="text-cyan-400 hover:underline">
               Providers
+            </Link>
+            <Link href="/admin/revenue" className="text-cyan-400 hover:underline">
+              Revenue
             </Link>
           </div>
         </section>

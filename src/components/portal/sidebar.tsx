@@ -87,14 +87,14 @@ const PORTAL_ADMIN_LINKS = [
   { href: "/admin/history", label: "History", icon: History },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon }[];
 
-// feed.horizonhft.com/admin/* — feed-ops surface. "Providers" / "Feed health" / "Revenue split"
-// are visible-but-disabled placeholders so the IA is legible before those routes exist.
+// feed.horizonhft.com/admin/* — feed-ops surface. "Feed health" stays a visible-but-disabled
+// placeholder (no collector wired yet, spec §10); Providers and Revenue split are live routes.
 const FEED_ADMIN_LINKS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/provider-applications", label: "Provider applications", icon: ClipboardCheck },
   { href: "/admin/providers", label: "Providers", icon: SatelliteDish },
   { href: "/admin/feed-health", label: "Feed health", icon: Radar, soon: true },
-  { href: "/admin/revenue-split", label: "Revenue split", icon: DollarSign, soon: true },
+  { href: "/admin/revenue", label: "Revenue split", icon: DollarSign },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
 
 function isActive(pathname: string, href: string): boolean {
