@@ -100,12 +100,13 @@ export default async function AdminProviderTermsReviewCard({
       </section>
 
       {round.termsStatus === "proposed" ? (
-        <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
-          <h2 className="text-sm font-medium text-zinc-300">Decision</h2>
+        <section className="rounded-xl border-2 border-emerald-500/50 bg-emerald-950/10 p-6">
+          <h2 className="text-sm font-medium text-emerald-400">Confirm & bind terms</h2>
           <div className="mt-3">
             <TermsReviewCardActions
               proposalId={round.id}
               providerSplitPct={round.providerSplitPct}
+              summaryLine={`${fmtUsd(round.clientPriceCents)}/mo · share ${round.providerSplitPct}% · you keep ${fmtUsd(retainedCents)}`}
               confirmAction={confirmProposalAction}
               declineAction={declineProposalAction}
             />

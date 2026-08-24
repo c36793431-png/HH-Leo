@@ -9,6 +9,7 @@ type Action = (prevState: ActionResult | null, formData: FormData) => Promise<Ac
 interface TermsReviewCardActionsProps {
   proposalId: string;
   providerSplitPct: number;
+  summaryLine: string;
   confirmAction: Action;
   declineAction: Action;
 }
@@ -16,10 +17,13 @@ interface TermsReviewCardActionsProps {
 /** Review card's Confirm (with an optional one-off split % override -- "adjust the
  * share before confirming") and Decline (requires a private note) actions. Both are
  * terminal for this round: on success there's nothing left to act on here, so we just
- * toast and let the caller's revalidatePath refresh the queue behind this page. */
+ * toast and let the caller's revalidatePath refresh the queue behind this page.
+ * Confirm-hot/decline-folded: coxwell's terms are pre-agreed on Telegram, so the common
+ * case is one click -- Confirm gets the emphasis, Decline stays reachable but subordinate. */
 export function TermsReviewCardActions({
   proposalId,
   providerSplitPct,
+  summaryLine,
   confirmAction,
   declineAction,
 }: TermsReviewCardActionsProps) {
@@ -64,24 +68,24 @@ export function TermsReviewCardActions({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={confirm}
-          disabled={pending}
-          className="rounded bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {pending ? "Working…" : "Confirm"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setOverrideOpen((v) => !v)}
-          disabled={pending}
-          className="text-xs text-zinc-500 hover:text-zinc-300"
-        >
-          {overrideOpen ? "Cancel adjustment" : "Adjust share before confirming"}
-        </button>
-      </div>
+      <p className="text-sm text-zinc-200">{summaryLine}</p>
+
+      <button
+        type="button"
+        onClick={confirm}
+        disabled={pending}
+        className="w-full rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {pending ? "Working…" : "Confirm & bind terms"}
+      </button>
+      <button
+        type="button"
+        onClick={() => setOverrideOpen((v) => !v)}
+        disabled={pending}
+        className="self-start text-xs text-zinc-500 hover:text-zinc-300"
+      >
+        {overrideOpen ? "Cancel adjustment" : "Adjust share before confirming"}
+      </button>
 
       {overrideOpen && (
         <label className="flex items-center gap-2 text-xs text-zinc-400">
@@ -98,15 +102,15 @@ export function TermsReviewCardActions({
         </label>
       )}
 
-      <div className="border-t border-zinc-800 pt-3">
+      <div className="mt-2 border-t border-zinc-800 pt-3">
         {!declineOpen ? (
           <button
             type="button"
             onClick={() => setDeclineOpen(true)}
             disabled={pending}
-            className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-red-400 hover:border-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-xs text-zinc-500 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Decline
+            Decline instead
           </button>
         ) : (
           <div className="flex flex-col gap-2">
