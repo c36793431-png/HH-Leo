@@ -139,47 +139,61 @@ export async function listAllLiveTiers(): Promise<LiveTierRevenueRow[]> {
 }
 
 export interface ProviderRosterEntry {
-  providerUserId: string;
+  applicationId: string;
   providerName: string;
+  status: "live" | "onboarding";
   tiers: { tierName: string; clientPriceCents: number; providerSplitPct: number }[];
 }
 
 /** /admin/providers roster table (bus thread feed-admin-dashboard-build-2026-08-24,
  * Iris's "roster is the index, terms-review is a filtered view inside it" reconciliation).
- * One row per provider, tiers nested -- same live-only-by-construction invariant as
- * listAllLiveTiers(), just grouped by provider instead of flattened per-tier. Status
- * (live/trial/paused) and uptime are deliberately not modeled: no backing column exists
- * anywhere in provider_tiers (verified against 0060-0064), flagged to Iris rather than
- * fabricated -- same gap as the aggregate dashboard's dropped connections-state tile. */
+ * One row per approved application, tiers nested. Status is Live/Onboarding derived from
+ * provider_applications.onboarded_at (NOT NULL = Live, NULL = Onboarding) -- the split
+ * 0060's own migration comment names as "the Live/pending-onboarding split". Iris's spec
+ * pointed at provider_tiers.published_at for this, but that column is `not null default
+ * now()` and can never be NULL, so it can't carry a two-state distinction; onboarded_at is
+ * the field that actually does. Base is provider_applications (status='approved') left-joined
+ * to provider_tiers, not an inner join on provider_tiers, so onboarding applicants with zero
+ * confirmed tiers still show up as a row instead of being invisible. Uptime remains unmodeled
+ * -- same gap as the aggregate dashboard's dropped connections-state tile. */
 export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
   const result = await pool.query<{
-    provider_user_id: string;
+    application_id: string;
     provider_name: string;
-    tier_name: string;
-    client_price_cents: number;
-    provider_split_pct: number;
+    onboarded_at: Date | null;
+    tier_name: string | null;
+    client_price_cents: number | null;
+    provider_split_pct: number | null;
   }>(
-    `select t.provider_user_id, pa.name as provider_name, t.tier_name,
-            t.client_price_cents, t.provider_split_pct
-     from provider_tiers t
-     join provider_applications pa on pa.id = t.application_id
+    `select pa.id as application_id, pa.name as provider_name, pa.onboarded_at,
+            t.tier_name, t.client_price_cents, t.provider_split_pct
+     from provider_applications pa
+     left join provider_tiers t on t.application_id = pa.id
+     where pa.status = 'approved'
      order by pa.name, t.tier_name`
   );
 
-  const byProvider = new Map<string, ProviderRosterEntry>();
+  const byApplication = new Map<string, ProviderRosterEntry>();
   for (const row of result.rows) {
-    let entry = byProvider.get(row.provider_user_id);
+    let entry = byApplication.get(row.application_id);
     if (!entry) {
-      entry = { providerUserId: row.provider_user_id, providerName: row.provider_name, tiers: [] };
-      byProvider.set(row.provider_user_id, entry);
+      entry = {
+        applicationId: row.application_id,
+        providerName: row.provider_name,
+        status: row.onboarded_at != null ? "live" : "onboarding",
+        tiers: [],
+      };
+      byApplication.set(row.application_id, entry);
     }
-    entry.tiers.push({
-      tierName: row.tier_name,
-      clientPriceCents: row.client_price_cents,
-      providerSplitPct: row.provider_split_pct,
-    });
+    if (row.tier_name != null && row.client_price_cents != null && row.provider_split_pct != null) {
+      entry.tiers.push({
+        tierName: row.tier_name,
+        clientPriceCents: row.client_price_cents,
+        providerSplitPct: row.provider_split_pct,
+      });
+    }
   }
-  return Array.from(byProvider.values());
+  return Array.from(byApplication.values());
 }
 
 export interface RegisterTierInput {

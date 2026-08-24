@@ -68,8 +68,8 @@ export default async function AdminProvidersPage({
           </span>
           <h1 className="mt-2 text-lg font-medium text-zinc-100">Providers</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            {roster.length} active provider{roster.length === 1 ? "" : "s"} · terms negotiation queue and live
-            feed-provider book.
+            {roster.length} approved provider{roster.length === 1 ? "" : "s"} · terms negotiation queue and
+            provider roster.
           </p>
         </div>
         <Link
@@ -128,26 +128,76 @@ export default async function AdminProvidersPage({
         </Link>
       )}
 
-      {filter === "all" || filter === "live" || filter === "trial" ? (
+      {filter === "trial" ? (
         <section className="flex flex-col gap-4">
           <p className="text-sm text-zinc-400">
-            Not yet wired up — this segment doesn&apos;t have its own view yet. It will show the
-            {filter === "all" ? " full provider roster" : filter === "live" ? " live provider roster" : " providers currently in trial"}{" "}
-            once that lands.
+            Not yet wired up — there&apos;s no trial state on provider_tiers to filter by yet.
+            This will show providers currently in trial once that lands.
           </p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" aria-hidden="true">
-            {["Provider", "Tiers", "Status"].map((label) => (
-              <div
-                key={label}
-                className="rounded-xl border border-zinc-700/50 bg-zinc-900/40 p-4 opacity-40"
-              >
-                <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
-                <div className="mt-2 h-6 w-16 rounded bg-zinc-700/60" />
-                <div className="mt-3 h-2 w-full rounded bg-zinc-800" />
-                <div className="mt-1.5 h-2 w-2/3 rounded bg-zinc-800" />
-              </div>
-            ))}
-          </div>
+        </section>
+      ) : filter === "all" || filter === "live" ? (
+        <section className="overflow-hidden rounded-xl border border-zinc-800">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-zinc-900/60 text-[11px] uppercase tracking-wide text-zinc-500">
+              <tr>
+                <th className="px-4 py-2.5 font-medium">Provider</th>
+                <th className="px-4 py-2.5 font-medium">Feed(s) / tier</th>
+                <th className="px-4 py-2.5 font-medium">Revenue share</th>
+                <th className="px-4 py-2.5 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800">
+              {roster
+                .filter((entry) => filter === "all" || entry.status === "live")
+                .map((entry) => (
+                  <tr key={entry.applicationId}>
+                    <td className="px-4 py-3 text-zinc-100">{entry.providerName}</td>
+                    <td className="px-4 py-3 text-zinc-300">
+                      {entry.tiers.length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          {entry.tiers.map((tier) => (
+                            <span key={tier.tierName}>{tier.tierName}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-600">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-300">
+                      {entry.tiers.length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          {entry.tiers.map((tier) => (
+                            <span key={tier.tierName}>
+                              {fmtUsd(tier.clientPriceCents)}/mo · provider {tier.providerSplitPct}%
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-600">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                          entry.status === "live"
+                            ? "border-cyan-400/40 bg-cyan-950/40 text-cyan-300"
+                            : "border-zinc-600 bg-zinc-800/60 text-zinc-400"
+                        }`}
+                      >
+                        {entry.status === "live" ? "Live" : "Onboarding"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              {roster.filter((entry) => filter === "all" || entry.status === "live").length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-zinc-500">
+                    No providers to show.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </section>
       ) : (
         <section className="flex flex-col gap-3">
