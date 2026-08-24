@@ -98,12 +98,14 @@ export default auth(async (req) => {
     // pathname (feed.horizonhft.com/dashboard) and the rewritten target (/feed/dashboard),
     // since this host rewrites everything under /feed onto the root -- checked independent of
     // `passthrough` so a direct /feed/dashboard request (already passthrough, since it starts
-    // with /feed) still gets caught. Scoped to the /feed/dashboard subtree only -- /feed
-    // (landing) and /feed/providers/apply stay public for both audiences, and /admin/* is
-    // passthrough (unrewritten) so this never loops.
+    // with /feed) still gets caught. Scoped to the /feed/dashboard subtree plus the bare host
+    // root (widened 2026-08-24, feed-root-admin-redirect) -- /feed/* beyond dashboard, notably
+    // /feed/providers/apply, stays public for both audiences, and /admin/* is passthrough
+    // (unrewritten) so this never loops.
     const rewrittenPathname = `/feed${pathname === "/" ? "" : pathname}`;
     const isFeedDashboardPath = pathname.startsWith("/feed/dashboard") || rewrittenPathname.startsWith("/feed/dashboard");
-    if (isFeedDashboardPath && isAdminUser(req.auth?.user)) {
+    const isFeedRootPath = pathname === "/" || rewrittenPathname === "/feed";
+    if ((isFeedDashboardPath || isFeedRootPath) && isAdminUser(req.auth?.user)) {
       return NextResponse.redirect(new URL("/admin/provider-applications", req.nextUrl));
     }
 
