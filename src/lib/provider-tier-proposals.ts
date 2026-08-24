@@ -156,11 +156,17 @@ interface SiblingRow {
 
 /** Spec §3.5 sibling-tier strip: this provider's other tiers still sitting at
  * terms_status = 'proposed', latest round each, excluding the tier the review card
- * is currently open on. Same-application scoping only -- this never crosses into
- * another provider's proposals (that's the §1a isolation rule; irrelevant here since
- * it's already scoped to one application_id). */
+ * is currently open on. Scoped by provider_user_id, not application_id -- a provider
+ * can have more than one provider_applications row (the parked dupe-application data
+ * problem), and a sibling tier can sit under a different application row than the one
+ * the review card opened on. Scoping by application_id alone silently drops that
+ * sibling, which is the same rendering defect fixed in the terms queue for round
+ * lineage grouping (064126f), just in the other half of the feature. Note this is NOT
+ * the round-lineage rule: lineage stays scoped to (application_id, tier_name) because a
+ * round belongs to the application that produced it -- sibling tiers belong to the
+ * provider. Marcus's ruling, bus thread provider-terms-negotiation-2026-08-24. */
 export async function listSiblingProposedTiersAdmin(
-  applicationId: string,
+  providerUserId: string,
   excludeTierName: string
 ): Promise<SiblingProposedTierRow[]> {
   const result = await pool.query<SiblingRow>(
@@ -168,11 +174,11 @@ export async function listSiblingProposedTiersAdmin(
        select distinct on (tier_name)
          tier_name, client_price_cents, provider_split_pct, terms_status
        from provider_tier_proposals
-       where application_id = $1 and tier_name <> $2
+       where provider_user_id = $1 and tier_name <> $2
        order by tier_name, created_at desc
      ) latest
      where terms_status = 'proposed'`,
-    [applicationId, excludeTierName]
+    [providerUserId, excludeTierName]
   );
   return result.rows.map((r) => ({
     tierName: r.tier_name,

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Lock } from "lucide-react";
 import { notFound } from "next/navigation";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import {
@@ -31,7 +32,7 @@ export default async function AdminProviderTermsReviewCard({
   if (!round) notFound();
 
   const lineage = await listProposalRoundsForTierAdmin(round.applicationId, round.tierName);
-  const siblingTiers = await listSiblingProposedTiersAdmin(round.applicationId, round.tierName);
+  const siblingTiers = await listSiblingProposedTiersAdmin(round.providerUserId, round.tierName);
   const retainedCents = calcRetainedCents(round.clientPriceCents, round.providerSplitPct);
   const retainedPct = 100 - round.providerSplitPct;
 
@@ -134,7 +135,12 @@ export default async function AdminProviderTermsReviewCard({
                 <th className="pb-2 pr-4">Price</th>
                 <th className="pb-2 pr-4">Share</th>
                 <th className="pb-2 pr-4">Status</th>
-                <th className="pb-2">Decision note</th>
+                <th className="pb-2">
+                  <span className="inline-flex items-center gap-1">
+                    Decision note
+                    <Lock size={10} className="text-zinc-600" />
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
@@ -151,7 +157,22 @@ export default async function AdminProviderTermsReviewCard({
                       {r.termsStatus.toUpperCase()}
                     </span>
                   </td>
-                  <td className="py-2 text-zinc-500">{r.declinedNote ?? "—"}</td>
+                  <td className="py-2 text-zinc-500">
+                    {r.declinedNote ? (
+                      <div className="flex flex-col gap-1">
+                        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-zinc-700 bg-black/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                          <Lock size={10} />
+                          Admins only
+                        </span>
+                        <span>{r.declinedNote}</span>
+                        <span className="text-[11px] text-zinc-600">
+                          Private · visible to admins only · not sent.
+                        </span>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
