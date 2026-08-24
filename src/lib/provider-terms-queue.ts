@@ -2,7 +2,7 @@ import { pool } from "./db";
 
 // /admin/providers "Needs terms review" queue -- spec §2/§3.2 (Iris, bus thread
 // provider-terms-negotiation-2026-08-24, m29314 [1/3] + m29329 REVISED). One row per
-// pending proposal (the latest round for a given application_id + tier_name), never
+// still-proposed round (the latest round for a given application_id + tier_name), never
 // per application -- a provider can have several tiers negotiating in parallel (§3.5).
 
 const THIN_MARGIN_THRESHOLD_PCT = 30;
@@ -68,7 +68,7 @@ function mapQueueRow(row: QueueDbRow): TermsQueueRow {
 }
 
 /** The "Needs terms review" filter: latest round per (application_id, tier_name),
- * scoped down to the ones still sitting at terms_status = 'pending'. Oldest first --
+ * scoped down to the ones still sitting at terms_status = 'proposed'. Oldest first --
  * the row that's been waiting longest surfaces at the top. */
 export async function listTermsReviewQueue(): Promise<TermsQueueRow[]> {
   const result = await pool.query<QueueDbRow>(
@@ -93,7 +93,7 @@ export async function listTermsReviewQueue(): Promise<TermsQueueRow[]> {
           order by p4.created_at asc limit 1) as round1_split_pct
      from latest l
      join provider_applications pa on pa.id = l.application_id
-     where l.terms_status = 'pending'
+     where l.terms_status = 'proposed'
      order by l.created_at asc`
   );
   return result.rows.map(mapQueueRow);
@@ -139,7 +139,7 @@ export async function getTermsQueueStats(): Promise<TermsQueueStats> {
          select distinct on (application_id, tier_name) terms_status
          from provider_tier_proposals
          order by application_id, tier_name, created_at desc
-       ) latest where terms_status = 'pending'`
+       ) latest where terms_status = 'proposed'`
     ),
     pool.query<{ count: string }>(`select count(distinct provider_user_id) as count from provider_tiers`),
     pool.query<{ count: string }>(

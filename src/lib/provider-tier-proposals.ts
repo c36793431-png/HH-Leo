@@ -122,7 +122,7 @@ export async function listProposalRoundsForTierProvider(
   return result.rows.map(mapProviderRow);
 }
 
-/** The queue's inline "Confirm" hot path (§2): agrees a pending round as-is, no card
+/** The queue's inline "Confirm" hot path (§2): agrees a proposed round as-is, no card
  * open required. Stamps the round confirmed, then mirrors its terms onto provider_tiers
  * -- update in place if a row for this (application_id, tier_name) already exists
  * (renegotiation of a live tier), otherwise insert one (first confirmation).
@@ -146,7 +146,7 @@ export async function confirmProposalRound(proposalId: string, adminUserId: stri
     );
     const proposal = proposalResult.rows[0];
     if (!proposal) throw new Error("Proposal round not found");
-    if (proposal.terms_status !== "pending") throw new Error("Proposal round is no longer pending");
+    if (proposal.terms_status !== "proposed") throw new Error("Proposal round is no longer proposed");
 
     await client.query(
       `update provider_tier_proposals

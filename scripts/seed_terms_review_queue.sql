@@ -61,14 +61,14 @@ begin
   delete from provider_tier_proposals
   where application_id in (provider_a.id, provider_b.id, provider_c.id);
 
-  -- Provider A: single-tier first proposal, round 1, pending.
+  -- Provider A: single-tier first proposal, round 1, proposed.
   insert into provider_tier_proposals
     (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
      trial_length_days, terms_status, created_at)
   values
-    (provider_a.id, provider_a.user_id, 'Alpha', 34900, 65, 14, 'pending', now() - interval '3 hours');
+    (provider_a.id, provider_a.user_id, 'Alpha', 34900, 65, 14, 'proposed', now() - interval '3 hours');
 
-  -- Provider B: round 1 declined (with note), round 2 resubmit pending -- 75% -> 70%.
+  -- Provider B: round 1 declined (with note), round 2 resubmit proposed -- 75% -> 70%.
   insert into provider_tier_proposals
     (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
      trial_length_days, terms_status, declined_note, decided_by, decided_at, created_at)
@@ -81,13 +81,13 @@ begin
     (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
      trial_length_days, terms_status, created_at)
   values
-    (provider_b.id, provider_b.user_id, 'Alpha', 59900, 70, 14, 'pending', now() - interval '5 hours');
+    (provider_b.id, provider_b.user_id, 'Alpha', 59900, 70, 14, 'proposed', now() - interval '5 hours');
 
-  -- Provider C: two tiers in flight, different fees and splits, both round 1 pending.
+  -- Provider C: two tiers in flight, different fees and splits, both round 1 proposed.
   insert into provider_tier_proposals
     (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
      trial_length_days, terms_status, created_at)
   values
-    (provider_c.id, provider_c.user_id, 'Alpha', 49900, 70, 14, 'pending', now() - interval '8 hours'),
-    (provider_c.id, provider_c.user_id, 'Beta',  129900, 60, 14, 'pending', now() - interval '7 hours');
+    (provider_c.id, provider_c.user_id, 'Alpha', 49900, 70, 14, 'proposed', now() - interval '8 hours'),
+    (provider_c.id, provider_c.user_id, 'Beta',  129900, 60, 14, 'proposed', now() - interval '7 hours');
 end $$;
