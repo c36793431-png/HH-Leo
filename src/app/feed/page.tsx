@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isAdminUser, isFeedProviderUser } from "@/lib/admin-users-panel";
+import { isFeedProviderUser } from "@/lib/admin-users-panel";
 import { SignOutButton } from "@/components/sign-out-button";
 import "./feed-landing.css";
 
@@ -12,12 +12,17 @@ import "./feed-landing.css";
  * mockups/horizon-feed-provider/feed-provider-landing.html) -- bus thread
  * leo-feed-landing-implementation-2026-08-22.
  *
- * A signed-in feed provider (or admin) is sent straight to /dashboard, same treatment as an
- * approved partner on partner.horizonhft.com. Everyone else -- unauthenticated visitors and
- * signed-in non-provider members -- sees the landing (feed providers are admin-onboarded, not
+ * A signed-in feed provider is sent straight to /dashboard, same treatment as an approved
+ * partner on partner.horizonhft.com. Everyone else -- unauthenticated visitors and signed-in
+ * non-provider members -- sees the landing (feed providers are admin-onboarded, not
  * self-signup, so there's no apply form to embed like partner's apply flow). This preserves the
  * 74d48cc redirect-loop fix: feed/dashboard/layout.tsx still owns the off-host bounce for a
  * signed-in non-provider who navigates straight to /dashboard.
+ *
+ * Admin is deliberately excluded (coxwell, feed-admin-role-collision-fix-2026-08-24 -- "admin
+ * has its own page", no QA-preview): proxy.ts redirects admins off /feed/dashboard before they
+ * ever reach here, so an admin landing on this page falls through to the normal signed-in-member
+ * treatment below rather than being routed into provider chrome.
  *
  * Deviations from the mockup (all intentional):
  *  - No Google Fonts <link> tags -- reuses the --font-inter/--font-saira/--font-jetbrains-mono
@@ -37,7 +42,7 @@ export default async function FeedLandingPage() {
   const session = await auth();
   const user = session?.user ?? null;
 
-  if (user?.id && (isFeedProviderUser(user) || isAdminUser(user))) {
+  if (user?.id && isFeedProviderUser(user)) {
     redirect("/dashboard");
   }
 

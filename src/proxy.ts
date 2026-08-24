@@ -76,10 +76,12 @@ export default auth(async (req) => {
   if (isFeedHost) {
     // feed.horizonhft.com serves the provider self-serve panel, rewritten to /feed
     // internally so it lands at the domain root (mirrors the partner-host block above).
-    // Feed-ops admin (provider applications review) also lives here, unrewritten, same
-    // /admin/* route file as portal.horizonhft.com (decision_split_portal_admin_and_feed_admin_surfaces_2026-08-23).
+    // Feed-ops admin (provider applications review + register-provider) also lives here,
+    // unrewritten, same /admin/* route files as portal.horizonhft.com
+    // (decision_split_portal_admin_and_feed_admin_surfaces_2026-08-23).
     // Every other /admin/* route stays portal-only to avoid leaking unrelated admin surfaces.
-    const isAdminFeedRoute = pathname.startsWith("/admin/provider-applications");
+    const ADMIN_FEED_ROUTE_PREFIXES = ["/admin/provider-applications", "/admin/register-provider"];
+    const isAdminFeedRoute = ADMIN_FEED_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
     if (pathname.startsWith("/admin") && !isAdminFeedRoute) {
       return new NextResponse("Not Found", { status: 404 });
     }
@@ -90,6 +92,20 @@ export default auth(async (req) => {
       pathname.startsWith("/feed") ||
       isAdminFeedRoute ||
       isStaticAsset;
+
+    // Admin has its own page (coxwell, feed-admin-role-collision-fix-2026-08-24): bounce them
+    // off the provider dashboard before the /feed rewrite below. Checked against both the raw
+    // pathname (feed.horizonhft.com/dashboard) and the rewritten target (/feed/dashboard),
+    // since this host rewrites everything under /feed onto the root -- checked independent of
+    // `passthrough` so a direct /feed/dashboard request (already passthrough, since it starts
+    // with /feed) still gets caught. Scoped to the /feed/dashboard subtree only -- /feed
+    // (landing) and /feed/providers/apply stay public for both audiences, and /admin/* is
+    // passthrough (unrewritten) so this never loops.
+    const rewrittenPathname = `/feed${pathname === "/" ? "" : pathname}`;
+    const isFeedDashboardPath = pathname.startsWith("/feed/dashboard") || rewrittenPathname.startsWith("/feed/dashboard");
+    if (isFeedDashboardPath && isAdminUser(req.auth?.user)) {
+      return NextResponse.redirect(new URL("/admin/provider-applications", req.nextUrl));
+    }
 
     if (!passthrough) {
       const url = req.nextUrl.clone();
