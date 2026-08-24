@@ -225,23 +225,18 @@ export async function confirmProposalRound(
   }
 }
 
-interface FullProposalRow extends AdminRow {
-  protocol: string | null;
-  endpoint_host: string | null;
-  endpoint_port: string | null;
-  compid: string | null;
-  regions: string[] | null;
-  coverage: string[] | null;
-}
-
-/** Decline (§5) -- a single write plus an appended round, never a mutation of the
- * reviewed snapshot in place: the declined round keeps its own terms_status/
- * declined_note/decided_by/decided_at, and a fresh round N+1 is inserted pre-filled
- * from it (back at terms_status='proposed') for the provider to revise. declined_note
- * is the only decline field, admin-only, and is never selected by
- * listProposalRoundsForTierProvider and never interpolated into the notification --
- * the email below is a static template with no slots, so it structurally cannot leak
- * a reason. Steering happens on Telegram, not in-app or by email. */
+/** Decline (§5) -- a single write to the reviewed row, never a mutation of the
+ * reviewed snapshot's terms and never an inserted round N+1: the declined round keeps
+ * its own terms_status/declined_note/decided_by/decided_at, and that's the whole write.
+ * "Spawns the pre-filled round N+1 draft" (spec §4) is a client-side render behaviour --
+ * a tier with no active `proposed` row renders as a draft pre-filled from the latest
+ * declined row -- not a persisted record; `draft` is never a terms_status value (0064
+ * constraint: proposed | confirmed | declined only). The next proposal row is created
+ * only when the provider actually submits it. declined_note is the only decline field,
+ * admin-only, and is never selected by listProposalRoundsForTierProvider and never
+ * interpolated into the notification -- the email below is a static template with no
+ * slots, so it structurally cannot leak a reason. Steering happens on Telegram, not
+ * in-app or by email. Marcus's ruling, bus thread provider-terms-negotiation-2026-08-24. */
 export async function declineProposalRound(
   proposalId: string,
   adminUserId: string,
@@ -251,11 +246,10 @@ export async function declineProposalRound(
   try {
     await client.query("begin");
 
-    const proposalResult = await client.query<FullProposalRow>(
+    const proposalResult = await client.query<AdminRow>(
       `select id, application_id, provider_user_id, tier_name, client_price_cents,
               provider_split_pct, trial_length_days, terms_status, declined_note,
-              decided_by, decided_at, created_at, protocol, endpoint_host, endpoint_port,
-              compid, regions, coverage
+              decided_by, decided_at, created_at
        from provider_tier_proposals where id = $1 for update`,
       [proposalId]
     );
@@ -268,27 +262,6 @@ export async function declineProposalRound(
        set terms_status = 'declined', declined_note = $2, decided_by = $3, decided_at = now()
        where id = $1`,
       [proposalId, declinedNote, adminUserId]
-    );
-
-    await client.query(
-      `insert into provider_tier_proposals
-         (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
-          trial_length_days, protocol, endpoint_host, endpoint_port, compid, regions, coverage)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-      [
-        proposal.application_id,
-        proposal.provider_user_id,
-        proposal.tier_name,
-        proposal.client_price_cents,
-        proposal.provider_split_pct,
-        proposal.trial_length_days,
-        proposal.protocol,
-        proposal.endpoint_host,
-        proposal.endpoint_port,
-        proposal.compid,
-        proposal.regions,
-        proposal.coverage,
-      ]
     );
 
     const recipient = await client.query<{ email: string | null }>(
