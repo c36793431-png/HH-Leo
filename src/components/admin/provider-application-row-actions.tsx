@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import { emitToast } from "@/lib/toast-bus";
 
@@ -12,15 +12,18 @@ interface ProviderApplicationRowActionsProps {
   declineAction: Action;
 }
 
-/** Approve/reject pair for one /admin/provider-applications row. MVP scope: no reason field on
- * reject (unlike PartnerApplicationRowActions) -- just a window.confirm guard, per the
- * admin-provider-applications-2026-08-23 spec. */
+/** Approve/decline pair for one /admin/provider-applications row. Approve is a status transition
+ * only -- the pre-fill handoff into Register Provider is deferred until that page exists (Iris,
+ * feed-admin-split thread, 2026-08-23), so it does not navigate anywhere. Decline prompts for an
+ * optional note, same pattern as PartnerApplicationRowActions. */
 export function ProviderApplicationRowActions({
   applicationId,
   approveAction,
   declineAction,
 }: ProviderApplicationRowActionsProps) {
   const [pending, startTransition] = useTransition();
+  const [declining, setDeclining] = useState(false);
+  const [note, setNote] = useState("");
 
   function approve() {
     const formData = new FormData();
@@ -31,34 +34,57 @@ export function ProviderApplicationRowActions({
     });
   }
 
-  function reject() {
-    if (!window.confirm("Reject this provider application?")) return;
+  function decline() {
     const formData = new FormData();
     formData.append("id", applicationId);
+    formData.append("adminNotes", note);
     startTransition(async () => {
       const result = await declineAction(null, formData);
-      emitToast(result.ok ? "Rejected" : result.error, result.ok ? "success" : "error");
+      emitToast(result.ok ? "Declined" : result.error, result.ok ? "success" : "error");
+      if (result.ok) setDeclining(false);
     });
   }
 
   return (
-    <div className="flex gap-2">
-      <button
-        type="button"
-        onClick={approve}
-        disabled={pending}
-        className="rounded border border-teal-500/50 px-2 py-0.5 text-[11px] text-teal-400 hover:border-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Approve
-      </button>
-      <button
-        type="button"
-        onClick={reject}
-        disabled={pending}
-        className="rounded border border-red-600/50 px-2 py-0.5 text-[11px] text-red-400 hover:border-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Reject
-      </button>
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={approve}
+          disabled={pending}
+          className="rounded border border-teal-500/50 px-2 py-0.5 text-[11px] text-teal-400 hover:border-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Approve
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeclining((v) => !v)}
+          disabled={pending}
+          className="rounded border border-red-600/50 px-2 py-0.5 text-[11px] text-red-400 hover:border-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Decline
+        </button>
+      </div>
+      {declining && (
+        <div className="flex flex-col gap-1">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            disabled={pending}
+            rows={2}
+            placeholder="Note (optional)…"
+            className="w-48 rounded border border-zinc-700 bg-black/40 px-1.5 py-1 text-xs text-zinc-200 placeholder:text-zinc-600 disabled:opacity-50"
+          />
+          <button
+            type="button"
+            onClick={decline}
+            disabled={pending}
+            className="self-start rounded border border-red-600/50 px-2 py-0.5 text-[11px] text-red-400 hover:border-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pending ? "Submitting…" : "Confirm decline"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

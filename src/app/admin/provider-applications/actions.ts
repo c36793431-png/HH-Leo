@@ -31,7 +31,8 @@ export async function declineProviderApplicationAction(
   return runAction("Failed to reject application", async () => {
     const adminId = await requireAdmin();
     const id = formData.get("id") as string;
-    await declineProviderApplication(id, adminId);
+    const adminNotes = ((formData.get("adminNotes") as string) ?? "").trim() || null;
+    await declineProviderApplication(id, adminId, adminNotes);
     revalidatePath("/admin/provider-applications");
   });
 }

@@ -222,10 +222,16 @@ export async function approveProviderApplication(id: string, actionedBy: string)
   return row;
 }
 
-export async function declineProviderApplication(id: string, actionedBy: string): Promise<ProviderApplicationRow> {
+export async function declineProviderApplication(
+  id: string,
+  actionedBy: string,
+  adminNotes: string | null
+): Promise<ProviderApplicationRow> {
   await pool.query(
-    `update provider_applications set status = 'declined', reviewed_at = now(), reviewed_by = $2 where id = $1`,
-    [id, actionedBy]
+    `update provider_applications
+     set status = 'declined', reviewed_at = now(), reviewed_by = $2, admin_notes = $3
+     where id = $1`,
+    [id, actionedBy, adminNotes]
   );
   const row = await getProviderApplication(id);
   if (!row) throw new Error("provider application not found after decline");
