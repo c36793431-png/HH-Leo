@@ -237,10 +237,20 @@ export async function confirmProposalRound(
       [proposal.application_id, proposal.tier_name]
     );
 
+    // Trial derivation (Iris, bus thread feed-admin-dashboard-build-2026-08-24): the arming
+    // instant is confirmed_at, not proposal-created, so anchor trial_expires_at to the same
+    // now() this statement stamps on confirmed_at. A trial-less round must clear
+    // trial_expires_at and set status='live' explicitly -- re-confirming a later round must
+    // not silently regress to the column default or leave a stale trial window in place.
     if (existingTier.rows[0]) {
       await client.query(
         `update provider_tiers
-         set client_price_cents = $2, provider_split_pct = $3, trial_length_days = $4, confirmed_at = now()
+         set client_price_cents = $2,
+             provider_split_pct = $3,
+             trial_length_days = $4,
+             confirmed_at = now(),
+             status = case when $4::int > 0 then 'trial' else 'live' end,
+             trial_expires_at = case when $4::int > 0 then now() + make_interval(days => $4::int) else null end
          where id = $1`,
         [existingTier.rows[0].id, proposal.client_price_cents, effectiveSplitPct, proposal.trial_length_days]
       );
@@ -248,8 +258,10 @@ export async function confirmProposalRound(
       await client.query(
         `insert into provider_tiers
            (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
-            trial_length_days, confirmed_at)
-         values ($1, $2, $3, $4, $5, $6, now())`,
+            trial_length_days, confirmed_at, status, trial_expires_at)
+         values ($1, $2, $3, $4, $5, $6, now(),
+                 case when $6::int > 0 then 'trial' else 'live' end,
+                 case when $6::int > 0 then now() + make_interval(days => $6::int) else null end)`,
         [
           proposal.application_id,
           proposal.provider_user_id,
