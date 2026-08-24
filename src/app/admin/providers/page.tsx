@@ -128,41 +128,26 @@ export default async function AdminProvidersPage({
         </Link>
       )}
 
-      {filter === "trial" ? (
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-sm text-zinc-500">
-          In trial isn&apos;t built yet — no trial state exists on a provider tier today.
-        </section>
-      ) : filter === "all" || filter === "live" ? (
-        <section className="flex flex-col gap-2">
-          {roster.map((entry) => (
-            <div key={entry.providerUserId} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-sm font-medium text-teal-400">{entry.providerName}</span>
-                <span className="text-[11px] text-zinc-500">
-                  {entry.tiers.length} tier{entry.tiers.length === 1 ? "" : "s"} live
-                </span>
+      {filter === "all" || filter === "live" || filter === "trial" ? (
+        <section className="flex flex-col gap-4">
+          <p className="text-sm text-zinc-400">
+            Not yet wired up — this segment doesn&apos;t have its own view yet. It will show the
+            {filter === "all" ? " full provider roster" : filter === "live" ? " live provider roster" : " providers currently in trial"}{" "}
+            once that lands.
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" aria-hidden="true">
+            {["Provider", "Tiers", "Status"].map((label) => (
+              <div
+                key={label}
+                className="rounded-xl border border-zinc-700/50 bg-zinc-900/40 p-4 opacity-40"
+              >
+                <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
+                <div className="mt-2 h-6 w-16 rounded bg-zinc-700/60" />
+                <div className="mt-3 h-2 w-full rounded bg-zinc-800" />
+                <div className="mt-1.5 h-2 w-2/3 rounded bg-zinc-800" />
               </div>
-              <div className="mt-2 flex flex-col gap-1">
-                {entry.tiers.map((tier) => (
-                  <div
-                    key={tier.tierName}
-                    className="flex items-center justify-between border-t border-zinc-800 pt-1.5 text-xs text-zinc-400"
-                  >
-                    <span>{tier.tierName}</span>
-                    <span className="text-zinc-300">
-                      {fmtUsd(tier.clientPriceCents)}/mo · provider share {tier.providerSplitPct}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          {roster.length === 0 && (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-sm text-zinc-500">
-              No providers onboarded yet.
-            </div>
-          )}
+            ))}
+          </div>
         </section>
       ) : (
         <section className="flex flex-col gap-3">
