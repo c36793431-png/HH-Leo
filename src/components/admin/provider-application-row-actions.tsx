@@ -47,7 +47,7 @@ export function ProviderApplicationRowActions({
         type="button"
         onClick={approve}
         disabled={pending}
-        className="rounded border border-emerald-600/50 px-2 py-0.5 text-[11px] text-emerald-400 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded border border-teal-500/50 px-2 py-0.5 text-[11px] text-teal-400 hover:border-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
       >
         Approve
       </button>

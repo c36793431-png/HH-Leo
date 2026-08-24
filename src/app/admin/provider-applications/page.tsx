@@ -18,7 +18,7 @@ export default async function AdminProviderApplicationsPage() {
         </p>
       </header>
 
-      <section className="rounded-xl border border-teal-400/35 bg-teal-950/60 p-6">
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-zinc-500">
@@ -33,7 +33,7 @@ export default async function AdminProviderApplicationsPage() {
             <tbody className="divide-y divide-zinc-800">
               {applications.map((a) => (
                 <tr key={a.id}>
-                  <td className="py-2 pr-4 text-zinc-200">{a.name}</td>
+                  <td className="py-2 pr-4 text-teal-400">{a.name}</td>
                   <td className="py-2 pr-4 text-zinc-400">{a.email}</td>
                   <td className="py-2 pr-4 text-zinc-400">{a.tiersOffered ?? "—"}</td>
                   <td className="py-2 pr-4 text-zinc-400">{formatRelative(a.appliedAt)}</td>
