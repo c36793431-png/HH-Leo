@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { ActionResult } from "@/lib/action-result";
 import { emitToast } from "@/lib/toast-bus";
 
@@ -12,15 +13,17 @@ interface ProviderApplicationRowActionsProps {
   declineAction: Action;
 }
 
-/** Approve/decline pair for one /admin/provider-applications row. Approve is a status transition
- * only -- the pre-fill handoff into Register Provider is deferred until that page exists (Iris,
- * feed-admin-split thread, 2026-08-23), so it does not navigate anywhere. Decline prompts for an
+/** Approve/decline pair for one /admin/provider-applications row. Approve flips the app to
+ * 'approved' (pending onboarding) then navigates into /admin/register-provider to hydrate the
+ * pre-fill contract (Iris, feed-admin-split thread, 2026-08-23) -- register-provider's own
+ * submit is what mints provider_tiers + stamps onboarded_at (Live). Decline prompts for an
  * optional note, same pattern as PartnerApplicationRowActions. */
 export function ProviderApplicationRowActions({
   applicationId,
   approveAction,
   declineAction,
 }: ProviderApplicationRowActionsProps) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [declining, setDeclining] = useState(false);
   const [note, setNote] = useState("");
@@ -30,7 +33,12 @@ export function ProviderApplicationRowActions({
     formData.append("id", applicationId);
     startTransition(async () => {
       const result = await approveAction(null, formData);
-      emitToast(result.ok ? "Approved" : result.error, result.ok ? "success" : "error");
+      if (result.ok) {
+        emitToast("Approved", "success");
+        router.push(`/admin/register-provider?from_application=${applicationId}`);
+      } else {
+        emitToast(result.error, "error");
+      }
     });
   }
 
@@ -52,7 +60,7 @@ export function ProviderApplicationRowActions({
           type="button"
           onClick={approve}
           disabled={pending}
-          className="rounded border border-teal-500/50 px-2 py-0.5 text-[11px] text-teal-400 hover:border-teal-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded bg-emerald-500 px-2 py-0.5 text-[11px] text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Approve
         </button>

@@ -1,10 +1,15 @@
+import Link from "next/link";
 import { listProviderApplications } from "@/lib/provider-applications";
 import { formatRelative } from "@/lib/format-time";
 import { ProviderApplicationRowActions } from "@/components/admin/provider-application-row-actions";
 import { approveProviderApplicationAction, declineProviderApplicationAction } from "./actions";
 
 export default async function AdminProviderApplicationsPage() {
-  const applications = await listProviderApplications({ status: "pending" });
+  const [applications, approved] = await Promise.all([
+    listProviderApplications({ status: "pending" }),
+    listProviderApplications({ status: "approved" }),
+  ]);
+  const pendingOnboarding = approved.filter((a) => !a.onboardedAt);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -57,6 +62,28 @@ export default async function AdminProviderApplicationsPage() {
           </table>
         </div>
       </section>
+
+      {pendingOnboarding.length > 0 && (
+        <section className="mt-6 rounded-xl border border-amber-500/35 bg-amber-950/20 p-6">
+          <h2 className="text-sm font-medium text-amber-300">Pending onboarding</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Approved but no tiers published yet — resume Register Provider to go live.
+          </p>
+          <ul className="mt-3 flex flex-col gap-2">
+            {pendingOnboarding.map((a) => (
+              <li key={a.id} className="flex items-center justify-between text-sm">
+                <span className="text-teal-400">{a.name}</span>
+                <Link
+                  href={`/admin/register-provider?from_application=${a.id}`}
+                  className="rounded bg-emerald-500 px-2 py-0.5 text-[11px] text-white hover:bg-emerald-600"
+                >
+                  Continue registration
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

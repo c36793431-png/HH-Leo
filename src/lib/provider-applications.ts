@@ -26,6 +26,7 @@ export interface ProviderApplicationRow {
   reviewedAt: Date | null;
   reviewedBy: string | null;
   adminNotes: string | null;
+  onboardedAt: Date | null;
 }
 
 interface Row {
@@ -50,6 +51,7 @@ interface Row {
   reviewed_at: Date | null;
   reviewed_by: string | null;
   admin_notes: string | null;
+  onboarded_at: Date | null;
 }
 
 function mapRow(row: Row): ProviderApplicationRow {
@@ -75,13 +77,14 @@ function mapRow(row: Row): ProviderApplicationRow {
     reviewedAt: row.reviewed_at,
     reviewedBy: row.reviewed_by,
     adminNotes: row.admin_notes,
+    onboardedAt: row.onboarded_at,
   };
 }
 
 const SELECT_BASE = `
   select id, user_id, name, email, contact_name, country, timezone, website_url,
          protocol, host, port, compid, regions, coverage, tiers_offered, notes, status,
-         applied_at, reviewed_at, reviewed_by, admin_notes
+         applied_at, reviewed_at, reviewed_by, admin_notes, onboarded_at
   from provider_applications
 `;
 
