@@ -76,15 +76,13 @@ export default auth(async (req) => {
   if (isFeedHost) {
     // feed.horizonhft.com serves the provider self-serve panel, rewritten to /feed
     // internally so it lands at the domain root (mirrors the partner-host block above).
-    // Feed-ops admin (provider applications review + register-provider) also lives here,
-    // unrewritten, same /admin/* route files as portal.horizonhft.com
-    // (decision_split_portal_admin_and_feed_admin_surfaces_2026-08-23).
-    // Every other /admin/* route stays portal-only to avoid leaking unrelated admin surfaces.
-    const ADMIN_FEED_ROUTE_PREFIXES = ["/admin/provider-applications", "/admin/register-provider"];
-    const isAdminFeedRoute = ADMIN_FEED_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-    if (pathname.startsWith("/admin") && !isAdminFeedRoute) {
-      return new NextResponse("Not Found", { status: 404 });
-    }
+    // /admin/* passes through unrewritten here too, same /admin/* route files as
+    // portal.horizonhft.com, gated by the same isAdminUser check below
+    // (decision_split_portal_admin_and_feed_admin_surfaces_2026-08-23; host-rewrite fix
+    // 2026-08-24, feed.horizonhft.com/admin was 404ing because only two /admin subpaths
+    // were allowlisted here -- the rewrite is routing, not authorisation, isAdminUser still
+    // gates every /admin page identically on both hosts).
+    const isAdminFeedRoute = pathname.startsWith("/admin");
     const isStaticAsset = /\.[a-zA-Z0-9]+$/.test(pathname);
     const passthrough =
       pathname === "/login" ||
