@@ -82,7 +82,7 @@ export default auth(async (req) => {
     // 2026-08-24). Exact-match allowlist, not a prefix -- a bare "/admin" prefix would also
     // pass through /admin/users and /admin/finance, which are portal-only and must stay
     // 404 on this host (marcus-approved list, feed-admin-dashboard-build-2026-08-24).
-    const ADMIN_FEED_ROUTES = ["/admin", "/admin/revenue", "/admin/providers", "/admin/feed-health", "/admin/provider-applications"];
+    const ADMIN_FEED_ROUTES = ["/admin", "/admin/revenue", "/admin/providers", "/admin/feed-health", "/admin/provider-applications", "/admin/register-provider"];
     const isAdminFeedRoute = ADMIN_FEED_ROUTES.includes(pathname);
     const isStaticAsset = /\.[a-zA-Z0-9]+$/.test(pathname);
     const passthrough =
