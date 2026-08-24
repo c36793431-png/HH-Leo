@@ -1,5 +1,14 @@
 import { pool } from "./db";
 import { notifyProviderApplicationSubmitted } from "./telemetry-sink";
+import { sendEmail } from "./email";
+
+const FEED_HOST = "feed.horizonhft.com";
+
+/** Best-effort applicant email -- a failed send must never fail the caller's action,
+ * same pattern as partner-applications.ts's notifyApplicant. */
+function notifyApplicantEmail(email: string, subject: string, text: string): Promise<void> {
+  return sendEmail(email, subject, text, { replyTo: process.env.SUPPORT_EMAIL }).catch(() => {});
+}
 
 export const PROVIDER_APPLICATION_STATUSES = ["pending", "approved", "declined"] as const;
 export type ProviderApplicationStatus = (typeof PROVIDER_APPLICATION_STATUSES)[number];
@@ -149,6 +158,14 @@ export async function createProviderApplication(args: CreateArgs): Promise<Provi
     adminUrl: args.adminUrl,
   }).catch(() => {});
 
+  await notifyApplicantEmail(
+    row.email,
+    "We received your Horizon feed provider application",
+    `Thanks for applying to become a Horizon HFT feed provider.\n\n` +
+      `We've received your application for ${row.name} and it's in review. We'll follow up at this ` +
+      `address once a decision is made -- no action is needed from you in the meantime.`
+  );
+
   return row;
 }
 
@@ -223,6 +240,22 @@ export async function approveProviderApplication(id: string, actionedBy: string)
   const row = await getProviderApplication(id);
   if (!row) throw new Error("provider application not found after approval");
   return row;
+}
+
+/** Fired once registerProviderTiers has published at least one tier -- approval alone only
+ * grants the 'feed_provider' role, the dashboard has nothing to show until tiers exist, so the
+ * "you're live" email waits for that step rather than firing at approve time (leo-provider-
+ * onboarding-notification-gap-2026-08-24). Best-effort, never throws. */
+export async function notifyProviderLive(row: ProviderApplicationRow): Promise<void> {
+  await notifyApplicantEmail(
+    row.email,
+    "You're approved as a Horizon feed provider",
+    `Your Horizon HFT feed provider application for ${row.name} has been approved and your feed ` +
+      `tier is now live.\n\n` +
+      `Log in at ${FEED_HOST} using this email address (${row.email}) and choose "Sign in with ` +
+      `email" -- we'll send you a one-time link, no password needed.\n\n` +
+      `Once signed in you'll land on your provider dashboard.`
+  );
 }
 
 export async function declineProviderApplication(

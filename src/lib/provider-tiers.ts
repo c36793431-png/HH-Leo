@@ -1,5 +1,5 @@
 import { pool } from "./db";
-import { getProviderApplication } from "./provider-applications";
+import { getProviderApplication, notifyProviderLive } from "./provider-applications";
 
 export interface ProviderTierRow {
   id: string;
@@ -146,4 +146,7 @@ export async function registerProviderTiers(
   } finally {
     client.release();
   }
+
+  const reloaded = await getProviderApplication(applicationId);
+  if (reloaded) await notifyProviderLive(reloaded);
 }
