@@ -14,6 +14,7 @@ import {
 import { listProviderApplications } from "@/lib/provider-applications";
 import { getProviderMarketplaceSummary } from "@/lib/provider-tiers";
 import { getTermsQueueStats } from "@/lib/provider-terms-queue";
+import { formatRelative, wholeDaysSince } from "@/lib/format-time";
 
 // Same route file serves portal.horizonhft.com/admin and feed.horizonhft.com/admin (see
 // admin/layout.tsx's host-detection comment) -- this file host-branches at the page level
@@ -25,25 +26,72 @@ function fmtUsd(cents: number): string {
   return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/** Feed-admin dashboard (§1-§8 of Iris's spec). Three tiles only -- no "Connections" tile
- * (nothing measures health yet) and no "Register provider" tile (that's a verb, it's the
- * header action below). Pending-applications count is the single shared selector
- * (listProviderApplications({status:"pending"})) per §6's dedup requirement -- do not let
- * the Applications tile compute its own count. Providers tile deliberately omits a
- * paid-subscriber figure: no subscription/payment table references provider_tiers anywhere
- * in this schema (verified against db/migrations/0060-0064), so that number would have to be
- * invented -- Iris's spec explicitly forbids that. Revenue tile headlines retained (not
- * gross) per coxwell's still-open headline-metric question; both are computed in
- * getProviderMarketplaceSummary() so swapping the headline later is a one-line change. */
+/** Feed-admin dashboard (§1-§8 of Iris's spec), re-skinned against
+ * design-refs/feed-provider/feed-admin-dashboard-live-desktop.png and the class grammar in
+ * feed-admin-dashboard.html (§8 says lift them; translated to this codebase's Tailwind idiom
+ * rather than importing her raw CSS, so the shell stays one system).
+ *
+ * The structure here was already right and is unchanged: three tiles, no Connections tile
+ * (nothing measures connection health yet -- §3's tile-vs-tab rule: a tab may exist unwired,
+ * a tile asserts a fact and may not), and no Register-provider tile (a verb, not a data
+ * surface -- it's the header action). What this pass adds is the visual layer the renders
+ * specify: the attention band's second clause + deep-link, the "At a glance" kicker, full
+ * tile anatomy (icon / status tag / headline / sub-metrics / deep-link foot), and the lower
+ * deep-read row (Recent activity + Revenue split).
+ *
+ * Data honesty (§3, §5): every figure below reads a real column. The mockup's Providers tile
+ * shows "18 tiers · 142 paid subscriptions" -- the subscription half is NOT rendered here,
+ * because no subscription or payment table references provider_tiers in this schema, so that
+ * number would have to be invented and §3 explicitly forbids inventing one. Recent activity is
+ * derived from appliedAt/reviewedAt on real application rows, not from a synthetic event log.
+ *
+ * Pending count stays the single shared selector per §6 -- the sidebar badge and the
+ * Applications tile must not be able to disagree, so neither recomputes it. */
 async function FeedAdminDashboard() {
-  const [pendingApplications, marketplace, termsQueueStats] = await Promise.all([
+  const [pendingApplications, allApplications, marketplace, termsQueueStats] = await Promise.all([
     listProviderApplications({ status: "pending" }),
+    listProviderApplications({}),
     getProviderMarketplaceSummary(),
     getTermsQueueStats(),
   ]);
+
   const pendingCount = pendingApplications.length;
   const marketplaceEmpty = marketplace.liveProviderCount === 0;
   const needsReviewCount = termsQueueStats.needsTermsReviewCount;
+  const payoutRunRateCents = marketplace.grossRunRateCents - marketplace.retainedRunRateCents;
+
+  const oldestPendingDays = pendingCount
+    ? wholeDaysSince(
+        new Date(Math.min(...pendingApplications.map((a) => a.appliedAt.getTime())))
+      )
+    : 0;
+
+  // Real rows only -- an application produces an "applied" event, and a decided one also
+  // produces a "reviewed" event. No invented activity types (§3).
+  const activity = allApplications
+    .flatMap((a) => {
+      const events: { at: Date; title: string; detail: string; kind: "applied" | "approved" | "declined" }[] = [
+        {
+          at: a.appliedAt,
+          title: `New application — ${a.name}`,
+          detail: `${a.email} applied to provide a feed`,
+          kind: "applied",
+        },
+      ];
+      if (a.reviewedAt && a.status !== "pending") {
+        events.push({
+          at: a.reviewedAt,
+          title: `Application ${a.status} — ${a.name}`,
+          detail: a.reviewedBy ? `reviewed by ${a.reviewedBy}` : "reviewed",
+          kind: a.status === "approved" ? "approved" : "declined",
+        });
+      }
+      return events;
+    })
+    .sort((x, y) => y.at.getTime() - x.at.getTime())
+    .slice(0, 4);
+
+  const showDeepRead = allApplications.length > 0 || !marketplaceEmpty;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -58,86 +106,237 @@ async function FeedAdminDashboard() {
           </p>
         </div>
         <Link
-          href="/admin/provider-applications"
-          className="shrink-0 rounded bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
+          href="/admin/register-provider"
+          className="shrink-0 rounded-lg bg-gradient-to-br from-teal-400 to-teal-600 px-3.5 py-2 text-xs font-semibold text-teal-950 shadow-lg shadow-teal-500/20 hover:from-teal-300 hover:to-teal-500"
         >
           + Register provider
         </Link>
       </header>
 
+      {/* Attention band (§5) -- amber only when something needs a human, calm emerald otherwise. */}
       {pendingCount > 0 ? (
-        <div className="mb-6 rounded-lg border border-amber-500/35 bg-amber-950/20 px-4 py-2.5 text-sm text-amber-300">
-          {pendingCount} awaiting review
-        </div>
-      ) : marketplaceEmpty ? (
-        <div className="mb-6 rounded-lg border border-emerald-500/35 bg-emerald-950/20 px-4 py-2.5 text-sm text-emerald-300">
-          Marketplace is empty — approve an application to bring the first feed online.
+        <div className="mb-6 flex items-center gap-3.5 rounded-2xl border border-amber-400/30 bg-gradient-to-r from-amber-400/10 to-amber-400/[0.02] px-4 py-3.5">
+          <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-lg bg-amber-400/15 text-base">
+            ⚑
+          </span>
+          <p className="text-[13.5px] text-zinc-200">
+            <b className="font-semibold text-amber-300">
+              {pendingCount} application{pendingCount === 1 ? "" : "s"}
+            </b>{" "}
+            awaiting review{" "}
+            <span className="text-zinc-500">
+              · oldest is{" "}
+              <b className="font-semibold text-amber-300">
+                {oldestPendingDays} day{oldestPendingDays === 1 ? "" : "s"}
+              </b>{" "}
+              old
+            </span>
+          </p>
+          <Link
+            href="/admin/provider-applications"
+            className="ml-auto whitespace-nowrap text-[13px] font-semibold text-amber-300 hover:text-amber-200"
+          >
+            Review queue →
+          </Link>
         </div>
       ) : (
-        <div className="mb-6 rounded-lg border border-emerald-500/35 bg-emerald-950/20 px-4 py-2.5 text-sm text-emerald-300">
-          All caught up — no applications waiting.
+        <div className="mb-6 flex items-center gap-3.5 rounded-2xl border border-emerald-400/25 bg-gradient-to-r from-emerald-400/[0.07] to-emerald-400/[0.01] px-4 py-3.5">
+          <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-lg bg-emerald-400/12 text-base">
+            ✓
+          </span>
+          <p className="text-[13.5px] text-zinc-200">
+            {marketplaceEmpty ? (
+              <>
+                <b className="font-semibold text-emerald-300">Marketplace is empty</b> — approve an
+                application to bring the first feed online.
+              </>
+            ) : (
+              <>
+                <b className="font-semibold text-emerald-300">All caught up</b> — no applications
+                waiting.
+              </>
+            )}
+          </p>
         </div>
       )}
 
+      {/* "At a glance" kicker (§4 -- teal-400 is the feed-host identity accent). */}
+      <div className="mb-3.5 flex items-center gap-2.5">
+        <span className="text-[15px] font-bold uppercase tracking-[0.08em] text-teal-400">
+          <span className="opacity-70">◇ </span>At a glance
+        </span>
+        <span className="h-px flex-1 bg-zinc-800" />
+        <span className="text-[11px] text-zinc-600">each tile summarises a tab &amp; opens it</span>
+      </div>
+
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* 1 · Applications -- the thing that needs a human. */}
         <Link
           href="/admin/provider-applications"
-          className="rounded-xl border border-amber-400/35 bg-amber-950/20 p-4 hover:border-amber-400/60"
+          className="group flex min-h-[172px] flex-col rounded-2xl border border-zinc-800 border-l-2 border-l-amber-400/50 bg-zinc-900/40 p-[18px] pb-[15px] transition hover:-translate-y-0.5 hover:border-teal-400"
         >
-          <div className="text-xs uppercase tracking-wide text-zinc-500">Applications</div>
-          <div className="mt-1 text-2xl font-semibold text-amber-300">{pendingCount}</div>
-          <div className="mt-0.5 text-xs text-zinc-500">
-            {pendingCount === 0 ? "No pending applications" : "Awaiting review"}
+          <div className="mb-0.5 flex items-center gap-2.5">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-500/10 text-xs text-zinc-400">
+              ▤
+            </span>
+            <span className="text-xs font-semibold text-zinc-300">Provider applications</span>
+            {pendingCount > 0 && (
+              <span className="ml-auto rounded-full bg-amber-400/15 px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.09em] text-amber-300">
+                {pendingCount} pending
+              </span>
+            )}
+          </div>
+          <div className="mt-3.5 text-[44px] font-extrabold leading-none text-zinc-100">
+            {pendingCount}
+          </div>
+          <div className="mt-2 min-h-[16px] text-xs text-zinc-500">
+            {pendingCount === 0
+              ? "no applications yet — the public apply form feeds this queue"
+              : `awaiting review · oldest is ${oldestPendingDays} day${oldestPendingDays === 1 ? "" : "s"} old`}
+          </div>
+          <div className="mt-auto flex items-center gap-1.5 pt-3.5 text-[12.5px] font-semibold text-teal-400">
+            Review queue <span className="transition group-hover:translate-x-[3px]">→</span>
           </div>
         </Link>
 
+        {/* 2 · Providers -- live count + tiers. Real columns only; no invented health rollup. */}
         <Link
           href="/admin/providers"
-          className="rounded-xl border border-teal-400/35 bg-teal-950/20 p-4 hover:border-teal-400/60"
+          className="group flex min-h-[172px] flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 p-[18px] pb-[15px] transition hover:-translate-y-0.5 hover:border-teal-400"
         >
-          <div className="text-xs uppercase tracking-wide text-zinc-500">Providers</div>
-          <div className="mt-1 text-2xl font-semibold text-teal-300">{needsReviewCount}</div>
-          <div className="mt-0.5 text-xs text-zinc-500">
-            {needsReviewCount === 0
-              ? marketplace.liveProviderCount === 0
-                ? "No live providers yet"
-                : `${marketplace.liveTierCount} live tier${marketplace.liveTierCount === 1 ? "" : "s"}`
-              : `${needsReviewCount} needs terms review`}
+          <div className="mb-0.5 flex items-center gap-2.5">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-500/10 text-xs text-zinc-400">
+              ◈
+            </span>
+            <span className="text-xs font-semibold text-zinc-300">Providers</span>
+            {needsReviewCount > 0 ? (
+              <span className="ml-auto rounded-full bg-amber-400/15 px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.09em] text-amber-300">
+                {needsReviewCount} terms review
+              </span>
+            ) : (
+              !marketplaceEmpty && (
+                <span className="ml-auto rounded-full bg-emerald-400/12 px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.09em] text-emerald-300">
+                  Live
+                </span>
+              )
+            )}
+          </div>
+          <div className="mt-3.5 text-[44px] font-extrabold leading-none text-zinc-100">
+            {marketplace.liveProviderCount}
+            <small className="ml-1.5 font-mono text-sm font-medium text-zinc-600">live</small>
+          </div>
+          <div className="mt-2 min-h-[16px] text-xs text-zinc-500">
+            {marketplaceEmpty
+              ? "No providers yet — approve an application to add your first feed provider"
+              : `${marketplace.liveTierCount} live tier${marketplace.liveTierCount === 1 ? "" : "s"}`}
+          </div>
+          <div className="mt-auto flex items-center gap-1.5 pt-3.5 text-[12.5px] font-semibold text-teal-400">
+            All providers <span className="transition group-hover:translate-x-[3px]">→</span>
           </div>
         </Link>
 
+        {/* 3 · Revenue -- emerald is money only (§4). Headline is retained; §9 keeps the
+            gross-vs-retained swap a one-liner while coxwell's call is still open. */}
         <Link
           href="/admin/revenue"
-          className="rounded-xl border border-emerald-400/35 bg-emerald-950/20 p-4 hover:border-emerald-400/60"
+          className="group flex min-h-[172px] flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 p-[18px] pb-[15px] transition hover:-translate-y-0.5 hover:border-teal-400"
         >
-          <div className="text-xs uppercase tracking-wide text-zinc-500">Revenue</div>
-          <div className="mt-1 text-2xl font-semibold text-emerald-300">
-            {marketplaceEmpty ? "—" : fmtUsd(marketplace.retainedRunRateCents)}
+          <div className="mb-0.5 flex items-center gap-2.5">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-500/10 text-xs text-zinc-400">
+              ▦
+            </span>
+            <span className="text-xs font-semibold text-zinc-300">Horizon retained</span>
+            <span className="ml-auto rounded-full bg-zinc-500/10 px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.09em] text-zinc-400">
+              Run-rate
+            </span>
           </div>
-          <div className="mt-0.5 text-xs text-zinc-500">
-            {marketplaceEmpty ? "No revenue yet" : "Horizon-retained run-rate / mo"}
+          <div className="mt-3.5 text-[44px] font-extrabold leading-none text-emerald-400">
+            {marketplaceEmpty ? "$0" : fmtUsd(marketplace.retainedRunRateCents)}
+            {!marketplaceEmpty && (
+              <small className="ml-1.5 font-mono text-sm font-medium text-zinc-600">/mo</small>
+            )}
+          </div>
+          <div className="mt-2 min-h-[16px] text-xs text-zinc-500">
+            {marketplaceEmpty
+              ? "$0 — appears after the first paid subscription"
+              : `Gross ${fmtUsd(marketplace.grossRunRateCents)} · providers paid ${fmtUsd(payoutRunRateCents)}`}
+          </div>
+          <div className="mt-auto flex items-center gap-1.5 pt-3.5 text-[12.5px] font-semibold text-teal-400">
+            Revenue &amp; splits <span className="transition group-hover:translate-x-[3px]">→</span>
           </div>
         </Link>
       </section>
 
-      {!marketplaceEmpty && (
-        <section className="mt-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
-          <h2 className="text-sm font-medium text-cyan-400">Keep exploring</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Review pending applications or manage live provider terms.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-3 text-sm">
-            <Link href="/admin/provider-applications" className="text-cyan-400 hover:underline">
-              Provider applications
-            </Link>
-            <Link href="/admin/providers" className="text-cyan-400 hover:underline">
-              Providers
-            </Link>
-            <Link href="/admin/revenue" className="text-cyan-400 hover:underline">
-              Revenue
-            </Link>
-          </div>
-        </section>
+      {/* Lower deep-read row (§3 hierarchy). Hidden entirely at day-one per §5 -- the landing
+          stays a clean three-tile intro rather than a page of empty panels. */}
+      {showDeepRead && (
+        <>
+          {activity.length > 0 && (
+            <section className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-zinc-200">Recent activity</h2>
+                <Link
+                  href="/admin/provider-applications?status=all"
+                  className="text-xs font-semibold text-teal-400 hover:text-teal-300"
+                >
+                  All applications →
+                </Link>
+              </div>
+              <ul className="mt-4 divide-y divide-zinc-800/70">
+                {activity.map((e, i) => (
+                  <li key={i} className="flex items-start gap-3 py-3">
+                    <span
+                      className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs ${
+                        e.kind === "approved"
+                          ? "bg-emerald-400/12 text-emerald-300"
+                          : e.kind === "declined"
+                            ? "bg-rose-400/12 text-rose-300"
+                            : "bg-zinc-500/10 text-zinc-400"
+                      }`}
+                    >
+                      {e.kind === "approved" ? "✔" : e.kind === "declined" ? "✕" : "▤"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm text-zinc-200">{e.title}</div>
+                      <div className="truncate text-xs text-zinc-500">{e.detail}</div>
+                    </div>
+                    <span className="shrink-0 text-xs text-zinc-600">{formatRelative(e.at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {!marketplaceEmpty && (
+            <section className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-zinc-200">Revenue split</h2>
+                <span className="font-mono text-[11px] text-zinc-600">run-rate · admin 100% view</span>
+              </div>
+              <p className="mt-3 text-sm text-zinc-300">
+                Providers payout{" "}
+                <b className="font-semibold text-emerald-400">{fmtUsd(payoutRunRateCents)}</b>
+                <span className="mx-2 text-zinc-700">·</span>
+                Horizon retained{" "}
+                <b className="font-semibold text-zinc-100">
+                  {fmtUsd(marketplace.retainedRunRateCents)}
+                </b>
+              </p>
+              <div className="mt-4 space-y-1.5 text-xs text-zinc-500">
+                <p>
+                  <span className="text-zinc-400">ⓘ</span> Admin sees the full 100% — gross, both
+                  shares, and fees. Providers see only their own share.
+                </p>
+                {/* Mandatory footnote (§9) -- must not imply "no money" or "verified money". */}
+                <p>
+                  <span className="text-zinc-400">◷</span>{" "}
+                  <b className="font-semibold text-zinc-400">Contracted run-rate</b> — price × split
+                  across live tiers. Not reconciled against payments received.
+                </p>
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );

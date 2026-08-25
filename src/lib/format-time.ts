@@ -31,3 +31,9 @@ export function humanizeTimeUntil(date: Date, now: Date = new Date()): string {
   if (days < 7) return `${days} day${days === 1 ? "" : "s"}`;
   return formatAbsoluteUtc(date);
 }
+
+/** Whole days elapsed since `date` — floored, so "0 days" reads as "today".
+ * Takes an injectable `now` like humanizeTimeUntil so callers stay pure. */
+export function wholeDaysSince(date: Date, now: Date = new Date()): number {
+  return Math.max(0, Math.floor((now.getTime() - date.getTime()) / 86_400_000));
+}
