@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { getUserDetail, maskLicenseKey, LICENSE_TIERS, type UserTierLabel } from "@/lib/licenses";
 import { listPaymentsForUser } from "@/lib/payments";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
@@ -8,6 +9,7 @@ import { ActionButton } from "@/components/admin/action-button";
 import { TierSelectForm } from "@/components/admin/tier-select-form";
 import { CopyIdButton } from "@/components/admin/copy-id-button";
 import { InlineEditField } from "@/components/admin/inline-edit-field";
+import { RoleSelectField } from "@/components/admin/role-select-field";
 import { FeedCheckboxes, FeedSelectForm } from "@/components/admin/feed-select-form";
 import { NotesForm } from "@/components/admin/notes-form";
 import { ConfigSummaryForm } from "@/components/admin/config-summary-form";
@@ -54,12 +56,14 @@ export default async function AdminUserDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [user, payments, configSummary] = await Promise.all([
+  const [session, user, payments, configSummary] = await Promise.all([
+    auth(),
     getUserDetail(id),
     listPaymentsForUser(id),
     getConfigSummary(id),
   ]);
   if (!user) notFound();
+  const isSelf = session?.user?.id === user.userId;
 
   const activeLicense = user.licenses.find(
     (l) => l.computedStatus === "active" || l.computedStatus === "expiring"
@@ -156,18 +160,14 @@ export default async function AdminUserDetailPage({
               {user.telegramUserId && <span className="text-zinc-600">({user.telegramUserId})</span>}
             </dd>
           </div>
-          <div>
-            <dt className="text-xs text-zinc-500">Role</dt>
-            <dd className="text-zinc-200">
-              <InlineEditField
-                action={updateUserFieldAction}
-                hiddenFields={{ userId: user.userId }}
-                field="role"
-                value={user.role}
-                label="Role"
-                options={["user", "admin"]}
-              />
-            </dd>
+          <div className="sm:col-span-2">
+            <RoleSelectField
+              action={updateUserFieldAction}
+              hiddenFields={{ userId: user.userId }}
+              currentRole={user.role}
+              subjectName={user.displayName ?? user.email ?? "this user"}
+              isSelf={isSelf}
+            />
           </div>
           <div>
             <dt className="text-xs text-zinc-500">Active IP</dt>
