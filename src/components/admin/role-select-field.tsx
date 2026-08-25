@@ -16,14 +16,26 @@ interface RoleSelectFieldProps {
  * an edit toggle: chrome (border + chevron) says "editable", plain zinc text says
  * "read-only" — changing the select value IS the edit, confirmed by a dialog before it
  * submits. Two-value fields don't need reveal-then-edit. */
+const EDITABLE_ROLES = ["user", "admin"];
+
 export function RoleSelectField({ action, hiddenFields = {}, currentRole, subjectName, isSelf }: RoleSelectFieldProps) {
   const [current, setCurrent] = useState(currentRole);
   const [draft, setDraft] = useState(currentRole);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const dirty = draft !== current;
+  const editable = EDITABLE_ROLES.includes(currentRole);
+  const dirty = editable && draft !== current;
   const isDemote = draft === "user" && current === "admin";
+
+  if (!editable) {
+    return (
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-zinc-500">Role</label>
+        <p className="text-sm text-zinc-200">{currentRole}</p>
+      </div>
+    );
+  }
 
   function closeAndReset() {
     setConfirmOpen(false);
