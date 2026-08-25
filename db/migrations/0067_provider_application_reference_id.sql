@@ -10,6 +10,8 @@
 -- never captured anywhere), so pre-existing rows may not resolve by an applicant's old "FP-..."
 -- follow-up email -- unavoidable, the original value was never stored. From this migration
 -- forward, the value shown and the value stored are the same string.
+begin;
+
 alter table provider_applications add column reference_id text;
 
 with numbered as (
@@ -28,3 +30,5 @@ alter table provider_applications add constraint provider_applications_reference
 insert into schema_migrations (version, name) values
   ('0067', '0067_provider_application_reference_id.sql')
 on conflict (version) do nothing;
+
+commit;
