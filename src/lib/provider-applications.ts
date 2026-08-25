@@ -176,6 +176,26 @@ export async function createProviderApplication(args: CreateArgs): Promise<Provi
   return row;
 }
 
+/** Deterministic small-int hash -- used to pick a stable avatar color and a stable-looking
+ * reference id per row without persisting either (no ref column on provider_applications). */
+function hashCode(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+/** Display-only reference id, stable per row -- mirrors the client-generated FP-YYYY-NNNN label
+ * shown to applicants on submit (provider-apply-form.tsx), but that label is never persisted, so
+ * this is a separate deterministic derivation from the row id, not a lookup of the real value. */
+export function providerApplicationReferenceId(a: Pick<ProviderApplicationRow, "id" | "appliedAt">): string {
+  const num = (Math.abs(hashCode(a.id)) % 9000) + 1000;
+  return `FP-${a.appliedAt.getFullYear()}-${num}`;
+}
+
+export function providerApplicationAvatarSeed(name: string): number {
+  return Math.abs(hashCode(name));
+}
+
 export async function getProviderApplication(id: string): Promise<ProviderApplicationRow | null> {
   const result = await pool.query<Row>(`${SELECT_BASE} where id = $1`, [id]);
   return result.rowCount ? mapRow(result.rows[0]) : null;

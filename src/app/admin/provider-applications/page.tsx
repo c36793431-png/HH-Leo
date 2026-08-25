@@ -2,12 +2,12 @@ import Link from "next/link";
 import {
   getProviderApplicationStats,
   listProviderApplications,
+  providerApplicationAvatarSeed,
+  providerApplicationReferenceId,
   type ProviderApplicationRow,
 } from "@/lib/provider-applications";
 import { getProviderMarketplaceSummary } from "@/lib/provider-tiers";
 import { formatRelative } from "@/lib/format-time";
-import { ProviderApplicationRowActions } from "@/components/admin/provider-application-row-actions";
-import { approveProviderApplicationAction, declineProviderApplicationAction } from "./actions";
 
 const STATUS_SEGMENTS = [
   { key: "pending", label: "Pending" },
@@ -37,24 +37,8 @@ const AVATAR_STYLES = [
   "border-rose-700/50 bg-rose-950/60 text-rose-300",
 ];
 
-/** Deterministic small-int hash -- used to pick a stable avatar color and a stable-looking
- * reference id per row without persisting either (no ref column on provider_applications). */
-function hashCode(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
-  return h;
-}
-
 function avatarStyle(name: string): string {
-  return AVATAR_STYLES[Math.abs(hashCode(name)) % AVATAR_STYLES.length];
-}
-
-/** Display-only reference id, stable per row -- mirrors the client-generated FP-YYYY-NNNN label
- * shown to applicants on submit (provider-apply-form.tsx), but that label is never persisted, so
- * this is a separate deterministic derivation from the row id, not a lookup of the real value. */
-function referenceId(a: ProviderApplicationRow): string {
-  const num = (Math.abs(hashCode(a.id)) % 9000) + 1000;
-  return `FP-${a.appliedAt.getFullYear()}-${num}`;
+  return AVATAR_STYLES[providerApplicationAvatarSeed(name) % AVATAR_STYLES.length];
 }
 
 function daysSince(date: Date): number {
@@ -231,43 +215,46 @@ export default async function AdminProviderApplicationsPage({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-start gap-3">
                 <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-sm font-semibold ${avatarStyle(a.name)}`}
+                  className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border text-lg font-semibold ${avatarStyle(a.name)}`}
                 >
                   {a.name.trim().charAt(0).toUpperCase() || "?"}
                 </div>
                 <div>
-                  <Link
-                    href={`/admin/provider-applications/${a.id}`}
-                    className="text-sm font-medium text-teal-400 hover:underline"
-                  >
-                    {a.name}
-                  </Link>
-                  {a.source === "admin_manual" && (
-                    <span className="ml-2 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
-                      Manual
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/admin/provider-applications/${a.id}`}
+                      className="text-sm font-bold text-teal-400 hover:underline"
+                    >
+                      {a.name}
+                    </Link>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_BADGE_STYLES[a.status]}`}
+                    >
+                      {a.status}
                     </span>
-                  )}
-                  <div className="mt-0.5 text-xs text-zinc-400">{a.email}</div>
+                    {a.source === "admin_manual" && (
+                      <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
+                        Manual
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-xs text-zinc-400">
+                    {[a.contactName, a.email, a.country].filter(Boolean).join(" · ")}
+                  </div>
                   <div className="mt-1.5 text-[11px] text-zinc-500">{feedTagStrip(a)}</div>
                 </div>
               </div>
 
               <div className="flex flex-col items-end gap-2">
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_BADGE_STYLES[a.status]}`}
-                >
-                  {a.status}
-                </span>
                 <span className="text-xs text-zinc-500">
-                  {referenceId(a)} · {formatRelative(a.appliedAt)}
+                  {providerApplicationReferenceId(a)} · {formatRelative(a.appliedAt)}
                 </span>
-                {a.status === "pending" && (
-                  <ProviderApplicationRowActions
-                    applicationId={a.id}
-                    approveAction={approveProviderApplicationAction}
-                    declineAction={declineProviderApplicationAction}
-                  />
-                )}
+                <Link
+                  href={`/admin/provider-applications/${a.id}`}
+                  className="rounded-md border border-zinc-700 px-3 py-1 text-xs font-medium text-zinc-300 hover:border-teal-500/50 hover:text-teal-300"
+                >
+                  Review →
+                </Link>
               </div>
             </div>
           </div>
