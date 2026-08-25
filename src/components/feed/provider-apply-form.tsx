@@ -5,12 +5,6 @@ import { useState, useTransition } from "react";
 import { createProviderApplicationAction } from "@/app/feed/providers/apply/actions";
 import { emitToast } from "@/lib/toast-bus";
 
-function generateReferenceId(): string {
-  const year = new Date().getFullYear();
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `FP-${year}-${rand}`;
-}
-
 const PROTOCOL_SUGGESTIONS = ["FIX 4.4", "FIX 4.2", "ITCH", "OUCH", "Binary", "WebSocket"];
 const REGION_SUGGESTIONS = ["LD4", "NY4", "FR2", "TY3", "CH1", "AISG"];
 
@@ -24,24 +18,23 @@ function maskEmail(email: string): string {
 /** Whole applywrap body (head-lead + rail + form <-> success), so the page-level
  * "which section is showing" toggle lives in one client component -- mirrors
  * partner-apply-form.tsx's useTransition/local-state pattern, mirroring
- * createPartnerApplicationAction's shape but for provider_applications. Reference id is a
- * client-visible label only (not a real DB sequence -- see createProviderApplication, which
- * doesn't generate one), good enough for the applicant to quote in a follow-up email. */
+ * createPartnerApplicationAction's shape but for provider_applications. Reference id comes back
+ * from the server action (persisted on the row, 0067) so the confirmation screen and the admin
+ * queue always agree on the same string -- it used to be generated client-side independently
+ * of the DB row, which is exactly the mismatch marcus's report caught. */
 export function ProviderApplyForm() {
-  const [submitted, setSubmitted] = useState<{ email: string } | null>(null);
+  const [submitted, setSubmitted] = useState<{ email: string; referenceId: string } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [protocol, setProtocol] = useState("");
   const [regions, setRegions] = useState("");
-
-  const [referenceId] = useState(generateReferenceId);
 
   function handleSubmit(formData: FormData) {
     setError(null);
     startTransition(async () => {
       const result = await createProviderApplicationAction(null, formData);
       if (result.ok) {
-        setSubmitted({ email: ((formData.get("email") as string) ?? "").trim() });
+        setSubmitted({ email: ((formData.get("email") as string) ?? "").trim(), referenceId: result.referenceId });
       } else {
         setError(result.error);
         emitToast(result.error, "error");
@@ -60,7 +53,7 @@ export function ProviderApplyForm() {
         </div>
         <h2>Application received</h2>
         <div className="em">
-          Ref&nbsp;·&nbsp;{referenceId} &nbsp;→&nbsp; {maskEmail(submitted.email)}
+          Ref&nbsp;·&nbsp;{submitted.referenceId} &nbsp;→&nbsp; {maskEmail(submitted.email)}
         </div>
         <p>
           Thanks — we&apos;ve got your feed provider application and sent a confirmation to your inbox.{" "}

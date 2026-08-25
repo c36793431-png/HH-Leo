@@ -21,6 +21,7 @@ export interface ProviderApplicationRow {
   id: string;
   userId: string | null;
   source: ProviderApplicationSource;
+  referenceId: string;
   name: string;
   email: string;
   contactName: string | null;
@@ -47,6 +48,7 @@ interface Row {
   id: string;
   user_id: string | null;
   source: string;
+  reference_id: string;
   name: string;
   email: string;
   contact_name: string | null;
@@ -74,6 +76,7 @@ function mapRow(row: Row): ProviderApplicationRow {
     id: row.id,
     userId: row.user_id,
     source: row.source as ProviderApplicationSource,
+    referenceId: row.reference_id,
     name: row.name,
     email: row.email,
     contactName: row.contact_name,
@@ -98,7 +101,7 @@ function mapRow(row: Row): ProviderApplicationRow {
 }
 
 const SELECT_BASE = `
-  select id, user_id, source, name, email, contact_name, country, timezone, website_url,
+  select id, user_id, source, reference_id, name, email, contact_name, country, timezone, website_url,
          protocol, host, port, compid, regions, coverage, tiers_offered, notes, status,
          applied_at, reviewed_at, reviewed_by, admin_notes, onboarded_at
   from provider_applications
@@ -155,30 +158,47 @@ interface CreateArgs {
 export async function createProviderApplication(args: CreateArgs): Promise<ProviderApplicationRow> {
   const protocol = args.protocol ? normalizeProtocol(args.protocol) : null;
   const regions = args.regions ? normalizeRegions(args.regions) : null;
-  const result = await pool.query<{ id: string }>(
-    `insert into provider_applications
-       (name, email, contact_name, country, timezone, website_url,
-        protocol, host, port, compid, regions, coverage, tiers_offered, notes)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-     returning id`,
-    [
-      args.name,
-      args.email,
-      args.contactName,
-      args.country,
-      args.timezone,
-      args.websiteUrl,
-      protocol,
-      args.host,
-      args.port,
-      args.compid,
-      regions,
-      args.coverage,
-      args.tiersOffered,
-      args.notes,
-    ]
-  );
-  const row = await getProviderApplication(result.rows[0].id);
+  const year = new Date().getFullYear();
+  let insertedId: string | null = null;
+  // Collision retry, not a lookup loop: reference_id is unique, and a random 4-digit clash
+  // within the same year is rare but possible at low volume -- retry a few times rather than
+  // failing the applicant's submission over it.
+  for (let attempt = 0; attempt < 5 && !insertedId; attempt++) {
+    const referenceId = `FP-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
+    try {
+      const result = await pool.query<{ id: string }>(
+        `insert into provider_applications
+           (reference_id, name, email, contact_name, country, timezone, website_url,
+            protocol, host, port, compid, regions, coverage, tiers_offered, notes)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         returning id`,
+        [
+          referenceId,
+          args.name,
+          args.email,
+          args.contactName,
+          args.country,
+          args.timezone,
+          args.websiteUrl,
+          protocol,
+          args.host,
+          args.port,
+          args.compid,
+          regions,
+          args.coverage,
+          args.tiersOffered,
+          args.notes,
+        ]
+      );
+      insertedId = result.rows[0].id;
+    } catch (err) {
+      const isUniqueViolation = err instanceof Error && "code" in err && (err as { code?: string }).code === "23505";
+      if (!isUniqueViolation) throw err;
+    }
+  }
+  if (!insertedId) throw new Error("failed to allocate a unique provider application reference id");
+
+  const row = await getProviderApplication(insertedId);
   if (!row) throw new Error("failed to load created provider application");
 
   await notifyProviderApplicationSubmitted({
@@ -204,20 +224,17 @@ export async function createProviderApplication(args: CreateArgs): Promise<Provi
   return row;
 }
 
-/** Deterministic small-int hash -- used to pick a stable avatar color and a stable-looking
- * reference id per row without persisting either (no ref column on provider_applications). */
+/** Deterministic small-int hash -- used only to pick a stable avatar color per row. */
 function hashCode(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
   return h;
 }
 
-/** Display-only reference id, stable per row -- mirrors the client-generated FP-YYYY-NNNN label
- * shown to applicants on submit (provider-apply-form.tsx), but that label is never persisted, so
- * this is a separate deterministic derivation from the row id, not a lookup of the real value. */
-export function providerApplicationReferenceId(a: Pick<ProviderApplicationRow, "id" | "appliedAt">): string {
-  const num = (Math.abs(hashCode(a.id)) % 9000) + 1000;
-  return `FP-${a.appliedAt.getFullYear()}-${num}`;
+/** The persisted reference_id, same string shown to the applicant at submit and stored on the
+ * row (0067_provider_application_reference_id) -- no longer a derivation, just a field read. */
+export function providerApplicationReferenceId(a: Pick<ProviderApplicationRow, "referenceId">): string {
+  return a.referenceId;
 }
 
 export function providerApplicationAvatarSeed(name: string): number {
@@ -245,7 +262,7 @@ export async function listProviderApplications(
   }
   if (options.search) {
     params.push(`%${options.search}%`);
-    conditions.push(`(name ilike $${params.length} or email ilike $${params.length})`);
+    conditions.push(`(name ilike $${params.length} or email ilike $${params.length} or reference_id ilike $${params.length})`);
   }
   const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
   const result = await pool.query<Row>(`${SELECT_BASE} ${where} order by applied_at desc`, params);
@@ -350,12 +367,13 @@ export async function createManualProviderApplication(
 
     const userId = await linkOrCreateProviderUser(client, args.email, args.name, null);
 
+    const referenceId = `FP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const inserted = await client.query<{ id: string }>(
       `insert into provider_applications
-         (name, email, status, source, user_id, applied_at, reviewed_at, reviewed_by)
-       values ($1, $2, 'approved', 'admin_manual', $3, now(), now(), $4)
+         (reference_id, name, email, status, source, user_id, applied_at, reviewed_at, reviewed_by)
+       values ($1, $2, $3, 'approved', 'admin_manual', $4, now(), now(), $5)
        returning id`,
-      [args.name, args.email, userId, actionedBy]
+      [referenceId, args.name, args.email, userId, actionedBy]
     );
     id = inserted.rows[0].id;
 
