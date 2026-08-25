@@ -83,6 +83,7 @@ export function ProviderApplicationRowActions({
             placeholder="Note (optional)…"
             className="w-48 rounded border border-zinc-700 bg-black/40 px-1.5 py-1 text-xs text-zinc-200 placeholder:text-zinc-600 disabled:opacity-50"
           />
+          <p className="w-48 text-[10px] leading-snug text-zinc-500">The row moves to Declined — nothing is deleted.</p>
           <button
             type="button"
             onClick={decline}
