@@ -89,6 +89,8 @@ export default auth(async (req) => {
     const passthrough =
       pathname === "/login" ||
       pathname === "/signup" ||
+      pathname === "/account" ||
+      pathname.startsWith("/account/") ||
       pathname.startsWith("/feed") ||
       isAdminFeedRoute ||
       isStaticAsset;
