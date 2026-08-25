@@ -104,6 +104,32 @@ const SELECT_BASE = `
   from provider_applications
 `;
 
+/** Tidies free-text protocol entry without rejecting anything unrecognized (Iris's ruling,
+ * feed-admin-provider-applications-rebuild-2026-08-25): "fix4.4"/"fix 4.4"/"FIX4.4" all collapse
+ * to "FIX 4.4" so the admin queue doesn't fragment into near-duplicate chips, but an exotic
+ * protocol string a provider actually types still gets through untouched (just trimmed). */
+function normalizeProtocol(raw: string): string | null {
+  const collapsed = raw.trim().replace(/\s+/g, " ");
+  if (!collapsed) return null;
+  const match = collapsed.match(/^([A-Za-z]+)\s*(\d[\d.]*)?$/);
+  if (!match) return collapsed;
+  const [, word, version] = match;
+  return version ? `${word.toUpperCase()} ${version}` : word.toUpperCase();
+}
+
+/** Normalizes the region list's separator to " · " regardless of whether the provider typed
+ * commas, spaces, or an existing middot -- multi-value is allowed per the spec ("LD4 · NY4" or
+ * "LD4, NY4"), this just makes the stored form consistent so the card can split it into pills. */
+function normalizeRegions(raw: string): string | null {
+  const collapsed = raw.trim().replace(/\s+/g, " ");
+  if (!collapsed) return null;
+  const parts = collapsed
+    .split(/[,·]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 interface CreateArgs {
   name: string;
   email: string;
@@ -127,6 +153,8 @@ interface CreateArgs {
  * this only inserts the row and fires the admin notify, mirroring createPartnerApplication's
  * shape minus the user_id matching + approve/decline lifecycle that partner_applications has. */
 export async function createProviderApplication(args: CreateArgs): Promise<ProviderApplicationRow> {
+  const protocol = args.protocol ? normalizeProtocol(args.protocol) : null;
+  const regions = args.regions ? normalizeRegions(args.regions) : null;
   const result = await pool.query<{ id: string }>(
     `insert into provider_applications
        (name, email, contact_name, country, timezone, website_url,
@@ -140,11 +168,11 @@ export async function createProviderApplication(args: CreateArgs): Promise<Provi
       args.country,
       args.timezone,
       args.websiteUrl,
-      args.protocol,
+      protocol,
       args.host,
       args.port,
       args.compid,
-      args.regions,
+      regions,
       args.coverage,
       args.tiersOffered,
       args.notes,

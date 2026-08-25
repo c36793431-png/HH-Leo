@@ -11,8 +11,8 @@ function generateReferenceId(): string {
   return `FP-${year}-${rand}`;
 }
 
-const PROTOCOL_OPTIONS = ["FIX 4.4", "FIX 4.2", "WebSocket", "REST"];
-const REGION_OPTIONS = ["LD4 · London", "NY4 · New York", "TY3 · Tokyo"];
+const PROTOCOL_SUGGESTIONS = ["FIX 4.4", "FIX 4.2", "ITCH", "OUCH", "Binary", "WebSocket"];
+const REGION_SUGGESTIONS = ["LD4", "NY4", "FR2", "TY3", "CH1", "AISG"];
 
 function maskEmail(email: string): string {
   const [user, domain] = email.split("@");
@@ -31,6 +31,8 @@ export function ProviderApplyForm() {
   const [submitted, setSubmitted] = useState<{ email: string } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [protocol, setProtocol] = useState("");
+  const [regions, setRegions] = useState("");
 
   const [referenceId] = useState(generateReferenceId);
 
@@ -168,16 +170,31 @@ export function ProviderApplyForm() {
           connection our team confirms at registration.
         </p>
         <div className="fap-field">
-          <label>Feed protocol(s)</label>
-          <div className="fap-chips" role="group" aria-label="Feed protocols">
-            {PROTOCOL_OPTIONS.map((opt) => (
-              <label className="chip" key={opt}>
-                <input type="checkbox" name="protocol" value={opt} disabled={isPending} />
-                <span className="bx">✓</span>
+          <label>Feed protocol</label>
+          <input
+            className="fap-inp mono"
+            name="protocol"
+            type="text"
+            maxLength={24}
+            placeholder="e.g. FIX 4.4 — or your own"
+            value={protocol}
+            onChange={(e) => setProtocol(e.target.value)}
+            disabled={isPending}
+          />
+          <div className="fap-chips" role="group" aria-label="Protocol suggestions">
+            {PROTOCOL_SUGGESTIONS.map((opt) => (
+              <button
+                type="button"
+                className="chip"
+                key={opt}
+                onClick={() => setProtocol(opt)}
+                disabled={isPending}
+              >
                 {opt}
-              </label>
+              </button>
             ))}
           </div>
+          <div className="fap-hint">State the protocol your feed speaks. We show this to reviewers exactly as you enter it.</div>
         </div>
         <div className="fap-field">
           <label>Host endpoint</label>
@@ -194,16 +211,40 @@ export function ProviderApplyForm() {
           </div>
         </div>
         <div className="fap-field">
-          <label>Regions you can serve</label>
-          <div className="fap-chips" role="group" aria-label="Regions">
-            {REGION_OPTIONS.map((opt) => (
-              <label className="chip" key={opt}>
-                <input type="checkbox" name="regions" value={opt} disabled={isPending} />
-                <span className="bx">✓</span>
+          <label>Region / datacentre</label>
+          <input
+            className="fap-inp mono"
+            name="regions"
+            type="text"
+            maxLength={32}
+            placeholder="e.g. LD4 · NY4"
+            value={regions}
+            onChange={(e) => setRegions(e.target.value)}
+            disabled={isPending}
+          />
+          <div className="fap-chips" role="group" aria-label="Region suggestions">
+            {REGION_SUGGESTIONS.map((opt) => (
+              <button
+                type="button"
+                className="chip"
+                key={opt}
+                onClick={() =>
+                  setRegions((prev) => {
+                    const existing = prev
+                      .split(/[,·]+/)
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    if (existing.includes(opt)) return prev;
+                    return existing.length ? `${existing.join(", ")}, ${opt}` : opt;
+                  })
+                }
+                disabled={isPending}
+              >
                 {opt}
-              </label>
+              </button>
             ))}
           </div>
+          <div className="fap-hint">Where your feed is served from. Add more than one, separated by a comma.</div>
         </div>
       </div>
 

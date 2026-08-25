@@ -7,9 +7,13 @@
    .feed-landing-v1/.feed-auth-v1/.partner-v3 scoping elsewhere.
 
    Simplifications vs the mockup (documented per the dispatch, both intentional):
-   - The mockup's JS chip-toggle multiselect (protocols/regions) is rendered as plain
-     checkbox groups instead -- no client JS needed, same visual chip styling reused for the
-     checkbox labels via the .chip class so it still reads as the mockup's chip picker.
+   - Protocol/region are free-text inputs with tap-to-fill suggestion chips (buttons that set
+     the input value), not the mockup's JS chip-toggle multiselect -- per Iris's ruling in
+     feed-admin-provider-applications-rebuild-2026-08-25: these are provider-filled "custom
+     slots", not a curated dropdown/multiselect we'd have to keep current. (Previously these
+     were checkbox groups sharing one form field name each -- the read side only ever kept the
+     first checked value via formData.get(), silently dropping every additional selection on
+     submit. Free text sidesteps the multi-value collection problem entirely.)
    - No price fields anywhere (per the mockup itself -- public surfaces carry no prices). */
 
 .feed-apply-v1 {
@@ -188,16 +192,14 @@
 }
 .fap-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .fap-hint { font-size: 11.5px; color: var(--fap-ink-3); line-height: 1.5; margin-top: 7px; }
-/* checkbox-group chips (protocols / regions) -- simplified from the mockup's JS chip toggle */
-.fap-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+/* tap-to-fill suggestion chips (protocol / region) -- buttons that populate the text input
+   above them, scaffolding rather than a constraint; the input stays free text either way */
+.fap-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .fap-chips .chip {
-  display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--fap-ink-2); cursor: pointer;
-  border: 1px solid var(--fap-line); background: var(--fap-panel-2); border-radius: 999px; padding: 8px 14px; user-select: none;
+  display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--fap-ink-2); cursor: pointer;
+  border: 1px solid var(--fap-line); background: var(--fap-panel-2); border-radius: 999px; padding: 6px 13px; user-select: none;
 }
-.fap-chips .chip input { appearance: none; width: 0; height: 0; position: absolute; }
-.fap-chips .chip .bx { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--fap-ink-4); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; }
-.fap-chips .chip:has(input:checked) { color: var(--fap-teal); border-color: var(--fap-teal-line); background: var(--fap-teal-soft); }
-.fap-chips .chip:has(input:checked) .bx { background: var(--fap-teal); border-color: var(--fap-teal); color: #20140a; }
+.fap-chips .chip:hover { color: var(--fap-teal); border-color: var(--fap-teal-line); background: var(--fap-teal-soft); }
 /* revenue callout */
 .fap-rev-note {
   display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 13px 15px; border-radius: 12px;
