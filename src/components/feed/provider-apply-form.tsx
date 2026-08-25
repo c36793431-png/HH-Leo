@@ -172,7 +172,7 @@ export function ProviderApplyForm() {
           <div className="fap-chips" role="group" aria-label="Feed protocols">
             {PROTOCOL_OPTIONS.map((opt) => (
               <label className="chip" key={opt}>
-                <input type="checkbox" name="protocol" value={opt} disabled={isPending} defaultChecked={opt === "FIX 4.4"} />
+                <input type="checkbox" name="protocol" value={opt} disabled={isPending} />
                 <span className="bx">✓</span>
                 {opt}
               </label>
@@ -198,13 +198,7 @@ export function ProviderApplyForm() {
           <div className="fap-chips" role="group" aria-label="Regions">
             {REGION_OPTIONS.map((opt) => (
               <label className="chip" key={opt}>
-                <input
-                  type="checkbox"
-                  name="regions"
-                  value={opt}
-                  disabled={isPending}
-                  defaultChecked={opt !== "TY3 · Tokyo"}
-                />
+                <input type="checkbox" name="regions" value={opt} disabled={isPending} />
                 <span className="bx">✓</span>
                 {opt}
               </label>
