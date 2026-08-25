@@ -15,7 +15,10 @@ const TITLES: Record<string, { title: string; crumb: string }> = {
   "/admin/history": { title: "History", crumb: "admin / history" },
 };
 
-function resolveTitle(pathname: string): { title: string; crumb: string } {
+// feed.horizonhft.com/admin is the feed-admin dashboard landing (spec §2), so its title
+// reads "Dashboard" there even though the same path is plain "Admin" on the portal host.
+function resolveTitle(pathname: string, adminSurface: AdminSurface): { title: string; crumb: string } {
+  if (pathname === "/admin" && adminSurface === "feed") return { title: "Dashboard", crumb: "admin" };
   if (TITLES[pathname]) return TITLES[pathname];
   const segments = pathname.split("/").filter(Boolean);
   const last = segments[segments.length - 1] ?? "dashboard";
@@ -36,7 +39,7 @@ export function PortalTopbar({
   onBurgerClick: () => void;
 }) {
   const pathname = usePathname();
-  const { title, crumb } = resolveTitle(pathname);
+  const { title, crumb } = resolveTitle(pathname, adminSurface);
   const host = adminSurface === "feed" ? "feed.horizonhft.com" : "portal.horizonhft.com";
 
   return (

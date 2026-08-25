@@ -10,6 +10,7 @@ export function PortalShell({
   userName,
   userEmail,
   adminSurface,
+  pendingApplicationsCount,
   children,
 }: {
   tier: PortalTier;
@@ -17,6 +18,7 @@ export function PortalShell({
   userName: string;
   userEmail: string;
   adminSurface?: AdminSurface;
+  pendingApplicationsCount?: number;
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
@@ -25,7 +27,14 @@ export function PortalShell({
     <div className={`portal-shell${navOpen ? " nav-open" : ""}`}>
       <div className="scrim" onClick={() => setNavOpen(false)} />
       <div className="app">
-        <PortalSidebar tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} adminSurface={adminSurface} />
+        <PortalSidebar
+          tier={tier}
+          isAdmin={isAdmin}
+          userName={userName}
+          userEmail={userEmail}
+          adminSurface={adminSurface}
+          pendingApplicationsCount={pendingApplicationsCount}
+        />
         <main className="main">
           <PortalTopbar isAdmin={isAdmin} adminSurface={adminSurface} onBurgerClick={() => setNavOpen((v) => !v)} />
           <section className="content">{children}</section>

@@ -88,13 +88,22 @@ const PORTAL_ADMIN_LINKS = [
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon }[];
 
 // feed.horizonhft.com/admin/* — feed-ops surface. "Feed health" stays a visible-but-disabled
-// placeholder (no collector wired yet, spec §10); Providers and Revenue split are live routes.
+// placeholder (no collector wired yet, spec §10); Providers and Revenue are live routes.
+// Order matches feed-admin-dashboard-spec.md §2.
 const FEED_ADMIN_LINKS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/provider-applications", label: "Provider applications", icon: ClipboardCheck },
   { href: "/admin/providers", label: "Providers", icon: SatelliteDish },
+  { href: "/admin/register-provider", label: "Register provider", icon: UserPlus },
+  { href: "/admin/revenue", label: "Revenue", icon: DollarSign },
   { href: "/admin/feed-health", label: "Feed health", icon: Radar, soon: true },
-  { href: "/admin/revenue", label: "Revenue split", icon: DollarSign },
+] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
+
+// §2's "PLATFORM → Accounts" row: the mockup carries it as a placeholder (href="#", no
+// page behind it anywhere in this app) same as Feed health was before its tab existed —
+// so it renders "soon" rather than link to a route that doesn't exist yet.
+const FEED_PLATFORM_LINKS = [
+  { href: "/admin/accounts", label: "Accounts", icon: CircleUser, soon: true },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
 
 function isActive(pathname: string, href: string): boolean {
@@ -111,12 +120,16 @@ export function PortalSidebar({
   userName,
   userEmail,
   adminSurface = "portal",
+  pendingApplicationsCount = 0,
 }: {
   tier: PortalTier;
   isAdmin: boolean;
   userName: string;
   userEmail: string;
   adminSurface?: AdminSurface;
+  /** Single §6 selector value — both this badge and the dashboard tile read the same
+   * getProviderApplicationStats().pendingCount; neither hardcodes or recomputes it. */
+  pendingApplicationsCount?: number;
 }) {
   const pathname = usePathname();
   const initial = (userName.trim()[0] ?? "?").toUpperCase();
@@ -183,11 +196,12 @@ export function PortalSidebar({
         {isAdmin && (
           <div className="admin-block">
             <div className="grp">
-              <span className="shield">🛡</span> Admin
+              <span className="shield">🛡</span> {adminSurface === "feed" ? "Feed admin" : "Admin"}
             </div>
             {(adminSurface === "feed" ? FEED_ADMIN_LINKS : PORTAL_ADMIN_LINKS).map((link) => {
               const Icon = link.icon;
               const soon = "soon" in link && link.soon;
+              const badgeCount = link.href === "/admin/provider-applications" ? pendingApplicationsCount : 0;
               if (soon) {
                 return (
                   <span key={link.href} className="soon" aria-disabled="true">
@@ -199,9 +213,25 @@ export function PortalSidebar({
               return (
                 <Link key={link.href} href={link.href} className={isActive(pathname, link.href) ? "on" : undefined}>
                   <span className="ic"><Icon size={18} strokeWidth={1.75} /></span> {link.label}
+                  {badgeCount > 0 && <span className="pill">{badgeCount}</span>}
                 </Link>
               );
             })}
+
+            {adminSurface === "feed" && (
+              <>
+                <div className="grp">Platform</div>
+                {FEED_PLATFORM_LINKS.map((link) => {
+                  const Icon = link.icon;
+                  return (
+                    <span key={link.href} className="soon" aria-disabled="true">
+                      <span className="ic"><Icon size={18} strokeWidth={1.75} /></span> {link.label}
+                      <span className="pill soon-pill">Soon</span>
+                    </span>
+                  );
+                })}
+              </>
+            )}
           </div>
         )}
       </nav>

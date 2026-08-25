@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { ToastHost } from "@/components/admin/toast-host";
+import { getProviderApplicationStats } from "@/lib/provider-applications";
 
 const FEED_HOST = "feed.horizonhft.com";
 
@@ -20,8 +21,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const host = (await headers()).get("host") || "";
   const isFeedHost = host === FEED_HOST || host.startsWith(`${FEED_HOST}:`);
 
+  // §6: the sidebar badge and the dashboard tile must read the same selector, so it's
+  // fetched once here (not recomputed in the sidebar) and passed down as a plain value.
+  const pendingApplicationsCount = isFeedHost ? (await getProviderApplicationStats()).pendingCount : undefined;
+
   return (
-    <PortalShell tier="admin" isAdmin userName={userName} userEmail={userEmail} adminSurface={isFeedHost ? "feed" : "portal"}>
+    <PortalShell
+      tier="admin"
+      isAdmin
+      userName={userName}
+      userEmail={userEmail}
+      adminSurface={isFeedHost ? "feed" : "portal"}
+      pendingApplicationsCount={pendingApplicationsCount}
+    >
       {children}
       <ToastHost />
     </PortalShell>

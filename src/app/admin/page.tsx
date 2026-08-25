@@ -11,7 +11,7 @@ import {
   resendGroupInviteAction,
   forceRemoveGroupAction,
 } from "./actions";
-import { listProviderApplications } from "@/lib/provider-applications";
+import { listProviderApplications, getProviderApplicationStats } from "@/lib/provider-applications";
 import { getProviderMarketplaceSummary } from "@/lib/provider-tiers";
 import { getTermsQueueStats } from "@/lib/provider-terms-queue";
 import { formatRelative, wholeDaysSince } from "@/lib/format-time";
@@ -48,17 +48,21 @@ function fmtUsd(cents: number): string {
  * Pending count stays the single shared selector per §6 -- the sidebar badge and the
  * Applications tile must not be able to disagree, so neither recomputes it. */
 async function FeedAdminDashboard() {
-  const [pendingApplications, allApplications, marketplace, termsQueueStats] = await Promise.all([
+  const [applicationStats, pendingApplications, allApplications, marketplace, termsQueueStats] = await Promise.all([
+    getProviderApplicationStats(),
     listProviderApplications({ status: "pending" }),
     listProviderApplications({}),
     getProviderMarketplaceSummary(),
     getTermsQueueStats(),
   ]);
 
-  const pendingCount = pendingApplications.length;
+  // §6: same selector the sidebar badge reads (admin/layout.tsx) -- this tile must not
+  // recompute its own count from pendingApplications.length, which is a separate query.
+  const pendingCount = applicationStats.pendingCount;
   const marketplaceEmpty = marketplace.liveProviderCount === 0;
   const needsReviewCount = termsQueueStats.needsTermsReviewCount;
   const payoutRunRateCents = marketplace.grossRunRateCents - marketplace.retainedRunRateCents;
+  const liveRevenue = marketplace.grossRunRateCents > 0;
 
   const oldestPendingDays = pendingCount
     ? wholeDaysSince(
@@ -90,8 +94,6 @@ async function FeedAdminDashboard() {
     })
     .sort((x, y) => y.at.getTime() - x.at.getTime())
     .slice(0, 4);
-
-  const showDeepRead = allApplications.length > 0 || !marketplaceEmpty;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -199,26 +201,26 @@ async function FeedAdminDashboard() {
           </div>
         </Link>
 
-        {/* 2 · Providers -- live count + tiers. Real columns only; no invented health rollup. */}
-        <Link
-          href="/admin/providers"
-          className="group flex min-h-[172px] flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 p-[18px] pb-[15px] transition hover:-translate-y-0.5 hover:border-teal-400"
-        >
+        {/* 2 · Providers -- live count + tiers. Real columns only; no invented health rollup.
+            Status tag keys off liveProviderCount alone (§6 fix) -- 0 live is a cold-start
+            fact, not the absence of a "needs review" fact, so the two render as independent
+            signals rather than one suppressing the other. Not a Link (unlike the other two
+            tiles) because it carries two distinct deep-links -- the terms-review sub-metric
+            and the footer -- and nested <a> isn't valid HTML. */}
+        <div className="group flex min-h-[172px] flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 p-[18px] pb-[15px] transition hover:-translate-y-0.5 hover:border-teal-400">
           <div className="mb-0.5 flex items-center gap-2.5">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-500/10 text-xs text-zinc-400">
               ◈
             </span>
             <span className="text-xs font-semibold text-zinc-300">Providers</span>
-            {needsReviewCount > 0 ? (
-              <span className="ml-auto rounded-full bg-amber-400/15 px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.09em] text-amber-300">
-                {needsReviewCount} terms review
+            {marketplace.liveProviderCount > 0 ? (
+              <span className="ml-auto rounded-full bg-emerald-400/12 px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.09em] text-emerald-300">
+                Live
               </span>
             ) : (
-              !marketplaceEmpty && (
-                <span className="ml-auto rounded-full bg-emerald-400/12 px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.09em] text-emerald-300">
-                  Live
-                </span>
-              )
+              <span className="ml-auto rounded-full bg-zinc-500/10 px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.09em] text-zinc-400">
+                Cold start
+              </span>
             )}
           </div>
           <div className="mt-3.5 text-[44px] font-extrabold leading-none text-zinc-100">
@@ -230,10 +232,21 @@ async function FeedAdminDashboard() {
               ? "No providers yet — approve an application to add your first feed provider"
               : `${marketplace.liveTierCount} live tier${marketplace.liveTierCount === 1 ? "" : "s"}`}
           </div>
-          <div className="mt-auto flex items-center gap-1.5 pt-3.5 text-[12.5px] font-semibold text-teal-400">
+          {needsReviewCount > 0 && (
+            <Link
+              href="/admin/providers?filter=needs-review"
+              className="mt-1.5 text-[11px] font-semibold text-amber-300 hover:text-amber-200"
+            >
+              {needsReviewCount} terms review →
+            </Link>
+          )}
+          <Link
+            href="/admin/providers"
+            className="mt-auto flex items-center gap-1.5 pt-3.5 text-[12.5px] font-semibold text-teal-400"
+          >
             All providers <span className="transition group-hover:translate-x-[3px]">→</span>
-          </div>
-        </Link>
+          </Link>
+        </div>
 
         {/* 3 · Revenue -- emerald is money only (§4). Headline is retained; §9 keeps the
             gross-vs-retained swap a one-liner while coxwell's call is still open. */}
@@ -267,10 +280,11 @@ async function FeedAdminDashboard() {
         </Link>
       </section>
 
-      {/* Lower deep-read row (§3 hierarchy). Hidden entirely at day-one per §5 -- the landing
-          stays a clean three-tile intro rather than a page of empty panels. */}
-      {showDeepRead && (
-        <>
+      {/* Lower deep-read row (§3 hierarchy). §5's hide rule is per-card, not per-row (Iris's
+          ruling, 2026-08-25) -- each card evaluates its own emptiness (activity.length === 0,
+          liveRevenue === 0) independently, so e.g. activity can show while revenue stays
+          hidden pre-first-subscription. */}
+      <>
           {activity.length > 0 && (
             <section className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
               <div className="flex items-center justify-between">
@@ -307,7 +321,7 @@ async function FeedAdminDashboard() {
             </section>
           )}
 
-          {!marketplaceEmpty && (
+          {liveRevenue && (
             <section className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-zinc-200">Revenue split</h2>
@@ -336,8 +350,7 @@ async function FeedAdminDashboard() {
               </div>
             </section>
           )}
-        </>
-      )}
+      </>
     </div>
   );
 }
