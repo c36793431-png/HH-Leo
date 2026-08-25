@@ -143,6 +143,7 @@ export interface ProviderRosterEntry {
   providerName: string;
   status: "live" | "onboarding";
   source: "application" | "admin_manual";
+  reviewedByLabel: string | null;
   tiers: { tierName: string; clientPriceCents: number; providerSplitPct: number }[];
 }
 
@@ -163,13 +164,17 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
     provider_name: string;
     onboarded_at: Date | null;
     source: "application" | "admin_manual";
+    reviewer_display_name: string | null;
+    reviewer_email: string | null;
     tier_name: string | null;
     client_price_cents: number | null;
     provider_split_pct: number | null;
   }>(
     `select pa.id as application_id, pa.name as provider_name, pa.onboarded_at, pa.source,
+            u.display_name as reviewer_display_name, u.email as reviewer_email,
             t.tier_name, t.client_price_cents, t.provider_split_pct
      from provider_applications pa
+     left join users u on u.id = pa.reviewed_by
      left join provider_tiers t on t.application_id = pa.id
      where pa.status = 'approved'
      order by pa.name, t.tier_name`
@@ -184,6 +189,10 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
         providerName: row.provider_name,
         status: row.onboarded_at != null ? "live" : "onboarding",
         source: row.source,
+        reviewedByLabel:
+          row.source === "admin_manual"
+            ? row.reviewer_display_name || row.reviewer_email?.split("@")[0] || "an admin"
+            : null,
         tiers: [],
       };
       byApplication.set(row.application_id, entry);

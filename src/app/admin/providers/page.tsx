@@ -155,7 +155,10 @@ export default async function AdminProvidersPage({
                       <span className="flex items-center gap-2">
                         {entry.providerName}
                         {entry.source === "admin_manual" && (
-                          <span className="rounded px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 bg-zinc-800">
+                          <span
+                            title={`Registered manually by ${entry.reviewedByLabel ?? "an admin"}`}
+                            className="rounded px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 bg-zinc-800"
+                          >
                             Manual
                           </span>
                         )}
