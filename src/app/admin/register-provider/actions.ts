@@ -5,15 +5,17 @@ import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { registerProviderTiers, type ApplicationFieldEdits, type RegisterTierInput } from "@/lib/provider-tiers";
+import { createManualProviderApplication } from "@/lib/provider-applications";
 
 function str(formData: FormData, key: string): string | null {
   const value = ((formData.get(key) as string) ?? "").trim();
   return value || null;
 }
 
-async function requireAdmin(): Promise<void> {
+async function requireAdmin(): Promise<string> {
   const session = await auth();
   if (!session?.user?.id || !isAdminUser(session.user)) throw new Error("forbidden");
+  return session.user.id;
 }
 
 function parseTiers(raw: string): RegisterTierInput[] {
@@ -53,8 +55,8 @@ export async function registerProviderAction(
   formData: FormData
 ): Promise<ActionResult> {
   return runAction("Failed to register provider", async () => {
-    await requireAdmin();
-    const applicationId = formData.get("applicationId") as string;
+    const adminUserId = await requireAdmin();
+    let applicationId = (formData.get("applicationId") as string)?.trim() || "";
     const tiersRaw = (formData.get("tiersJson") as string) ?? "[]";
     const tiers = parseTiers(tiersRaw);
     const edits: ApplicationFieldEdits = {
@@ -71,6 +73,14 @@ export async function registerProviderAction(
       tiersOffered: str(formData, "offeringDescription"),
     };
     if (!edits.name) throw new Error("Provider name is required");
+
+    if (!applicationId) {
+      const contactEmail = str(formData, "contactEmail");
+      if (!contactEmail) throw new Error("Contact email is required for manual registration");
+      const manual = await createManualProviderApplication({ name: edits.name, email: contactEmail }, adminUserId);
+      applicationId = manual.id;
+    }
+
     await registerProviderTiers(applicationId, tiers, edits);
     revalidatePath("/admin/register-provider");
     revalidatePath("/admin/provider-applications");

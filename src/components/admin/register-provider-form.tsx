@@ -39,13 +39,13 @@ export function RegisterProviderForm({
   application,
   action,
 }: {
-  application: ProviderApplicationRow;
+  application: ProviderApplicationRow | null;
   action: Action;
 }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(action, null);
   const [tiers, setTiers] = useState<TierDraft[]>(() => [
-    emptyTier({ host: application.host ?? "", port: application.port ?? "" }),
+    emptyTier({ host: application?.host ?? "", port: application?.port ?? "" }),
   ]);
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export function RegisterProviderForm({
   }
 
   function addTier() {
-    setTiers((prev) => [...prev, emptyTier({ host: application.host ?? "", port: application.port ?? "" })]);
+    setTiers((prev) => [...prev, emptyTier({ host: application?.host ?? "", port: application?.port ?? "" })]);
   }
 
   function removeTier(index: number) {
@@ -72,7 +72,7 @@ export function RegisterProviderForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
-      <input type="hidden" name="applicationId" value={application.id} />
+      <input type="hidden" name="applicationId" value={application?.id ?? ""} />
       <input type="hidden" name="tiersJson" value={JSON.stringify(tiers)} />
 
       {/* 1. Account */}
@@ -81,23 +81,23 @@ export function RegisterProviderForm({
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <label>
             <span className={LABEL}>Provider name</span>
-            <input className={INPUT} name="providerName" defaultValue={application.name} />
+            <input className={INPUT} name="providerName" defaultValue={application?.name ?? ""} />
           </label>
           <label>
             <span className={LABEL}>Contact name</span>
-            <input className={INPUT} name="contactName" defaultValue={application.contactName ?? ""} />
+            <input className={INPUT} name="contactName" defaultValue={application?.contactName ?? ""} />
           </label>
           <label>
             <span className={LABEL}>Contact email</span>
-            <input className={INPUT} name="contactEmail" defaultValue={application.email} />
+            <input className={INPUT} name="contactEmail" defaultValue={application?.email ?? ""} required={!application} />
           </label>
           <label>
             <span className={LABEL}>Country</span>
-            <input className={INPUT} name="country" defaultValue={application.country ?? ""} />
+            <input className={INPUT} name="country" defaultValue={application?.country ?? ""} />
           </label>
           <label>
             <span className={LABEL}>Timezone</span>
-            <input className={INPUT} name="timezone" defaultValue={application.timezone ?? ""} />
+            <input className={INPUT} name="timezone" defaultValue={application?.timezone ?? ""} />
           </label>
         </div>
       </section>
@@ -114,19 +114,19 @@ export function RegisterProviderForm({
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <label>
             <span className={LABEL}>Protocol</span>
-            <input className={INPUT} name="protocol" defaultValue={application.protocol ?? ""} />
+            <input className={INPUT} name="protocol" defaultValue={application?.protocol ?? ""} />
           </label>
           <label>
             <span className={LABEL}>Host</span>
-            <input className={`${INPUT} font-mono`} name="host" defaultValue={application.host ?? ""} />
+            <input className={`${INPUT} font-mono`} name="host" defaultValue={application?.host ?? ""} />
           </label>
           <label>
             <span className={LABEL}>Port</span>
-            <input className={`${INPUT} font-mono`} name="port" defaultValue={application.port ?? ""} />
+            <input className={`${INPUT} font-mono`} name="port" defaultValue={application?.port ?? ""} />
           </label>
           <label>
             <span className={LABEL}>Sender CompID</span>
-            <input className={`${INPUT} font-mono`} name="senderCompId" defaultValue={application.compid ?? ""} />
+            <input className={`${INPUT} font-mono`} name="senderCompId" defaultValue={application?.compid ?? ""} />
           </label>
         </div>
       </section>
@@ -137,16 +137,16 @@ export function RegisterProviderForm({
         <div className="mt-3 grid gap-3">
           <label>
             <span className={LABEL}>Offering description</span>
-            <textarea className={INPUT} name="offeringDescription" defaultValue={application.tiersOffered ?? ""} rows={2} />
+            <textarea className={INPUT} name="offeringDescription" defaultValue={application?.tiersOffered ?? ""} rows={2} />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label>
               <span className={LABEL}>Asset classes</span>
-              <input className={INPUT} name="assetClasses" defaultValue={application.coverage ?? ""} />
+              <input className={INPUT} name="assetClasses" defaultValue={application?.coverage ?? ""} />
             </label>
             <label>
               <span className={LABEL}>Regions</span>
-              <input className={INPUT} name="regions" defaultValue={application.regions ?? ""} />
+              <input className={INPUT} name="regions" defaultValue={application?.regions ?? ""} />
             </label>
           </div>
         </div>

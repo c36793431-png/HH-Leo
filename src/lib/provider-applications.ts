@@ -1,3 +1,4 @@
+import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
 import { notifyProviderApplicationSubmitted } from "./telemetry-sink";
 import { sendEmail } from "./email";
@@ -13,9 +14,13 @@ function notifyApplicantEmail(email: string, subject: string, text: string): Pro
 export const PROVIDER_APPLICATION_STATUSES = ["pending", "approved", "declined"] as const;
 export type ProviderApplicationStatus = (typeof PROVIDER_APPLICATION_STATUSES)[number];
 
+export const PROVIDER_APPLICATION_SOURCES = ["application", "admin_manual"] as const;
+export type ProviderApplicationSource = (typeof PROVIDER_APPLICATION_SOURCES)[number];
+
 export interface ProviderApplicationRow {
   id: string;
   userId: string | null;
+  source: ProviderApplicationSource;
   name: string;
   email: string;
   contactName: string | null;
@@ -41,6 +46,7 @@ export interface ProviderApplicationRow {
 interface Row {
   id: string;
   user_id: string | null;
+  source: string;
   name: string;
   email: string;
   contact_name: string | null;
@@ -67,6 +73,7 @@ function mapRow(row: Row): ProviderApplicationRow {
   return {
     id: row.id,
     userId: row.user_id,
+    source: row.source as ProviderApplicationSource,
     name: row.name,
     email: row.email,
     contactName: row.contact_name,
@@ -91,7 +98,7 @@ function mapRow(row: Row): ProviderApplicationRow {
 }
 
 const SELECT_BASE = `
-  select id, user_id, name, email, contact_name, country, timezone, website_url,
+  select id, user_id, source, name, email, contact_name, country, timezone, website_url,
          protocol, host, port, compid, regions, coverage, tiers_offered, notes, status,
          applied_at, reviewed_at, reviewed_by, admin_notes, onboarded_at
   from provider_applications
@@ -192,6 +199,34 @@ export async function listProviderApplications(
   return result.rows.map(mapRow);
 }
 
+/** Shared by approveProviderApplication and createManualProviderApplication: match an existing
+ * user by id (if already linked) or email, else create one with role 'feed_provider'. Must run
+ * inside the caller's transaction (takes the connected client, not the pool). */
+async function linkOrCreateProviderUser(
+  client: PoolClient,
+  email: string,
+  name: string,
+  existingUserId: string | null
+): Promise<string> {
+  let userId = existingUserId;
+  if (!userId) {
+    const matched = await client.query<{ id: string }>(`select id from users where lower(email) = lower($1)`, [
+      email,
+    ]);
+    userId = matched.rows[0]?.id ?? null;
+  }
+  if (userId) {
+    await client.query(`update users set role = 'feed_provider', updated_at = now() where id = $1`, [userId]);
+  } else {
+    const created = await client.query<{ id: string }>(
+      `insert into users (email, display_name, role) values ($1, $2, 'feed_provider') returning id`,
+      [email, name]
+    );
+    userId = created.rows[0].id;
+  }
+  return userId;
+}
+
 /** Approve = flip the applicant's user.role to 'feed_provider' + stamp the application row, in a
  * single transaction (mirrors approvePartnerApplication's account-linkage fallback: match an
  * existing user by user_id, else by email, else create one -- but as one atomic unit per the
@@ -205,22 +240,7 @@ export async function approveProviderApplication(id: string, actionedBy: string)
     if (!existing.rowCount) throw new Error("provider application not found");
     const application = mapRow(existing.rows[0]);
 
-    let userId = application.userId;
-    if (!userId) {
-      const matched = await client.query<{ id: string }>(`select id from users where lower(email) = lower($1)`, [
-        application.email,
-      ]);
-      userId = matched.rows[0]?.id ?? null;
-    }
-    if (userId) {
-      await client.query(`update users set role = 'feed_provider', updated_at = now() where id = $1`, [userId]);
-    } else {
-      const created = await client.query<{ id: string }>(
-        `insert into users (email, display_name, role) values ($1, $2, 'feed_provider') returning id`,
-        [application.email, application.name]
-      );
-      userId = created.rows[0].id;
-    }
+    const userId = await linkOrCreateProviderUser(client, application.email, application.name, application.userId);
 
     await client.query(
       `update provider_applications
@@ -239,6 +259,45 @@ export async function approveProviderApplication(id: string, actionedBy: string)
 
   const row = await getProviderApplication(id);
   if (!row) throw new Error("provider application not found after approval");
+  return row;
+}
+
+/** Admin-initiated direct onboarding (register-provider's manual mode, no public application on
+ * file -- e.g. a Black-tier partner coxwell recruits offline). Creates the provider_applications
+ * row already 'approved' with source='admin_manual', so it can flow into registerProviderTiers
+ * exactly like a pre-filled application. Per Iris's spec (iris-register-provider-manual-mode-
+ * 2026-08-24): same account-linkage rule as approve, just triggered at creation instead of at
+ * approval of a pre-existing pending row. */
+export async function createManualProviderApplication(
+  args: { name: string; email: string },
+  actionedBy: string
+): Promise<ProviderApplicationRow> {
+  const client = await pool.connect();
+  let id: string;
+  try {
+    await client.query("begin");
+
+    const userId = await linkOrCreateProviderUser(client, args.email, args.name, null);
+
+    const inserted = await client.query<{ id: string }>(
+      `insert into provider_applications
+         (name, email, status, source, user_id, applied_at, reviewed_at, reviewed_by)
+       values ($1, $2, 'approved', 'admin_manual', $3, now(), now(), $4)
+       returning id`,
+      [args.name, args.email, userId, actionedBy]
+    );
+    id = inserted.rows[0].id;
+
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  const row = await getProviderApplication(id);
+  if (!row) throw new Error("provider application not found after manual creation");
   return row;
 }
 
