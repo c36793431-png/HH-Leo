@@ -151,7 +151,16 @@ export default async function AdminProvidersPage({
                 .filter((entry) => filter === "all" || entry.status === "live")
                 .map((entry) => (
                   <tr key={entry.applicationId}>
-                    <td className="px-4 py-3 text-zinc-100">{entry.providerName}</td>
+                    <td className="px-4 py-3 text-zinc-100">
+                      <span className="flex items-center gap-2">
+                        {entry.providerName}
+                        {entry.source === "admin_manual" && (
+                          <span className="rounded px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 bg-zinc-800">
+                            Manual
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-zinc-300">
                       {entry.tiers.length > 0 ? (
                         <div className="flex flex-col gap-0.5">
