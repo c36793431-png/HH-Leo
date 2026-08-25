@@ -164,6 +164,24 @@ export function PortalSidebar({
           <span className={`brand-pill${tierClass ? ` ${tierClass}` : ""}`}>{tierLabel.toUpperCase()}</span>
         </div>
       </Link>
+      {isAdmin && (
+        <div className="host-switch" role="group" aria-label="Switch admin surface">
+          {adminSurface === "feed" ? (
+            <span className="host-seg active feed" aria-current="page">Feed</span>
+          ) : (
+            <a className="host-seg" href="https://feed.horizonhft.com/admin">
+              Feed<span className="arrow" aria-hidden="true">↗</span>
+            </a>
+          )}
+          {adminSurface === "portal" ? (
+            <span className="host-seg active portal" aria-current="page">Portal</span>
+          ) : (
+            <a className="host-seg" href="https://portal.horizonhft.com/dashboard">
+              Portal<span className="arrow" aria-hidden="true">↗</span>
+            </a>
+          )}
+        </div>
+      )}
       <nav className={`nav${isPaidPlus ? " paid-theme" : ""}`}>
         {!isAdmin && (
           <>

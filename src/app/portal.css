@@ -79,6 +79,20 @@
 .portal-shell .brand .txt .brand-pill.team { background: rgba(45, 226, 230, 0.14); color: var(--hz-cyan); border-color: rgba(45, 226, 230, 0.34); }
 .portal-shell .brand .txt .brand-pill.admin { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: rgba(255, 194, 75, 0.36); }
 
+.portal-shell .host-switch {
+  display: flex; margin: 0 22px 16px; padding: 3px; gap: 2px;
+  background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hz-line-soft); border-radius: 10px;
+}
+.portal-shell .host-switch .host-seg {
+  flex: 1; text-align: center; padding: 7px 0; border-radius: 8px;
+  font-family: var(--hz-sans); font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--hz-ink-3); text-decoration: none; transition: background 0.12s, color 0.12s;
+}
+.portal-shell .host-switch a.host-seg:hover { background: rgba(255, 255, 255, 0.05); color: var(--hz-ink-2); }
+.portal-shell .host-switch .host-seg .arrow { margin-left: 4px; opacity: 0.6; }
+.portal-shell .host-switch .host-seg.active.feed { background: rgba(45, 212, 191, 0.16); color: #2dd4bf; }
+.portal-shell .host-switch .host-seg.active.portal { background: rgba(45, 226, 230, 0.16); color: var(--hz-cyan); }
+
 .portal-shell .nav { flex: 1; overflow-y: auto; padding: 6px 14px; }
 .portal-shell .nav .grp { font-size: 10px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hz-ink-4); padding: 16px 12px 8px; }
 .portal-shell .nav a {
