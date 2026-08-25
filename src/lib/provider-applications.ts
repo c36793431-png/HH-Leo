@@ -183,6 +183,7 @@ export async function getProviderApplication(id: string): Promise<ProviderApplic
 
 export interface ListProviderApplicationsOptions {
   status?: ProviderApplicationStatus;
+  search?: string;
 }
 
 export async function listProviderApplications(
@@ -194,9 +195,31 @@ export async function listProviderApplications(
     params.push(options.status);
     conditions.push(`status = $${params.length}`);
   }
+  if (options.search) {
+    params.push(`%${options.search}%`);
+    conditions.push(`(name ilike $${params.length} or email ilike $${params.length})`);
+  }
   const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
   const result = await pool.query<Row>(`${SELECT_BASE} ${where} order by applied_at desc`, params);
   return result.rows.map(mapRow);
+}
+
+export interface ProviderApplicationStats {
+  pendingCount: number;
+  approvedCount: number;
+  declinedCount: number;
+}
+
+export async function getProviderApplicationStats(): Promise<ProviderApplicationStats> {
+  const result = await pool.query<{ status: string; count: string }>(
+    `select status, count(*) as count from provider_applications group by status`
+  );
+  const byStatus = new Map(result.rows.map((r) => [r.status, Number(r.count)]));
+  return {
+    pendingCount: byStatus.get("pending") ?? 0,
+    approvedCount: byStatus.get("approved") ?? 0,
+    declinedCount: byStatus.get("declined") ?? 0,
+  };
 }
 
 /** Shared by approveProviderApplication and createManualProviderApplication: match an existing
