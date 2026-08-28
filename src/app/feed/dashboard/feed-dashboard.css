@@ -47,13 +47,7 @@
   display: flex; flex-direction: column; z-index: 40;
 }
 .feed-provider-v1 .fp-brand { display: flex; align-items: center; gap: 12px; padding: 22px 22px 20px; }
-.feed-provider-v1 .fp-brand .glyph {
-  width: 38px; height: 38px; border-radius: 10px;
-  background: linear-gradient(135deg, var(--pfp-cyan), #0b6e78);
-  display: flex; align-items: center; justify-content: center; color: #02171a;
-  font-family: var(--pfp-disp); font-weight: 800; font-size: 22px;
-  box-shadow: 0 4px 18px rgba(45, 226, 230, 0.35);
-}
+.feed-provider-v1 .fp-brand .glyph-img { width: 38px; height: 38px; object-fit: contain; background: transparent; flex: 0 0 auto; }
 .feed-provider-v1 .fp-brand .txt { font-family: var(--pfp-disp); font-weight: 800; font-size: 22px; letter-spacing: 0.04em; line-height: 1; }
 .feed-provider-v1 .fp-brand .txt small { display: block; font-family: var(--pfp-sans); font-weight: 600; font-size: 10px; letter-spacing: 0.3em; color: var(--pfp-cyan); margin-top: 3px; }
 .feed-provider-v1 .fp-nav { flex: 1; overflow-y: auto; padding: 6px 14px; }

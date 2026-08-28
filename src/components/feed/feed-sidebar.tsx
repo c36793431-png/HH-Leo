@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -32,7 +33,7 @@ export function FeedSidebar({
   return (
     <aside className="fp-sidebar">
       <div className="fp-brand">
-        <div className="glyph">H</div>
+        <Image src="/logo.png" alt="Horizon" width={38} height={38} className="glyph-img" priority />
         <div className="txt">
           HORIZON
           <small>PROVIDER PANEL</small>
