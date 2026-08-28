@@ -271,7 +271,7 @@ export async function listConnectionOverview(): Promise<ConnectionOverviewRow[]>
      left join latest on latest.license_id = li.license_id
      left join licenses l on l.id = li.license_id
      left join users u on u.id = l.user_id
-     order by latest.captured_at desc nulls last`
+     order by coalesce(latest.captured_at, sr.updated_at) desc nulls last`
   );
 
   return Promise.all(

@@ -37,7 +37,7 @@ export async function saveServerRegistrationAction(
     await saveServerRegistration(
       licenseId,
       { serverName, vpsProvider, vpsProviderOther, serverLocation, declaredIp },
-      `/admin/connections?license=${licenseId}`,
+      `https://portal.horizonhft.com/admin/connections/${licenseId}`,
       email
     );
     revalidatePath("/account/servers");

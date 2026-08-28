@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (result.licenseId) {
-    captureConnectionIp(result.licenseId, ip, "validate", `/admin/connections?license=${result.licenseId}`).catch(
+    captureConnectionIp(result.licenseId, ip, "validate", `https://portal.horizonhft.com/admin/connections/${result.licenseId}`).catch(
       () => {}
     );
   }

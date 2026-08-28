@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       result.licenseId,
       ip,
       "verify-license",
-      `/admin/connections?license=${result.licenseId}`
+      `https://portal.horizonhft.com/admin/connections/${result.licenseId}`
     ).catch(() => {});
   }
 
