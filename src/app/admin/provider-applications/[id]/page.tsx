@@ -101,12 +101,18 @@ const REVIEW_CHECKLIST = [
   "No existing provider already on file for this company",
 ];
 
-/** Read-only application detail view -- 4 sections mirroring feed-apply.html's form structure
+/** Read-only application detail view -- sections mirroring feed-apply.html's form structure
  * (Company & contact / Feed connection / What they'll offer / Notes & source), plus a right rail
  * (decision block / review checklist / meta) per marcus's
  * feed-admin-provider-applications-rebuild-2026-08-25 manifest. This is intentionally not
  * register-provider: no editing, no tier/price fields -- approve still hands off into
- * register-provider to mint the tiers. */
+ * register-provider to mint the tiers.
+ *
+ * Feed connection only renders when at least one of its fields is non-null: the public apply
+ * form stopped collecting them (12388f5), so new applications have all five null, but legacy
+ * rows submitted before that change still carry real applicant-supplied data that must keep
+ * showing. Section numbers below the gap are computed, not literals -- they shift when the
+ * block is absent. */
 export default async function AdminProviderApplicationDetailPage({
   params,
 }: {
@@ -115,6 +121,15 @@ export default async function AdminProviderApplicationDetailPage({
   const { id } = await params;
   const application = await getProviderApplication(id);
   if (!application) notFound();
+
+  const hasFeedConnection = Boolean(
+    application.protocol || application.host || application.port || application.compid || application.regions
+  );
+  let sectionNum = 1;
+  const companyContactNum = sectionNum++;
+  const feedConnectionNum = hasFeedConnection ? sectionNum++ : null;
+  const offerNum = sectionNum++;
+  const notesNum = sectionNum++;
 
   return (
     <div className="flex flex-1 flex-col gap-6">
@@ -140,7 +155,7 @@ export default async function AdminProviderApplicationDetailPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
         <div className="flex flex-col gap-6">
-          <Section num={1} title="Company & contact">
+          <Section num={companyContactNum} title="Company & contact">
             <Field label="Company / feed provider name" value={application.name} />
             <Field label="Primary contact email" value={application.email} />
             <Field label="Contact display name" value={application.contactName} />
@@ -149,15 +164,17 @@ export default async function AdminProviderApplicationDetailPage({
             <Field label="Website / feed documentation URL" value={application.websiteUrl} href={application.websiteUrl ?? undefined} />
           </Section>
 
-          <Section num={2} title="Feed connection" badge="APPLICANT-SUPPLIED · VERIFY AT REGISTER">
-            <ChipField label="Feed protocol(s)" value={application.protocol} />
-            <Field label="Host endpoint" value={application.host} />
-            <Field label="Port" value={application.port} />
-            <Field label="CompID / stream id" value={application.compid} />
-            <ChipField label="Regions" value={application.regions} />
-          </Section>
+          {feedConnectionNum !== null && (
+            <Section num={feedConnectionNum} title="Feed connection" badge="APPLICANT-SUPPLIED · VERIFY AT REGISTER">
+              <ChipField label="Feed protocol(s)" value={application.protocol} />
+              <Field label="Host endpoint" value={application.host} />
+              <Field label="Port" value={application.port} />
+              <Field label="CompID / stream id" value={application.compid} />
+              <ChipField label="Regions" value={application.regions} />
+            </Section>
+          )}
 
-          <Section num={3} title="What they'll offer" badge="NO PRICES — SET AT REGISTER">
+          <Section num={offerNum} title="What they'll offer" badge="NO PRICES — SET AT REGISTER">
             <Field label="Asset classes / instruments covered" value={application.coverage} />
             <Field label="Tiers offered" value={application.tiersOffered} />
           </Section>
@@ -165,7 +182,7 @@ export default async function AdminProviderApplicationDetailPage({
           <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
             <div className="mb-4 flex items-center gap-2 text-sm font-medium text-zinc-200">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-[11px] text-zinc-400">
-                4
+                {notesNum}
               </span>
               Notes & source
             </div>
