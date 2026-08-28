@@ -3,6 +3,7 @@ import { notifyPartnerApplicationSubmitted } from "./telemetry-sink";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
 import { sendEmail } from "./email";
 import { createPartner, getPartnerByUserId } from "./partners";
+import { resolveAdminUserId } from "./admin";
 
 export const PARTNER_APPLICATION_STATUSES = ["pending", "approved", "declined"] as const;
 export type PartnerApplicationStatus = (typeof PARTNER_APPLICATION_STATUSES)[number];
@@ -162,6 +163,22 @@ async function actionApplication(
   return row;
 }
 
+/** Same audit gap as provider-applications.ts's linkOrCreateProviderUser: overwriting an
+ * existing user's role destroys any record of what it was before. Mirrors that fix
+ * exactly -- read the prior role, then log the conversion to the same admin_actions
+ * table before applying it. */
+async function recordPartnerRoleConversion(userId: string, actionedBy: string): Promise<void> {
+  const previous = await pool.query<{ role: string }>(`select role from users where id = $1`, [userId]);
+  const previousRole = previous.rows[0]?.role ?? null;
+  await pool.query(`update users set role = 'partner', updated_at = now() where id = $1`, [userId]);
+  const resolvedAdminUserId = await resolveAdminUserId(actionedBy);
+  await pool.query(
+    `insert into admin_actions (admin_user_id, action_type, target_user_id, details_json)
+     values ($1, $2, $3, $4)`,
+    [resolvedAdminUserId, "partner_role_conversion", userId, JSON.stringify({ from: previousRole, to: "partner" })]
+  );
+}
+
 export async function approvePartnerApplication(
   id: string,
   actionedBy: string,
@@ -170,7 +187,7 @@ export async function approvePartnerApplication(
   let row = await actionApplication(id, "approved", actionedBy, adminNotes);
 
   if (row.userId) {
-    await pool.query(`update users set role = 'partner', updated_at = now() where id = $1`, [row.userId]);
+    await recordPartnerRoleConversion(row.userId, actionedBy);
   } else {
     // Hybrid account-linkage (leo-partner-page-broken-auth-buttons-2026-08-22): re-check
     // for an account created between apply-time and approve-time before creating a new
@@ -180,7 +197,7 @@ export async function approvePartnerApplication(
     ]);
     let userId = matched.rows[0]?.id ?? null;
     if (userId) {
-      await pool.query(`update users set role = 'partner', updated_at = now() where id = $1`, [userId]);
+      await recordPartnerRoleConversion(userId, actionedBy);
     } else {
       const created = await pool.query<{ id: string }>(
         `insert into users (email, display_name, role) values ($1, $2, 'partner') returning id`,
