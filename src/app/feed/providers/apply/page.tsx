@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ProviderApplyForm } from "@/components/feed/provider-apply-form";
 import "./feed-apply.css";
@@ -27,14 +28,7 @@ export default function ProviderApplyPage() {
         <nav className="fap-nav">
           <Link className="fap-brand" href="/">
             <span className="fap-glyph">
-              <svg viewBox="0 0 48 48" fill="none" aria-label="Horizon HFT">
-                <g stroke="#041A1E" strokeWidth={3.2} strokeLinecap="round">
-                  <line x1="16" y1="13" x2="16" y2="35" />
-                  <line x1="32" y1="13" x2="32" y2="35" />
-                  <line x1="13.5" y1="24" x2="34.5" y2="24" />
-                </g>
-                <path d="M19 24a5 5 0 0 1 10 0" fill="none" stroke="#041A1E" strokeWidth={2.4} strokeLinecap="round" />
-              </svg>
+              <Image src="/logo-feed.png" alt="Horizon HFT" width={42} height={42} priority />
             </span>
             <span className="fap-txt">
               HORIZON
@@ -63,14 +57,7 @@ export default function ProviderApplyPage() {
         <main className="fap-applywrap">
           <div className="fap-head">
             <span className="fap-pb-seal" aria-hidden="true">
-              <svg viewBox="0 0 48 48" fill="none">
-                <g stroke="currentColor" strokeWidth={3.2} strokeLinecap="round">
-                  <line x1="16" y1="13" x2="16" y2="35" />
-                  <line x1="32" y1="13" x2="32" y2="35" />
-                  <line x1="13.5" y1="24" x2="34.5" y2="24" />
-                </g>
-                <path d="M19 24a5 5 0 0 1 10 0" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" />
-              </svg>
+              <Image src="/logo-feed.png" alt="" width={28} height={28} />
             </span>
             <div className="fap-eyebrow">
               <span className="dot" />
