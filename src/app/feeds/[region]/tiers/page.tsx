@@ -137,6 +137,12 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
         <div className="ftd-server-banner">
           <span className="lbl">Server</span>
           <span className="val">{serverRegistration.serverName}</span>
+          <span className="val">
+            ·{" "}
+            {serverRegistration.vpsProviderOther
+              ? `${serverRegistration.vpsProvider} (${serverRegistration.vpsProviderOther})`
+              : serverRegistration.vpsProvider}
+          </span>
           <span className="val">· {serverRegistration.declaredIp}</span>
           <span className="verified">✓ Verified</span>
           <Link href="/account/servers" className="change-link">

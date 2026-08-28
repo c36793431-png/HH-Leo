@@ -5,6 +5,7 @@ import { listPendingRequestsForProvider, listActiveTrialsForProvider, listTiersF
 import { formatRelative } from "@/lib/format-time";
 import { getBotLink } from "@/lib/telegram-bot-links";
 import { FEEDS_BOT_KEY } from "@/lib/telegram-feeds-bot";
+import { getActiveSubscriberCountForProvider } from "@/lib/feed-subscriptions";
 
 const TYPE_ICON: Record<string, string> = { pending: "🧪", approved: "✓", rejected: "✗", provisioned: "💳" };
 
@@ -12,11 +13,12 @@ export default async function FeedOverviewPage() {
   const session = await auth();
   const providerId = session!.user!.id!;
 
-  const [pending, trials, tiers, telegramLink] = await Promise.all([
+  const [pending, trials, tiers, telegramLink, subscriberCount] = await Promise.all([
     listPendingRequestsForProvider(providerId),
     listActiveTrialsForProvider(providerId),
     listTiersForProvider(providerId),
     getBotLink(providerId, FEEDS_BOT_KEY),
+    getActiveSubscriberCountForProvider(providerId),
   ]);
 
   const oldest = pending[pending.length - 1];
@@ -57,6 +59,13 @@ export default async function FeedOverviewPage() {
                 Manage →
               </Link>
             </div>
+          </div>
+          <div className="stat">
+            <div className="lab">
+              <span className="si">◎</span> Subscribers
+            </div>
+            <div className="val">{subscriberCount}</div>
+            <div className="sub">trial + active, across your packages</div>
           </div>
           <div className={`stat${pending.length > 0 ? " hot" : ""}`}>
             <div className="lab">
