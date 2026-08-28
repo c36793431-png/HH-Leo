@@ -6,10 +6,12 @@ import {
   USERS_TIER_BUCKETS,
   type AdminUserRow,
   type HasLicenseFilter,
+  type RoleFilter,
   type SignupSourceFilter,
   type UsersSortColumn,
   type UsersTierBucket,
 } from "@/lib/licenses";
+import { ALL_USER_ROLES, ROLE_LABELS, type UserRole } from "@/lib/admin-user-roles";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
 import { ActionButton } from "@/components/admin/action-button";
@@ -36,6 +38,7 @@ const PER_PAGE = 50;
 
 const HAS_LICENSE_VALUES: HasLicenseFilter[] = ["active", "expiring", "expired", "revoked", "none"];
 const SIGNUP_SOURCE_VALUES: SignupSourceFilter[] = ["telegram", "email-link", "both"];
+const ROLE_VALUES: readonly RoleFilter[] = ALL_USER_ROLES;
 const SORT_COLUMNS: { key: UsersSortColumn; label: string }[] = [
   { key: "joined_at", label: "Joined" },
   { key: "last_verified_at", label: "Last verified" },
@@ -72,6 +75,7 @@ interface RawSearchParams {
   q?: string;
   hasLicense?: string;
   signupSource?: string;
+  role?: string;
   tab?: string;
   sort?: string;
   dir?: string;
@@ -109,6 +113,7 @@ export default async function AdminUsersPage({
   const signupSource = SIGNUP_SOURCE_VALUES.includes(sp.signupSource as SignupSourceFilter)
     ? (sp.signupSource as SignupSourceFilter)
     : undefined;
+  const role = ROLE_VALUES.includes(sp.role as RoleFilter) ? (sp.role as RoleFilter) : undefined;
   const tierBucket = USERS_TIER_BUCKETS.includes(sp.tab as UsersTierBucket)
     ? (sp.tab as UsersTierBucket)
     : undefined;
@@ -118,6 +123,7 @@ export default async function AdminUsersPage({
     search,
     hasLicense,
     signupSource,
+    role,
     tierBucket,
     sort,
     dir,
@@ -202,6 +208,21 @@ export default async function AdminUsersPage({
             ))}
           </select>
         </div>
+        <div>
+          <label className="block text-xs text-zinc-500">Role</label>
+          <select
+            name="role"
+            defaultValue={sp.role ?? ""}
+            className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"
+          >
+            <option value="">Any</option>
+            {ROLE_VALUES.map((v) => (
+              <option key={v} value={v}>
+                {ROLE_LABELS[v]}
+              </option>
+            ))}
+          </select>
+        </div>
         <input type="hidden" name="sort" value={sort} />
         <input type="hidden" name="dir" value={dir} />
         {tierBucket && <input type="hidden" name="tab" value={tierBucket} />}
@@ -211,7 +232,7 @@ export default async function AdminUsersPage({
         >
           Filter
         </button>
-        {(search || hasLicense || signupSource) && (
+        {(search || hasLicense || signupSource || role) && (
           <Link href="/admin/users" className="text-xs text-zinc-500 hover:text-zinc-300 hover:underline">
             Clear filters
           </Link>
@@ -224,6 +245,7 @@ export default async function AdminUsersPage({
             <thead className="text-zinc-500">
               <tr>
                 <th className="pb-2 pr-4">Email</th>
+                <th className="pb-2 pr-4">Role</th>
                 <th className="pb-2 pr-4">Telegram</th>
                 <th className="pb-2 pr-4">Source</th>
                 <th className="pb-2 pr-4">
@@ -280,6 +302,7 @@ export default async function AdminUsersPage({
                         {u.email ?? u.displayName ?? "—"}
                       </Link>
                     </td>
+                    <td className="py-2 pr-4 text-zinc-400">{ROLE_LABELS[u.role as UserRole] ?? u.role}</td>
                     <td className="py-2 pr-4 text-zinc-400">
                       {u.telegramUsername ? `@${u.telegramUsername}` : "—"}
                     </td>
@@ -393,8 +416,8 @@ export default async function AdminUsersPage({
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="py-4 text-center text-zinc-500">
-                    {search || hasLicense || signupSource
+                  <td colSpan={13} className="py-4 text-center text-zinc-500">
+                    {search || hasLicense || signupSource || role
                       ? "No users match these filters."
                       : "No users yet."}
                   </td>

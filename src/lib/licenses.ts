@@ -7,6 +7,7 @@ import {
   notifyLicenseRevoked,
 } from "./telemetry-sink";
 import { insertPayment } from "./payments";
+import type { UserRole } from "./admin-user-roles";
 import { maybeCreateReferralEarning } from "./referrals";
 
 /** Single source of truth for the active/expiring/expired/revoked bucket shown on every
@@ -564,6 +565,7 @@ export interface AdminUserRow {
 
 export type HasLicenseFilter = "active" | "expiring" | "expired" | "revoked" | "none";
 export type SignupSourceFilter = "telegram" | "email-link" | "both";
+export type RoleFilter = UserRole;
 export type UsersSortColumn = "joined_at" | "last_verified_at" | "expires_at";
 export type SortDir = "asc" | "desc";
 
@@ -575,6 +577,7 @@ export interface ListUsersOptions {
   search?: string;
   hasLicense?: HasLicenseFilter;
   signupSource?: SignupSourceFilter;
+  role?: RoleFilter;
   tierBucket?: UsersTierBucket;
   sort?: UsersSortColumn;
   dir?: SortDir;
@@ -626,6 +629,10 @@ export async function listAllUsersWithLicenses(
   if (options.signupSource) {
     params.push(options.signupSource);
     conditions.push(`${SIGNUP_SOURCE_SQL} = $${params.length}`);
+  }
+  if (options.role) {
+    params.push(options.role);
+    conditions.push(`u.role = $${params.length}`);
   }
   if (options.tierBucket === "admin") {
     conditions.push(`u.role = 'admin'`);
