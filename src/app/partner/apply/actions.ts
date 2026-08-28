@@ -3,6 +3,7 @@
 import { createPartnerApplication } from "@/lib/partner-applications";
 import { runAction, type ActionResult } from "@/lib/action-result";
 
+// Host is load-bearing: partner-applications review lives on portal-admin today -- revisit if it moves surfaces.
 const PARTNERAPP_ADMIN_URL = "https://portal.horizonhft.com/admin/partner-applications";
 
 /** Public /apply form on partner.horizonhft.com -- no auth required, mirrors
