@@ -158,8 +158,7 @@ export default async function ProviderApplyPage() {
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
               <span>
-                Your connection details are used only to verify your feed. We never publish them, and no tier goes
-                live until you and our team agree the terms.
+                No tier goes live until you and our team agree the terms.
               </span>
             </div>
           </aside>
