@@ -161,9 +161,9 @@ export default async function DashboardPage() {
               <a className="btn primary" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
                 ⚡ Upgrade to Paid
               </a>
-              <a className="btn ghost" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
+              <Link className="btn ghost" href="/whats-included">
                 See what&apos;s included
-              </a>
+              </Link>
               <span className="note">Licenses are issued manually · typically &lt; 1h</span>
             </div>
           </div>
