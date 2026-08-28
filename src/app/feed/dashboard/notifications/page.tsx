@@ -1,10 +1,22 @@
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
+import { TelegramDeliveryControl } from "@/components/feed/telegram-delivery-control";
+import { auth } from "@/lib/auth";
+import { getBotLink } from "@/lib/telegram-bot-links";
+import { FEEDS_BOT_KEY } from "@/lib/telegram-feeds-bot";
+import { createFeedsOnboardingToken } from "@/lib/telegram-feeds-onboarding";
 
-/** Static UI port of mockups/horizon-providers/notifications.html -- no notification-prefs
- * table or Feed Provider Bot exist yet (spec §1 is a new dedicated Telegram bot, unbuilt),
- * so the toggles below are inert display only, not wired to a backend. Flagged to marcus as
- * follow-up scope, not silently faked as live. */
-export default function FeedNotificationsPage() {
+/** Static UI port of mockups/horizon-providers/notifications.html. Telegram delivery
+ * (bus thread provider-telegram-linking-build-2026-08-28) is now real via the shared
+ * @HorizonFeedsBot -- see the delivery control card below. The per-event toggles below
+ * that remain inert display only: no notification-prefs table exists yet to store which
+ * events a provider wants, so there's nothing for delivery to read from. */
+export default async function FeedNotificationsPage() {
+  const session = await auth();
+  const providerId = session!.user!.id!;
+
+  const link = await getBotLink(providerId, FEEDS_BOT_KEY);
+  const onboarding = !link ? await createFeedsOnboardingToken(providerId).catch(() => null) : null;
+
   return (
     <>
       <header className="fp-topbar">
@@ -20,8 +32,24 @@ export default function FeedNotificationsPage() {
         <div className="banner info">
           <span className="bic">✈</span>
           <div>
-            <b>Preview only</b> — the dedicated Feed Provider Bot (spec §1) and a per-event notification-prefs
-            table don&apos;t exist yet. These toggles show the intended design and aren&apos;t wired to a backend.
+            <b>Toggle prefs preview only</b> — Telegram delivery below is real (linking, unlinking, and sending a
+            test message all work). The per-event toggles further down don&apos;t have a notification-prefs table
+            behind them yet, so they show the intended design without controlling what actually gets sent.
+          </div>
+        </div>
+
+        <div className="card full" style={{ marginBottom: 18 }}>
+          <div className="chead">
+            <span className="ic">✈</span>
+            <h3>Delivery</h3>
+            <span className="cap">where events get sent</span>
+          </div>
+          <div className="nlist">
+            <TelegramDeliveryControl
+              linked={!!link}
+              telegramUsername={link?.telegramUsername ?? null}
+              linkHref={onboarding?.link ?? null}
+            />
           </div>
         </div>
 
@@ -29,7 +57,7 @@ export default function FeedNotificationsPage() {
           <div className="chead">
             <span className="ic">✦</span>
             <h3>Account &amp; subscription events</h3>
-            <span className="cap">4 events · not yet wired</span>
+            <span className="cap">4 events · toggle prefs not yet wired</span>
           </div>
           <div className="nlist">
             {[
