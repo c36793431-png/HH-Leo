@@ -134,6 +134,7 @@
 .feed-provider-v1 .tb.active { background: rgba(55, 245, 160, 0.12); color: var(--pfp-ok); border: 1px solid rgba(55, 245, 160, 0.3); }
 .feed-provider-v1 .tb.review { background: rgba(255, 194, 75, 0.12); color: var(--pfp-warn); border: 1px solid rgba(255, 194, 75, 0.32); }
 .feed-provider-v1 .tb.draft { background: rgba(138, 155, 160, 0.12); color: var(--pfp-grey); border: 1px solid rgba(138, 155, 160, 0.3); }
+.feed-provider-v1 .tb.lapsed { background: rgba(255, 92, 122, 0.12); color: var(--pfp-bad); border: 1px solid rgba(255, 92, 122, 0.32); }
 
 /* approval queue rows */
 .feed-provider-v1 .q { display: flex; flex-direction: column; gap: 10px; }
