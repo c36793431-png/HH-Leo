@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -152,17 +153,22 @@ export default async function DashboardPage() {
 
       {!paid && !isAdmin && (
         <div className="hero">
-          <div className="eyebrow">Free tier</div>
-          <h2>Unlock the full Horizon HFT terminal</h2>
-          <p>{config.pricingDisplay}</p>
-          <div className="row">
-            <a className="btn primary" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
-              ⚡ Upgrade to Paid
-            </a>
-            <a className="btn ghost" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
-              See what&apos;s included
-            </a>
-            <span className="note">Licenses are issued manually · typically &lt; 1h</span>
+          <div className="hero-content">
+            <div className="eyebrow">Free tier</div>
+            <h2>Unlock the full Horizon HFT terminal</h2>
+            <p>{config.pricingDisplay}</p>
+            <div className="row">
+              <a className="btn primary" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
+                ⚡ Upgrade to Paid
+              </a>
+              <a className="btn ghost" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
+                See what&apos;s included
+              </a>
+              <span className="note">Licenses are issued manually · typically &lt; 1h</span>
+            </div>
+          </div>
+          <div className="hero-image">
+            <Image src="/hero-terminal-2x.png" alt="Horizon HFT terminal" width={340} height={210} priority />
           </div>
         </div>
       )}

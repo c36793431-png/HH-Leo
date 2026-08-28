@@ -231,16 +231,23 @@
   position: relative; overflow: hidden; border-radius: 16px; padding: 26px 28px; margin-bottom: 24px;
   background: linear-gradient(120deg, rgba(6, 182, 212, 0.16), rgba(20, 184, 166, 0.06) 60%, transparent), var(--hz-panel);
   border: 1px solid var(--hz-card-line); box-shadow: 0 0 40px rgba(6, 182, 212, 0.1);
+  display: flex; align-items: center; justify-content: space-between; gap: 28px;
 }
 .portal-shell .hero::after {
   content: ""; position: absolute; right: -40px; top: -40px; width: 240px; height: 240px; border-radius: 50%;
   background: radial-gradient(circle, rgba(45, 226, 230, 0.22), transparent 70%); pointer-events: none;
 }
+.portal-shell .hero .hero-content { flex: 1 1 auto; min-width: 0; }
 .portal-shell .hero .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: var(--hz-cyan); }
 .portal-shell .hero h2 { font-family: var(--hz-disp); font-weight: 800; font-size: 32px; line-height: 1.05; margin: 8px 0 8px; max-width: 600px; }
 .portal-shell .hero p { color: var(--hz-ink-2); font-size: 14px; max-width: 560px; line-height: 1.5; }
 .portal-shell .hero .row { display: flex; align-items: center; gap: 14px; margin-top: 18px; flex-wrap: wrap; }
 .portal-shell .hero .note { font-family: var(--hz-mono); font-size: 12px; color: var(--hz-ink-3); }
+.portal-shell .hero .hero-image {
+  position: relative; z-index: 1; flex: none; width: 340px; height: 210px; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+.portal-shell .hero .hero-image img { width: 100%; height: 100%; object-fit: cover; }
 
 /* ---- BUTTONS ---- */
 .portal-shell .btn { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: 14px; border-radius: 11px; padding: 12px 20px; cursor: pointer; border: 1px solid transparent; }
@@ -834,6 +841,8 @@
   .portal-shell .feed-grid { grid-template-columns: 1fr 1fr; }
   .portal-shell .metrics { margin-left: 0; width: 100%; justify-content: space-between; }
   .portal-shell .hero h2, .portal-shell .edu-hero h2 { font-size: 26px; }
+  .portal-shell .hero { flex-wrap: wrap; }
+  .portal-shell .hero .hero-image { display: none; }
   .portal-shell .edu-stats { gap: 22px; }
   .portal-shell .lesson-locked-cta { flex-wrap: wrap; }
   .portal-shell .lesson-locked-cta .upgrade { margin-left: 0; }
