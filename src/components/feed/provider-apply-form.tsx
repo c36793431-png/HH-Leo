@@ -5,9 +5,6 @@ import { useState, useTransition } from "react";
 import { createProviderApplicationAction } from "@/app/feed/providers/apply/actions";
 import { emitToast } from "@/lib/toast-bus";
 
-const PROTOCOL_SUGGESTIONS = ["FIX 4.4", "FIX 4.2", "ITCH", "OUCH", "Binary", "WebSocket"];
-const REGION_SUGGESTIONS = ["LD4", "NY4", "FR2", "TY3", "CH1", "AISG"];
-
 function maskEmail(email: string): string {
   const [user, domain] = email.split("@");
   if (!domain) return email;
@@ -26,8 +23,6 @@ export function ProviderApplyForm() {
   const [submitted, setSubmitted] = useState<{ email: string; referenceId: string } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [protocol, setProtocol] = useState("");
-  const [regions, setRegions] = useState("");
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -153,98 +148,10 @@ export function ProviderApplyForm() {
         </div>
       </div>
 
-      {/* 2. YOUR FEED — optional now */}
+      {/* 2. WHAT YOU'LL OFFER — no price fields */}
       <div className="fap-fieldset">
         <div className="fap-legend">
-          <span className="num">2</span> Your feed <span className="opt">Optional now</span>
-        </div>
-        <p className="fap-set-sub">
-          Share what you can — we verify the endpoint before go-live, so blanks are fine. These map straight to the
-          connection our team confirms at registration.
-        </p>
-        <div className="fap-field">
-          <label>Feed protocol</label>
-          <input
-            className="fap-inp mono"
-            name="protocol"
-            type="text"
-            maxLength={24}
-            placeholder="e.g. FIX 4.4 — or your own"
-            value={protocol}
-            onChange={(e) => setProtocol(e.target.value)}
-            disabled={isPending}
-          />
-          <div className="fap-chips" role="group" aria-label="Protocol suggestions">
-            {PROTOCOL_SUGGESTIONS.map((opt) => (
-              <button
-                type="button"
-                className="chip"
-                key={opt}
-                onClick={() => setProtocol(opt)}
-                disabled={isPending}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-          <div className="fap-hint">State the protocol your feed speaks. We show this to reviewers exactly as you enter it.</div>
-        </div>
-        <div className="fap-field">
-          <label>Host endpoint</label>
-          <input className="fap-inp mono" name="host" type="text" placeholder="fix.sigma-md.io" disabled={isPending} />
-        </div>
-        <div className="fap-field-row">
-          <div className="fap-field">
-            <label>Port</label>
-            <input className="fap-inp mono" name="port" type="text" placeholder="9443" disabled={isPending} />
-          </div>
-          <div className="fap-field">
-            <label>CompID / stream id</label>
-            <input className="fap-inp mono" name="compid" type="text" placeholder="SIGMA_MD" disabled={isPending} />
-          </div>
-        </div>
-        <div className="fap-field">
-          <label>Region / datacentre</label>
-          <input
-            className="fap-inp mono"
-            name="regions"
-            type="text"
-            maxLength={32}
-            placeholder="e.g. LD4 · NY4"
-            value={regions}
-            onChange={(e) => setRegions(e.target.value)}
-            disabled={isPending}
-          />
-          <div className="fap-chips" role="group" aria-label="Region suggestions">
-            {REGION_SUGGESTIONS.map((opt) => (
-              <button
-                type="button"
-                className="chip"
-                key={opt}
-                onClick={() =>
-                  setRegions((prev) => {
-                    const existing = prev
-                      .split(/[,·]+/)
-                      .map((s) => s.trim())
-                      .filter(Boolean);
-                    if (existing.includes(opt)) return prev;
-                    return existing.length ? `${existing.join(", ")}, ${opt}` : opt;
-                  })
-                }
-                disabled={isPending}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-          <div className="fap-hint">Where your feed is served from. Add more than one, separated by a comma.</div>
-        </div>
-      </div>
-
-      {/* 3. WHAT YOU'LL OFFER — no price fields */}
-      <div className="fap-fieldset">
-        <div className="fap-legend">
-          <span className="num">3</span> What you&apos;ll offer
+          <span className="num">2</span> What you&apos;ll offer
         </div>
         <p className="fap-set-sub">
           Describe the coverage and tiers you&apos;d publish. Pricing and the exact tier bindings
@@ -281,10 +188,10 @@ export function ProviderApplyForm() {
         </div>
       </div>
 
-      {/* 4. ANYTHING ELSE + CONSENT */}
+      {/* 3. ANYTHING ELSE + CONSENT */}
       <div className="fap-fieldset">
         <div className="fap-legend">
-          <span className="num">4</span> Anything else
+          <span className="num">3</span> Anything else
         </div>
         <div className="fap-field">
           <label>Notes for our team</label>
