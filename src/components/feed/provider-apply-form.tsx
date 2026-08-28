@@ -111,8 +111,8 @@ export function ProviderApplyForm() {
           </label>
           <input className="fap-inp" name="email" type="email" placeholder="ops@sigma-md.io" required disabled={isPending} />
           <div className="fap-hint">
-            If your application is approved, your activation invite is sent here — you&apos;ll set your own password
-            and finish onboarding from that link.
+            If approved, we&apos;ll email you here once your feed tier is live — sign in at feed.horizonhft.com
+            with this address using a one-time link, no password to set.
           </div>
         </div>
         <div className="fap-field">
