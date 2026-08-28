@@ -106,7 +106,7 @@ export function LicenseStatusCard({
             <span className="dot" /> {displayStatus === "revoked" ? "REVOKED" : "NO LICENSE"}
           </span>
           <div className="txt">
-            <b>You don&apos;t have a license yet.</b>
+            <b>{displayStatus === "revoked" ? "Your license has been revoked." : "You don't have a license yet."}</b>
             <p>Downloads and the Paid Users group are locked.</p>
           </div>
           <a className="btn primary" href={telegramChannelUrl} target="_blank" rel="noopener noreferrer">
