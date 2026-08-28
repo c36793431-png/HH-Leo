@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import { emitToast } from "@/lib/toast-bus";
+import { EDITABLE_USER_ROLES } from "@/lib/admin-user-roles";
 
 interface RoleSelectFieldProps {
   action: (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
@@ -16,7 +17,10 @@ interface RoleSelectFieldProps {
  * an edit toggle: chrome (border + chevron) says "editable", plain zinc text says
  * "read-only" — changing the select value IS the edit, confirmed by a dialog before it
  * submits. Two-value fields don't need reveal-then-edit. */
-const EDITABLE_ROLES = ["user", "admin"];
+const ROLE_LABELS: Record<string, string> = {
+  feed_provider: "Feed provider",
+  partner: "Partner",
+};
 
 export function RoleSelectField({ action, hiddenFields = {}, currentRole, subjectName, isSelf }: RoleSelectFieldProps) {
   const [current, setCurrent] = useState(currentRole);
@@ -24,7 +28,7 @@ export function RoleSelectField({ action, hiddenFields = {}, currentRole, subjec
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const editable = EDITABLE_ROLES.includes(currentRole);
+  const editable = (EDITABLE_USER_ROLES as readonly string[]).includes(currentRole);
   const dirty = editable && draft !== current;
   const isDemote = draft === "user" && current === "admin";
 
@@ -32,7 +36,7 @@ export function RoleSelectField({ action, hiddenFields = {}, currentRole, subjec
     return (
       <div className="flex flex-col gap-1">
         <label className="text-xs text-zinc-500">Role</label>
-        <p className="text-sm text-zinc-200">{currentRole}</p>
+        <p className="text-sm text-zinc-200">{ROLE_LABELS[currentRole] ?? currentRole}</p>
       </div>
     );
   }

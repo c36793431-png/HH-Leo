@@ -30,6 +30,7 @@ import {
   CONFIG_SUMMARY_STRATEGIES,
   type ConfigSummaryStrategy,
 } from "@/lib/config-summary";
+import { EDITABLE_USER_ROLES, type EditableUserRole } from "@/lib/admin-user-roles";
 
 async function requireAdminUsersPanel(): Promise<string> {
   const session = await auth();
@@ -150,7 +151,7 @@ export async function updateUserFieldAction(
       throw new Error("Invalid field");
     }
     const value = ((formData.get("value") as string) ?? "").trim();
-    if (field === "role" && value !== "user" && value !== "admin") {
+    if (field === "role" && !EDITABLE_USER_ROLES.includes(value as EditableUserRole)) {
       throw new Error("Invalid role");
     }
     if (field === "email" && value === "") {
