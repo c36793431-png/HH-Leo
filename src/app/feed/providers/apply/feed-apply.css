@@ -17,14 +17,14 @@
    - No price fields anywhere (per the mockup itself -- public surfaces carry no prices). */
 
 .feed-apply-v1 {
-  --fap-bg: #05070b;
-  --fap-panel-2: #0d141f;
+  --fap-bg: rgb(4, 11, 15);
+  --fap-panel-2: rgb(11, 24, 32);
   --fap-cyan: #2de2e6;
   --fap-line: rgba(6, 182, 212, 0.16);
   --fap-line-soft: rgba(218, 244, 245, 0.07);
   --fap-ink: #daf4f5;
   --fap-ink-2: #8fb0b7;
-  --fap-ink-3: #738f95;
+  --fap-ink-3: rgb(125, 155, 162);
   --fap-ink-4: #3a5157;
   --fap-ok: #37f5a0;
   --fap-teal: #06b6d4;
@@ -133,8 +133,8 @@
 /* LEFT — context rail */
 .fap-rail { position: sticky; top: 98px; display: flex; flex-direction: column; gap: 22px; }
 .fap-rail .card {
-  border: 1px solid var(--fap-teal-line); border-radius: 18px; padding: 24px 22px;
-  background: linear-gradient(180deg, rgba(15, 17, 22, 0.9), rgba(10, 11, 14, 0.9));
+  border: 1px solid rgba(45, 212, 232, 0.34); border-radius: 18px; padding: 24px 22px;
+  background-image: linear-gradient(rgb(10, 20, 27), rgb(7, 15, 20));
 }
 .fap-rail h3 { font-family: var(--fap-disp); font-weight: 800; font-size: 16px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fap-ink); margin-bottom: 18px; }
 .fap-steps { list-style: none; display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; }
@@ -159,8 +159,8 @@
 
 /* RIGHT — the form card */
 .fap-formcard {
-  border: 1px solid var(--fap-teal-line); border-radius: 20px; overflow: hidden;
-  background: linear-gradient(180deg, #0c0e13, #08090c); box-shadow: 0 40px 110px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(45, 212, 232, 0.34); border-radius: 20px; overflow: hidden;
+  background-image: linear-gradient(rgb(10, 20, 27), rgb(7, 15, 20)); box-shadow: 0 40px 110px rgba(0, 0, 0, 0.5);
 }
 .fap-fieldset { padding: 26px 30px; border-bottom: 1px solid var(--fap-line-soft); }
 .fap-fieldset:last-of-type { border-bottom: none; }
@@ -179,13 +179,12 @@
 .fap-field label { display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fap-ink-3); font-family: var(--fap-mono); margin-bottom: 8px; }
 .fap-field label .req { color: var(--fap-teal); margin-left: 2px; }
 .fap-inp, .fap-sel, .fap-txta {
-  width: 100%; background: var(--fap-panel-2); border: 1px solid var(--fap-line); border-radius: 11px;
+  width: 100%; background: var(--fap-panel-2); border: 1px solid rgba(45, 212, 232, 0.40); border-radius: 11px;
   padding: 12px 14px; color: var(--fap-ink); font-family: var(--fap-sans); font-size: 14px;
 }
 .fap-inp.mono { font-family: var(--fap-mono); }
-.fap-inp::placeholder, .fap-txta::placeholder { color: rgb(100, 126, 132); opacity: 1; }
-.fap-inp:placeholder-shown, .fap-txta:placeholder-shown, .fap-sel { border-color: rgba(143, 176, 183, 0.3); }
-.fap-inp:focus, .fap-sel:focus, .fap-txta:focus { outline: none; border-color: var(--fap-teal-line); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1); }
+.fap-inp::placeholder, .fap-txta::placeholder { color: rgb(110, 140, 148); opacity: 1; }
+.fap-inp:focus, .fap-sel:focus, .fap-txta:focus { outline: none; border-color: rgba(45, 212, 232, 0.85); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1); }
 .fap-txta { resize: vertical; min-height: 84px; line-height: 1.5; }
 .fap-sel {
   appearance: none;
