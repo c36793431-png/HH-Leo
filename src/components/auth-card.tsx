@@ -52,7 +52,7 @@ export function AuthCard({ mode, botUsername, error, redirectTo }: AuthCardProps
         <div className="h-px flex-1 bg-zinc-800" />
       </div>
 
-      <EmailLoginForm redirectTo={redirectTo} />
+      <EmailLoginForm redirectTo={redirectTo} mode={mode} />
 
       <p className="mt-6 text-center text-xs text-zinc-500">
         {mode === "login" ? (

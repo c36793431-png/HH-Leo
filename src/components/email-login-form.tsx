@@ -27,31 +27,41 @@ async function emailSignIn(redirectTo: string, formData: FormData) {
   await signIn("resend", { email, redirectTo });
 }
 
-export function EmailLoginForm({ redirectTo }: { redirectTo: string }) {
+export function EmailLoginForm({
+  redirectTo,
+  mode,
+}: {
+  redirectTo: string;
+  mode: "login" | "signup";
+}) {
   const emailSignInWithRedirect = emailSignIn.bind(null, redirectTo);
 
   return (
     <form action={emailSignInWithRedirect} className="flex flex-col gap-3">
-      <label htmlFor="name" className="text-sm text-zinc-400">
-        Name
-      </label>
-      <input
-        id="name"
-        name="name"
-        type="text"
-        placeholder="Jane Trader"
-        className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-400"
-      />
-      <label htmlFor="telegram" className="text-sm text-zinc-400">
-        Telegram handle (optional)
-      </label>
-      <input
-        id="telegram"
-        name="telegram"
-        type="text"
-        placeholder="@yourhandle"
-        className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-400"
-      />
+      {mode === "signup" && (
+        <>
+          <label htmlFor="name" className="text-sm text-zinc-400">
+            Name
+          </label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            placeholder="Jane Trader"
+            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-400"
+          />
+          <label htmlFor="telegram" className="text-sm text-zinc-400">
+            Telegram handle (optional)
+          </label>
+          <input
+            id="telegram"
+            name="telegram"
+            type="text"
+            placeholder="@yourhandle"
+            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-400"
+          />
+        </>
+      )}
       <label htmlFor="email" className="text-sm text-zinc-400">
         Email
       </label>
