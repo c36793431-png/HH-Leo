@@ -6,6 +6,7 @@ import { isFeedProviderUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { getBotLink, unlinkBot } from "@/lib/telegram-bot-links";
 import { sendFeedsBotMessage, FEEDS_BOT_KEY } from "@/lib/telegram-feeds-bot";
+import { setNotificationPref, type NotificationEventKey } from "@/lib/notification-prefs";
 
 async function requireProviderId(): Promise<string> {
   const session = await auth();
@@ -34,5 +35,13 @@ export async function sendTelegramFeedsTestAction(): Promise<ActionResult> {
       "🔔 Test notification from your Horizon Feeds provider panel — delivery is working."
     );
     if (!sent) throw new Error("Telegram rejected the message — try unlinking and linking again");
+  });
+}
+
+export async function setNotificationPrefAction(eventKey: NotificationEventKey, enabled: boolean): Promise<ActionResult> {
+  return runAction("Failed to update notification preference", async () => {
+    const userId = await requireProviderId();
+    await setNotificationPref(userId, eventKey, enabled);
+    revalidatePath("/feed/dashboard/notifications");
   });
 }

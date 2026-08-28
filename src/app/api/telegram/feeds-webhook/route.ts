@@ -93,6 +93,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  const alreadyLinkedSameAccount = linkedByTelegramId.rows[0]?.user_id === userId;
+
   await pool.query(
     `insert into telegram_bot_links (user_id, bot_key, telegram_user_id, telegram_username)
      values ($1, $2, $3, $4)
@@ -106,7 +108,9 @@ export async function POST(req: NextRequest) {
   try {
     await sendFeedsBotMessage(
       chatId,
-      "You're linked! Notification events from your Horizon Feeds provider panel will be DM'd here from now on."
+      alreadyLinkedSameAccount
+        ? "You're already linked — no changes needed. Notification events from your Horizon Feeds provider panel are still DM'd here."
+        : "You're linked! Notification events from your Horizon Feeds provider panel will be DM'd here from now on."
     );
   } catch (err) {
     console.error("feeds webhook: sendFeedsBotMessage failed", err);

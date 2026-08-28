@@ -1,5 +1,6 @@
 import { pool } from "./db";
 import { sendEmail } from "./email";
+import { isNotificationEnabled } from "./notification-prefs";
 
 // Round lineage is scoped by (application_id, tier_name), never application_id alone.
 // A provider can have several tiers negotiating in parallel (spec §3.5 -- "each proposal
@@ -329,7 +330,7 @@ export async function declineProposalRound(
     await client.query("commit");
 
     const email = recipient.rows[0]?.email;
-    if (email) {
+    if (email && (await isNotificationEnabled(proposal.provider_user_id, "tier_review_decision"))) {
       await sendEmail(
         email,
         "Update on your Horizon feed-provider terms",
