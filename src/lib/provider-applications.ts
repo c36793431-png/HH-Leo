@@ -2,6 +2,7 @@ import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
 import { notifyProviderApplicationSubmitted } from "./telemetry-sink";
 import { sendEmail } from "./email";
+import { resolveAdminUserId } from "./admin";
 
 const FEED_HOST = "feed.horizonhft.com";
 
@@ -290,11 +291,17 @@ export async function getProviderApplicationStats(): Promise<ProviderApplication
 /** Shared by approveProviderApplication and createManualProviderApplication: match an existing
  * user by id (if already linked) or email, else create one with role 'feed_provider'. Must run
  * inside the caller's transaction (takes the connected client, not the pool). */
+/** Overwriting an existing user's role destroys any record of what it was before --
+ * there is no multi-role model, so a matched account (e.g. a former admin applying
+ * as a provider) would otherwise lose that fact for good. Mirrors the audit trail
+ * admin/users/actions.ts's updateUserFieldAction already writes for manual role edits,
+ * so both role-changing paths land in the same admin_actions table. */
 async function linkOrCreateProviderUser(
   client: PoolClient,
   email: string,
   name: string,
-  existingUserId: string | null
+  existingUserId: string | null,
+  actionedBy: string
 ): Promise<string> {
   let userId = existingUserId;
   if (!userId) {
@@ -304,7 +311,20 @@ async function linkOrCreateProviderUser(
     userId = matched.rows[0]?.id ?? null;
   }
   if (userId) {
+    const previous = await client.query<{ role: string }>(`select role from users where id = $1`, [userId]);
+    const previousRole = previous.rows[0]?.role ?? null;
     await client.query(`update users set role = 'feed_provider', updated_at = now() where id = $1`, [userId]);
+    const resolvedAdminUserId = await resolveAdminUserId(actionedBy);
+    await client.query(
+      `insert into admin_actions (admin_user_id, action_type, target_user_id, details_json)
+       values ($1, $2, $3, $4)`,
+      [
+        resolvedAdminUserId,
+        "provider_role_conversion",
+        userId,
+        JSON.stringify({ from: previousRole, to: "feed_provider" }),
+      ]
+    );
   } else {
     const created = await client.query<{ id: string }>(
       `insert into users (email, display_name, role) values ($1, $2, 'feed_provider') returning id`,
@@ -328,7 +348,13 @@ export async function approveProviderApplication(id: string, actionedBy: string)
     if (!existing.rowCount) throw new Error("provider application not found");
     const application = mapRow(existing.rows[0]);
 
-    const userId = await linkOrCreateProviderUser(client, application.email, application.name, application.userId);
+    const userId = await linkOrCreateProviderUser(
+      client,
+      application.email,
+      application.name,
+      application.userId,
+      actionedBy
+    );
 
     await client.query(
       `update provider_applications
@@ -365,7 +391,7 @@ export async function createManualProviderApplication(
   try {
     await client.query("begin");
 
-    const userId = await linkOrCreateProviderUser(client, args.email, args.name, null);
+    const userId = await linkOrCreateProviderUser(client, args.email, args.name, null, actionedBy);
 
     const referenceId = `FP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const inserted = await client.query<{ id: string }>(
