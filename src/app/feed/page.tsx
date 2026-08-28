@@ -2,7 +2,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isFeedProviderUser } from "@/lib/admin-users-panel";
-import { SignOutButton } from "@/components/sign-out-button";
+import { FeedAuthNavStatus } from "@/components/feed/feed-auth-nav-status";
 import "./feed-landing.css";
 
 /** Public landing for feed.horizonhft.com's root -- mirrors src/app/partner/page.tsx's shape
@@ -46,10 +46,6 @@ export default async function FeedLandingPage() {
     redirect("/dashboard");
   }
 
-  const loggedIn = Boolean(user?.id);
-  const memberLabel = user?.name?.trim() || user?.email?.trim() || "member";
-  const memberInitial = memberLabel.charAt(0).toUpperCase();
-
   return (
     <div className="feed-landing-v1">
       <div className="fl-wrap">
@@ -66,12 +62,12 @@ export default async function FeedLandingPage() {
           </a>
           <span className="fl-sp" />
           <span className="fl-nav-links">
-            {loggedIn && (
-              <span className="fl-signedin">
-                <span className="fl-av">{memberInitial}</span>Signed in as <b>{memberLabel}</b>
-                <SignOutButton className="fl-subtle" redirectTo="/" />
-              </span>
-            )}
+            <FeedAuthNavStatus
+              signedInClassName="fl-signedin"
+              avatarClassName="fl-av"
+              signOutClassName="fl-subtle"
+              redirectTo="/"
+            />
             <a className="fl-trader-link" href="https://portal.horizonhft.com">
               <svg className="fl-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 12h4l3-8 4 16 3-8h4" />

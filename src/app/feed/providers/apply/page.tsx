@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ProviderApplyForm } from "@/components/feed/provider-apply-form";
+import { FeedAuthNavStatus } from "@/components/feed/feed-auth-nav-status";
 import "./feed-apply.css";
 
 /** Public feed-provider application (mounted at /providers/apply on feed.horizonhft.com,
@@ -20,8 +21,13 @@ import "./feed-apply.css";
  *  - Mockup's "Save & finish later" ghost button dropped -- there's no draft-save backend.
  *  - The context rail (steps + trust tiles) stays visible after a successful submit instead
  *    of being hidden like the mockup's body.state-success rule -- simpler to keep the whole
- *    rail server-rendered outside the form/success toggle, and it's still useful info. */
-export default function ProviderApplyPage() {
+ *    rail server-rendered outside the form/success toggle, and it's still useful info.
+ *
+ * Nav auth status (feed-provider-apply-page-logo-2026-08-25): shares FeedAuthNavStatus with
+ * feed/page.tsx so a signed-in visitor sees the same "Signed in as" chip here as on the
+ * landing page, instead of this page's previous static "Already a provider? Log in" link,
+ * which showed unconditionally regardless of session. */
+export default async function ProviderApplyPage() {
   return (
     <div className="feed-apply-v1">
       <div className="fap-wrap">
@@ -36,22 +42,32 @@ export default function ProviderApplyPage() {
             </span>
           </Link>
           <span className="fap-sp" />
-          <a className="fap-nav-login" href="/login">
-            <svg
-              className="ic"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-              <polyline points="10 17 15 12 10 7" />
-              <line x1="15" y1="12" x2="3" y2="12" />
-            </svg>
-            Already a provider? Log in
-          </a>
+          <FeedAuthNavStatus
+            signedInClassName="fap-signedin"
+            avatarClassName="fap-av"
+            signOutClassName="fap-nav-login"
+            signedOutHref="/login"
+            signedOutClassName="fap-nav-login"
+            redirectTo="/providers/apply"
+            signedOutContent={
+              <>
+                <svg
+                  className="ic"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                  <polyline points="10 17 15 12 10 7" />
+                  <line x1="15" y1="12" x2="3" y2="12" />
+                </svg>
+                Already a provider? Log in
+              </>
+            }
+          />
         </nav>
 
         <main className="fap-applywrap">

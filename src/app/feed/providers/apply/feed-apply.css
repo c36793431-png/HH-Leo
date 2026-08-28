@@ -90,6 +90,11 @@
 }
 .fap-nav-login .ic { width: 15px; height: 15px; opacity: 0.9; }
 .fap-nav-login:hover { background: rgba(6, 182, 212, 0.16); }
+.fap-signedin { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fap-ink-2); }
+.fap-signedin .fap-av { width: 20px; height: 20px; border-radius: 50%; background: var(--fap-teal-soft); border: 1px solid var(--fap-teal-line); color: var(--fap-teal); display: inline-flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; }
+.fap-signedin b { color: var(--fap-ink); }
+.fap-signedin form { display: inline-flex; }
+.fap-signedin .fap-nav-login { padding: 6px 13px; }
 
 /* buttons */
 .fap-btn {
