@@ -125,6 +125,19 @@ export default auth(async (req) => {
     if (!isAdminUser(req.auth.user)) {
       return new NextResponse("Forbidden", { status: 403 });
     }
+    // Mirrors ADMIN_FEED_ROUTES above (decision_split_portal_admin_and_feed_admin_surfaces_2026-08-23):
+    // the feed-host branch already 404s portal-only /admin/* routes there, but the portal host had no
+    // equivalent allowlist and would happily render these feed-only routes under portal chrome instead
+    // of 404ing -- a one-directional enforcement gap (feed-admin-portal-link-sweep-2026-08-28). Bare
+    // "/admin" is excluded: that route file host-branches internally and is legitimately dual-host.
+    // Checked after the 403 above so a non-admin still gets Forbidden, not a 404 that leaks which
+    // admin routes exist.
+    const FEED_ONLY_ADMIN_ROUTES = ["/admin/revenue", "/admin/providers", "/admin/feed-health", "/admin/provider-applications", "/admin/register-provider"];
+    const isFeedOnlyAdminRoute =
+      FEED_ONLY_ADMIN_ROUTES.includes(pathname) || pathname.startsWith("/admin/provider-applications/");
+    if (!isFeedHost && !isPartnerHost && isFeedOnlyAdminRoute) {
+      return new NextResponse("Not Found", { status: 404 });
+    }
   }
 
   // Captures ?ref=<code> on signup/login into a 30-day cookie, ahead of whichever auth path
