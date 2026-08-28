@@ -2,7 +2,7 @@
 
 import { createProviderApplication } from "@/lib/provider-applications";
 
-const PROVIDERAPP_ADMIN_URL = "https://portal.horizonhft.com/admin/provider-applications";
+const PROVIDERAPP_ADMIN_URL = "https://feed.horizonhft.com/admin/provider-applications";
 
 /** Return type carries the server-generated reference_id back to the form so the confirmation
  * screen shows the same string the admin queue will show -- see 0067's migration comment for

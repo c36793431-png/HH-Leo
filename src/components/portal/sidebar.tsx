@@ -176,7 +176,7 @@ export function PortalSidebar({
           {adminSurface === "portal" ? (
             <span className="host-seg active portal" aria-current="page">Portal</span>
           ) : (
-            <a className="host-seg" href="https://portal.horizonhft.com/dashboard">
+            <a className="host-seg" href="https://portal.horizonhft.com/admin/dashboard">
               Portal<span className="arrow" aria-hidden="true">↗</span>
             </a>
           )}
