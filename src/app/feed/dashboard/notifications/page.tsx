@@ -7,7 +7,7 @@ import { createFeedsOnboardingToken } from "@/lib/telegram-feeds-onboarding";
 
 /** Static UI port of mockups/horizon-providers/notifications.html. Telegram delivery
  * (bus thread provider-telegram-linking-build-2026-08-28) is now real via the shared
- * @HorizonFeedsBot -- see the delivery control card below. The per-event toggles below
+ * @horizonfbot -- see the delivery control card below. The per-event toggles below
  * that remain inert display only: no notification-prefs table exists yet to store which
  * events a provider wants, so there's nothing for delivery to read from. */
 export default async function FeedNotificationsPage() {

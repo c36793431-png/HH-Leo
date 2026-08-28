@@ -6,7 +6,7 @@
 -- column or either bot's webhook.
 --
 -- This table is for bots that need a link scoped to themselves instead of sharing the users
--- columns -- starting with the shared provider bot (@HorizonFeedsBot, one bot for all feed
+-- columns -- starting with the shared provider bot (@horizonfbot, one bot for all feed
 -- providers in v1 per coxwell) so wiring up provider Telegram linking never collides with
 -- alerts73_bot's existing linkage the way a naive copy of that pattern would. Per-provider bots
 -- later are just additional bot_key values in this same table, not a schema change.

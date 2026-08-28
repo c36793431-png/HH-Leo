@@ -17,7 +17,7 @@ function authorized(req: NextRequest): boolean {
 }
 
 /**
- * Inbound webhook for the shared provider bot (TELEGRAM_FEEDS_BOT_TOKEN, @HorizonFeedsBot).
+ * Inbound webhook for the shared provider bot (TELEGRAM_FEEDS_BOT_TOKEN, @horizonfbot).
  * Handles the Notifications page's `?start=<token>` deep link -- the panel-generated,
  * one-time-use token (see telegram-feeds-onboarding.ts) proves which provider account
  * clicked Start, so this webhook binds telegram_bot_links (0068), never

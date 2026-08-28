@@ -2,7 +2,7 @@
 -- provider-telegram-linking-build-2026-08-28). Mirrors 0032's
 -- hft_alert_onboarding_tokens shape but scoped by bot_key instead of being a
 -- one-off table for a single bot, so it works for telegram_bot_links (0068)
--- generally -- starting with the shared provider bot (@HorizonFeedsBot,
+-- generally -- starting with the shared provider bot (@horizonfbot,
 -- bot_key 'horizon_feeds_bot'), and any per-provider bots added later without
 -- another migration.
 create table if not exists telegram_bot_link_tokens (

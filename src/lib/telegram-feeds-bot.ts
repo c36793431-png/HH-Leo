@@ -1,5 +1,5 @@
 /**
- * Shared provider bot (@HorizonFeedsBot) -- one bot for every feed provider in v1, per
+ * Shared provider bot (@horizonfbot) -- one bot for every feed provider in v1, per
  * coxwell (bus thread provider-telegram-linking-build-2026-08-28), not one bot per
  * provider. Links live in telegram_bot_links (0068) keyed by FEEDS_BOT_KEY, never in
  * users.telegram_user_id -- that column stays the portal bot's and alerts73_bot's shared
