@@ -4,7 +4,7 @@ import type { ServerRegistration } from "@/lib/server-registration";
 export function ServerRegistrationBand({ registration }: { registration: ServerRegistration }) {
   return (
     <div className="ftd-server-banner">
-      <span className="lbl">Server</span>
+      <span className="lbl" role="img" aria-label="Server">🖥</span>
       <span className="val">{registration.serverName}</span>
       <span className="val">
         ·{" "}
