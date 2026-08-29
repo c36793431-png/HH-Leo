@@ -68,6 +68,20 @@ export async function getServerRegistration(licenseId: string): Promise<ServerRe
   return result.rowCount ? mapRegistration(result.rows[0]) : null;
 }
 
+/** Servers registered across every currently-active license a user holds — same
+ * active-license criteria as computeUserActiveFeeds, so a two-license account can
+ * legitimately show 2 (one registration per license, enforced by the license_id
+ * unique constraint on server_registrations). */
+export async function countUserActiveServers(userId: string): Promise<number> {
+  const result = await pool.query<{ count: string }>(
+    `select count(*) from server_registrations sr
+     join licenses l on l.id = sr.license_id
+     where l.user_id = $1 and l.status = 'active' and l.expires_at > now()`,
+    [userId]
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
 /** Upserts the registration and fires the "new registration" alert only on first insert
  * (an edit shouldn't re-fire it). adminUrl is passed in by the caller since this lib has
  * no request context to build one from. */

@@ -830,6 +830,17 @@
 .portal-shell .sf-stat { font-size: 11px; color: var(--hz-ink-3); }
 .portal-shell .sf-action { align-self: flex-end; font-size: 11px; font-weight: 600; color: var(--hz-blue-bright); }
 
+.portal-shell .act-tile { justify-content: flex-start; }
+.portal-shell .act-tile-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--hz-ink-3); }
+.portal-shell .act-feed-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.portal-shell .act-feed-chip {
+  display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; background: rgba(55, 245, 160, 0.14); color: var(--hz-ok);
+  border: 1px solid rgba(55, 245, 160, 0.4);
+}
+.portal-shell .act-count { font-family: var(--hz-disp); font-weight: 700; font-size: 24px; color: var(--hz-ink); display: block; }
+.portal-shell .act-count-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--hz-ink-3); }
+
 @media (max-width: 768px) {
   .portal-shell .app { grid-template-columns: 1fr; }
   .portal-shell .sidebar {
