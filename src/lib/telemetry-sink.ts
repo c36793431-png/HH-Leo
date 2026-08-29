@@ -221,11 +221,13 @@ export async function notifyLicenseUpgraded(opts: {
 export async function notifyLicenseExpiringSoon(opts: {
   email: string | null;
   licenseKey: string;
+  tier: string;
   expiresAt: Date;
 }): Promise<void> {
   await sendSinkMessage(
     `⏰ license expiring soon\n` +
       `email: ${opts.email ?? "-"}\n` +
+      `tier: ${opts.tier}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `expires: ${opts.expiresAt.toISOString()}`
   );
@@ -234,11 +236,13 @@ export async function notifyLicenseExpiringSoon(opts: {
 export async function notifyLicenseExpired(opts: {
   email: string | null;
   licenseKey: string;
+  tier: string;
   expiredAt: Date;
 }): Promise<void> {
   await sendSinkMessage(
     `⏱️ license expired\n` +
       `email: ${opts.email ?? "-"}\n` +
+      `tier: ${opts.tier}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `expired: ${opts.expiredAt.toISOString()}`
   );
@@ -247,11 +251,13 @@ export async function notifyLicenseExpired(opts: {
 export async function notifyLicenseRevoked(opts: {
   email: string | null;
   licenseKey: string;
+  tier: string;
   revokedAt: Date;
 }): Promise<void> {
   await sendSinkMessage(
     `🚫 license revoked\n` +
       `email: ${opts.email ?? "-"}\n` +
+      `tier: ${opts.tier}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `revoked: ${opts.revokedAt.toISOString()}`
   );

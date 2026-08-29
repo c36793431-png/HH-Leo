@@ -268,11 +268,11 @@ export async function getLicenseExpiresAt(licenseId: string): Promise<Date | nul
 }
 
 export async function revokeLicense(licenseId: string): Promise<void> {
-  const result = await pool.query<{ license_key: string; user_id: string | null; email: string | null }>(
+  const result = await pool.query<{ license_key: string; tier: string; user_id: string | null; email: string | null }>(
     `update licenses l set status = 'revoked', lifecycle_state = 'expired_processed'
      from users u
      where l.id = $1 and l.user_id = u.id
-     returning l.license_key, l.user_id, u.email`,
+     returning l.license_key, l.tier, l.user_id, u.email`,
     [licenseId]
   );
   const row = result.rows[0];
@@ -288,6 +288,7 @@ export async function revokeLicense(licenseId: string): Promise<void> {
   notifyLicenseRevoked({
     email: row.email,
     licenseKey: row.license_key,
+    tier: row.tier,
     revokedAt: new Date(),
   }).catch(() => {});
 }

@@ -9,6 +9,7 @@ import { pruneOldTradingAlerts } from "@/lib/trading-alerts";
 interface ExpiredRow {
   license_id: string;
   license_key: string;
+  tier: string;
   user_id: string;
   telegram_user_id: string | null;
   email: string | null;
@@ -17,6 +18,7 @@ interface ExpiredRow {
 interface ExpiringSoonRow {
   license_id: string;
   license_key: string;
+  tier: string;
   user_id: string;
   email: string | null;
   expires_at: Date;
@@ -27,7 +29,7 @@ interface ExpiringSoonRow {
  * expiring window across several cron runs. */
 async function notifyExpiringSoon(): Promise<number> {
   const expiringSoon = await pool.query<ExpiringSoonRow>(
-    `select l.id as license_id, l.license_key, u.id as user_id, u.email, l.expires_at
+    `select l.id as license_id, l.license_key, l.tier, u.id as user_id, u.email, l.expires_at
      from licenses l
      join users u on u.id = l.user_id
      where l.status = 'active'
@@ -50,6 +52,7 @@ async function notifyExpiringSoon(): Promise<number> {
       await notifyLicenseExpiringSoon({
         email: row.email,
         licenseKey: row.license_key,
+        tier: row.tier,
         expiresAt: row.expires_at,
       });
       notified++;
@@ -75,7 +78,7 @@ export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const expired = await pool.query<ExpiredRow>(
-    `select l.id as license_id, l.license_key, u.id as user_id, u.telegram_user_id, u.email
+    `select l.id as license_id, l.license_key, l.tier, u.id as user_id, u.telegram_user_id, u.email
      from licenses l
      join users u on u.id = l.user_id
      where l.status = 'active'
@@ -104,6 +107,7 @@ export async function GET(req: NextRequest) {
       notifyLicenseExpired({
         email: row.email,
         licenseKey: row.license_key,
+        tier: row.tier,
         expiredAt: new Date(),
       }).catch(() => {});
       processed++;
