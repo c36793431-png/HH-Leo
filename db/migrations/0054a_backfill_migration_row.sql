@@ -5,3 +5,11 @@
 insert into schema_migrations (version, name) values
   ('0054', '0054_tier_waitlist.sql')
 on conflict (version) do nothing;
+
+-- Bookkeeping for this file itself: the drift checker's filename regex expects
+-- a row keyed literally '0054a' (leo-migration-drift-check-2026-08-22, marcus) --
+-- without this insert, 0054a can never satisfy its own drift check and alerts
+-- forever. Changes nothing until coxwell pastes this file into prod.
+insert into schema_migrations (version, name) values
+  ('0054a', '0054a_backfill_migration_row.sql')
+on conflict (version) do nothing;
