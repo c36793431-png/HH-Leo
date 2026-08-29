@@ -48,6 +48,7 @@ const PORTAL_LINKS = [
   { href: "/downloads", label: "Downloads", icon: Download, paidOnly: true, color: "#7BE06A" },
   { href: "/community", label: "Community", icon: Users, color: "#2DE2E6" },
   { href: "/feeds", label: "Feeds", icon: Rss, paidOnly: true, lockedStaysOnPage: true, color: "#17D0B0" },
+  { href: "/account/servers", label: "Servers", icon: HardDrive, paidOnly: true, lockedStaysOnPage: true, color: "#189FC9" },
   { href: "/alerts", label: "Trading", icon: CandlestickChart, paidOnly: true, lockedStaysOnPage: true, color: "#FFC24B", isNew: true },
   { href: "/strategies", label: "Strategies", icon: Zap, paidOnly: true, lockedStaysOnPage: true, color: "#37F5A0" },
   { href: "/setfiles", label: "Setfiles", icon: Sliders, paidOnly: true, lockedStaysOnPage: true, color: "#2FBE8E" },
@@ -59,7 +60,6 @@ const PORTAL_LINKS = [
   { href: "/prop-firm", label: "Prop Firm", icon: TrendingUp, paidOnly: true, lockedStaysOnPage: true, color: "#8A86D6" },
   { href: "/account/refer", label: "Refer & earn", icon: Gift, color: "#F0A94B" },
   { href: "/account/my-setup", label: "My setup", icon: Wrench, paidOnly: true, lockedStaysOnPage: true, color: "#5FC8BE" },
-  { href: "/account/servers", label: "Servers", icon: HardDrive, paidOnly: true, lockedStaysOnPage: true, color: "#189FC9" },
   { href: "/account", label: "Account", icon: CircleUser, color: "#6FB0D8" },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; color: string; paidOnly?: boolean; lockedStaysOnPage?: boolean; isNew?: boolean }[];
 

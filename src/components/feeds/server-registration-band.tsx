@@ -13,7 +13,7 @@ export function ServerRegistrationBand({ registration }: { registration: ServerR
           : registration.vpsProvider}
       </span>
       <span className="val">· {registration.declaredIp}</span>
-      <span className="verified">✓ Verified</span>
+      <span className="verified">✓ Registered</span>
       <Link href="/account/servers" className="change-link">
         Change server →
       </Link>

@@ -38,6 +38,21 @@ const LONDON_TIER_RANK: Record<string, number> = {
 };
 const BLACK_RANK = 1;
 
+/** Interim v1 packaging: Beta/Gamma/Delta are three feeds from one provider sold as a
+ * single bundle at one price, so they render as one card instead of three competing
+ * ones (coxwell/marcus, london-tiers-retail-package-card-2026-08-29). Grouping is keyed
+ * by tier here, not by provider_id, because the real packages table doesn't exist yet --
+ * this breaks the moment one provider has two packages and should be replaced once that
+ * table lands. Unmapped tier keys fall back to package-of-one (their own card). */
+const TIER_PACKAGE_KEY: Record<string, string> = {
+  "ld-beta-56": "retail",
+  "ld-gamma-19": "retail",
+  "ld-delta-18": "retail",
+};
+const PACKAGE_LABELS: Record<string, string> = {
+  retail: "Retail",
+};
+
 /** Institutional ($10k+) vs retail segment split (marcus/coxwell,
  * leo-tiers-institutional-retail-labels-2026-08-21). feed_tiers has no price_cents
  * populated yet, so this is a tier-key allowlist rather than a price/enum threshold --
@@ -101,6 +116,25 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
       ? [...tiers].sort((a, b) => (LONDON_TIER_RANK[a.tierKey] ?? 99) - (LONDON_TIER_RANK[b.tierKey] ?? 99))
       : tiers;
 
+  // Group tiers into packages (see TIER_PACKAGE_KEY above). A group with one member
+  // renders identically to a standalone tier card; only multi-member groups (Retail)
+  // get package treatment. Sorted by each group's best (lowest-number) member rank.
+  const tierGroups = (() => {
+    const groups = new Map<string, { packageKey: string; rank: number; members: FeedTierDetail[] }>();
+    for (const t of displayTiers) {
+      const packageKey = TIER_PACKAGE_KEY[t.tierKey] ?? t.tierKey;
+      const rank = LONDON_TIER_RANK[t.tierKey] ?? 99;
+      const existing = groups.get(packageKey);
+      if (existing) {
+        existing.members.push(t);
+        existing.rank = Math.min(existing.rank, rank);
+      } else {
+        groups.set(packageKey, { packageKey, rank, members: [t] });
+      }
+    }
+    return [...groups.values()].sort((a, b) => a.rank - b.rank);
+  })();
+
   const catalogueEntry = FEED_CATALOGUE.find((f) => f.slug === region) ?? null;
   const regionName = catalogueEntry?.name ?? region;
   const countryCode = catalogueEntry?.countryCode ?? "";
@@ -138,7 +172,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
         <ServerRegistrationBand registration={serverRegistration} />
       ) : (
         <div className="ftd-server-banner no-server">
-          <span className="lbl">Server</span>
+          <span className="lbl" role="img" aria-label="Server">🖥</span>
           <span className="val">No server registered yet</span>
           <Link href="/account/servers" className="change-link">
             Register a server →
@@ -169,7 +203,45 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
           </div>
         )}
 
-        {displayTiers.map((t) => {
+        {tierGroups.map((group) => {
+          if (group.members.length > 1) {
+            const label = PACKAGE_LABELS[group.packageKey] ?? group.packageKey;
+            return (
+              <div key={group.packageKey} className="card ftd-tier-card ftd-package">
+                <span className="ftd-rank-badge">#{group.rank}</span>
+                <span className="ftd-segment-badge">RETAIL LATENCY</span>
+                <h3 className="ftd-name">{label}</h3>
+                <p className="ftd-desc">
+                  {group.members.length} feeds from one provider, sold as a single bundle at one price.
+                </p>
+                <div className="ftd-pkg-members">
+                  {group.members.map((m) => (
+                    <div key={m.tierKey} className="ftd-pkg-member">
+                      <div className="ftd-pkg-member-row">
+                        <span className="ftd-pkg-member-name">{m.name}</span>
+                        <span className="ftd-pkg-member-score">
+                          {m.speedDisplay}
+                          <span className="ftd-speed-unit">/100</span>
+                        </span>
+                      </div>
+                      <TierRequestControl
+                        region={region}
+                        tierKey={m.tierKey}
+                        tierName={m.name}
+                        alreadyRequested={requestedTierKeys.has(m.tierKey)}
+                        serverName={serverRegistration?.serverName ?? null}
+                        serverIp={serverRegistration?.declaredIp ?? null}
+                        licenseTail={licenseTail}
+                        variant="primary"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          const t = group.members[0];
           const isInstitutional = region === "london" && INSTITUTIONAL_TIER_KEYS.has(t.tierKey);
           return (
           <div

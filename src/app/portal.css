@@ -678,6 +678,12 @@
 .portal-shell .ftd-contact-pricing { font-size: 12px; font-weight: 600; color: var(--hz-ink-3); margin-top: 6px; }
 .portal-shell .ftd-unlock { margin-top: 4px; }
 .portal-shell .ftd-submitted { font-size: 12px; color: var(--hz-ok); margin-top: 4px; }
+.portal-shell .ftd-pkg-members { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.portal-shell .ftd-pkg-member { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hz-line-soft); }
+.portal-shell .ftd-pkg-member:first-child { border-top: none; padding-top: 0; }
+.portal-shell .ftd-pkg-member-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.portal-shell .ftd-pkg-member-name { font-size: 12px; font-weight: 600; color: var(--hz-ink-2); }
+.portal-shell .ftd-pkg-member-score { font-family: var(--hz-mono); font-size: 14px; font-weight: 700; color: var(--hz-ink); }
 .portal-shell .ftd-compare { margin-top: 24px; overflow-x: auto; }
 .portal-shell .ftd-compare .ref-table { min-width: 480px; }
 
