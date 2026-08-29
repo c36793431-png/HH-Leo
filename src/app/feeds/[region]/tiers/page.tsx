@@ -10,6 +10,7 @@ import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
 import { BlackWaitlistControl } from "@/components/feeds/black-waitlist-control";
 import { getServerRegistration } from "@/lib/server-registration";
+import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { hasJoinedTierWaitlist } from "@/lib/tier-waitlist";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
@@ -134,21 +135,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
       />
 
       {serverRegistration ? (
-        <div className="ftd-server-banner">
-          <span className="lbl">Server</span>
-          <span className="val">{serverRegistration.serverName}</span>
-          <span className="val">
-            ·{" "}
-            {serverRegistration.vpsProviderOther
-              ? `${serverRegistration.vpsProvider} (${serverRegistration.vpsProviderOther})`
-              : serverRegistration.vpsProvider}
-          </span>
-          <span className="val">· {serverRegistration.declaredIp}</span>
-          <span className="verified">✓ Verified</span>
-          <Link href="/account/servers" className="change-link">
-            Change server →
-          </Link>
-        </div>
+        <ServerRegistrationBand registration={serverRegistration} />
       ) : (
         <div className="ftd-server-banner no-server">
           <span className="lbl">Server</span>

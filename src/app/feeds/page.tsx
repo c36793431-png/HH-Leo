@@ -14,6 +14,8 @@ import {
 import { regionForFeedType } from "@/lib/feed-tier-catalogue";
 import { getTierCountsByRegion } from "@/lib/feed-tiers";
 import { FeedRequestForm } from "@/components/feeds/feed-request-form";
+import { getServerRegistration } from "@/lib/server-registration";
+import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
 
 const STATUS_LABEL: Record<FeedCardStatus, string> = {
   active: "Active",
@@ -35,6 +37,7 @@ export default async function FeedsPage() {
   ]);
   const activeFeeds = await computeUserActiveFeeds(session.user.id).catch(() => []);
   const tierCounts = await getTierCountsByRegion().catch(() => ({} as Awaited<ReturnType<typeof getTierCountsByRegion>>));
+  const serverRegistration = licenseDetail ? await getServerRegistration(licenseDetail.id).catch(() => null) : null;
   const isAdmin = isAdminUser(session.user);
   const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
@@ -90,11 +93,15 @@ export default async function FeedsPage() {
                   Manage via Telegram →
                 </a>
               )}
-              {(status === "active" || status === "trial") && entry.feedType === "futures" && (
-                <Link href="/account/servers" className="btn ghost sm fp-cta">
-                  🖥 Register your server →
-                </Link>
-              )}
+              {(status === "active" || status === "trial") &&
+                (entry.feedType === "futures" || entry.feedType === "crypto") &&
+                (serverRegistration ? (
+                  <ServerRegistrationBand registration={serverRegistration} />
+                ) : (
+                  <Link href="/account/servers" className="btn ghost sm fp-cta">
+                    🖥 Register your server →
+                  </Link>
+                ))}
               {status === "included" && <span className="fp-note">Admin access</span>}
               {status === "locked" && !hasTiers && (
                 <a className="btn primary sm fp-cta" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
