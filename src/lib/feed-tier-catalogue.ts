@@ -32,6 +32,12 @@ export const FEED_TIERS: FeedTierMeta[] = [
   { key: "ld-ultra", name: "LD Ultra", region: "london" },
   { key: "ny-normal", name: "NY Beta", region: "ny" },
   { key: "ny-fast", name: "NY Alpha", region: "ny" },
+  /** Pseudo-tier for the Retail package card's single request button (tiers/page.tsx
+   * TIER_PACKAGE_KEY, london-tiers-retail-package-card-2026-08-29). Not a real feed_tiers
+   * DB row and never rendered as its own card -- exists only so feed_tier_requests gets
+   * one row per package purchase (tier_key is unconstrained text, no migration needed)
+   * instead of three disconnected per-tier rows for what the client bought as one bundle. */
+  { key: "ld-retail-package", name: "Retail Package (Beta 56 / Gamma 19 / Delta 18)", region: "london" },
 ];
 
 /** Only the entry tier and the flagship get a trial CTA (coxwell, trial feature add-on,

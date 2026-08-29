@@ -53,6 +53,13 @@ const PACKAGE_LABELS: Record<string, string> = {
   retail: "Retail",
 };
 
+/** The tier_key a package's single Request access button submits under -- see the
+ * ld-retail-package comment in feed-tier-catalogue.ts for why this is a pseudo-tier
+ * rather than the three real member tier keys. */
+const PACKAGE_REQUEST_TIER_KEY: Record<string, string> = {
+  retail: "ld-retail-package",
+};
+
 /** Institutional ($10k+) vs retail segment split (marcus/coxwell,
  * leo-tiers-institutional-retail-labels-2026-08-21). feed_tiers has no price_cents
  * populated yet, so this is a tier-key allowlist rather than a price/enum threshold --
@@ -224,19 +231,19 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                           <span className="ftd-speed-unit">/100</span>
                         </span>
                       </div>
-                      <TierRequestControl
-                        region={region}
-                        tierKey={m.tierKey}
-                        tierName={m.name}
-                        alreadyRequested={requestedTierKeys.has(m.tierKey)}
-                        serverName={serverRegistration?.serverName ?? null}
-                        serverIp={serverRegistration?.declaredIp ?? null}
-                        licenseTail={licenseTail}
-                        variant="primary"
-                      />
                     </div>
                   ))}
                 </div>
+                <TierRequestControl
+                  region={region}
+                  tierKey={PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey}
+                  tierName={`${label} package`}
+                  alreadyRequested={requestedTierKeys.has(PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey)}
+                  serverName={serverRegistration?.serverName ?? null}
+                  serverIp={serverRegistration?.declaredIp ?? null}
+                  licenseTail={licenseTail}
+                  variant="primary"
+                />
               </div>
             );
           }
