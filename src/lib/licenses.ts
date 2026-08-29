@@ -1020,18 +1020,18 @@ export async function setLicenseFeedTypes(licenseId: string, feedTypes: FeedType
   await pool.query(`update licenses set feed_types = $2 where id = $1`, [licenseId, feedTypes]);
 }
 
-/** Feeds live and die with the license they're attached to — active feeds are just the
- * feed_types array on the user's currently-active license, empty when there's none. */
+/** Feeds live and die with the license they're attached to — active feeds are the union
+ * of feed_types across every currently-active license a user holds (a user can hold more
+ * than one, e.g. via claimPendingLicense claiming multiple pre-provisioned licenses at
+ * once), empty when there's none. */
 export async function computeUserActiveFeeds(userId: string): Promise<FeedType[]> {
   const result = await pool.query<{ feed_types: string[] }>(
     `select feed_types from licenses
-     where user_id = $1 and status = 'active' and expires_at > now()
-     order by expires_at desc
-     limit 1`,
+     where user_id = $1 and status = 'active' and expires_at > now()`,
     [userId]
   );
-  const raw = result.rows[0]?.feed_types ?? [];
-  return raw.filter(isFeedType);
+  const raw = result.rows.flatMap((r) => r.feed_types ?? []);
+  return [...new Set(raw.filter(isFeedType))];
 }
 
 /** Sum of monthly_cost_usd across every feed_type entitlement on every currently-active
