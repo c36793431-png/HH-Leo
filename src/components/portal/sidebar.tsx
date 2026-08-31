@@ -121,6 +121,7 @@ export function PortalSidebar({
   userEmail,
   adminSurface = "portal",
   pendingApplicationsCount = 0,
+  hasOtherActiveTiers = false,
 }: {
   tier: PortalTier;
   isAdmin: boolean;
@@ -130,11 +131,15 @@ export function PortalSidebar({
   /** Single §6 selector value — both this badge and the dashboard tile read the same
    * getProviderApplicationStats().pendingCount; neither hardcodes or recomputes it. */
   pendingApplicationsCount?: number;
+  /** True when the user holds active licenses at more than one tier, so `tier` (the
+   * highest of them) is only part of the picture — see computePortalTierFromLicenses. */
+  hasOtherActiveTiers?: boolean;
 }) {
   const pathname = usePathname();
   const initial = (userName.trim()[0] ?? "?").toUpperCase();
   const tierLabel = tier === "admin" ? "Admin" : tier === "team" ? "Team" : tier === "trial" ? "Trial" : tier === "paid" ? "Active" : "Free";
   const tierClass = tier === "free" ? "" : tier;
+  const otherTiersTitle = hasOtherActiveTiers ? "Also holds an active license at another tier — see Account for details" : undefined;
 
   // "deal" licenses fold into "paid" upstream (see computePortalTier), so this covers
   // the full paid+/team/deal/admin set the sidebar theming applies to.
@@ -161,7 +166,10 @@ export function PortalSidebar({
         <div className="txt">
           HORIZON
           <small>{adminSurface === "feed" ? "HFT · FEED NETWORK" : "HFT PORTAL"}</small>
-          <span className={`brand-pill${tierClass ? ` ${tierClass}` : ""}`}>{tierLabel.toUpperCase()}</span>
+          <span className={`brand-pill${tierClass ? ` ${tierClass}` : ""}`} title={otherTiersTitle}>
+            {tierLabel.toUpperCase()}
+            {hasOtherActiveTiers && "+"}
+          </span>
         </div>
       </Link>
       {isAdmin && (
@@ -260,7 +268,10 @@ export function PortalSidebar({
             <b>{userName}</b>
             <span>{userEmail}</span>
           </div>
-          <span className={`tier ${tierClass}`}>{tierLabel}</span>
+          <span className={`tier ${tierClass}`} title={otherTiersTitle}>
+            {tierLabel}
+            {hasOtherActiveTiers && "+"}
+          </span>
         </Link>
       </div>
     </aside>

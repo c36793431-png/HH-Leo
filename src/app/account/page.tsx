@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import { getLicenseForUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
 import { getBotUsername } from "@/lib/telegram-bot";
@@ -26,16 +26,17 @@ export default async function AccountPage() {
     getBotUsername(),
   ]);
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
+  const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
   const isAdmin = isAdminUser(session.user);
   const telegramLinked = telegramRow.telegram_user_id !== null;
 
-  const tier = computePortalTier(isAdmin, licenseDetail);
-  const tierBadgeLabel = tier.toUpperCase();
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
+  const tierBadgeLabel = tier.toUpperCase() + (hasOtherActiveTiers ? "+" : "");
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="grid">
         <div className="card full">
           <div className="chead">
@@ -49,7 +50,12 @@ export default async function AccountPage() {
                 <b>{userName}</b>
                 <span>{userEmail}</span>
               </div>
-              <span className={`tier-badge ${tier}`}>{tierBadgeLabel}</span>
+              <span
+                className={`tier-badge ${tier}`}
+                title={hasOtherActiveTiers ? "Also holds an active license at another tier" : undefined}
+              >
+                {tierBadgeLabel}
+              </span>
             </div>
             <div className="rw">
               <div className="ricon">✈</div>

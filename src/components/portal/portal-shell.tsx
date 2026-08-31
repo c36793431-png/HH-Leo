@@ -11,6 +11,7 @@ export function PortalShell({
   userEmail,
   adminSurface,
   pendingApplicationsCount,
+  hasOtherActiveTiers,
   children,
 }: {
   tier: PortalTier;
@@ -19,6 +20,7 @@ export function PortalShell({
   userEmail: string;
   adminSurface?: AdminSurface;
   pendingApplicationsCount?: number;
+  hasOtherActiveTiers?: boolean;
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
@@ -34,6 +36,7 @@ export function PortalShell({
           userEmail={userEmail}
           adminSurface={adminSurface}
           pendingApplicationsCount={pendingApplicationsCount}
+          hasOtherActiveTiers={hasOtherActiveTiers}
         />
         <main className="main">
           <PortalTopbar isAdmin={isAdmin} adminSurface={adminSurface} onBurgerClick={() => setNavOpen((v) => !v)} />

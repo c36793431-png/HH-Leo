@@ -715,20 +715,53 @@ export function computeLicenseDisplayStatus(
   return "active";
 }
 
-/** Sidebar/account nav tier bucket for the signed-in user — folds 'deal' into 'paid'
- * (no dedicated nav slot for it) and any non-active license into 'free'. Kept as its
- * own string union rather than importing PortalTier from the sidebar component to
- * avoid pulling a "use client" module into this server-only file. */
+/** Sidebar/account nav tier bucket for a single license — folds 'deal' into 'paid' (no
+ * dedicated nav slot for it) and any non-active license into 'free'. Only correct for
+ * users with at most one active license; a user holding more than one active license
+ * (possibly at different tiers) must go through computePortalTierFromLicenses instead,
+ * since picking "the" license here means whichever one the caller happened to pass in. */
 export function computePortalTier(
   isAdmin: boolean,
   license: { tier: string; status: string; expiresAt: Date } | null
-): "free" | "trial" | "paid" | "team" | "admin" {
+): PortalTier {
   if (isAdmin) return "admin";
   const status = computeLicenseDisplayStatus(license);
   if (status !== "active" && status !== "expiring") return "free";
   if (license!.tier === "team") return "team";
   if (license!.tier === "trial") return "trial";
   return "paid";
+}
+
+export type PortalTier = "free" | "trial" | "paid" | "team" | "admin";
+
+function portalTierBucket(licenseTier: string): "trial" | "paid" | "team" {
+  if (licenseTier === "team") return "team";
+  if (licenseTier === "trial") return "trial";
+  return "paid";
+}
+
+/** team > paid/deal > trial — used only to pick which bucket "wins" the single sidebar
+ * badge when a user holds active licenses at more than one tier; not a claim that team
+ * is worth more than paid, just that it's the more-privileged bucket of the two. */
+function portalTierRank(bucket: "trial" | "paid" | "team"): number {
+  return bucket === "team" ? 2 : bucket === "paid" ? 1 : 0;
+}
+
+/** Sidebar/account nav tier bucket for a user, computed across ALL of their currently-active
+ * licenses rather than just the latest-issued one (thread multi-license-visibility-2026-08-31,
+ * marcus). A user holding both a 'team' and a still-active older 'paid' license must not have
+ * the badge silently fall back to whichever was issued most recently — that was the bug.
+ * Picks the highest-ranked active tier and flags when other active licenses sit at a different
+ * bucket, so the caller can surface that instead of hiding it. */
+export function computePortalTierFromLicenses(
+  isAdmin: boolean,
+  activeLicenses: { tier: string }[]
+): { tier: PortalTier; hasOtherActiveTiers: boolean } {
+  if (isAdmin) return { tier: "admin", hasOtherActiveTiers: false };
+  if (activeLicenses.length === 0) return { tier: "free", hasOtherActiveTiers: false };
+  const buckets = activeLicenses.map((l) => portalTierBucket(l.tier));
+  const bucket = buckets.reduce((best, b) => (portalTierRank(b) > portalTierRank(best) ? b : best));
+  return { tier: bucket, hasOtherActiveTiers: buckets.some((b) => b !== bucket) };
 }
 
 /** Dashboard widget lookup — unlike getActiveLicenseForUser, returns the latest license regardless of status/expiry so the UI can render EXPIRED/REVOKED states. */

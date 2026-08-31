@@ -8,7 +8,7 @@ import {
   getActiveLicenseDetailsForUser,
   computeLicenseDisplayStatus,
   computeUserActiveFeeds,
-  computePortalTier,
+  computePortalTierFromLicenses,
   FEED_TYPES,
   FEED_TYPE_META,
 } from "@/lib/licenses";
@@ -131,7 +131,7 @@ export default async function DashboardPage() {
   // single-license card never shows REVOKED/EXPIRED while real access still exists.
   const singleCardLicense = activeLicenses.length === 1 ? activeLicenses[0] : licenseDetail;
 
-  const tier = computePortalTier(isAdmin, licenseDetail);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   // Admin bypass: Downloads/Education render unlocked regardless of license, same as `paid`.
@@ -139,7 +139,7 @@ export default async function DashboardPage() {
   const unlocked = paid || isAdmin;
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       {isExpired && (
         <div className="banner grey">
           <span className="bic">⏱</span>
