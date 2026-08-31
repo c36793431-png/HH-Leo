@@ -818,8 +818,8 @@ export interface AdminUserRow {
    * is empty (no active license: show whatever was issued last, active or not). tierBucket
    * filtering does NOT use this field (see ACTIVE_TIER_SQL) — it keys off the active-license
    * set instead, to agree with the /admin/dashboard tile counts it's linked from.
-   * Do NOT use this alone to render "the" license when activeLicenses.length > 1 — see
-   * [[project_horizon_multi_license_visibility_2026-08-31]] for the bug this shape guards against. */
+   * Do NOT use this alone to render "the" license when activeLicenses.length > 1 — a user
+   * holding two active licenses would silently show only the most-recently-issued one. */
   licenseId: string | null;
   licenseKey: string | null;
   status: string | null;
@@ -870,9 +870,8 @@ const COMPUTED_STATUS_SQL = licenseStatusCaseSql("l", { noneWhenMissing: true })
 /** Mirrors getUserCounts' active_tier subquery (admin-dashboard.ts) exactly — the tier of
  * the active license with the furthest-out expiry, not whichever license was issued last.
  * tierBucket filtering must use this same definition so an /admin/dashboard tile's count
- * always agrees with its linked /admin/users row count; see
- * [[project_horizon_multi_license_visibility_2026-08-31]] for the bug class this guards
- * against (a user holding two active licenses of different tiers). */
+ * always agrees with its linked /admin/users row count — otherwise a user holding two
+ * active licenses of different tiers could be bucketed differently by each. */
 const ACTIVE_TIER_SQL = `(
   select l2.tier from licenses l2
   where l2.user_id = u.id and l2.status = 'active' and l2.expires_at > now()
@@ -883,7 +882,7 @@ const ACTIVE_TIER_SQL = `(
 /** Mirrors getUserCounts' ever_licensed subquery exactly — true if the user has held any
  * license, ever, regardless of its current status. Combined with ACTIVE_TIER_SQL is null,
  * splits free (never licensed) from lapsed (licensed before, nothing active now) the same
- * way the /admin/dashboard tiles do; see [[project_horizon_multi_license_visibility_2026-08-31]]. */
+ * way the /admin/dashboard tiles do. */
 const EVER_LICENSED_SQL = `exists (select 1 from licenses l2 where l2.user_id = u.id)`;
 
 const SIGNUP_SOURCE_SQL = `
