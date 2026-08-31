@@ -290,6 +290,7 @@
 }
 .portal-shell .srv-ghead.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; }
 .portal-shell .srv-ghead .srv-pin { color: var(--hz-cyan); font-size: 15px; }
+.portal-shell .srv-ghead .srv-flag { font-size: 14px; }
 .portal-shell .srv-ghead .srv-gname { font-family: var(--hz-disp); font-weight: 700; font-size: 17px; letter-spacing: 0.02em; }
 .portal-shell .srv-ghead .srv-gcount {
   font-family: var(--hz-mono); font-size: 10.5px; color: var(--hz-cyan); background: rgba(45, 226, 230, 0.08);
@@ -297,11 +298,13 @@
 }
 .portal-shell .srv-ghead .srv-gsum { margin-left: auto; font-family: var(--hz-mono); font-size: 10.5px; color: var(--hz-ink-3); letter-spacing: 0.02em; }
 .portal-shell .srv-ghead .srv-chev { color: var(--hz-ink-3); font-size: 11px; width: 14px; text-align: center; margin-left: auto; }
-.portal-shell .srv-ghead.empty { background: linear-gradient(180deg, rgba(45, 226, 230, 0.02), transparent); border-style: dashed; border-color: var(--hz-line-soft); cursor: default; }
+.portal-shell .srv-ghead.empty { background: linear-gradient(180deg, rgba(45, 226, 230, 0.02), transparent); border-style: dashed; border-color: var(--hz-line-soft); cursor: default; flex-wrap: wrap; }
 .portal-shell .srv-ghead .srv-pin.dim { opacity: 0.42; }
+.portal-shell .srv-ghead .srv-flag.dim { opacity: 0.42; }
 .portal-shell .srv-ghead .srv-gname.dim { color: var(--hz-ink-2); }
 .portal-shell .srv-ghead .srv-gcount.zero { color: var(--hz-ink-3); background: transparent; border-color: var(--hz-line-soft); }
 .portal-shell .srv-ghead .srv-gsum.none { margin-left: 14px; font-family: var(--hz-sans); font-size: 12px; color: var(--hz-ink-3); letter-spacing: 0; }
+.portal-shell .srv-ghead .srv-gsub { flex: 1 0 100%; margin-left: 14px; margin-top: 2px; font-family: var(--hz-sans); font-size: 11px; color: var(--hz-ink-4); letter-spacing: 0; }
 .portal-shell .srv-gadd {
   margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600;
   color: var(--hz-cyan); cursor: pointer; white-space: nowrap; padding: 4px 2px; background: none; border: none; font: inherit;

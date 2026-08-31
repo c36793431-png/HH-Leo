@@ -12,6 +12,14 @@ export const SERVER_LOCATION_LABELS: Record<ServerLocation, string> = {
   tokyo: "Tokyo",
 };
 
+/** ny and cme are both US -- same flag, intentionally. */
+export const SERVER_LOCATION_FLAGS: Record<ServerLocation, string> = {
+  london: "🇬🇧",
+  ny: "🇺🇸",
+  cme: "🇺🇸",
+  tokyo: "🇯🇵",
+};
+
 export function isServerLocation(value: string): value is ServerLocation {
   return (SERVER_LOCATIONS as string[]).includes(value);
 }
