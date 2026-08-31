@@ -78,12 +78,18 @@ export default async function DashboardPage() {
   ]);
   const isAdmin = isAdminUser(session.user);
 
+  // Highest tier across every active license wins (thread multi-license-visibility-2026-08-31,
+  // marcus) — a paying client must never see "Trial" on a feed just because getLicenseForUser's
+  // latest-issued row happens to be an older trial.
+  const { tier: bestActiveTier } = computePortalTierFromLicenses(false, activeLicenses);
+  const bestLicenseTier = bestActiveTier === "free" ? null : bestActiveTier;
+
   const feedCatalogueByType = new Map(FEED_CATALOGUE.map((entry) => [entry.feedType, entry]));
   const signalFeedCards = FEED_TYPES.map((feedType) => {
     const catalogueEntry = feedCatalogueByType.get(feedType);
     const meta = FEED_TYPE_META[feedType];
     const status = catalogueEntry
-      ? computeFeedCardStatus(catalogueEntry, { activeFeeds, licenseTier: licenseDetail?.tier ?? null, isAdmin })
+      ? computeFeedCardStatus(catalogueEntry, { activeFeeds, licenseTier: bestLicenseTier, isAdmin })
       : "locked";
     const region = regionForFeedType(feedType);
     const tierCount = region ? feedTierCounts[region] ?? 0 : 0;
