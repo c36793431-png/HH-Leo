@@ -8,13 +8,15 @@ import { VPS_PROVIDERS, type ServerRegistration } from "@/lib/server-registratio
 interface ServerRegistrationFormProps {
   action: (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   value: ServerRegistration | null;
+  onSaved?: () => void;
+  onCancel?: () => void;
 }
 
 const inputClass =
   "w-full rounded border border-zinc-700 bg-black/40 px-2 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-600 disabled:opacity-50";
 const labelClass = "text-xs text-zinc-500";
 
-export function ServerRegistrationForm({ action, value }: ServerRegistrationFormProps) {
+export function ServerRegistrationForm({ action, value, onSaved, onCancel }: ServerRegistrationFormProps) {
   const [serverName, setServerName] = useState(value?.serverName ?? "");
   const [vpsProvider, setVpsProvider] = useState(value?.vpsProvider ?? "");
   const [vpsProviderOther, setVpsProviderOther] = useState(value?.vpsProviderOther ?? "");
@@ -34,6 +36,7 @@ export function ServerRegistrationForm({ action, value }: ServerRegistrationForm
       const result = await action(null, formData);
       if (result.ok) {
         emitToast(value ? "Server details updated" : "Server registered", "success");
+        onSaved?.();
       } else {
         emitToast(result.error, "error");
       }
@@ -109,13 +112,25 @@ export function ServerRegistrationForm({ action, value }: ServerRegistrationForm
         </div>
       </div>
 
-      <button
-        type="submit"
-        disabled={isPending}
-        className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-emerald-400 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {isPending ? "Saving…" : value ? "Update server" : "Register server"}
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={isPending}
+          className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-emerald-400 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isPending ? "Saving…" : value ? "Update server" : "Register server"}
+        </button>
+        {onCancel && (
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={onCancel}
+            className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }

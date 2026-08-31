@@ -5,10 +5,10 @@ import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { ServerRegistrationForm } from "@/components/account/server-registration-form";
-import { getServerRegistration } from "@/lib/server-registration";
+import { ServerRegistrationView } from "@/components/account/server-registration-view";
+import { getServerRegistration, getLatestConnectionIp } from "@/lib/server-registration";
 import { getBlackTrialForLicense } from "@/lib/black-trials";
 import { getPortalConfig } from "@/lib/portal-config";
-import { formatAbsoluteUtc } from "@/lib/format-time";
 import { BlackTrialCard } from "@/components/account/black-trial-card";
 import { saveServerRegistrationAction, requestBlackTrialAction, requestBlackTrialConvertAction } from "./actions";
 
@@ -29,6 +29,8 @@ export default async function ServersPage() {
 
   const registration = licenseDetail ? await getServerRegistration(licenseDetail.id).catch(() => null) : null;
   const blackTrial = licenseDetail ? await getBlackTrialForLicense(licenseDetail.id).catch(() => null) : null;
+  const latestIp = registration && licenseDetail ? await getLatestConnectionIp(licenseDetail.id).catch(() => null) : null;
+  const verified = !!(registration && latestIp && latestIp === registration.declaredIp);
 
   return (
     <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
@@ -40,19 +42,24 @@ export default async function ServersPage() {
           <div className="chead">
             <span className="ic">🖥</span>
             <h3>Server registration</h3>
+            {unlocked && licenseDetail && registration && (
+              <span className={`st ${verified ? "ver" : "reg"}`} style={{ marginLeft: "auto" }}>
+                <span className="d" />
+                {verified ? "Verified" : "Registered"}
+              </span>
+            )}
           </div>
           {unlocked && licenseDetail ? (
             <>
               <p style={{ color: "var(--hz-ink-2)", fontSize: 13, marginBottom: 16 }}>
                 Tell us where your Horizon client runs. We use this to whitelist your IP with feed
-                vendors and confirm the location we already see server-side. You can edit this any
-                time.
+                vendors and confirm the location we already see server-side.
+                {!registration && " You can edit this any time."}
               </p>
-              <ServerRegistrationForm action={saveServerRegistrationAction} value={registration} />
-              {registration && (
-                <p style={{ marginTop: 16, fontSize: 12, color: "var(--hz-ink-2)" }}>
-                  Last updated {formatAbsoluteUtc(registration.updatedAt)}
-                </p>
+              {registration ? (
+                <ServerRegistrationView registration={registration} action={saveServerRegistrationAction} />
+              ) : (
+                <ServerRegistrationForm action={saveServerRegistrationAction} value={null} />
               )}
             </>
           ) : (

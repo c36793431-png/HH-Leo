@@ -123,6 +123,18 @@ export async function saveServerRegistration(
   }
 }
 
+/** Most recent observed IP for a license, or null if the client has never connected.
+ * Used client-side to distinguish Registered (nothing observed) from Verified (declared
+ * IP matches what we see) — the third state, mismatch, is admin-only and never
+ * computed for this surface. */
+export async function getLatestConnectionIp(licenseId: string): Promise<string | null> {
+  const result = await pool.query<{ ip: string }>(
+    "select ip from connection_ips where license_id = $1 order by captured_at desc limit 1",
+    [licenseId]
+  );
+  return result.rows[0]?.ip ?? null;
+}
+
 export async function setMultipleIpsOk(licenseId: string, value: boolean): Promise<void> {
   await pool.query(
     "update server_registrations set multiple_ips_ok = $2, updated_at = now() where license_id = $1",
