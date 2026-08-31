@@ -79,7 +79,7 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
                       setOpenGroup(key);
                     }}
                   >
-                    ＋ Add here
+                    <span className="srv-gadd-icon">＋</span> Add here
                   </button>
                 )}
                 {!addTarget && <span className="srv-gsub">Each server needs its own licence.</span>}
@@ -178,7 +178,7 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
                     style={{ marginTop: 10 }}
                     onClick={() => setAddingInGroup(key)}
                   >
-                    ＋ Add here
+                    <span className="srv-gadd-icon">＋</span> Add here
                   </button>
                 )}
               </div>

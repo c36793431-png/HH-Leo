@@ -310,6 +310,11 @@
   color: var(--hz-cyan); cursor: pointer; white-space: nowrap; padding: 4px 2px; background: none; border: none; font: inherit;
 }
 .portal-shell .srv-gadd:hover { opacity: 0.85; }
+.portal-shell .srv-gadd-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 999px; border: 1px solid var(--hz-cyan);
+  font-size: 11px; line-height: 1; flex: 0 0 auto;
+}
 .portal-shell .srv-grows { border: 1px solid var(--hz-line); border-top: none; border-radius: 0 0 12px 12px; overflow: hidden; padding: 10px; background: var(--hz-panel); }
 .portal-shell .srv-srow {
   display: flex; align-items: center; gap: 14px; padding: 13px 12px; border-radius: 9px; width: 100%;
