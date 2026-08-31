@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getLicenseForUser, getActiveLicensesForUser, computePortalTier, type ActiveLicense } from "@/lib/licenses";
+import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses, type LicenseDetail } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { ServerRegistrationForm } from "@/components/account/server-registration-form";
@@ -14,7 +14,7 @@ import { BlackTrialCard } from "@/components/account/black-trial-card";
 import { saveServerRegistrationAction, requestBlackTrialAction, requestBlackTrialConvertAction } from "./actions";
 
 interface ServerCardProps {
-  license: ActiveLicense;
+  license: LicenseDetail;
   registration: ServerRegistration | null;
   blackTrial: BlackTrialRow | null;
   verified: boolean;
@@ -65,14 +65,13 @@ export default async function ServersPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [paid, licenseDetail, licenses, config] = await Promise.all([
+  const [paid, licenses, config] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
-    getLicenseForUser(session.user.id).catch(() => null),
-    getActiveLicensesForUser(session.user.id).catch(() => []),
+    getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
     getPortalConfig(),
   ]);
   const isAdmin = isAdminUser(session.user);
-  const tier = computePortalTier(isAdmin, licenseDetail);
+  const { tier } = computePortalTierFromLicenses(isAdmin, licenses);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   const unlocked = paid || isAdmin;

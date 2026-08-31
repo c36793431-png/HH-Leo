@@ -599,10 +599,10 @@ export async function getActiveLicensesForUser(userId: string): Promise<ActiveLi
 }
 
 /** Same set/order as getActiveLicensesForUser, but with the full LicenseDetail columns —
- * for surfaces (dashboard card) that must render each active license's own tier/hwid/last-seen
- * rather than just its id/key. Kept separate from ActiveLicense so entitlement-adjacent callers
- * of getActiveLicensesForUser (issueLicense's active-license check, /account/servers) don't pick
- * up extra columns they don't need. */
+ * for surfaces (dashboard card, /account/servers) that must render each active license's own
+ * tier/hwid/last-seen rather than just its id/key. Kept separate from ActiveLicense so
+ * entitlement-adjacent callers that only need id/key (issueLicense's active-license check)
+ * don't pick up extra columns they don't need. */
 export async function getActiveLicenseDetailsForUser(userId: string): Promise<LicenseDetail[]> {
   const result = await pool.query(
     `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types,
