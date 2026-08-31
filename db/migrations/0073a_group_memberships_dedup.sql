@@ -14,6 +14,10 @@
 -- Dedup: mark all but the most-recently-invited active-status row per (user_id, chat_id)
 -- as 'left', so 0073's unique index can be created against rows that already contain
 -- duplicates from before that fix.
+--
+-- Apply order note (2026-08-31): the "0073a" suffix does not mean "after 0073" here —
+-- this UPDATE must run BEFORE 0073's create unique index, whenever duplicates exist,
+-- or that index creation fails on the still-present dupes.
 update group_memberships gm
 set status = 'left', removed_at = coalesce(removed_at, now())
 where status not in ('removed_on_lapse', 'left')

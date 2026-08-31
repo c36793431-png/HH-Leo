@@ -9,6 +9,10 @@
 -- 2026-08-31): this file only creates the index. Any dedup of pre-existing duplicate rows
 -- happens in 0073a, and only if db/migrations/0073a_check_group_memberships_dupes.sql
 -- (read-only) finds rows to dedup.
+--
+-- Apply order note (2026-08-31): despite the numeric prefix, if duplicates exist,
+-- 0073a_group_memberships_dedup.sql's UPDATE must run BEFORE the index creation below —
+-- the duplicates it demotes are exactly what would make this unique index fail to create.
 create unique index if not exists group_memberships_active_user_chat_idx
   on group_memberships (user_id, chat_id)
   where status not in ('removed_on_lapse', 'left');
