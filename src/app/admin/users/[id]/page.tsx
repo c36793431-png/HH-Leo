@@ -20,6 +20,7 @@ import {
   extendLicenseAction,
   revokeAction,
   issueNewLicenseAction,
+  issueAdditionalLicenseAction,
   setUserLicenseTierAction,
   updateUserFieldAction,
   updateLicenseFeedsAction,
@@ -231,6 +232,35 @@ export default async function AdminUserDetailPage({
               <FeedCheckboxes />
             </DurationForm>
           </div>
+          {activeLicense && (
+            <div className="mt-2">
+              <DurationForm
+                action={issueAdditionalLicenseAction}
+                hiddenFields={{ userId: user.userId }}
+                submitLabel="Issue"
+                successMessage="Additional license issued"
+                compact
+                triggerLabel="Issue additional license"
+                triggerClassName="cursor-pointer select-none rounded border border-amber-500/50 px-2 py-1 text-xs text-amber-300 hover:border-amber-400 hover:text-amber-200"
+              >
+                <label className="flex items-center gap-1 text-xs text-zinc-400">
+                  Tier
+                  <select
+                    name="tier"
+                    defaultValue="paid"
+                    className="rounded border border-zinc-700 bg-black/40 px-1.5 py-0.5 text-xs text-zinc-200"
+                  >
+                    {LICENSE_TIERS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <FeedCheckboxes />
+              </DurationForm>
+            </div>
+          )}
         </div>
       </section>
 
