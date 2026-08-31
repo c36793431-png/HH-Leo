@@ -25,11 +25,11 @@ export interface FeedTierMeta {
 }
 
 export const FEED_TIERS: FeedTierMeta[] = [
-  { key: "ld-alpha-85", name: "LD Alpha 85", region: "london" },
+  { key: "ld-alpha-85", name: "Alpha", region: "london" },
   { key: "ld-beta-56", name: "LD Beta 56", region: "london" },
   { key: "ld-gamma-19", name: "LD Gamma 19", region: "london" },
   { key: "ld-delta-18", name: "LD Delta 18", region: "london" },
-  { key: "ld-ultra", name: "LD Ultra", region: "london" },
+  { key: "ld-ultra", name: "Ultra", region: "london" },
   { key: "ny-normal", name: "NY Beta", region: "ny" },
   { key: "ny-fast", name: "NY Alpha", region: "ny" },
   /** Pseudo-tier for the Retail package card's single request button (tiers/page.tsx
