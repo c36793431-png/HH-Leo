@@ -8,6 +8,7 @@ import {
 import Link from "next/link";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { maskLicenseKey } from "@/lib/licenses";
+import { LICENSE_BADGE_STYLES, LICENSE_STATUS_BADGES, LICENSE_BADGE_CLASS } from "@/lib/license-status-badge";
 
 /** "YYYY-MM-DD" -> "Jul 1" for sparkline x-axis ticks. */
 function formatShortDate(iso: string): string {
@@ -160,48 +161,62 @@ export default async function AdminDashboardPage() {
               <thead className="text-zinc-500">
                 <tr>
                   <th className="pb-2 pr-4">Email</th>
-                  <th className="pb-2 pr-4">Name</th>
-                  <th className="pb-2 pr-4">Telegram</th>
+                  <th className="pb-2 pr-4">Contact</th>
                   <th className="pb-2 pr-4">Signed up</th>
-                  <th className="pb-2">Tier</th>
+                  <th className="pb-2 pr-4">Tier</th>
+                  <th className="pb-2 pr-4">Role</th>
+                  <th className="pb-2">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {signups.map((s) => (
-                  <tr key={s.userId} className="group cursor-pointer hover:bg-zinc-900/60">
-                    <td className="py-2 pr-4 text-zinc-200">
-                      <Link
-                        href={`/admin/users/${s.userId}`}
-                        className="block group-hover:text-cyan-300 group-hover:underline"
-                      >
-                        {s.email ?? s.displayName ?? "—"}
-                      </Link>
-                    </td>
-                    <td className="py-2 pr-4 text-zinc-400">
-                      <Link href={`/admin/users/${s.userId}`} className="block">
-                        {s.displayName ?? "—"}
-                      </Link>
-                    </td>
-                    <td className="py-2 pr-4 text-zinc-400">
-                      <Link href={`/admin/users/${s.userId}`} className="block">
-                        {s.telegramUsername ? `@${s.telegramUsername}` : "—"}
-                      </Link>
-                    </td>
-                    <td className="py-2 pr-4 text-zinc-400">
-                      <Link href={`/admin/users/${s.userId}`} className="block">
-                        {formatRelative(s.createdAt)}
-                      </Link>
-                    </td>
-                    <td className={`py-2 ${SIGNUP_STATUS_STYLES[s.statusLabel]}`}>
-                      <Link href={`/admin/users/${s.userId}`} className="block">
-                        {s.statusLabel}
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {signups.map((s) => {
+                  const badge = LICENSE_STATUS_BADGES[s.licenseStatus];
+                  return (
+                    <tr key={s.userId} className="group cursor-pointer hover:bg-zinc-900/60">
+                      <td className="py-2 pr-4 text-zinc-200">
+                        <Link
+                          href={`/admin/users/${s.userId}`}
+                          className="block group-hover:text-cyan-300 group-hover:underline"
+                        >
+                          {s.email ?? s.displayName ?? "—"}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-4 text-zinc-400">
+                        <Link href={`/admin/users/${s.userId}`} className="block">
+                          <div>{s.displayName ?? "—"}</div>
+                          <div className="text-xs text-zinc-500">
+                            {s.telegramUsername ? `@${s.telegramUsername}` : "—"}
+                          </div>
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-4 text-zinc-400">
+                        <Link href={`/admin/users/${s.userId}`} className="block">
+                          {formatRelative(s.createdAt)}
+                        </Link>
+                      </td>
+                      <td className={`py-2 pr-4 ${SIGNUP_STATUS_STYLES[s.statusLabel]}`}>
+                        <Link href={`/admin/users/${s.userId}`} className="block">
+                          {s.statusLabel}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-4 text-zinc-400">
+                        <Link href={`/admin/users/${s.userId}`} className="block">
+                          {s.roleLabel}
+                        </Link>
+                      </td>
+                      <td className="py-2">
+                        <Link href={`/admin/users/${s.userId}`} className="block">
+                          <span className={`${LICENSE_BADGE_CLASS} ${LICENSE_BADGE_STYLES[badge.color]}`}>
+                            {badge.label}
+                          </span>
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {signups.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-4 text-center text-zinc-500">
+                    <td colSpan={6} className="py-4 text-center text-zinc-500">
                       No signups yet.
                     </td>
                   </tr>

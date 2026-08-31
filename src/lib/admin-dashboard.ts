@@ -1,6 +1,8 @@
 import { pool } from "./db";
 import { getPaymentTotals } from "./payments";
-import { getFeedCostStats } from "./licenses";
+import { getFeedCostStats, licenseStatusCaseSql } from "./licenses";
+import { ROLE_LABELS, type UserRole } from "./admin-user-roles";
+import type { ComputedLicenseStatus } from "./license-status-badge";
 
 /**
  * All counts/lists here scope to role='user' (matches listClients' convention) —
@@ -80,6 +82,11 @@ export interface RecentSignupRow {
   telegramUsername: string | null;
   createdAt: Date;
   statusLabel: "Paid" | "Trial" | "Team" | "Deal" | "Lapsed" | "Free";
+  roleLabel: string;
+  /** Computed off the most-recently-issued license (same lateral-join convention as
+   * listAllUsersWithLicenses), independent of statusLabel above which only looks at
+   * the active tier — the two can disagree (e.g. a revoked license with a newer trial). */
+  licenseStatus: ComputedLicenseStatus;
 }
 
 export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
@@ -89,18 +96,28 @@ export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
     display_name: string | null;
     telegram_username: string | null;
     created_at: Date;
+    role: UserRole;
     active_tier: string | null;
     ever_licensed: boolean;
+    computed_status: ComputedLicenseStatus;
   }>(
-    `select u.id, u.email, u.display_name, u.telegram_username, u.created_at,
+    `select u.id, u.email, u.display_name, u.telegram_username, u.created_at, u.role,
             (
               select l.tier from licenses l
               where l.user_id = u.id and l.status = 'active' and l.expires_at > now()
               order by l.expires_at desc
               limit 1
             ) as active_tier,
-            exists (select 1 from licenses l where l.user_id = u.id) as ever_licensed
+            exists (select 1 from licenses l where l.user_id = u.id) as ever_licensed,
+            ${licenseStatusCaseSql("recent_l", { noneWhenMissing: true })} as computed_status
      from users u
+     left join lateral (
+       select id, status, expires_at
+       from licenses
+       where user_id = u.id
+       order by issued_at desc
+       limit 1
+     ) recent_l on true
      where u.role = 'user'
      order by u.created_at desc
      limit $1`,
@@ -112,6 +129,7 @@ export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
     displayName: r.display_name,
     telegramUsername: r.telegram_username,
     createdAt: r.created_at,
+    roleLabel: ROLE_LABELS[r.role] ?? r.role,
     statusLabel:
       r.active_tier === "paid"
         ? "Paid"
@@ -124,6 +142,7 @@ export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
               : r.ever_licensed
                 ? "Lapsed"
                 : "Free",
+    licenseStatus: r.computed_status,
   }));
 }
 
@@ -164,7 +183,7 @@ export async function getRecentLicenseActivity(limit = 10): Promise<LicenseActiv
       select 'expired' as type, l.license_key, u.email as user_email, null as actor_email, l.expires_at as at
       from licenses l
       left join users u on u.id = l.user_id
-      where l.lifecycle_state = 'expired_processed'
+      where l.lifecycle_state = 'expired_processed' and l.status != 'revoked'
     )
     order by at desc
     limit $3`,

@@ -12,6 +12,7 @@ import {
   type UsersTierBucket,
 } from "@/lib/licenses";
 import { ALL_USER_ROLES, ROLE_LABELS, type UserRole } from "@/lib/admin-user-roles";
+import { LICENSE_BADGE_STYLES as BADGE_STYLES, LICENSE_STATUS_BADGES as BADGES } from "@/lib/license-status-badge";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
 import { ActionButton } from "@/components/admin/action-button";
@@ -26,14 +27,6 @@ import {
   setUserLicenseTierAction,
 } from "./actions";
 
-const BADGE_STYLES = {
-  green: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
-  amber: "border-amber-500/40 bg-amber-500/15 text-amber-300",
-  red: "border-red-500/40 bg-red-500/15 text-red-300",
-  grey: "border-zinc-600/40 bg-zinc-600/15 text-zinc-400",
-  blue: "border-blue-500/40 bg-blue-500/15 text-blue-300",
-} as const;
-
 const PER_PAGE = 50;
 
 const HAS_LICENSE_VALUES: HasLicenseFilter[] = ["active", "expiring", "expired", "revoked", "none"];
@@ -44,14 +37,6 @@ const SORT_COLUMNS: { key: UsersSortColumn; label: string }[] = [
   { key: "last_verified_at", label: "Last verified" },
   { key: "expires_at", label: "Expires" },
 ];
-
-const BADGES: Record<AdminUserRow["computedStatus"], { label: string; color: keyof typeof BADGE_STYLES }> = {
-  none: { label: "NO LICENSE", color: "grey" },
-  revoked: { label: "REVOKED", color: "red" },
-  expired: { label: "EXPIRED", color: "red" },
-  expiring: { label: "EXPIRING", color: "amber" },
-  active: { label: "ACTIVE", color: "green" },
-};
 
 function getBadge(row: AdminUserRow): { label: string; color: keyof typeof BADGE_STYLES } {
   if (row.role === "admin") return { label: "ADMIN", color: "blue" };

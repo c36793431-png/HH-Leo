@@ -16,7 +16,7 @@ import { removeFromPaidGroup } from "./group-membership";
  * pages used to each define their own CASE expression and drifted (a license 24h from
  * expiry showed ACTIVE on one page, EXPIRING on another). Any page rendering license
  * status must select via this fragment, never hand-roll its own. */
-function licenseStatusCaseSql(alias: string, { noneWhenMissing = false } = {}): string {
+export function licenseStatusCaseSql(alias: string, { noneWhenMissing = false } = {}): string {
   return `
     case
       ${noneWhenMissing ? `when ${alias}.id is null then 'none'\n      ` : ""}when ${alias}.status = 'revoked' then 'revoked'
