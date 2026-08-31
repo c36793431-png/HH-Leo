@@ -60,6 +60,7 @@ const TAB_LABELS: Record<UsersTierBucket, string> = {
   team: "Team",
   admin: "Admin",
   deal: "Deal",
+  lapsed: "Lapsed",
 };
 
 interface RawSearchParams {

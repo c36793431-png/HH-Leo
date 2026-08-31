@@ -843,9 +843,9 @@ export type RoleFilter = UserRole;
 export type UsersSortColumn = "joined_at" | "last_verified_at" | "expires_at";
 export type SortDir = "asc" | "desc";
 
-/** Segmented tab bucket for /admin/users: admin/free by role+license state, the rest by active tier. */
-export type UsersTierBucket = "free" | "trial" | "paid" | "team" | "deal" | "admin";
-export const USERS_TIER_BUCKETS: UsersTierBucket[] = ["free", "trial", "paid", "team", "deal", "admin"];
+/** Segmented tab bucket for /admin/users: admin/free/lapsed by role+license state, the rest by active tier. */
+export type UsersTierBucket = "free" | "trial" | "paid" | "team" | "deal" | "lapsed" | "admin";
+export const USERS_TIER_BUCKETS: UsersTierBucket[] = ["free", "trial", "paid", "team", "deal", "lapsed", "admin"];
 
 export interface ListUsersOptions {
   search?: string;
@@ -879,6 +879,12 @@ const ACTIVE_TIER_SQL = `(
   order by l2.expires_at desc
   limit 1
 )`;
+
+/** Mirrors getUserCounts' ever_licensed subquery exactly — true if the user has held any
+ * license, ever, regardless of its current status. Combined with ACTIVE_TIER_SQL is null,
+ * splits free (never licensed) from lapsed (licensed before, nothing active now) the same
+ * way the /admin/dashboard tiles do; see [[project_horizon_multi_license_visibility_2026-08-31]]. */
+const EVER_LICENSED_SQL = `exists (select 1 from licenses l2 where l2.user_id = u.id)`;
 
 const SIGNUP_SOURCE_SQL = `
   case
@@ -924,7 +930,9 @@ export async function listAllUsersWithLicenses(
   if (options.tierBucket === "admin") {
     conditions.push(`u.role = 'admin'`);
   } else if (options.tierBucket === "free") {
-    conditions.push(`u.role != 'admin' and ${COMPUTED_STATUS_SQL} not in ('active', 'expiring')`);
+    conditions.push(`u.role != 'admin' and ${ACTIVE_TIER_SQL} is null and not ${EVER_LICENSED_SQL}`);
+  } else if (options.tierBucket === "lapsed") {
+    conditions.push(`u.role != 'admin' and ${ACTIVE_TIER_SQL} is null and ${EVER_LICENSED_SQL}`);
   } else if (options.tierBucket) {
     params.push(options.tierBucket);
     conditions.push(`u.role != 'admin' and ${ACTIVE_TIER_SQL} = $${params.length}`);

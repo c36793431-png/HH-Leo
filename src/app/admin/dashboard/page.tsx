@@ -107,7 +107,7 @@ export default async function AdminDashboardPage() {
           href="/admin/users?role=user&tab=deal"
         />
         <StatTile label="Free" value={String(counts.free)} href="/admin/users?role=user&hasLicense=none" />
-        <StatTile label="Lapsed" value={String(counts.lapsed)} />
+        <StatTile label="Lapsed" value={String(counts.lapsed)} href="/admin/users?role=user&tab=lapsed" />
         <StatTile label="Admins" value={String(counts.admins)} href="/admin/users?tab=admin" />
       </section>
 
