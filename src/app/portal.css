@@ -293,8 +293,8 @@
 .portal-shell .srv-ghead .srv-flag { width: 16px; height: 12px; flex: 0 0 auto; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15); }
 .portal-shell .srv-ghead .srv-gname { font-family: var(--hz-disp); font-weight: 700; font-size: 17px; letter-spacing: 0.02em; }
 .portal-shell .srv-ghead .srv-gcount {
-  font-family: var(--hz-mono); font-size: 10.5px; color: var(--hz-cyan); background: rgba(45, 226, 230, 0.08);
-  border: 1px solid var(--hz-line); padding: 3px 9px; border-radius: 999px;
+  font-family: var(--hz-mono); font-size: 10.5px; color: var(--hz-ok); background: rgba(55, 245, 160, 0.1);
+  border: 1px solid rgba(55, 245, 160, 0.34); padding: 3px 9px; border-radius: 999px;
 }
 .portal-shell .srv-ghead .srv-gsum { margin-left: auto; font-family: var(--hz-mono); font-size: 10.5px; color: var(--hz-ink-3); letter-spacing: 0.02em; }
 .portal-shell .srv-ghead .srv-gsum .srv-gsum-item.reg { color: var(--hz-ok); }
