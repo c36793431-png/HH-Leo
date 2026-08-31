@@ -103,12 +103,6 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
 
         const verifiedCount = groupEntries.filter((e) => e.verified).length;
         const registeredCount = groupEntries.length - verifiedCount;
-        const summary = [
-          verifiedCount ? `${verifiedCount} Verified` : null,
-          registeredCount ? `${registeredCount} Registered` : null,
-        ]
-          .filter(Boolean)
-          .join(" · ");
 
         return (
           <div className="srv-grp" key={key}>
@@ -117,7 +111,11 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
               {Flag && <Flag className="srv-flag" />}
               <span className="srv-gname">{label} Servers</span>
               {groupEntries.length >= 2 && <span className="srv-gcount">{groupEntries.length} Added</span>}
-              <span className="srv-gsum">{summary}</span>
+              <span className="srv-gsum">
+                {verifiedCount > 0 && <span className="srv-gsum-item">{verifiedCount} Verified</span>}
+                {verifiedCount > 0 && registeredCount > 0 && <span className="srv-gsum-sep"> · </span>}
+                {registeredCount > 0 && <span className="srv-gsum-item reg">{registeredCount} Registered</span>}
+              </span>
               <span className="srv-chev">{isOpen ? "▾" : "▸"}</span>
             </button>
             {isOpen && (

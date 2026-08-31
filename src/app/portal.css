@@ -262,8 +262,8 @@
 /* ---- STATUS CHIP (Registered / Verified — the third state, Mismatch, is admin-only) ---- */
 .portal-shell .st { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; letter-spacing: 0.01em; white-space: nowrap; }
 .portal-shell .st .d { width: 7px; height: 7px; border-radius: 50%; }
-.portal-shell .st.reg { background: rgba(138, 155, 160, 0.1); border: 1px solid rgba(138, 155, 160, 0.32); color: var(--hz-grey); }
-.portal-shell .st.reg .d { background: var(--hz-grey); }
+.portal-shell .st.reg { background: rgba(55, 245, 160, 0.1); border: 1px solid rgba(55, 245, 160, 0.34); color: var(--hz-ok); }
+.portal-shell .st.reg .d { background: var(--hz-ok); box-shadow: 0 0 8px var(--hz-ok); }
 .portal-shell .st.ver { background: rgba(55, 245, 160, 0.1); border: 1px solid rgba(55, 245, 160, 0.34); color: var(--hz-ok); }
 .portal-shell .st.ver .d { background: var(--hz-ok); box-shadow: 0 0 8px var(--hz-ok); }
 
@@ -297,6 +297,7 @@
   border: 1px solid var(--hz-line); padding: 3px 9px; border-radius: 999px;
 }
 .portal-shell .srv-ghead .srv-gsum { margin-left: auto; font-family: var(--hz-mono); font-size: 10.5px; color: var(--hz-ink-3); letter-spacing: 0.02em; }
+.portal-shell .srv-ghead .srv-gsum .srv-gsum-item.reg { color: var(--hz-ok); }
 .portal-shell .srv-ghead .srv-chev { color: var(--hz-ink-3); font-size: 11px; width: 14px; text-align: center; margin-left: auto; }
 .portal-shell .srv-ghead.empty { background: linear-gradient(180deg, rgba(45, 226, 230, 0.02), transparent); border-style: dashed; border-color: var(--hz-line-soft); cursor: default; flex-wrap: wrap; }
 .portal-shell .srv-ghead .srv-pin.dim { opacity: 0.42; }
@@ -307,12 +308,12 @@
 .portal-shell .srv-ghead .srv-gsub { flex: 1 0 100%; margin-left: 14px; margin-top: 2px; font-family: var(--hz-sans); font-size: 11px; color: var(--hz-ink-4); letter-spacing: 0; }
 .portal-shell .srv-gadd {
   margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600;
-  color: var(--hz-cyan); cursor: pointer; white-space: nowrap; padding: 4px 2px; background: none; border: none; font: inherit;
+  color: var(--hz-ok); cursor: pointer; white-space: nowrap; padding: 4px 2px; background: none; border: none; font: inherit;
 }
 .portal-shell .srv-gadd:hover { opacity: 0.85; }
 .portal-shell .srv-gadd-icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px; border-radius: 999px; border: 1px solid var(--hz-cyan);
+  width: 18px; height: 18px; border-radius: 999px; border: 1px solid var(--hz-ok);
   font-size: 11px; line-height: 1; flex: 0 0 auto;
 }
 .portal-shell .srv-grows { border: 1px solid var(--hz-line); border-top: none; border-radius: 0 0 12px 12px; overflow: hidden; padding: 10px; background: var(--hz-panel); }
