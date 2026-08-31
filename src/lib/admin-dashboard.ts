@@ -5,9 +5,10 @@ import { ROLE_LABELS, type UserRole } from "./admin-user-roles";
 import type { ComputedLicenseStatus } from "./license-status-badge";
 
 /**
- * getUserCounts/getSignupsPerDay scope to role='user' (matches listClients' convention) —
- * the single admin account isn't a business metric. getRecentSignups is wider: see its
- * own doc comment.
+ * getUserCounts scopes to role='user' (matches listClients' convention) — the single
+ * admin account isn't a business metric. getSignupsPerDay and getRecentSignups are wider
+ * (role != 'admin') so the "New signups" chart and the "Recent signups" table it sits
+ * above agree on what counts as a signup; see getRecentSignups' own doc comment.
  */
 
 export interface UserCounts {
@@ -220,7 +221,7 @@ export async function getSignupsPerDay(days = 30): Promise<SignupsPerDay[]> {
        interval '1 day'
      ) as d(day)
      left join users u
-       on u.role = 'user' and date_trunc('day', u.created_at) = d.day
+       on u.role != 'admin' and date_trunc('day', u.created_at) = d.day
      group by d.day
      order by d.day asc`,
     [days]
