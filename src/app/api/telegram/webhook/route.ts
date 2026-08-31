@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { sendTelegramMessage, answerCallbackQuery, editMessageText } from "@/lib/telegram-bot";
 import { notifyTelegramLinked } from "@/lib/telemetry-sink";
-import { getLicenseForUser, computeLicenseDisplayStatus, getGroupTarget, isPaidTier } from "@/lib/licenses";
+import { getActiveLicenseDetailsForUser, getGroupTarget, isPaidTier } from "@/lib/licenses";
 import { sendPaidGroupInvite } from "@/lib/group-membership";
 import { resolveAdminUserId } from "@/lib/admin-telegram-map";
 import { approveFeedTierRequest, rejectFeedTierRequest, getFeedTierRequest } from "@/lib/feed-tier-requests";
@@ -229,12 +229,8 @@ export async function POST(req: NextRequest) {
     }).catch(() => {});
   }
 
-  const license = await getLicenseForUser(userId).catch(() => null);
-  const displayStatus = computeLicenseDisplayStatus(license);
-  const eligible =
-    license !== null &&
-    isPaidTier(license.tier) &&
-    (displayStatus === "active" || displayStatus === "expiring");
+  const activeLicenses = await getActiveLicenseDetailsForUser(userId).catch(() => []);
+  const eligible = activeLicenses.some((l) => isPaidTier(l.tier));
 
   try {
     if (!eligible) {

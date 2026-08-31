@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { verifyTelegramLogin, type TelegramLoginPayload } from "@/lib/telegram-auth";
-import { claimPendingLicense, getLicenseForUser, computeLicenseDisplayStatus, getGroupTarget } from "@/lib/licenses";
+import { claimPendingLicense, getActiveLicenseDetailsForUser, isPaidTier, getGroupTarget } from "@/lib/licenses";
 import { sendGroupInvite, sendPaidGroupInvite } from "@/lib/group-membership";
 import { notifyTelegramLinked } from "@/lib/telemetry-sink";
 import type { ActionResult } from "@/lib/action-result";
@@ -69,9 +69,8 @@ export async function requestPaidGroupInviteAction(): Promise<ActionResult> {
   if (!session?.user?.id) return { ok: false, error: "Not authenticated." };
   const userId = session.user.id;
 
-  const license = await getLicenseForUser(userId).catch(() => null);
-  const displayStatus = computeLicenseDisplayStatus(license);
-  if (displayStatus !== "active" && displayStatus !== "expiring") {
+  const activeLicenses = await getActiveLicenseDetailsForUser(userId).catch(() => []);
+  if (!activeLicenses.some((l) => isPaidTier(l.tier))) {
     return { ok: false, error: "Renew required — your license isn't active." };
   }
 
