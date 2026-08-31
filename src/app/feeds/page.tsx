@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getLicenseForUser, computeUserActiveFeeds, computePortalTier } from "@/lib/licenses";
+import {
+  isPaidUser,
+  getLicenseForUser,
+  getActiveLicenseDetailsForUser,
+  computeUserActiveFeeds,
+  computePortalTier,
+  computePortalTierFromLicenses,
+} from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
@@ -30,12 +37,18 @@ export default async function FeedsPage() {
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [paid, licenseDetail, config] = await Promise.all([
+  const [paid, licenseDetail, config, activeLicenses] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
     getLicenseForUser(session.user.id).catch(() => null),
     getPortalConfig(),
+    getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
   ]);
   const activeFeeds = await computeUserActiveFeeds(session.user.id).catch(() => []);
+  // Highest tier across every active license wins (thread multi-license-visibility-2026-08-31,
+  // marcus) — a paying client must never see "Trial" on a feed just because getLicenseForUser's
+  // latest-issued row happens to be an older trial.
+  const { tier: bestActiveTier } = computePortalTierFromLicenses(false, activeLicenses);
+  const bestLicenseTier = bestActiveTier === "free" ? null : bestActiveTier;
   const tierCounts = await getTierCountsByRegion().catch(() => ({} as Awaited<ReturnType<typeof getTierCountsByRegion>>));
   const serverRegistration = await getAnyServerRegistrationForUser(session.user.id).catch(() => null);
   const isAdmin = isAdminUser(session.user);
@@ -54,9 +67,14 @@ export default async function FeedsPage() {
         {FEED_CATALOGUE.map((entry) => {
           const status = computeFeedCardStatus(entry, {
             activeFeeds,
-            licenseTier: licenseDetail?.tier ?? null,
+            licenseTier: bestLicenseTier,
             isAdmin,
           });
+          // Furthest expiry among active licenses that actually grant this feed wins — that's
+          // when this card's access really ends, not whichever license was issued last.
+          const grantingLicense = entry.feedType
+            ? activeLicenses.find((l) => l.feedTypes.includes(entry.feedType!))
+            : undefined;
           const region = regionForFeedType(entry.feedType);
           const tierCount = region ? tierCounts[region] ?? 0 : 0;
           const hasTiers = tierCount > 1;
@@ -87,10 +105,10 @@ export default async function FeedsPage() {
               <p className="fp-desc">{entry.description}</p>
               <span className="fp-latency">{entry.latencyBand}</span>
 
-              {(status === "active" || status === "trial") && licenseDetail && (
+              {(status === "active" || status === "trial") && grantingLicense && (
                 <span className="fp-expiry">
                   {status === "trial" ? "Trial · expires " : "Active until "}
-                  {licenseDetail.expiresAt.toLocaleDateString()}
+                  {grantingLicense.expiresAt.toLocaleDateString()}
                 </span>
               )}
 
