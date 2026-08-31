@@ -9,7 +9,7 @@ import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
 import { BlackWaitlistControl } from "@/components/feeds/black-waitlist-control";
-import { getServerRegistration } from "@/lib/server-registration";
+import { getAnyServerRegistrationForUser } from "@/lib/server-registration";
 import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { hasJoinedTierWaitlist } from "@/lib/tier-waitlist";
@@ -109,7 +109,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const userEmail = session.user.email ?? "";
 
   const [serverRegistration, existingRequests, blackWaitlisted] = await Promise.all([
-    licenseDetail ? getServerRegistration(licenseDetail.id) : Promise.resolve(null),
+    getAnyServerRegistrationForUser(session.user.id),
     listFeedTierRequests({ userId: session.user.id }),
     region === "london" ? hasJoinedTierWaitlist(session.user.id, "london", "black") : Promise.resolve(false),
   ]);

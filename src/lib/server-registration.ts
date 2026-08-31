@@ -1,7 +1,7 @@
 import { pool } from "./db";
 import { resolveGeoIp } from "./geoip";
 import { notifyServerRegistered, notifyIpMismatch, notifyCountryChange } from "./telemetry-sink";
-import { FEED_TYPE_META, type FeedType } from "./licenses";
+import { FEED_TYPE_META, getActiveLicensesForUser, type FeedType } from "./licenses";
 import { SERVER_LOCATION_LABELS, type ServerLocation } from "./server-locations";
 
 function isFeedType(value: string): value is FeedType {
@@ -94,6 +94,23 @@ export async function getServerRegistration(licenseId: string): Promise<ServerRe
     [licenseId]
   );
   return result.rowCount ? mapRegistration(result.rows[0]) : null;
+}
+
+/** First registered server across a user's active licenses, in the same expires_at-desc,
+ * issued_at-desc order as getActiveLicensesForUser -- for single-registration banners
+ * (/feeds, tiers page) that must agree with /account/servers on whether *any* active
+ * license has a server registered, not just the single latest-issued one from
+ * getLicenseForUser (marcus, multi-license-visibility-2026-08-31 contradiction 1: the
+ * old latest-issued-only check could tell a client with a registered server on an older
+ * active license that no server was registered at all). Sequential rather than
+ * Promise.all so the common single-license case costs exactly one query, same as before. */
+export async function getAnyServerRegistrationForUser(userId: string): Promise<ServerRegistration | null> {
+  const licenses = await getActiveLicensesForUser(userId);
+  for (const license of licenses) {
+    const registration = await getServerRegistration(license.id);
+    if (registration) return registration;
+  }
+  return null;
 }
 
 /** Servers registered across every currently-active license a user holds — same

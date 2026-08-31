@@ -14,7 +14,7 @@ import {
 import { regionForFeedType } from "@/lib/feed-tier-catalogue";
 import { getTierCountsByRegion } from "@/lib/feed-tiers";
 import { FeedRequestForm } from "@/components/feeds/feed-request-form";
-import { getServerRegistration } from "@/lib/server-registration";
+import { getAnyServerRegistrationForUser } from "@/lib/server-registration";
 import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
 
 const STATUS_LABEL: Record<FeedCardStatus, string> = {
@@ -37,7 +37,7 @@ export default async function FeedsPage() {
   ]);
   const activeFeeds = await computeUserActiveFeeds(session.user.id).catch(() => []);
   const tierCounts = await getTierCountsByRegion().catch(() => ({} as Awaited<ReturnType<typeof getTierCountsByRegion>>));
-  const serverRegistration = licenseDetail ? await getServerRegistration(licenseDetail.id).catch(() => null) : null;
+  const serverRegistration = await getAnyServerRegistrationForUser(session.user.id).catch(() => null);
   const isAdmin = isAdminUser(session.user);
   const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
