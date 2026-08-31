@@ -89,12 +89,14 @@ export default async function ServersPage() {
       )
     : [];
 
-  // Grouping only kicks in once there's something to group -- a single registration
-  // (the overwhelming majority of accounts) renders through the exact same path as
-  // today (one ServerCard, no group chrome), by design: that's the regression guard
-  // marcus asked for, independent of whether migration 0072 has landed.
+  // Mockup states, not a heuristic -- don't "tidy" this back to >= 2. n=1 (the
+  // overwhelming majority of accounts) renders through the exact same single-card
+  // path as today, unchanged: that's the regression guard marcus asked for. n=0 and
+  // n>=2 both use the grouped chrome -- n=0 shows the four empty location regions
+  // (State 1), which teaches a brand-new client the product shape instead of a bare
+  // form. This is independent of whether migration 0072 has landed.
   const registeredCards = cards.filter((c) => c.registration);
-  const grouped = registeredCards.length >= 2;
+  const grouped = cards.length > 0 && registeredCards.length !== 1;
 
   const groupedEntries: GroupedServerEntry[] = grouped
     ? registeredCards.map(({ license, registration, verified }) => ({

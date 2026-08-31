@@ -31,7 +31,8 @@ interface ServerRegistrationsGroupedProps {
 
 type GroupKey = ServerLocation | "unspecified";
 
-function mostRecentGroup(entries: GroupedServerEntry[]): GroupKey {
+function mostRecentGroup(entries: GroupedServerEntry[]): GroupKey | null {
+  if (entries.length === 0) return null;
   const newest = entries.reduce((a, b) => (b.registration.updatedAt > a.registration.updatedAt ? b : a));
   return effectiveServerLocation(newest.registration.location, newest.registration.serverLocation);
 }
