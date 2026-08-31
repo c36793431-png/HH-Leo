@@ -290,7 +290,7 @@
 }
 .portal-shell .srv-ghead.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; }
 .portal-shell .srv-ghead .srv-pin { color: var(--hz-cyan); font-size: 15px; }
-.portal-shell .srv-ghead .srv-flag { font-size: 14px; }
+.portal-shell .srv-ghead .srv-flag { width: 16px; height: 12px; flex: 0 0 auto; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15); }
 .portal-shell .srv-ghead .srv-gname { font-family: var(--hz-disp); font-weight: 700; font-size: 17px; letter-spacing: 0.02em; }
 .portal-shell .srv-ghead .srv-gcount {
   font-family: var(--hz-mono); font-size: 10.5px; color: var(--hz-cyan); background: rgba(45, 226, 230, 0.08);
