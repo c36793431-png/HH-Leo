@@ -6,6 +6,7 @@ import type { ServerRegistration } from "@/lib/server-registration";
 import {
   SERVER_LOCATIONS,
   SERVER_LOCATION_LABELS,
+  SERVER_LOCATION_FLAGS,
   effectiveServerLocation,
   type ServerLocation,
 } from "@/lib/server-locations";
@@ -58,12 +59,14 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
         const label = key === "unspecified" ? "Unspecified location" : SERVER_LOCATION_LABELS[key];
         const isOpen = openGroup === key;
         const isAdding = addingInGroup === key;
+        const Flag = key !== "unspecified" ? SERVER_LOCATION_FLAGS[key] : null;
 
         if (groupEntries.length === 0) {
           return (
             <div className="srv-grp" key={key}>
               <div className="srv-ghead empty">
                 <span className="srv-pin dim">📍</span>
+                {Flag && <Flag className="srv-flag dim" />}
                 <span className="srv-gname dim">{label} Servers</span>
                 <span className="srv-gcount zero">0 Added</span>
                 <span className="srv-gsum none">No server registered here yet</span>
@@ -79,6 +82,7 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
                     ＋ Add here
                   </button>
                 )}
+                {!addTarget && <span className="srv-gsub">Each server needs its own licence.</span>}
               </div>
               {isAdding && addTarget && key !== "unspecified" && (
                 <div className="srv-grows">
@@ -110,6 +114,7 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
           <div className="srv-grp" key={key}>
             <button type="button" className={`srv-ghead${isOpen ? " open" : ""}`} onClick={() => setOpenGroup(isOpen ? null : key)}>
               <span className="srv-pin">📍</span>
+              {Flag && <Flag className="srv-flag" />}
               <span className="srv-gname">{label} Servers</span>
               {groupEntries.length >= 2 && <span className="srv-gcount">{groupEntries.length} Added</span>}
               <span className="srv-gsum">{summary}</span>

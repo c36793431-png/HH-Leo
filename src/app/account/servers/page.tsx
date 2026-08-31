@@ -89,14 +89,13 @@ export default async function ServersPage() {
       )
     : [];
 
-  // Mockup states, not a heuristic -- don't "tidy" this back to >= 2. n=1 (the
-  // overwhelming majority of accounts) renders through the exact same single-card
-  // path as today, unchanged: that's the regression guard marcus asked for. n=0 and
-  // n>=2 both use the grouped chrome -- n=0 shows the four empty location regions
-  // (State 1), which teaches a brand-new client the product shape instead of a bare
-  // form. This is independent of whether migration 0072 has landed.
+  // Grouped chrome renders at every count -- 0, 1, and 2+ -- with all four regions
+  // always present (empty ones dashed, "No server registered here yet"). coxwell hit
+  // n=1 in prod and asked why the other regions weren't there: his 08-29 instruction
+  // ("New york can be visible but 0 added if not there and other locations also")
+  // outranks the State 2 mockup that only covered n=0/n>=2. No per-count special case.
   const registeredCards = cards.filter((c) => c.registration);
-  const grouped = cards.length > 0 && registeredCards.length !== 1;
+  const grouped = cards.length > 0;
 
   const groupedEntries: GroupedServerEntry[] = grouped
     ? registeredCards.map(({ license, registration, verified }) => ({

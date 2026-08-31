@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import {
   issueLicense,
+  issueAdditionalLicense,
   extendLicense,
   revokeLicenseAndSyncGroup,
   getLicenseExpiresAt,
@@ -269,6 +270,47 @@ export async function issueNewLicenseAction(
       if (isPaidTier(tier ?? "paid")) {
         await sendPaidGroupInvite(target);
       }
+    }
+
+    revalidateUsers(userId);
+  });
+}
+
+/** Deliberate second-sale path — distinct from issueNewLicenseAction, which refuses when the
+ * user already has an active license. Delivers the new key the same way a first activation
+ * does, but deliberately skips sendPaidGroupInvite: that function has no dedup guard against
+ * an existing group_memberships row, and by construction a user reaching this action already
+ * holds an active license, so is very likely already a paid-group member — inviting again
+ * would insert a duplicate row and re-send a redundant DM. Not fixed here; flagged separately. */
+export async function issueAdditionalLicenseAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to issue additional license", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const userId = formData.get("userId") as string;
+    const expiresAt = resolveExpiresAt(parseDurationFormData(formData));
+    const feedTypes = readFeedTypesFromFormData(formData);
+    const tierRaw = formData.get("tier") as string | null;
+    if (tierRaw && !LICENSE_TIERS.includes(tierRaw as LicenseTier)) throw new Error("Invalid tier");
+    const tier = (tierRaw as LicenseTier) || undefined;
+    const license = await issueAdditionalLicense({ userId, expiresAt, feedTypes, tier });
+    await logAdminAction(
+      adminUserId,
+      "admin_users_issue_additional_license",
+      userId,
+      { licenseId: license.id, expiresAt: expiresAt.toISOString(), feedTypes, tier: tier ?? "paid" },
+      license.id
+    );
+
+    const target = await getGroupTarget(userId);
+    if (target) {
+      const config = await getPortalConfig();
+      await notifyUser(
+        { telegramUserId: target.telegramUserId, email: target.email },
+        "Your additional Horizon HFT license is ready",
+        `Your license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
+      );
     }
 
     revalidateUsers(userId);
