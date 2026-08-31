@@ -714,6 +714,20 @@ export async function getLicenseForUser(userId: string): Promise<LicenseDetail |
   };
 }
 
+/** One active license within an AdminUserRow's activeLicenses list — the per-license
+ * columns/actions rendered on /admin/users when a user holds more than one. */
+export interface AdminUserLicenseRow {
+  licenseId: string;
+  licenseKey: string;
+  status: string;
+  computedStatus: "active" | "expiring";
+  expiresAt: Date;
+  tier: string;
+  hardwareId: string | null;
+  lastVerifiedAt: Date | null;
+  feedTypes: FeedType[];
+}
+
 export interface AdminUserRow {
   userId: string;
   email: string | null;
@@ -722,6 +736,11 @@ export interface AdminUserRow {
   role: string;
   joinedAt: Date;
   signupSource: "telegram" | "email-link" | "both" | null;
+  /** Most-recently-*issued* license — used for search/filter/sort/pagination (hasLicense,
+   * tierBucket, expires_at/last_verified_at sort) and as the row's display fallback when
+   * activeLicenses is empty (no active license: show whatever was issued last, active or not).
+   * Do NOT use this alone to render "the" license when activeLicenses.length > 1 — see
+   * [[project_horizon_multi_license_visibility_2026-08-31]] for the bug this shape guards against. */
   licenseId: string | null;
   licenseKey: string | null;
   status: string | null;
@@ -731,6 +750,11 @@ export interface AdminUserRow {
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
   feedTypes: FeedType[];
+  /** Every currently-active license this user holds, expires_at desc / issued_at desc —
+   * same order as getActiveLicenseDetailsForUser. Empty when the user has zero active
+   * licenses (fall back to the licenseId/... fields above). Render one entry per row when
+   * length > 1 instead of collapsing to the licenseId fields, mirroring the dashboard fix. */
+  activeLicenses: AdminUserLicenseRow[];
 }
 
 export type HasLicenseFilter = "active" | "expiring" | "expired" | "revoked" | "none";
@@ -846,6 +870,39 @@ export async function listAllUsersWithLicenses(
     params
   );
 
+  // Batch-fetch every active license for just this page's users, so a user holding more
+  // than one active license (e.g. issueAdditionalLicense) doesn't have the older one hidden
+  // behind whichever license was issued last — same fix class as getActiveLicenseDetailsForUser.
+  const userIds = result.rows.map((r) => r.user_id as string);
+  const activeByUser = new Map<string, AdminUserLicenseRow[]>();
+  if (userIds.length > 0) {
+    const activeResult = await pool.query(
+      `select user_id, id, license_key, status, expires_at, tier, hardware_id, last_verified_at, feed_types
+       from licenses
+       where user_id = any($1) and status = 'active' and expires_at > now()
+       order by expires_at desc, issued_at desc`,
+      [userIds]
+    );
+    for (const r of activeResult.rows) {
+      const entry: AdminUserLicenseRow = {
+        licenseId: r.id,
+        licenseKey: r.license_key,
+        status: r.status,
+        computedStatus: computeLicenseDisplayStatus({ status: r.status, expiresAt: r.expires_at }) as
+          | "active"
+          | "expiring",
+        expiresAt: r.expires_at,
+        tier: r.tier,
+        hardwareId: r.hardware_id,
+        lastVerifiedAt: r.last_verified_at,
+        feedTypes: (r.feed_types ?? []).filter(isFeedType),
+      };
+      const list = activeByUser.get(r.user_id);
+      if (list) list.push(entry);
+      else activeByUser.set(r.user_id, [entry]);
+    }
+  }
+
   return {
     total,
     rows: result.rows.map((r) => ({
@@ -865,6 +922,7 @@ export async function listAllUsersWithLicenses(
       hardwareId: r.hardware_id,
       lastVerifiedAt: r.last_verified_at,
       feedTypes: (r.feed_types ?? []).filter(isFeedType),
+      activeLicenses: activeByUser.get(r.user_id) ?? [],
     })),
   };
 }

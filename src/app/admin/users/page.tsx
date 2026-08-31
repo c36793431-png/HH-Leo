@@ -58,6 +58,12 @@ function getBadge(row: AdminUserRow): { label: string; color: keyof typeof BADGE
   return BADGES[row.computedStatus];
 }
 
+/** Badge for one entry in a multi-license stack — activeLicenses is always
+ * status='active' && expires_at > now(), so only "active"/"expiring" ever apply. */
+function activeLicenseBadge(status: "active" | "expiring"): { label: string; color: keyof typeof BADGE_STYLES } {
+  return BADGES[status];
+}
+
 function hasActiveLicense(row: AdminUserRow): boolean {
   return row.computedStatus === "active" || row.computedStatus === "expiring";
 }
@@ -295,6 +301,13 @@ export default async function AdminUsersPage({
             <tbody className="divide-y divide-zinc-800">
               {users.map((u) => {
                 const badge = getBadge(u);
+                // Multiple active licenses (issueAdditionalLicense) means no single license
+                // can stand in for "the" license — stack every active one instead of the
+                // legacy single licenseId/... fields, which only ever tracked the newest.
+                // See project_horizon_multi_license_visibility_2026-08-31 for the bug this
+                // guards against: an older still-active license silently unreachable in
+                // this list because a newer (possibly revoked/expired) one replaced it.
+                const hasMultipleActive = u.role !== "admin" && u.activeLicenses.length > 1;
                 return (
                   <tr key={u.userId} className="group">
                     <td className="py-2 pr-4 text-zinc-200">
@@ -308,109 +321,245 @@ export default async function AdminUsersPage({
                     </td>
                     <td className="py-2 pr-4 text-zinc-500 text-xs">{u.signupSource ?? "—"}</td>
                     <td className="py-2 pr-4 text-zinc-400">{formatRelative(u.joinedAt)}</td>
-                    <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
-                      {u.licenseKey ? maskLicenseKey(u.licenseKey) : "—"}
-                    </td>
-                    <td className="py-2 pr-4">
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${BADGE_STYLES[badge.color]}`}
-                      >
-                        {badge.label}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-4 text-zinc-400">
-                      {u.expiresAt ? (
-                        <>
-                          {formatAbsoluteUtc(u.expiresAt)}{" "}
-                          <span className="text-zinc-600">({formatRelative(u.expiresAt)})</span>
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="py-2 pr-4 text-zinc-400">{u.tier ?? "—"}</td>
-                    <td className="py-2 pr-4">
-                      <div className="flex flex-wrap gap-1">
-                        {u.feedTypes.length === 0 ? (
-                          <span className="text-xs text-zinc-600">—</span>
-                        ) : (
-                          u.feedTypes.map((f) => (
-                            <span
-                              key={f}
-                              className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300"
-                            >
-                              {FEED_TYPE_META[f].name}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-2 pr-4 font-mono text-xs text-zinc-500">
-                      {u.hardwareId ? `${u.hardwareId.slice(0, 4)}…` : "—"}
-                    </td>
-                    <td className="py-2 pr-4 text-zinc-400">
-                      {u.lastVerifiedAt ? formatRelative(u.lastVerifiedAt) : "never"}
-                    </td>
-                    <td className="py-2">
-                      <div className="flex flex-wrap gap-2">
-                        {u.licenseId && (
-                          <>
-                            <ActionButton
-                              action={expireNowAction}
-                              hiddenFields={{ licenseId: u.licenseId }}
-                              label="Trigger expire now"
-                              successMessage="License expired"
-                            />
+                    {hasMultipleActive ? (
+                      <>
+                        <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
+                          <div className="flex flex-col gap-1.5">
+                            {u.activeLicenses.map((lic) => (
+                              <div key={lic.licenseId}>{maskLicenseKey(lic.licenseKey)}</div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-4">
+                          <div className="flex flex-col gap-1.5">
+                            {u.activeLicenses.map((lic) => {
+                              const licBadge = activeLicenseBadge(lic.computedStatus);
+                              return (
+                                <span
+                                  key={lic.licenseId}
+                                  className={`w-fit rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${BADGE_STYLES[licBadge.color]}`}
+                                >
+                                  {licBadge.label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-4 text-zinc-400">
+                          <div className="flex flex-col gap-1.5">
+                            {u.activeLicenses.map((lic) => (
+                              <div key={lic.licenseId}>
+                                {formatAbsoluteUtc(lic.expiresAt)}{" "}
+                                <span className="text-zinc-600">({formatRelative(lic.expiresAt)})</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-4 text-zinc-400">
+                          <div className="flex flex-col gap-1.5">
+                            {u.activeLicenses.map((lic) => (
+                              <div key={lic.licenseId}>{lic.tier}</div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-4">
+                          <div className="flex flex-col gap-1.5">
+                            {u.activeLicenses.map((lic) => (
+                              <div key={lic.licenseId} className="flex flex-wrap gap-1">
+                                {lic.feedTypes.length === 0 ? (
+                                  <span className="text-xs text-zinc-600">—</span>
+                                ) : (
+                                  lic.feedTypes.map((f) => (
+                                    <span
+                                      key={f}
+                                      className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300"
+                                    >
+                                      {FEED_TYPE_META[f].name}
+                                    </span>
+                                  ))
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-4 font-mono text-xs text-zinc-500">
+                          <div className="flex flex-col gap-1.5">
+                            {u.activeLicenses.map((lic) => (
+                              <div key={lic.licenseId}>{lic.hardwareId ? `${lic.hardwareId.slice(0, 4)}…` : "—"}</div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-4 text-zinc-400">
+                          <div className="flex flex-col gap-1.5">
+                            {u.activeLicenses.map((lic) => (
+                              <div key={lic.licenseId}>
+                                {lic.lastVerifiedAt ? formatRelative(lic.lastVerifiedAt) : "never"}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-2">
+                          <div className="flex flex-col gap-2">
+                            {u.activeLicenses.map((lic) => (
+                              <div key={lic.licenseId} className="flex flex-wrap gap-2">
+                                <ActionButton
+                                  action={expireNowAction}
+                                  hiddenFields={{ licenseId: lic.licenseId }}
+                                  label="Trigger expire now"
+                                  successMessage="License expired"
+                                />
+                                <DurationForm
+                                  action={extendLicenseAction}
+                                  hiddenFields={{ licenseId: lic.licenseId }}
+                                  submitLabel="Apply"
+                                  successMessage="License extended"
+                                  compact
+                                  triggerLabel="Extend"
+                                  showExtendFrom
+                                  defaultAmount={30}
+                                  defaultUnit="days"
+                                  triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                                />
+                                <FeedSelectForm
+                                  action={updateLicenseFeedsAction}
+                                  hiddenFields={{ licenseId: lic.licenseId }}
+                                  currentFeedTypes={lic.feedTypes}
+                                  triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300"
+                                />
+                                <TierSelectForm
+                                  action={setUserLicenseTierAction}
+                                  revokeAction={revokeAction}
+                                  hiddenFields={{ licenseId: lic.licenseId }}
+                                  currentTier={lic.tier}
+                                  confirmSubject={u.email ?? "this user"}
+                                />
+                                <ActionButton
+                                  action={revokeAction}
+                                  hiddenFields={{ licenseId: lic.licenseId }}
+                                  label="Revoke"
+                                  successMessage="License revoked"
+                                  className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                                />
+                              </div>
+                            ))}
                             <DurationForm
-                              action={extendLicenseAction}
-                              hiddenFields={{ licenseId: u.licenseId }}
-                              submitLabel="Apply"
-                              successMessage="License extended"
+                              action={issueNewLicenseAction}
+                              hiddenFields={{ userId: u.userId }}
+                              submitLabel="Issue"
+                              successMessage="License issued"
                               compact
-                              triggerLabel="Extend"
-                              showExtendFrom
-                              defaultAmount={30}
-                              defaultUnit="days"
-                              triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                              triggerLabel="Issue new license"
                             />
-                            {hasActiveLicense(u) && (
-                              <FeedSelectForm
-                                action={updateLicenseFeedsAction}
-                                hiddenFields={{ licenseId: u.licenseId }}
-                                currentFeedTypes={u.feedTypes}
-                                triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300"
-                              />
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
+                          {u.licenseKey ? maskLicenseKey(u.licenseKey) : "—"}
+                        </td>
+                        <td className="py-2 pr-4">
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${BADGE_STYLES[badge.color]}`}
+                          >
+                            {badge.label}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-zinc-400">
+                          {u.expiresAt ? (
+                            <>
+                              {formatAbsoluteUtc(u.expiresAt)}{" "}
+                              <span className="text-zinc-600">({formatRelative(u.expiresAt)})</span>
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-2 pr-4 text-zinc-400">{u.tier ?? "—"}</td>
+                        <td className="py-2 pr-4">
+                          <div className="flex flex-wrap gap-1">
+                            {u.feedTypes.length === 0 ? (
+                              <span className="text-xs text-zinc-600">—</span>
+                            ) : (
+                              u.feedTypes.map((f) => (
+                                <span
+                                  key={f}
+                                  className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300"
+                                >
+                                  {FEED_TYPE_META[f].name}
+                                </span>
+                              ))
                             )}
-                            {/* Tier is a property of the licence row itself, not of its
-                                active/expired state, so this is gated on licenseId only —
-                                same as /admin/licenses, which lets an expired licence's tier
-                                be corrected. Rows with no licence render nothing here. */}
-                            <TierSelectForm
-                              action={setUserLicenseTierAction}
-                              revokeAction={revokeAction}
-                              hiddenFields={{ licenseId: u.licenseId }}
-                              currentTier={u.tier ?? "paid"}
-                              confirmSubject={u.email ?? "this user"}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-4 font-mono text-xs text-zinc-500">
+                          {u.hardwareId ? `${u.hardwareId.slice(0, 4)}…` : "—"}
+                        </td>
+                        <td className="py-2 pr-4 text-zinc-400">
+                          {u.lastVerifiedAt ? formatRelative(u.lastVerifiedAt) : "never"}
+                        </td>
+                        <td className="py-2">
+                          <div className="flex flex-wrap gap-2">
+                            {u.licenseId && (
+                              <>
+                                <ActionButton
+                                  action={expireNowAction}
+                                  hiddenFields={{ licenseId: u.licenseId }}
+                                  label="Trigger expire now"
+                                  successMessage="License expired"
+                                />
+                                <DurationForm
+                                  action={extendLicenseAction}
+                                  hiddenFields={{ licenseId: u.licenseId }}
+                                  submitLabel="Apply"
+                                  successMessage="License extended"
+                                  compact
+                                  triggerLabel="Extend"
+                                  showExtendFrom
+                                  defaultAmount={30}
+                                  defaultUnit="days"
+                                  triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                                />
+                                {hasActiveLicense(u) && (
+                                  <FeedSelectForm
+                                    action={updateLicenseFeedsAction}
+                                    hiddenFields={{ licenseId: u.licenseId }}
+                                    currentFeedTypes={u.feedTypes}
+                                    triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300"
+                                  />
+                                )}
+                                {/* Tier is a property of the licence row itself, not of its
+                                    active/expired state, so this is gated on licenseId only —
+                                    same as /admin/licenses, which lets an expired licence's tier
+                                    be corrected. Rows with no licence render nothing here. */}
+                                <TierSelectForm
+                                  action={setUserLicenseTierAction}
+                                  revokeAction={revokeAction}
+                                  hiddenFields={{ licenseId: u.licenseId }}
+                                  currentTier={u.tier ?? "paid"}
+                                  confirmSubject={u.email ?? "this user"}
+                                />
+                                <ActionButton
+                                  action={revokeAction}
+                                  hiddenFields={{ licenseId: u.licenseId }}
+                                  label="Revoke"
+                                  successMessage="License revoked"
+                                  className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                                />
+                              </>
+                            )}
+                            <DurationForm
+                              action={issueNewLicenseAction}
+                              hiddenFields={{ userId: u.userId }}
+                              submitLabel="Issue"
+                              successMessage="License issued"
+                              compact
+                              triggerLabel="Issue new license"
                             />
-                            <ActionButton
-                              action={revokeAction}
-                              hiddenFields={{ licenseId: u.licenseId }}
-                              label="Revoke"
-                              successMessage="License revoked"
-                              className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
-                            />
-                          </>
-                        )}
-                        <DurationForm
-                          action={issueNewLicenseAction}
-                          hiddenFields={{ userId: u.userId }}
-                          submitLabel="Issue"
-                          successMessage="License issued"
-                          compact
-                          triggerLabel="Issue new license"
-                        />
-                      </div>
-                    </td>
+                          </div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
