@@ -438,6 +438,20 @@ export async function getActiveLicenseForUser(userId: string): Promise<ActiveLic
   return row ? { id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at } : null;
 }
 
+/** All of a user's currently-active licenses, for surfaces that must render/act on each one
+ * individually (e.g. per-license server registration) rather than collapsing to "the" license.
+ * issued_at desc tiebreaks expires_at ties (e.g. two same-day purchases with equal duration) so
+ * card order is stable across renders — same precedence 0007's dedup migration used. */
+export async function getActiveLicensesForUser(userId: string): Promise<ActiveLicense[]> {
+  const result = await pool.query(
+    `select id, license_key, expires_at from licenses
+     where user_id = $1 and status = 'active' and expires_at > now()
+     order by expires_at desc, issued_at desc`,
+    [userId]
+  );
+  return result.rows.map((row) => ({ id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at }));
+}
+
 export interface VerifyLicenseResult {
   status: "active" | "expired" | "revoked" | "not_found";
   expiresAt: Date | null;
