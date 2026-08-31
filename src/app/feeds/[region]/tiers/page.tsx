@@ -1,10 +1,10 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import { isPaidUser, getLicenseForUser, getActiveLicenseDetailsForUser, computePortalTier } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { isFeedRegion } from "@/lib/feed-tier-catalogue";
+import { isFeedRegion, FEED_REGION_TYPE } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
@@ -95,10 +95,11 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [tiers, otherRegions, licenseDetail] = await Promise.all([
+  const [tiers, otherRegions, licenseDetail, activeLicenses] = await Promise.all([
     getTiersForRegion(region),
     getMultiTierRegions(),
     getLicenseForUser(session.user.id).catch(() => null),
+    getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
   ]);
   if (tiers.length < 2) notFound();
 
@@ -116,7 +117,16 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const requestedTierKeys = new Set(
     existingRequests.filter((r) => r.region === region && r.status !== "rejected").map((r) => r.tierKey)
   );
-  const licenseTail = licenseDetail?.licenseKey ? licenseDetail.licenseKey.slice(-4) : "—";
+  // A license key identifies one specific license, not an aggregate — never blend multiple
+  // licenses into one tail. Show this region's active license(s); if the client holds two
+  // active licenses that both grant this region, show both rather than picking one
+  // (coxwell-approved rule, thread multi-license-visibility-2026-08-31).
+  const regionFeedType = FEED_REGION_TYPE[region];
+  const regionLicenses = regionFeedType
+    ? activeLicenses.filter((l) => l.feedTypes.includes(regionFeedType))
+    : [];
+  const licenseTail =
+    regionLicenses.length > 0 ? regionLicenses.map((l) => l.licenseKey.slice(-4)).join(", ") : "—";
 
   const displayTiers =
     region === "london"
