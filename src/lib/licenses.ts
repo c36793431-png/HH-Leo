@@ -469,6 +469,22 @@ export async function getAlertTargetForLicense(licenseId: string): Promise<Group
   return { userId: row.user_id, telegramUserId: row.telegram_user_id, email: row.email };
 }
 
+/** Single entry point for revoking a license and keeping paid-group membership in sync —
+ * resolves the owner internally via getAlertTargetForLicense instead of relying on the
+ * caller to pass a userId. revokeLicenseFromListAction and revokeAction never touched group
+ * membership at all, and revokeLicenseAction only did when the form happened to include
+ * userId; all three now go through here so correct behaviour is the default, not the lucky
+ * case. Always uses removeFromPaidGroupIfNoOtherActiveLicense, never the raw
+ * removeFromPaidGroup — forceRemoveGroupAction is the only deliberate-override caller of
+ * that. Per marcus, thread overnight-builds-2026-08-30. */
+export async function revokeLicenseAndSyncGroup(licenseId: string): Promise<void> {
+  const target = await getAlertTargetForLicense(licenseId);
+  await revokeLicense(licenseId);
+  if (target?.telegramUserId) {
+    await removeFromPaidGroupIfNoOtherActiveLicense(target.userId, target.telegramUserId);
+  }
+}
+
 export interface ClientRow {
   userId: string;
   email: string | null;

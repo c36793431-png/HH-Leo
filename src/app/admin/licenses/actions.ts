@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
-import { extendLicense, revokeLicense, getLicenseExpiresAt, setLicenseTier, LICENSE_TIERS, type LicenseTier } from "@/lib/licenses";
+import { extendLicense, revokeLicenseAndSyncGroup, getLicenseExpiresAt, setLicenseTier, LICENSE_TIERS, type LicenseTier } from "@/lib/licenses";
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction } from "@/lib/admin";
 import { isAdminUser } from "@/lib/admin-users-panel";
@@ -72,7 +72,7 @@ export async function revokeLicenseFromListAction(
     const adminUserId = await requireAdminUsersPanel();
     const licenseId = formData.get("licenseId") as string;
     const ownerId = await getLicenseOwner(licenseId);
-    await revokeLicense(licenseId);
+    await revokeLicenseAndSyncGroup(licenseId);
     await logAdminAction(adminUserId, "admin_licenses_revoke", ownerId, { licenseId }, licenseId);
     revalidateLicenses(ownerId);
   });
