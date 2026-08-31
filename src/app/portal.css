@@ -688,7 +688,7 @@
   font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px;
   border: 1px solid transparent;
 }
-.portal-shell .fp-pill-active { background: rgba(55, 245, 160, 0.14); color: var(--hz-ok); border-color: rgba(55, 245, 160, 0.4); }
+.portal-shell .fp-pill-active { background: rgba(55, 245, 160, 0.1); color: var(--hz-ok); border-color: rgba(55, 245, 160, 0.34); }
 .portal-shell .fp-pill-trial { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: var(--hz-amber-line); }
 .portal-shell .fp-pill-included { background: rgba(76, 141, 255, 0.14); color: var(--hz-blue-bright); border-color: rgba(76, 141, 255, 0.4); }
 .portal-shell .fp-pill-locked { background: rgba(255, 92, 122, 0.14); color: var(--hz-bad); border-color: rgba(255, 92, 122, 0.4); }

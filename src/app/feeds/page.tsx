@@ -60,6 +60,12 @@ export default async function FeedsPage() {
           const region = regionForFeedType(entry.feedType);
           const tierCount = region ? tierCounts[region] ?? 0 : 0;
           const hasTiers = tierCount > 1;
+          const isActiveOrTrial = status === "active" || status === "trial";
+          const seeTiersLink = hasTiers && region && (
+            <Link href={`/feeds/${region}/tiers`} className="btn ghost sm fp-see-tiers">
+              See tiers →
+            </Link>
+          );
 
           return (
             <div key={entry.slug} className={`card fp-card fp-${status}`}>
@@ -88,6 +94,7 @@ export default async function FeedsPage() {
                 </span>
               )}
 
+              {isActiveOrTrial && seeTiersLink}
               {(status === "active" || status === "trial") && (
                 <a className="btn ghost sm fp-cta" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
                   Manage via Telegram →
@@ -110,11 +117,7 @@ export default async function FeedsPage() {
               )}
               {status === "coming_soon" && <span className="fp-note">Planned — not live yet</span>}
 
-              {hasTiers && region && (
-                <Link href={`/feeds/${region}/tiers`} className="btn ghost sm fp-see-tiers">
-                  See tiers →
-                </Link>
-              )}
+              {!isActiveOrTrial && seeTiersLink}
             </div>
           );
         })}
