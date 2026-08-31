@@ -94,6 +94,7 @@ export default async function AccountPage() {
             telegramChannelUrl={config.telegramChannelUrl}
             isAdminAccount={isAdmin}
             adminLabel={userName}
+            showBadge={activeLicenses.length > 1}
           />
         )}
       </div>

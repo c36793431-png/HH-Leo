@@ -17,7 +17,6 @@ type BoundAction = (prevState: ActionResult | null, formData: FormData) => Promi
 export interface GroupedServerEntry {
   licenseId: string;
   licenseKey: string;
-  licenseNumber: number;
   registration: ServerRegistration;
   verified: boolean;
   action: BoundAction;
@@ -130,7 +129,6 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
                       <div className="srv-detail" key={entry.licenseId}>
                         <div className="srv-dtop">
                           <span className="srv-dn">{entry.registration.serverName}</span>
-                          <span className="lic-num-badge">HH{entry.licenseNumber}</span>
                         </div>
                         <ServerRegistrationForm
                           action={entry.action}
@@ -150,7 +148,6 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
                     >
                       <span className="srv-ic">🖥</span>
                       <span className="srv-sname">{entry.registration.serverName}</span>
-                      <span className="lic-num-badge">HH{entry.licenseNumber}</span>
                       <span className="srv-sprov">
                         {entry.registration.vpsProvider}
                         {entry.registration.vpsProviderOther ? ` · ${entry.registration.vpsProviderOther}` : ""}

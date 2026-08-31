@@ -28,6 +28,7 @@ export function LicenseStatusCard({
   adminLabel = "admin",
   installedVersion = null,
   showHeading = true,
+  showBadge = false,
 }: {
   license: LicenseDetail | null;
   telegramChannelUrl: string;
@@ -35,9 +36,13 @@ export function LicenseStatusCard({
   adminLabel?: string;
   installedVersion?: string | null;
   /** False when this card is one of several stacked under a single shared "License status"
-   * heading (dashboard/page.tsx's multi-license case) — each card still carries its own HH{n}
-   * badge, so the heading only needs to appear once for the group. */
+   * heading (dashboard/page.tsx's multi-license case) — the heading only needs to appear
+   * once for the group. */
   showHeading?: boolean;
+  /** HH{n} disambiguates which license this card is when the user holds more than one —
+   * with a single license it identifies nothing, so callers only pass true in that case
+   * (coxwell, multi-license-visibility-2026-08-31). */
+  showBadge?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -186,7 +191,7 @@ export function LicenseStatusCard({
             {" "}({formatRelative(license.expiresAt)}) · issued {formatAbsoluteUtc(license.issuedAt)} · seat 1 of 1
           </p>
           <div className="keyrow">
-            <span className="lic-num-badge">HH{license.licenseNumber}</span>
+            {showBadge && <span className="lic-num-badge">HH{license.licenseNumber}</span>}
             <span className={`k${isActive ? " ok" : " bad"}`}>
               {revealed ? license.licenseKey : maskLicenseKey(license.licenseKey)}
             </span>

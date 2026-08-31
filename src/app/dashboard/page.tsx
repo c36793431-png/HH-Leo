@@ -214,6 +214,7 @@ export default async function DashboardPage() {
               adminLabel={userName}
               installedVersion={downloads.windows?.version ?? downloads.macos?.version ?? null}
               showHeading={index === 0}
+              showBadge={hasMultipleActiveLicenses}
             />
           ))
         ) : (

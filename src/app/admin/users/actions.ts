@@ -265,7 +265,7 @@ export async function issueNewLicenseAction(
       await notifyUser(
         { telegramUserId: target.telegramUserId, email: target.email },
         "Your Horizon HFT license is ready",
-        `Your HH${license.licenseNumber} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
+        `Your${license.licenseNumber > 1 ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
       );
       if (isPaidTier(tier ?? "paid")) {
         await sendPaidGroupInvite(target);
@@ -309,7 +309,7 @@ export async function issueAdditionalLicenseAction(
       await notifyUser(
         { telegramUserId: target.telegramUserId, email: target.email },
         "Your additional Horizon HFT license is ready",
-        `Your HH${license.licenseNumber} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
+        `Your${license.licenseNumber > 1 ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
       );
     }
 
