@@ -3,10 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import {
   isPaidUser,
-  getLicenseForUser,
   getActiveLicenseDetailsForUser,
   computeUserActiveFeeds,
-  computePortalTier,
   computePortalTierFromLicenses,
 } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -37,27 +35,25 @@ export default async function FeedsPage() {
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [paid, licenseDetail, config, activeLicenses] = await Promise.all([
+  const [paid, config, activeLicenses] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
-    getLicenseForUser(session.user.id).catch(() => null),
     getPortalConfig(),
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
   ]);
   const activeFeeds = await computeUserActiveFeeds(session.user.id).catch(() => []);
-  // Highest tier across every active license wins (thread multi-license-visibility-2026-08-31,
-  // marcus) — a paying client must never see "Trial" on a feed just because getLicenseForUser's
-  // latest-issued row happens to be an older trial.
-  const { tier: bestActiveTier } = computePortalTierFromLicenses(false, activeLicenses);
-  const bestLicenseTier = bestActiveTier === "free" ? null : bestActiveTier;
+  const isAdmin = isAdminUser(session.user);
+  // Same aggregation drives the card status below and the sidebar badge (thread
+  // multi-license-visibility-2026-08-31, marcus) — a paying client must never see "Trial" on a
+  // feed, or a lower-tier sidebar badge, just because an older/newer license sorts differently.
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
+  const bestLicenseTier = tier === "free" ? null : tier;
   const tierCounts = await getTierCountsByRegion().catch(() => ({} as Awaited<ReturnType<typeof getTierCountsByRegion>>));
   const serverRegistration = await getAnyServerRegistrationForUser(session.user.id).catch(() => null);
-  const isAdmin = isAdminUser(session.user);
-  const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="comm-head">
         <h1>Feeds</h1>
         <p>Every signal feed we run — what you have, what&apos;s included, and what&apos;s next.</p>

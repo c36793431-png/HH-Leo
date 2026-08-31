@@ -71,7 +71,7 @@ export default async function ServersPage() {
     getPortalConfig(),
   ]);
   const isAdmin = isAdminUser(session.user);
-  const { tier } = computePortalTierFromLicenses(isAdmin, licenses);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, licenses);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   const unlocked = paid || isAdmin;
@@ -111,7 +111,7 @@ export default async function ServersPage() {
     : null;
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <Link href="/feeds" className="btn ghost sm" style={{ marginBottom: 12, display: "inline-block" }}>
         ← All feeds
       </Link>

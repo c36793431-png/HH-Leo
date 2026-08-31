@@ -3,9 +3,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import {
   isPaidUser,
-  getLicenseForUser,
   getActiveLicenseDetailsForUser,
-  computePortalTier,
   computePortalTierFromLicenses,
 } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -34,22 +32,20 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [paid, licenseDetail, config, setfiles, activeLicenses] = await Promise.all([
+  const [paid, config, setfiles, activeLicenses] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
-    getLicenseForUser(session.user.id).catch(() => null),
     getPortalConfig(),
     listActiveSetfiles().catch(() => []),
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
   ]);
   const isAdmin = isAdminUser(session.user);
-  const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
-  // Highest tier across every active license wins (thread multi-license-visibility-2026-08-31,
-  // marcus) — a paying client must never see "Trial" just because getLicenseForUser's
-  // latest-issued row happens to be a newer trial license.
-  const { tier: bestActiveTier } = computePortalTierFromLicenses(false, activeLicenses);
-  const bestLicenseTier = bestActiveTier === "free" ? null : bestActiveTier;
+  // Same aggregation drives the card status below and the sidebar badge (thread
+  // multi-license-visibility-2026-08-31, marcus) — a paying client must never see "Trial", or a
+  // lower-tier sidebar badge, just because an older/newer license sorts differently.
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
+  const bestLicenseTier = tier === "free" ? null : tier;
   const status = computeStrategyCardStatus({ paid, licenseTier: bestLicenseTier, isAdmin });
 
   const meta = STRATEGY_DISPLAY_META[slug];
@@ -58,7 +54,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   const recommendedFeed = FEED_CATALOGUE.find((f) => f.slug === meta.recommendedFeedSlug) ?? null;
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="comm-head">
         <Link href="/strategies" className="btn ghost sm" style={{ marginBottom: 12, display: "inline-block" }}>
           ← All strategies

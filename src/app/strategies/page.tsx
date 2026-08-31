@@ -3,9 +3,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import {
   isPaidUser,
-  getLicenseForUser,
   getActiveLicenseDetailsForUser,
-  computePortalTier,
   computePortalTierFromLicenses,
 } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -49,27 +47,25 @@ export default async function StrategiesPage() {
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [paid, licenseDetail, config, setfiles, activeLicenses] = await Promise.all([
+  const [paid, config, setfiles, activeLicenses] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
-    getLicenseForUser(session.user.id).catch(() => null),
     getPortalConfig(),
     listActiveSetfiles().catch(() => []),
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
   ]);
   const isAdmin = isAdminUser(session.user);
-  const tier = computePortalTier(isAdmin, licenseDetail);
+  // Same aggregation drives the card status below and the sidebar badge (thread
+  // multi-license-visibility-2026-08-31, marcus) — a paying client must never see "Trial", or a
+  // lower-tier sidebar badge, just because an older/newer license sorts differently.
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   const groups = groupSetfiles(setfiles);
-  // Highest tier across every active license wins (thread multi-license-visibility-2026-08-31,
-  // marcus) — a paying client must never see "Trial" just because getLicenseForUser's
-  // latest-issued row happens to be a newer trial license.
-  const { tier: bestActiveTier } = computePortalTierFromLicenses(false, activeLicenses);
-  const bestLicenseTier = bestActiveTier === "free" ? null : bestActiveTier;
+  const bestLicenseTier = tier === "free" ? null : tier;
   const status = computeStrategyCardStatus({ paid, licenseTier: bestLicenseTier, isAdmin });
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="comm-head">
         <h1>Strategies</h1>
         <p>Every strategy Horizon runs — what it does, how it&apos;s tuned, and what feed it wants.</p>

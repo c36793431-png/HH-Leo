@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getLicenseForUser, getActiveLicenseDetailsForUser, computePortalTier } from "@/lib/licenses";
+import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { isFeedRegion, FEED_REGION_TYPE } from "@/lib/feed-tier-catalogue";
@@ -95,17 +95,19 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [tiers, otherRegions, licenseDetail, activeLicenses] = await Promise.all([
+  const [tiers, otherRegions, activeLicenses] = await Promise.all([
     getTiersForRegion(region),
     getMultiTierRegions(),
-    getLicenseForUser(session.user.id).catch(() => null),
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
   ]);
   if (tiers.length < 2) notFound();
 
   await isPaidUser(session.user.id).catch(() => false);
   const isAdmin = isAdminUser(session.user);
-  const tier = computePortalTier(isAdmin, licenseDetail);
+  // Aggregated across active licenses, same as every other portal page's sidebar badge
+  // (thread multi-license-visibility-2026-08-31, marcus) — this page was still keyed off
+  // the single latest-issued license.
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
@@ -157,7 +159,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const countryCode = catalogueEntry?.countryCode ?? "";
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="comm-head">
         <Link href="/feeds" className="btn ghost sm" style={{ marginBottom: 12, display: "inline-block" }}>
           ← All feeds
