@@ -26,7 +26,8 @@ where status not in ('removed_on_lapse', 'left')
     where newer.user_id = gm.user_id
       and newer.chat_id = gm.chat_id
       and newer.status not in ('removed_on_lapse', 'left')
-      and (newer.invited_at, newer.id) > (gm.invited_at, gm.id)
+      and (coalesce(newer.joined_at, newer.invited_at), newer.id)
+        > (coalesce(gm.joined_at, gm.invited_at), gm.id)
   );
 
 insert into schema_migrations (version, name)
