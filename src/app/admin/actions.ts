@@ -9,6 +9,7 @@ import {
   listClients,
   getGroupTarget,
   getLicenseExpiresAt,
+  removeFromPaidGroupIfNoOtherActiveLicense,
   LICENSE_TIERS,
   type LicenseTier,
 } from "@/lib/licenses";
@@ -104,7 +105,7 @@ export async function revokeLicenseAction(
 
     if (userId) {
       const target = await getGroupTarget(userId);
-      if (target?.telegramUserId) await removeFromPaidGroup(target.userId, target.telegramUserId);
+      if (target?.telegramUserId) await removeFromPaidGroupIfNoOtherActiveLicense(target.userId, target.telegramUserId);
     }
 
     revalidatePath("/admin");

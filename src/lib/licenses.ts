@@ -9,6 +9,7 @@ import {
 import { insertPayment } from "./payments";
 import type { UserRole } from "./admin-user-roles";
 import { maybeCreateReferralEarning } from "./referrals";
+import { removeFromPaidGroup } from "./group-membership";
 
 /** Single source of truth for the active/expiring/expired/revoked bucket shown on every
  * license row across /admin/users, /admin/users/[id], and /admin/licenses — these three
@@ -107,6 +108,15 @@ export class ActiveLicenseExistsError extends Error {
   }
 }
 
+/** Thrown by issueAdditionalLicense when the target user has no active license to add to — that's
+ * a first activation and belongs on issueLicense (or the claim path), not here. */
+export class NoActiveLicenseError extends Error {
+  constructor(public userId: string) {
+    super(`User has no active license. Use "Issue new license" for a first activation.`);
+    this.name = "NoActiveLicenseError";
+  }
+}
+
 /** Creates an active license row bound to an existing user, or pre-provisioned by claim_email/claim_telegram_user_id ahead of signup. */
 export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicense> {
   const expiresAt = args.expiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -161,21 +171,71 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
   throw new Error("issueLicense: failed to generate a unique license key after 5 attempts");
 }
 
-/** Fires the trial-issued/paid-signup sink notify, gated on this being a genuine new
- * activation (see isFirstActiveLicense) — never on a renewal or re-issue landing alongside
- * an already-active license. Best-effort: must never throw into issueLicense's caller. */
-async function notifyNewPaidActivation(args: {
-  newLicenseId: string;
+export interface IssueAdditionalLicenseArgs {
+  userId: string;
+  /** Defaults to 30 days from now when omitted. */
+  expiresAt?: Date;
+  notes?: string;
+  feedTypes?: FeedType[];
+  /** Defaults to the DB column default ('paid') when omitted. */
+  tier?: LicenseTier;
+}
+
+/** Issues a second (or Nth) active license for a user who already holds one — the
+ * buy-additional-license path (one server per license; clients buy additional licenses,
+ * not additional servers per license). Precondition is the inverse of issueLicense's: refuses
+ * when the user has zero active licenses, since that case is a first activation and belongs on
+ * issueLicense/the claim path. Unlike issueLicense, this never gates the activation notify or
+ * payment row on isFirstActiveLicense — by construction it is never the first, so both must
+ * always fire, or a legitimate 2nd purchase would silently record $0 revenue and send nothing. */
+export async function issueAdditionalLicense(args: IssueAdditionalLicenseArgs): Promise<IssuedLicense> {
+  const existing = await getActiveLicenseForUser(args.userId);
+  if (!existing) throw new NoActiveLicenseError(args.userId);
+
+  const expiresAt = args.expiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const licenseKey = generateLicenseKey();
+    try {
+      const result = await pool.query(
+        `insert into licenses (user_id, license_key, status, expires_at, notes, feed_types, tier)
+         values ($1, $2, 'active', $3, $4, $5, coalesce($6, 'paid'))
+         returning id, license_key, expires_at, tier`,
+        [args.userId, licenseKey, expiresAt, args.notes ?? null, args.feedTypes ?? [], args.tier ?? null]
+      );
+      const row = result.rows[0];
+
+      sendActivationNotification({
+        licenseKey: row.license_key,
+        tier: row.tier,
+        expiresAt: row.expires_at,
+        userId: args.userId,
+      }).catch(() => {});
+
+      insertAutoPaymentForLicense({
+        newLicenseId: row.id,
+        tier: row.tier,
+        userId: args.userId,
+      }).catch(() => {});
+
+      return { id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at };
+    } catch (err: unknown) {
+      if ((err as { code?: string })?.code === "23505") continue; // license_key collision — retry with a fresh key
+      throw err;
+    }
+  }
+  throw new Error("issueAdditionalLicense: failed to generate a unique license key after 5 attempts");
+}
+
+/** Actually sends the trial-issued/paid-activation sink notify — split out from
+ * notifyNewPaidActivation so issueAdditionalLicense (which is never a first activation by
+ * construction) can fire it unconditionally instead of through the isFirstActiveLicense gate. */
+async function sendActivationNotification(args: {
   licenseKey: string;
   tier: string;
   expiresAt: Date;
   userId?: string;
   claimEmail?: string;
-  claimTelegramUserId?: number;
 }): Promise<void> {
-  const isFirst = await isFirstActiveLicense(args);
-  if (!isFirst) return;
-
   let email = args.claimEmail ?? null;
   if (!email && args.userId) {
     const result = await pool.query<{ email: string | null }>("select email from users where id = $1", [args.userId]);
@@ -200,6 +260,23 @@ async function notifyNewPaidActivation(args: {
   });
 }
 
+/** Fires the trial-issued/paid-signup sink notify, gated on this being a genuine new
+ * activation (see isFirstActiveLicense) — never on a renewal or re-issue landing alongside
+ * an already-active license. Best-effort: must never throw into issueLicense's caller. */
+async function notifyNewPaidActivation(args: {
+  newLicenseId: string;
+  licenseKey: string;
+  tier: string;
+  expiresAt: Date;
+  userId?: string;
+  claimEmail?: string;
+  claimTelegramUserId?: number;
+}): Promise<void> {
+  const isFirst = await isFirstActiveLicense(args);
+  if (!isFirst) return;
+  await sendActivationNotification(args);
+}
+
 /** portal_config row lets coxwell reprice without a code change; falls back to $100 if unset. */
 async function getPaidTierDefaultPriceUsd(): Promise<number> {
   const result = await pool.query<{ value: unknown }>(
@@ -209,20 +286,17 @@ async function getPaidTierDefaultPriceUsd(): Promise<number> {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
 }
 
-/** Auto-logs a finance payment row when a Paid-tier license is a genuine new activation
- * (never on Trial/Team/Deal, and never on a renewal/re-issue — same isFirstActiveLicense
- * guard as notifyNewPaidActivation). Coxwell can still edit/delete the row from /admin/finance. */
-async function recordAutoPaymentForNewLicense(args: {
+/** Actually inserts the finance payment row (and downstream referral earning) — split out
+ * from recordAutoPaymentForNewLicense so issueAdditionalLicense (which is never a first
+ * activation by construction) can fire it unconditionally instead of through the
+ * isFirstActiveLicense gate. Still paid-tier-only: team is comped, deal is barter/non-revenue
+ * (commits 9718252 / afafdd7) — that rule is unrelated to first-vs-additional and stays. */
+async function insertAutoPaymentForLicense(args: {
   newLicenseId: string;
   tier: string;
-  userId?: string;
-  claimEmail?: string;
-  claimTelegramUserId?: number;
+  userId: string;
 }): Promise<void> {
-  if (args.tier !== "paid" || !args.userId) return;
-
-  const isFirst = await isFirstActiveLicense(args);
-  if (!isFirst) return;
+  if (args.tier !== "paid") return;
 
   const result = await pool.query<{ email: string | null }>("select email from users where id = $1", [args.userId]);
   const email = result.rows[0]?.email ?? null;
@@ -243,6 +317,24 @@ async function recordAutoPaymentForNewLicense(args: {
   });
 
   await maybeCreateReferralEarning(paymentId);
+}
+
+/** Auto-logs a finance payment row when a Paid-tier license is a genuine new activation
+ * (never on Trial/Team/Deal, and never on a renewal/re-issue — same isFirstActiveLicense
+ * guard as notifyNewPaidActivation). Coxwell can still edit/delete the row from /admin/finance. */
+async function recordAutoPaymentForNewLicense(args: {
+  newLicenseId: string;
+  tier: string;
+  userId?: string;
+  claimEmail?: string;
+  claimTelegramUserId?: number;
+}): Promise<void> {
+  if (args.tier !== "paid" || !args.userId) return;
+
+  const isFirst = await isFirstActiveLicense(args);
+  if (!isFirst) return;
+
+  await insertAutoPaymentForLicense({ newLicenseId: args.newLicenseId, tier: args.tier, userId: args.userId });
 }
 
 export async function extendLicense(licenseId: string, expiresAt: Date): Promise<void> {
@@ -450,6 +542,27 @@ export async function getActiveLicensesForUser(userId: string): Promise<ActiveLi
     [userId]
   );
   return result.rows.map((row) => ({ id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at }));
+}
+
+/** Bug 2 (marcus, thread overnight-builds-2026-08-30): once issueAdditionalLicense lets a
+ * user hold more than one active license, expiring/revoking any single one of them must not
+ * evict a client who is still paying via another. Call this instead of removeFromPaidGroup
+ * directly wherever a single license's lapse is the trigger (expire-licenses cron,
+ * revokeLicenseAction) — but not forceRemoveGroupAction, which is a deliberate admin
+ * override and must bypass this check. Logs the skip so "chose not to remove" reads
+ * differently from "forgot to remove" in the logs. */
+export async function removeFromPaidGroupIfNoOtherActiveLicense(
+  userId: string,
+  telegramUserId: string | number
+): Promise<void> {
+  const remaining = await getActiveLicensesForUser(userId);
+  if (remaining.length > 0) {
+    console.log(
+      `removeFromPaidGroup skipped for user ${userId}: ${remaining.length} other active license(s) remain`
+    );
+    return;
+  }
+  await removeFromPaidGroup(userId, telegramUserId);
 }
 
 export interface VerifyLicenseResult {
