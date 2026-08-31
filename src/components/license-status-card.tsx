@@ -175,6 +175,7 @@ export function LicenseStatusCard({
             {" "}({formatRelative(license.expiresAt)}) · issued {formatAbsoluteUtc(license.issuedAt)} · seat 1 of 1
           </p>
           <div className="keyrow">
+            <span className="lic-num-badge">HH{license.licenseNumber}</span>
             <span className={`k${isActive ? " ok" : " bad"}`}>
               {revealed ? license.licenseKey : maskLicenseKey(license.licenseKey)}
             </span>

@@ -27,7 +27,7 @@ function ServerCard({ license, registration, blackTrial, verified, showLicenseLa
       <div className="card full">
         <div className="chead">
           <span className="ic">🖥</span>
-          <h3>Server registration{showLicenseLabel ? ` — ${license.licenseKey}` : ""}</h3>
+          <h3>Server registration{showLicenseLabel ? ` — HH${license.licenseNumber} ${license.licenseKey}` : ""}</h3>
           {registration && (
             <span className={`st ${verified ? "ver" : "reg"}`} style={{ marginLeft: "auto" }}>
               <span className="d" />
@@ -101,6 +101,7 @@ export default async function ServersPage() {
     ? registeredCards.map(({ license, registration, verified }) => ({
         licenseId: license.id,
         licenseKey: license.licenseKey,
+        licenseNumber: license.licenseNumber,
         registration: registration as ServerRegistration,
         verified,
         action: saveServerRegistrationAction.bind(null, license.id),

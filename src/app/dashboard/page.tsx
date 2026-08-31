@@ -160,7 +160,10 @@ export default async function DashboardPage() {
             {hasMultipleActiveLicenses ? (
               <>
                 Your <b>{soonestActiveLicense!.tier}</b> license{" "}
-                <b>{soonestActiveLicense!.licenseKey.split("-").slice(0, 2).join("-")}</b> expires in{" "}
+                <b>
+                  {soonestActiveLicense!.licenseKey.split("-").slice(0, 2).join("-")} (HH{soonestActiveLicense!.licenseNumber})
+                </b>{" "}
+                expires in{" "}
                 <b>{humanizeTimeUntil(soonestActiveLicense!.expiresAt)}</b>. There&apos;s no auto-renewal for this
                 license — message us on Telegram to get it renewed before it lapses. Your other active license is
                 unaffected.

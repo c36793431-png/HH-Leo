@@ -320,7 +320,14 @@ export default async function AdminUserDetailPage({
               {user.licenses.map((l) => (
                 <tr key={l.id}>
                   <td className="py-2 pr-4 font-mono text-xs text-zinc-600">{l.id.slice(0, 8)}…</td>
-                  <td className="py-2 pr-4 font-mono text-xs text-zinc-400">{maskLicenseKey(l.licenseKey)}</td>
+                  <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
+                    <span className="flex items-center gap-1.5">
+                      <span className="rounded-full border border-cyan-500/50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+                        HH{l.licenseNumber}
+                      </span>
+                      {maskLicenseKey(l.licenseKey)}
+                    </span>
+                  </td>
                   <td className="py-2 pr-4">
                     <span
                       className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${STATUS_STYLES[l.computedStatus]}`}

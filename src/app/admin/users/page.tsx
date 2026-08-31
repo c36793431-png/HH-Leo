@@ -311,7 +311,12 @@ export default async function AdminUsersPage({
                         <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
                           <div className="flex flex-col gap-1.5">
                             {u.activeLicenses.map((lic) => (
-                              <div key={lic.licenseId}>{maskLicenseKey(lic.licenseKey)}</div>
+                              <div key={lic.licenseId} className="flex items-center gap-1.5">
+                                <span className="rounded-full border border-cyan-500/50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+                                  HH{lic.licenseNumber}
+                                </span>
+                                {maskLicenseKey(lic.licenseKey)}
+                              </div>
                             ))}
                           </div>
                         </td>
@@ -441,7 +446,16 @@ export default async function AdminUsersPage({
                     ) : (
                       <>
                         <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
-                          {u.licenseKey ? maskLicenseKey(u.licenseKey) : "—"}
+                          {u.licenseKey ? (
+                            <span className="flex items-center gap-1.5">
+                              <span className="rounded-full border border-cyan-500/50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+                                HH{u.licenseNumber}
+                              </span>
+                              {maskLicenseKey(u.licenseKey)}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         <td className="py-2 pr-4">
                           <span

@@ -394,6 +394,11 @@
 .portal-shell .keyrow .k.ok { color: var(--hz-ok); }
 .portal-shell .keyrow .k.bad { color: var(--hz-bad); }
 .portal-shell .keyrow .copy { color: var(--hz-cyan); font-weight: 600; cursor: pointer; font-family: var(--hz-sans); font-size: 12px; background: none; border: none; padding: 0; }
+.portal-shell .lic-num-badge {
+  flex: 0 0 auto; font-family: var(--hz-sans); font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--hz-cyan); border: 1px solid var(--hz-cyan); border-radius: 999px; padding: 2px 8px;
+  display: inline-block;
+}
 .portal-shell .metrics { display: flex; gap: 24px; margin-left: auto; }
 .portal-shell .metrics .m { text-align: right; }
 .portal-shell .metrics .m b { font-family: var(--hz-disp); font-weight: 700; font-size: 24px; display: block; color: var(--hz-ink); }

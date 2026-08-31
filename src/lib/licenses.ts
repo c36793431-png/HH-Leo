@@ -11,6 +11,25 @@ import type { UserRole } from "./admin-user-roles";
 import { maybeCreateReferralEarning } from "./referrals";
 import { removeFromPaidGroup } from "./group-membership";
 
+/** A license's permanent per-user ordinal (1, 2, 3…) for the "HH1"/"HH2" display label —
+ * marcus's ask (thread multi-license-visibility-2026-08-31, Job E): earliest-issued license
+ * is always HH1 and stays HH1 even after it's revoked or expires, so a support conversation
+ * referencing "HH2" never goes stale. Counts every license the user has ever held (not just
+ * active ones), so a lapsed license still consumes its number — this is why it's a correlated
+ * count rather than a window function scoped to whatever subset the outer query already
+ * filtered to. Tiebreaks same-transaction issued_at collisions on id (licenses.id has no
+ * natural ordering, but it's stable and unique, which is all a tiebreak needs). Relies on
+ * licenses never being hard-deleted (status is DB-constrained to 'active'/'revoked', and no
+ * app code deletes rows — confirmed via repo search) — if that ever changes, this needs to
+ * become a stored column instead. */
+export function licenseNumberSql(alias: string): string {
+  return `(
+    select count(*) from licenses ln
+    where ln.user_id = ${alias}.user_id
+      and (ln.issued_at, ln.id) <= (${alias}.issued_at, ${alias}.id)
+  )`;
+}
+
 /** Single source of truth for the active/expiring/expired/revoked bucket shown on every
  * license row across /admin/users, /admin/users/[id], and /admin/licenses — these three
  * pages used to each define their own CASE expression and drifted (a license 24h from
@@ -532,18 +551,21 @@ export interface ActiveLicense {
   id: string;
   licenseKey: string;
   expiresAt: Date;
+  licenseNumber: number;
 }
 
 export async function getActiveLicenseForUser(userId: string): Promise<ActiveLicense | null> {
   const result = await pool.query(
-    `select id, license_key, expires_at from licenses
+    `select id, license_key, expires_at, ${licenseNumberSql("licenses")} as license_number from licenses
      where user_id = $1 and status = 'active' and expires_at > now()
      order by expires_at desc
      limit 1`,
     [userId]
   );
   const row = result.rows[0];
-  return row ? { id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at } : null;
+  return row
+    ? { id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at, licenseNumber: Number(row.license_number) }
+    : null;
 }
 
 /** All of a user's currently-active licenses, for surfaces that must render/act on each one
@@ -552,12 +574,17 @@ export async function getActiveLicenseForUser(userId: string): Promise<ActiveLic
  * card order is stable across renders — same precedence 0007's dedup migration used. */
 export async function getActiveLicensesForUser(userId: string): Promise<ActiveLicense[]> {
   const result = await pool.query(
-    `select id, license_key, expires_at from licenses
+    `select id, license_key, expires_at, ${licenseNumberSql("licenses")} as license_number from licenses
      where user_id = $1 and status = 'active' and expires_at > now()
      order by expires_at desc, issued_at desc`,
     [userId]
   );
-  return result.rows.map((row) => ({ id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at }));
+  return result.rows.map((row) => ({
+    id: row.id,
+    licenseKey: row.license_key,
+    expiresAt: row.expires_at,
+    licenseNumber: Number(row.license_number),
+  }));
 }
 
 /** Same set/order as getActiveLicensesForUser, but with the full LicenseDetail columns —
@@ -567,7 +594,8 @@ export async function getActiveLicensesForUser(userId: string): Promise<ActiveLi
  * up extra columns they don't need. */
 export async function getActiveLicenseDetailsForUser(userId: string): Promise<LicenseDetail[]> {
   const result = await pool.query(
-    `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types
+    `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types,
+            ${licenseNumberSql("licenses")} as license_number
      from licenses
      where user_id = $1 and status = 'active' and expires_at > now()
      order by expires_at desc, issued_at desc`,
@@ -583,6 +611,7 @@ export async function getActiveLicenseDetailsForUser(userId: string): Promise<Li
     hardwareId: row.hardware_id,
     lastVerifiedAt: row.last_verified_at,
     feedTypes: (row.feed_types ?? []).filter(isFeedType),
+    licenseNumber: Number(row.license_number),
   }));
 }
 
@@ -655,6 +684,7 @@ export interface LicenseDetail {
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
   feedTypes: FeedType[];
+  licenseNumber: number;
 }
 
 export type LicenseDisplayStatus = "active" | "expiring" | "expired" | "revoked" | "none";
@@ -693,7 +723,8 @@ export function computePortalTier(
 /** Dashboard widget lookup — unlike getActiveLicenseForUser, returns the latest license regardless of status/expiry so the UI can render EXPIRED/REVOKED states. */
 export async function getLicenseForUser(userId: string): Promise<LicenseDetail | null> {
   const result = await pool.query(
-    `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types
+    `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types,
+            ${licenseNumberSql("licenses")} as license_number
      from licenses where user_id = $1
      order by issued_at desc
      limit 1`,
@@ -711,6 +742,7 @@ export async function getLicenseForUser(userId: string): Promise<LicenseDetail |
     hardwareId: row.hardware_id,
     lastVerifiedAt: row.last_verified_at,
     feedTypes: (row.feed_types ?? []).filter(isFeedType),
+    licenseNumber: Number(row.license_number),
   };
 }
 
@@ -726,6 +758,7 @@ export interface AdminUserLicenseRow {
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
   feedTypes: FeedType[];
+  licenseNumber: number;
 }
 
 export interface AdminUserRow {
@@ -750,6 +783,7 @@ export interface AdminUserRow {
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
   feedTypes: FeedType[];
+  licenseNumber: number | null;
   /** Every currently-active license this user holds, expires_at desc / issued_at desc —
    * same order as getActiveLicenseDetailsForUser. Empty when the user has zero active
    * licenses (fall back to the licenseId/... fields above). Render one entry per row when
@@ -844,7 +878,8 @@ export async function listAllUsersWithLicenses(
   const baseFrom = `
     from users u
     left join lateral (
-      select id, license_key, status, expires_at, tier, hardware_id, last_verified_at, feed_types
+      select id, license_key, status, expires_at, tier, hardware_id, last_verified_at, feed_types,
+             ${licenseNumberSql("licenses")} as license_number
       from licenses
       where user_id = u.id
       order by issued_at desc
@@ -861,7 +896,7 @@ export async function listAllUsersWithLicenses(
     `select u.id as user_id, u.email, u.display_name, u.telegram_username, u.role, u.created_at,
             ${SIGNUP_SOURCE_SQL} as signup_source,
             l.id as license_id, l.license_key, l.status, l.expires_at, l.tier,
-            l.hardware_id, l.last_verified_at, l.feed_types,
+            l.hardware_id, l.last_verified_at, l.feed_types, l.license_number,
             ${COMPUTED_STATUS_SQL} as computed_status
      ${baseFrom}
      ${where}
@@ -877,7 +912,8 @@ export async function listAllUsersWithLicenses(
   const activeByUser = new Map<string, AdminUserLicenseRow[]>();
   if (userIds.length > 0) {
     const activeResult = await pool.query(
-      `select user_id, id, license_key, status, expires_at, tier, hardware_id, last_verified_at, feed_types
+      `select user_id, id, license_key, status, expires_at, tier, hardware_id, last_verified_at, feed_types,
+              ${licenseNumberSql("licenses")} as license_number
        from licenses
        where user_id = any($1) and status = 'active' and expires_at > now()
        order by expires_at desc, issued_at desc`,
@@ -896,6 +932,7 @@ export async function listAllUsersWithLicenses(
         hardwareId: r.hardware_id,
         lastVerifiedAt: r.last_verified_at,
         feedTypes: (r.feed_types ?? []).filter(isFeedType),
+        licenseNumber: Number(r.license_number),
       };
       const list = activeByUser.get(r.user_id);
       if (list) list.push(entry);
@@ -922,6 +959,7 @@ export async function listAllUsersWithLicenses(
       hardwareId: r.hardware_id,
       lastVerifiedAt: r.last_verified_at,
       feedTypes: (r.feed_types ?? []).filter(isFeedType),
+      licenseNumber: r.license_number !== null ? Number(r.license_number) : null,
       activeLicenses: activeByUser.get(r.user_id) ?? [],
     })),
   };
@@ -939,6 +977,7 @@ export interface UserLicenseRow {
   hardwareId: string | null;
   lastVerifiedAt: Date | null;
   feedTypes: FeedType[];
+  licenseNumber: number;
 }
 
 export interface SigninEventRow {
@@ -1019,7 +1058,8 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
   const [licensesResult, signinsResult, actionsResult, groupsResult] = await Promise.all([
     pool.query(
       `select id, license_key, status, lifecycle_state, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types,
-              ${licenseStatusCaseSql("licenses")} as computed_status
+              ${licenseStatusCaseSql("licenses")} as computed_status,
+              ${licenseNumberSql("licenses")} as license_number
        from licenses where user_id = $1
        order by issued_at desc`,
       [userId]
@@ -1074,6 +1114,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
       hardwareId: r.hardware_id,
       lastVerifiedAt: r.last_verified_at,
       feedTypes: (r.feed_types ?? []).filter(isFeedType),
+      licenseNumber: Number(r.license_number),
     })),
     signins: signinsResult.rows.map((r) => ({
       id: r.id,
