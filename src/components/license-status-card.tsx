@@ -138,13 +138,16 @@ export function LicenseStatusCard({
   const daysLeft = Math.max(0, daysBetween(license.expiresAt, now));
   const pct = Math.round(Math.min(100, Math.max(0, (daysLeft / totalDays) * 100)));
 
+  // Round-to-nearest everywhere a countdown renders (thread multi-license-visibility-2026-08-31,
+  // marcus) — this used to Math.ceil, so the ring read "20 hours left" on the same ~19h20m
+  // remaining that formatRelative/humanizeTimeUntil below both round to "19 hours".
   let ringValue: number;
   let ringUnit: string;
   if (msRemaining < 60 * 60 * 1000) {
-    ringValue = Math.ceil(msRemaining / 60_000);
+    ringValue = Math.round(msRemaining / 60_000);
     ringUnit = "minutes left";
   } else if (msRemaining < 24 * 60 * 60 * 1000) {
-    ringValue = Math.ceil(msRemaining / 3_600_000);
+    ringValue = Math.round(msRemaining / 3_600_000);
     ringUnit = "hours left";
   } else {
     ringValue = daysLeft;

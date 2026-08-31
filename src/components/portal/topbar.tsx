@@ -15,6 +15,11 @@ const TITLES: Record<string, { title: string; crumb: string }> = {
   "/admin/history": { title: "History", crumb: "admin / history" },
 };
 
+// Segment-derived titles below capitalize each word — fine for plain words, wrong for acronyms
+// ("vps" -> "Vps"). Only these two are known acronyms (thread multi-license-visibility-2026-08-31,
+// marcus); other title/label mismatches on the portal are coxwell's naming calls, left alone.
+const ACRONYM_WORDS = new Set(["vps", "obi"]);
+
 // feed.horizonhft.com/admin is the feed-admin dashboard landing (spec §2), so its title
 // reads "Dashboard" there even though the same path is plain "Admin" on the portal host.
 function resolveTitle(pathname: string, adminSurface: AdminSurface): { title: string; crumb: string } {
@@ -24,7 +29,7 @@ function resolveTitle(pathname: string, adminSurface: AdminSurface): { title: st
   const last = segments[segments.length - 1] ?? "dashboard";
   const title = last
     .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word) => (ACRONYM_WORDS.has(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
     .join(" ");
   return { title, crumb: segments.join(" / ") };
 }

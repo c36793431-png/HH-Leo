@@ -97,11 +97,13 @@ export default async function DashboardPage() {
     const hasDrillIn = tierCount > 1;
     const isOwned = status === "active" || status === "trial" || status === "included";
 
-    const pill: { color: "green" | "cyan" | "red"; label: string } = isOwned
+    // Status pill always reflects real ownership — a tier count is informational and must never
+    // replace it (thread multi-license-visibility-2026-08-31, marcus: NY showed "2 TIERS" where
+    // the header read "1 OF 4 ACTIVE"). /feeds renders both as separate pills; mirror that here.
+    const pill: { color: "green" | "red"; label: string } = isOwned
       ? { color: "green", label: "ACTIVE" }
-      : hasTierCatalogue
-        ? { color: "cyan", label: `${tierCount} TIER${tierCount === 1 ? "" : "S"}` }
-        : { color: "red", label: "LOCKED" };
+      : { color: "red", label: "LOCKED" };
+    const tierBadge = !isOwned && hasTierCatalogue ? `${tierCount} TIER${tierCount === 1 ? "" : "S"}` : null;
 
     const action =
       pill.color === "red"
@@ -117,6 +119,7 @@ export default async function DashboardPage() {
       countryCode: catalogueEntry?.countryCode ?? "US",
       stat,
       pill,
+      tierBadge,
       action,
     };
   });
@@ -277,6 +280,7 @@ export default async function DashboardPage() {
                   <span className={`sf-flag fi fi-${f.countryCode.toLowerCase()}`} role="img" aria-label={`${f.countryCode} flag`} />
                   <b className="sf-name">{f.name.replace(/ Feed$/, "")}</b>
                   <span className={`sf-pill sf-pill-${f.pill.color}`}>● {f.pill.label}</span>
+                  {f.tierBadge && <span className="sf-pill sf-pill-cyan">{f.tierBadge}</span>}
                 </div>
                 <span className="sf-stat">{f.stat}</span>
                 {f.action.external ? (
