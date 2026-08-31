@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getActiveLicenseForUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
+import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { DownloadButton } from "@/components/download-button";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -21,11 +21,13 @@ export default async function DownloadsPage() {
   const isAdmin = isAdminUser(session.user);
   if (!paid && !isAdmin) redirect("/dashboard");
 
-  const [license, activeLicenses, downloads] = await Promise.all([
-    getActiveLicenseForUser(session.user.id).catch(() => null),
+  const [activeLicenses, downloads] = await Promise.all([
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
     getLatestDownloads().catch((): LatestDownloads => ({})),
   ]);
+  // Same predicate/ordering as the old getActiveLicenseForUser call (status='active' and
+  // expires_at > now(), expires_at desc) -- activeLicenses[0] is that same row.
+  const license = activeLicenses[0] ?? null;
 
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
