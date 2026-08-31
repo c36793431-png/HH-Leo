@@ -9,6 +9,7 @@ import {
 import { insertPayment } from "./payments";
 import type { UserRole } from "./admin-user-roles";
 import { maybeCreateReferralEarning } from "./referrals";
+import { removeFromPaidGroup } from "./group-membership";
 
 /** Single source of truth for the active/expiring/expired/revoked bucket shown on every
  * license row across /admin/users, /admin/users/[id], and /admin/licenses — these three
@@ -377,6 +378,22 @@ export async function getAlertTargetForLicense(licenseId: string): Promise<Group
   return { userId: row.user_id, telegramUserId: row.telegram_user_id, email: row.email };
 }
 
+/** Single entry point for revoking a license and keeping paid-group membership in sync —
+ * resolves the owner internally via getAlertTargetForLicense instead of relying on the
+ * caller to pass a userId. revokeLicenseFromListAction and revokeAction never touched group
+ * membership at all, and revokeLicenseAction only did when the form happened to include
+ * userId; all three now go through here so correct behaviour is the default, not the lucky
+ * case. Always uses removeFromPaidGroupIfNoOtherActiveLicense, never the raw
+ * removeFromPaidGroup — forceRemoveGroupAction is the only deliberate-override caller of
+ * that. Per marcus, thread overnight-builds-2026-08-30. */
+export async function revokeLicenseAndSyncGroup(licenseId: string): Promise<void> {
+  const target = await getAlertTargetForLicense(licenseId);
+  await revokeLicense(licenseId);
+  if (target?.telegramUserId) {
+    await removeFromPaidGroupIfNoOtherActiveLicense(target.userId, target.telegramUserId);
+  }
+}
+
 export interface ClientRow {
   userId: string;
   email: string | null;
@@ -450,6 +467,27 @@ export async function getActiveLicensesForUser(userId: string): Promise<ActiveLi
     [userId]
   );
   return result.rows.map((row) => ({ id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at }));
+}
+
+/** Duplicated from feat/issue-additional-license (bf729bc) rather than depending on that
+ * branch — this fix needs to stand alone and merge independently. Reconcile at merge time,
+ * whichever branch merges second. Once issueAdditionalLicense lets a user hold more than one
+ * active license, expiring/revoking any single one of them must not evict a client who is
+ * still paying via another. Call this instead of removeFromPaidGroup directly wherever a
+ * single license's lapse is the trigger — but not forceRemoveGroupAction, which is a
+ * deliberate admin override and must bypass this check. */
+export async function removeFromPaidGroupIfNoOtherActiveLicense(
+  userId: string,
+  telegramUserId: string | number
+): Promise<void> {
+  const remaining = await getActiveLicensesForUser(userId);
+  if (remaining.length > 0) {
+    console.log(
+      `removeFromPaidGroup skipped for user ${userId}: ${remaining.length} other active license(s) remain`
+    );
+    return;
+  }
+  await removeFromPaidGroup(userId, telegramUserId);
 }
 
 export interface VerifyLicenseResult {

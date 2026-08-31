@@ -6,7 +6,7 @@ import { pool } from "@/lib/db";
 import {
   issueLicense,
   extendLicense,
-  revokeLicense,
+  revokeLicenseAndSyncGroup,
   getLicenseExpiresAt,
   setLicenseTier,
   setLicenseFeedTypes,
@@ -93,7 +93,7 @@ export async function revokeAction(
     const adminUserId = await requireAdminUsersPanel();
     const licenseId = formData.get("licenseId") as string;
     const ownerId = await getLicenseOwner(licenseId);
-    await revokeLicense(licenseId);
+    await revokeLicenseAndSyncGroup(licenseId);
     await logAdminAction(adminUserId, "admin_users_revoke", ownerId, { licenseId }, licenseId);
     revalidateUsers(ownerId);
   });

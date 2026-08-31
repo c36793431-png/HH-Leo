@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import {
   issueLicense,
   extendLicense,
-  revokeLicense,
+  revokeLicenseAndSyncGroup,
   listClients,
   getGroupTarget,
   getLicenseExpiresAt,
@@ -98,14 +98,8 @@ export async function revokeLicenseAction(
   return runAction("Failed to revoke license", async () => {
     const session = await requireAdmin();
     const licenseId = formData.get("licenseId") as string;
-    const userId = (formData.get("userId") as string | null) || undefined;
-    await revokeLicense(licenseId);
+    await revokeLicenseAndSyncGroup(licenseId);
     await logAdminAction(session.user.id, "revoke_license", null, { licenseId });
-
-    if (userId) {
-      const target = await getGroupTarget(userId);
-      if (target?.telegramUserId) await removeFromPaidGroup(target.userId, target.telegramUserId);
-    }
 
     revalidatePath("/admin");
   });
