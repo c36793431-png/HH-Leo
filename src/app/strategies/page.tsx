@@ -1,7 +1,13 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import {
+  isPaidUser,
+  getLicenseForUser,
+  getActiveLicenseDetailsForUser,
+  computePortalTier,
+  computePortalTierFromLicenses,
+} from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
@@ -43,18 +49,24 @@ export default async function StrategiesPage() {
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [paid, licenseDetail, config, setfiles] = await Promise.all([
+  const [paid, licenseDetail, config, setfiles, activeLicenses] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
     getLicenseForUser(session.user.id).catch(() => null),
     getPortalConfig(),
     listActiveSetfiles().catch(() => []),
+    getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
   ]);
   const isAdmin = isAdminUser(session.user);
   const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   const groups = groupSetfiles(setfiles);
-  const status = computeStrategyCardStatus({ paid, licenseTier: licenseDetail?.tier ?? null, isAdmin });
+  // Highest tier across every active license wins (thread multi-license-visibility-2026-08-31,
+  // marcus) — a paying client must never see "Trial" just because getLicenseForUser's
+  // latest-issued row happens to be a newer trial license.
+  const { tier: bestActiveTier } = computePortalTierFromLicenses(false, activeLicenses);
+  const bestLicenseTier = bestActiveTier === "free" ? null : bestActiveTier;
+  const status = computeStrategyCardStatus({ paid, licenseTier: bestLicenseTier, isAdmin });
 
   return (
     <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
