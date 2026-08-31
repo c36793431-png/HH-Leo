@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { getActiveLicensesForUser, isPaidUser } from "@/lib/licenses";
 import { saveServerRegistration, VPS_PROVIDERS, type VpsProvider, getServerRegistration } from "@/lib/server-registration";
+import { isServerLocation } from "@/lib/server-locations";
 import { requestBlackTrial, requestBlackTrialConversion } from "@/lib/black-trials";
 
 /** Validates the caller-supplied licenseId against the signed-in user's own active licenses —
@@ -29,18 +30,18 @@ export async function saveServerRegistrationAction(
     const serverName = ((formData.get("serverName") as string) ?? "").trim();
     const vpsProvider = ((formData.get("vpsProvider") as string) ?? "").trim();
     const vpsProviderOther = ((formData.get("vpsProviderOther") as string) ?? "").trim() || null;
-    const serverLocation = ((formData.get("serverLocation") as string) ?? "").trim();
+    const location = ((formData.get("location") as string) ?? "").trim();
     const declaredIp = ((formData.get("declaredIp") as string) ?? "").trim();
 
     if (!serverName) throw new Error("Server name is required");
     if (!VPS_PROVIDERS.includes(vpsProvider as VpsProvider)) throw new Error("Invalid VPS provider");
     if (vpsProvider === "other" && !vpsProviderOther) throw new Error("Please specify the VPS provider");
-    if (!serverLocation) throw new Error("Server location is required");
+    if (!isServerLocation(location)) throw new Error("Server location is required");
     if (!declaredIp) throw new Error("Server IP is required");
 
     await saveServerRegistration(
       validLicenseId,
-      { serverName, vpsProvider, vpsProviderOther, serverLocation, declaredIp },
+      { serverName, vpsProvider, vpsProviderOther, location, declaredIp },
       `https://portal.horizonhft.com/admin/connections/${validLicenseId}`,
       email
     );

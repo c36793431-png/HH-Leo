@@ -6,6 +6,7 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { ServerRegistrationForm } from "@/components/account/server-registration-form";
 import { ServerRegistrationView } from "@/components/account/server-registration-view";
+import { ServerRegistrationsGrouped, type GroupedServerEntry } from "@/components/account/server-registrations-grouped";
 import { getServerRegistration, getLatestConnectionIp, type ServerRegistration } from "@/lib/server-registration";
 import { getBlackTrialForLicense, type BlackTrialRow } from "@/lib/black-trials";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -88,12 +89,47 @@ export default async function ServersPage() {
       )
     : [];
 
+  // Grouping only kicks in once there's something to group -- a single registration
+  // (the overwhelming majority of accounts) renders through the exact same path as
+  // today (one ServerCard, no group chrome), by design: that's the regression guard
+  // marcus asked for, independent of whether migration 0072 has landed.
+  const registeredCards = cards.filter((c) => c.registration);
+  const grouped = registeredCards.length >= 2;
+
+  const groupedEntries: GroupedServerEntry[] = grouped
+    ? registeredCards.map(({ license, registration, verified }) => ({
+        licenseId: license.id,
+        licenseKey: license.licenseKey,
+        registration: registration as ServerRegistration,
+        verified,
+        action: saveServerRegistrationAction.bind(null, license.id),
+      }))
+    : [];
+  const availableCard = grouped ? cards.find((c) => !c.registration) : undefined;
+  const addTarget = availableCard
+    ? { licenseId: availableCard.license.id, action: saveServerRegistrationAction.bind(null, availableCard.license.id) }
+    : null;
+
   return (
     <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
       <Link href="/feeds" className="btn ghost sm" style={{ marginBottom: 12, display: "inline-block" }}>
         ← All feeds
       </Link>
-      {cards.length > 0 ? (
+      {grouped ? (
+        <div className="grid">
+          <div className="card full">
+            <div className="chead">
+              <span className="ic">🖥</span>
+              <h3>Server registration</h3>
+            </div>
+            <p style={{ color: "var(--hz-ink-2)", fontSize: 13, marginBottom: 16 }}>
+              Tell us where your Horizon client runs. Servers are grouped by location — expand a
+              location to view or edit each machine.
+            </p>
+            <ServerRegistrationsGrouped entries={groupedEntries} addTarget={addTarget} />
+          </div>
+        </div>
+      ) : cards.length > 0 ? (
         cards.map(({ license, registration, blackTrial, verified }) => (
           <ServerCard
             key={license.id}
