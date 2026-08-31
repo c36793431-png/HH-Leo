@@ -62,9 +62,17 @@ export async function sendGroupInvite(target: InviteTarget, tier: GroupTier): Pr
   const link = await createChatInviteLink(chatId, `${tier}-${target.userId}`);
   if (!link) return { sent: false, reason: "invite_link_failed" };
 
+  // Idempotent on (user_id, chat_id) among active-membership rows (see migration 0073):
+  // a resend or a renewal landing while a row is already invited/joined updates that row's
+  // link instead of inserting a duplicate. Status is left untouched — a resend must not
+  // demote an already-'joined' member back to 'invited'. The DM below still fires every
+  // call; that's caller-controlled (resendGroupInviteAction's whole job), not tied to
+  // whether the row was inserted or updated.
   await pool.query(
     `insert into group_memberships (user_id, telegram_id, chat_id, tier, invite_link, invited_at, status)
-     values ($1, $2, $3, $4, $5, now(), 'invited')`,
+     values ($1, $2, $3, $4, $5, now(), 'invited')
+     on conflict (user_id, chat_id) where status not in ('removed_on_lapse', 'left')
+     do update set telegram_id = excluded.telegram_id, invite_link = excluded.invite_link, invited_at = now()`,
     [target.userId, target.telegramUserId, chatId, tier, link]
   );
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
-import { removeFromPaidGroup } from "@/lib/group-membership";
+import { removeFromPaidGroupIfNoOtherActiveLicense } from "@/lib/licenses";
 import { notifyUser } from "@/lib/notify";
 import { getPortalConfig } from "@/lib/portal-config";
 import { notifyLicenseExpired, notifyLicenseExpiringSoon } from "@/lib/telemetry-sink";
@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
   for (const row of expired.rows) {
     try {
       if (row.telegram_user_id) {
-        await removeFromPaidGroup(row.user_id, row.telegram_user_id);
+        await removeFromPaidGroupIfNoOtherActiveLicense(row.user_id, row.telegram_user_id);
       }
       await notifyUser(
         { telegramUserId: row.telegram_user_id, email: row.email },

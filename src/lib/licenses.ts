@@ -9,6 +9,7 @@ import {
 import { insertPayment } from "./payments";
 import type { UserRole } from "./admin-user-roles";
 import { maybeCreateReferralEarning } from "./referrals";
+import { removeFromPaidGroup } from "./group-membership";
 
 /** Single source of truth for the active/expiring/expired/revoked bucket shown on every
  * license row across /admin/users, /admin/users/[id], and /admin/licenses — these three
@@ -541,6 +542,27 @@ export async function getActiveLicensesForUser(userId: string): Promise<ActiveLi
     [userId]
   );
   return result.rows.map((row) => ({ id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at }));
+}
+
+/** Bug 2 (marcus, thread overnight-builds-2026-08-30): once issueAdditionalLicense lets a
+ * user hold more than one active license, expiring/revoking any single one of them must not
+ * evict a client who is still paying via another. Call this instead of removeFromPaidGroup
+ * directly wherever a single license's lapse is the trigger (expire-licenses cron,
+ * revokeLicenseAction) — but not forceRemoveGroupAction, which is a deliberate admin
+ * override and must bypass this check. Logs the skip so "chose not to remove" reads
+ * differently from "forgot to remove" in the logs. */
+export async function removeFromPaidGroupIfNoOtherActiveLicense(
+  userId: string,
+  telegramUserId: string | number
+): Promise<void> {
+  const remaining = await getActiveLicensesForUser(userId);
+  if (remaining.length > 0) {
+    console.log(
+      `removeFromPaidGroup skipped for user ${userId}: ${remaining.length} other active license(s) remain`
+    );
+    return;
+  }
+  await removeFromPaidGroup(userId, telegramUserId);
 }
 
 export interface VerifyLicenseResult {
