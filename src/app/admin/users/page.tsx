@@ -308,130 +308,29 @@ export default async function AdminUsersPage({
                     <td className="py-2 pr-4 text-zinc-400">{formatRelative(u.joinedAt)}</td>
                     {hasMultipleActive ? (
                       <>
-                        <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
-                          <div className="flex flex-col gap-1.5">
-                            {u.activeLicenses.map((lic) => (
-                              <div key={lic.licenseId} className="flex items-center gap-1.5">
-                                <span className="rounded-full border border-cyan-500/50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
-                                  HH{lic.licenseNumber}
-                                </span>
-                                {maskLicenseKey(lic.licenseKey)}
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="py-2 pr-4">
-                          <div className="flex flex-col gap-1.5">
+                        <td className="py-2 pr-4" colSpan={7}>
+                          <div className="flex flex-wrap items-center gap-1.5">
                             {u.activeLicenses.map((lic) => {
                               const licBadge = activeLicenseBadge(lic.computedStatus);
                               return (
                                 <span
                                   key={lic.licenseId}
-                                  className={`w-fit rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${BADGE_STYLES[licBadge.color]}`}
+                                  className={`rounded-full border px-2 py-0.5 text-[11px] font-medium tracking-wide ${BADGE_STYLES[licBadge.color]}`}
                                 >
-                                  {licBadge.label}
+                                  HH{lic.licenseNumber} · {lic.tier}
                                 </span>
                               );
                             })}
                           </div>
                         </td>
-                        <td className="py-2 pr-4 text-zinc-400">
-                          <div className="flex flex-col gap-1.5">
-                            {u.activeLicenses.map((lic) => (
-                              <div key={lic.licenseId}>
-                                {formatAbsoluteUtc(lic.expiresAt)}{" "}
-                                <span className="text-zinc-600">({formatRelative(lic.expiresAt)})</span>
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="py-2 pr-4 text-zinc-400">
-                          <div className="flex flex-col gap-1.5">
-                            {u.activeLicenses.map((lic) => (
-                              <div key={lic.licenseId}>{lic.tier}</div>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="py-2 pr-4">
-                          <div className="flex flex-col gap-1.5">
-                            {u.activeLicenses.map((lic) => (
-                              <div key={lic.licenseId} className="flex flex-wrap gap-1">
-                                {lic.feedTypes.length === 0 ? (
-                                  <span className="text-xs text-zinc-600">—</span>
-                                ) : (
-                                  lic.feedTypes.map((f) => (
-                                    <span
-                                      key={f}
-                                      className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300"
-                                    >
-                                      {FEED_TYPE_META[f].name}
-                                    </span>
-                                  ))
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="py-2 pr-4 font-mono text-xs text-zinc-500">
-                          <div className="flex flex-col gap-1.5">
-                            {u.activeLicenses.map((lic) => (
-                              <div key={lic.licenseId}>{lic.hardwareId ? `${lic.hardwareId.slice(0, 4)}…` : "—"}</div>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="py-2 pr-4 text-zinc-400">
-                          <div className="flex flex-col gap-1.5">
-                            {u.activeLicenses.map((lic) => (
-                              <div key={lic.licenseId}>
-                                {lic.lastVerifiedAt ? formatRelative(lic.lastVerifiedAt) : "never"}
-                              </div>
-                            ))}
-                          </div>
-                        </td>
                         <td className="py-2">
-                          <div className="flex flex-col gap-2">
-                            {u.activeLicenses.map((lic) => (
-                              <div key={lic.licenseId} className="flex flex-wrap gap-2">
-                                <ActionButton
-                                  action={expireNowAction}
-                                  hiddenFields={{ licenseId: lic.licenseId }}
-                                  label="Trigger expire now"
-                                  successMessage="License expired"
-                                />
-                                <DurationForm
-                                  action={extendLicenseAction}
-                                  hiddenFields={{ licenseId: lic.licenseId }}
-                                  submitLabel="Apply"
-                                  successMessage="License extended"
-                                  compact
-                                  triggerLabel="Extend"
-                                  showExtendFrom
-                                  defaultAmount={30}
-                                  defaultUnit="days"
-                                  triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
-                                />
-                                <FeedSelectForm
-                                  action={updateLicenseFeedsAction}
-                                  hiddenFields={{ licenseId: lic.licenseId }}
-                                  currentFeedTypes={lic.feedTypes}
-                                  triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300"
-                                />
-                                <TierSelectForm
-                                  action={setUserLicenseTierAction}
-                                  revokeAction={revokeAction}
-                                  hiddenFields={{ licenseId: lic.licenseId }}
-                                  currentTier={lic.tier}
-                                  confirmSubject={u.email ?? "this user"}
-                                />
-                                <ActionButton
-                                  action={revokeAction}
-                                  hiddenFields={{ licenseId: lic.licenseId }}
-                                  label="Revoke"
-                                  successMessage="License revoked"
-                                  className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
-                                />
-                              </div>
-                            ))}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Link
+                              href={`/admin/users/${u.userId}`}
+                              className="rounded border border-cyan-500/50 px-2 py-1 text-xs font-medium text-cyan-300 hover:border-cyan-400 hover:bg-cyan-500/10"
+                            >
+                              Manage ({u.activeLicenses.length})
+                            </Link>
                             <DurationForm
                               action={issueNewLicenseAction}
                               hiddenFields={{ userId: u.userId }}

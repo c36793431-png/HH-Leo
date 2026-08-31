@@ -390,6 +390,11 @@ export default async function AdminUserDetailPage({
                           hiddenFields={{ licenseId: l.id }}
                           currentFeedTypes={l.feedTypes}
                         />
+                        <TierSelectForm
+                          action={setUserLicenseTierAction}
+                          hiddenFields={{ licenseId: l.id }}
+                          currentTier={l.tier}
+                        />
                         <ActionButton
                           action={revokeAction}
                           hiddenFields={{ licenseId: l.id }}
