@@ -9,6 +9,7 @@ import {
   extendLicense,
   revokeLicenseAndSyncGroup,
   getLicenseExpiresAt,
+  getActiveLicensesForUser,
   setLicenseTier,
   setLicenseFeedTypes,
   getGroupTarget,
@@ -262,10 +263,11 @@ export async function issueNewLicenseAction(
     const target = await getGroupTarget(userId);
     if (target) {
       const config = await getPortalConfig();
+      const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
       await notifyUser(
         { telegramUserId: target.telegramUserId, email: target.email },
         "Your Horizon HFT license is ready",
-        `Your${license.licenseNumber > 1 ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
+        `Your${showBadge ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
       );
       if (isPaidTier(tier ?? "paid")) {
         await sendPaidGroupInvite(target);
@@ -306,10 +308,11 @@ export async function issueAdditionalLicenseAction(
     const target = await getGroupTarget(userId);
     if (target) {
       const config = await getPortalConfig();
+      const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
       await notifyUser(
         { telegramUserId: target.telegramUserId, email: target.email },
         "Your additional Horizon HFT license is ready",
-        `Your${license.licenseNumber > 1 ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
+        `Your${showBadge ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
       );
     }
 
