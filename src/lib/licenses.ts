@@ -560,6 +560,32 @@ export async function getActiveLicensesForUser(userId: string): Promise<ActiveLi
   return result.rows.map((row) => ({ id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at }));
 }
 
+/** Same set/order as getActiveLicensesForUser, but with the full LicenseDetail columns —
+ * for surfaces (dashboard card) that must render each active license's own tier/hwid/last-seen
+ * rather than just its id/key. Kept separate from ActiveLicense so entitlement-adjacent callers
+ * of getActiveLicensesForUser (issueLicense's active-license check, /account/servers) don't pick
+ * up extra columns they don't need. */
+export async function getActiveLicenseDetailsForUser(userId: string): Promise<LicenseDetail[]> {
+  const result = await pool.query(
+    `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types
+     from licenses
+     where user_id = $1 and status = 'active' and expires_at > now()
+     order by expires_at desc, issued_at desc`,
+    [userId]
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    licenseKey: row.license_key,
+    status: row.status,
+    tier: row.tier,
+    issuedAt: row.issued_at,
+    expiresAt: row.expires_at,
+    hardwareId: row.hardware_id,
+    lastVerifiedAt: row.last_verified_at,
+    feedTypes: (row.feed_types ?? []).filter(isFeedType),
+  }));
+}
+
 /** Bug 2 (marcus, thread overnight-builds-2026-08-30): once issueAdditionalLicense lets a
  * user hold more than one active license, expiring/revoking any single one of them must not
  * evict a client who is still paying via another. Call this instead of removeFromPaidGroup

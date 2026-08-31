@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import {
   isPaidUser,
   getLicenseForUser,
+  getActiveLicenseDetailsForUser,
   computeLicenseDisplayStatus,
   computeUserActiveFeeds,
   computePortalTier,
@@ -70,6 +71,7 @@ export default async function DashboardPage() {
       ? await createOnboardingToken(session.user.id).catch(() => null)
       : null;
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
+  const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
   const [activeFeeds, activeServerCount] = await Promise.all([
     computeUserActiveFeeds(session.user.id).catch((): typeof FEED_TYPES => []),
     countUserActiveServers(session.user.id).catch(() => 0),
@@ -116,9 +118,18 @@ export default async function DashboardPage() {
     getRecentAlertsForUser(session.user.id, DASHBOARD_ALERTS_LIMIT).catch(() => []),
     countDistinctAlertLicenses(session.user.id).catch(() => 0),
   ]);
-  const displayStatus = computeLicenseDisplayStatus(licenseDetail);
-  const isExpired = displayStatus === "expired";
-  const isExpiringSoon = displayStatus === "expiring";
+  // activeLicenses is ordered expires_at desc, issued_at desc — the last entry expires soonest.
+  const soonestActiveLicense = activeLicenses.length > 0 ? activeLicenses[activeLicenses.length - 1] : null;
+  const hasMultipleActiveLicenses = activeLicenses.length > 1;
+  // "Expired"/"none"/"revoked" banners only apply when no other license is still granting access —
+  // otherwise the latest-issued license (which getLicenseForUser tracks) can read expired/revoked
+  // while a second, still-active license means the account isn't actually locked out.
+  const isExpired = activeLicenses.length === 0 && computeLicenseDisplayStatus(licenseDetail) === "expired";
+  const isExpiringSoon = soonestActiveLicense !== null && computeLicenseDisplayStatus(soonestActiveLicense) === "expiring";
+  // getLicenseForUser tracks the most-recently-*issued* row, which can differ from the user's one
+  // active license (e.g. a later license was issued and then revoked) — prefer the active one so the
+  // single-license card never shows REVOKED/EXPIRED while real access still exists.
+  const singleCardLicense = activeLicenses.length === 1 ? activeLicenses[0] : licenseDetail;
 
   const tier = computePortalTier(isAdmin, licenseDetail);
   const userName = session.user.name ?? session.user.email ?? "trader";
@@ -146,8 +157,20 @@ export default async function DashboardPage() {
         <div className="banner warn">
           <span className="bic">⏳</span>
           <div>
-            Expires in <b>{humanizeTimeUntil(licenseDetail!.expiresAt)}</b>. There&apos;s no auto-renewal —
-            message us on Telegram to get a new license issued before it lapses.
+            {hasMultipleActiveLicenses ? (
+              <>
+                Your <b>{soonestActiveLicense!.tier}</b> license{" "}
+                <b>{soonestActiveLicense!.licenseKey.split("-").slice(0, 2).join("-")}</b> expires in{" "}
+                <b>{humanizeTimeUntil(soonestActiveLicense!.expiresAt)}</b>. There&apos;s no auto-renewal for this
+                license — message us on Telegram to get it renewed before it lapses. Your other active license is
+                unaffected.
+              </>
+            ) : (
+              <>
+                Expires in <b>{humanizeTimeUntil(soonestActiveLicense!.expiresAt)}</b>. There&apos;s no auto-renewal —
+                message us on Telegram to get a new license issued before it lapses.
+              </>
+            )}
           </div>
           <a className="baction" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
             Renew via Telegram →
@@ -178,13 +201,26 @@ export default async function DashboardPage() {
       )}
 
       <div className="grid">
-        <LicenseStatusCard
-          license={licenseDetail}
-          telegramChannelUrl={config.telegramChannelUrl}
-          isAdminAccount={isAdmin}
-          adminLabel={userName}
-          installedVersion={downloads.windows?.version ?? downloads.macos?.version ?? null}
-        />
+        {hasMultipleActiveLicenses ? (
+          activeLicenses.map((license) => (
+            <LicenseStatusCard
+              key={license.id}
+              license={license}
+              telegramChannelUrl={config.telegramChannelUrl}
+              isAdminAccount={isAdmin}
+              adminLabel={userName}
+              installedVersion={downloads.windows?.version ?? downloads.macos?.version ?? null}
+            />
+          ))
+        ) : (
+          <LicenseStatusCard
+            license={singleCardLicense}
+            telegramChannelUrl={config.telegramChannelUrl}
+            isAdminAccount={isAdmin}
+            adminLabel={userName}
+            installedVersion={downloads.windows?.version ?? downloads.macos?.version ?? null}
+          />
+        )}
 
         <div className="card full">
           <div className="chead">
