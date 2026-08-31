@@ -93,7 +93,6 @@ export default async function DashboardPage() {
       : "locked";
     const region = regionForFeedType(feedType);
     const tierCount = region ? feedTierCounts[region] ?? 0 : 0;
-    const hasTierCatalogue = tierCount >= 1;
     const hasDrillIn = tierCount > 1;
     const isOwned = status === "active" || status === "trial" || status === "included";
 
@@ -103,7 +102,9 @@ export default async function DashboardPage() {
     const pill: { color: "green" | "red"; label: string } = isOwned
       ? { color: "green", label: "ACTIVE" }
       : { color: "red", label: "LOCKED" };
-    const tierBadge = !isOwned && hasTierCatalogue ? `${tierCount} TIER${tierCount === 1 ? "" : "S"}` : null;
+    // Tier count is a fact about the feed, not a property of ownership status — no isOwned gate,
+    // matching /feeds (thread multi-license-visibility-2026-08-31, marcus).
+    const tierBadge = hasDrillIn ? `${tierCount} TIER${tierCount === 1 ? "" : "S"}` : null;
 
     const action =
       pill.color === "red"
