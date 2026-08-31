@@ -27,12 +27,17 @@ export function LicenseStatusCard({
   isAdminAccount = false,
   adminLabel = "admin",
   installedVersion = null,
+  showHeading = true,
 }: {
   license: LicenseDetail | null;
   telegramChannelUrl: string;
   isAdminAccount?: boolean;
   adminLabel?: string;
   installedVersion?: string | null;
+  /** False when this card is one of several stacked under a single shared "License status"
+   * heading (dashboard/page.tsx's multi-license case) — each card still carries its own HH{n}
+   * badge, so the heading only needs to appear once for the group. */
+  showHeading?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -57,11 +62,13 @@ export function LicenseStatusCard({
 
     return (
       <div className="card full admin-lic">
-        <div className="chead">
-          <span className="ic">◐</span>
-          <h3>License status</h3>
-          <span className="cap">Your account</span>
-        </div>
+        {showHeading && (
+          <div className="chead">
+            <span className="ic">◐</span>
+            <h3>License status</h3>
+            <span className="cap">Your account</span>
+          </div>
+        )}
         <div className="lic-active">
           <div className="ring warn">
             <div className="rin">
@@ -96,11 +103,13 @@ export function LicenseStatusCard({
   if (!license || displayStatus === "none" || displayStatus === "revoked") {
     return (
       <div className="card full">
-        <div className="chead">
-          <span className="ic">◐</span>
-          <h3>License status</h3>
-          <span className="cap">Overview</span>
-        </div>
+        {showHeading && (
+          <div className="chead">
+            <span className="ic">◐</span>
+            <h3>License status</h3>
+            <span className="cap">Overview</span>
+          </div>
+        )}
         <div className="lic-free">
           <span className={`lic-badge${displayStatus === "revoked" ? " bad" : ""}`}>
             <span className="dot" /> {displayStatus === "revoked" ? "REVOKED" : "NO LICENSE"}
@@ -152,11 +161,13 @@ export function LicenseStatusCard({
 
   return (
     <div className={`card full${isAdminAccount ? " admin-lic" : ""}`}>
-      <div className="chead">
-        <span className="ic">◐</span>
-        <h3>License status</h3>
-        <span className="cap">{isAdminAccount ? "Your account" : "Overview"}</span>
-      </div>
+      {showHeading && (
+        <div className="chead">
+          <span className="ic">◐</span>
+          <h3>License status</h3>
+          <span className="cap">{isAdminAccount ? "Your account" : "Overview"}</span>
+        </div>
+      )}
       <div className="lic-active">
         <div className={`ring${isExpiring || isExpired || isAdminAccount ? " warn" : ""}`} style={{ "--pct": pct } as React.CSSProperties}>
           <div className="rin">

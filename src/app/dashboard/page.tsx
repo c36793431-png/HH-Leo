@@ -205,7 +205,7 @@ export default async function DashboardPage() {
 
       <div className="grid">
         {hasMultipleActiveLicenses ? (
-          activeLicenses.map((license) => (
+          activeLicenses.map((license, index) => (
             <LicenseStatusCard
               key={license.id}
               license={license}
@@ -213,6 +213,7 @@ export default async function DashboardPage() {
               isAdminAccount={isAdmin}
               adminLabel={userName}
               installedVersion={downloads.windows?.version ?? downloads.macos?.version ?? null}
+              showHeading={index === 0}
             />
           ))
         ) : (

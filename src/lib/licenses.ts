@@ -82,6 +82,7 @@ export interface IssuedLicense {
   id: string;
   licenseKey: string;
   expiresAt: Date;
+  licenseNumber: number;
 }
 
 /** True if this license is the user's (or pre-provisioned claim's) only currently-active
@@ -149,7 +150,7 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
       const result = await pool.query(
         `insert into licenses (user_id, claim_email, claim_telegram_user_id, license_key, status, expires_at, notes, feed_types, tier)
          values ($1, $2, $3, $4, 'active', $5, $6, $7, coalesce($8, 'paid'))
-         returning id, license_key, expires_at, tier`,
+         returning id, license_key, expires_at, tier, ${licenseNumberSql("licenses")} as license_number`,
         [
           args.userId ?? null,
           args.claimEmail ?? null,
@@ -181,7 +182,12 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
         claimTelegramUserId: args.claimTelegramUserId,
       }).catch(() => {});
 
-      return { id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at };
+      return {
+        id: row.id,
+        licenseKey: row.license_key,
+        expiresAt: row.expires_at,
+        licenseNumber: Number(row.license_number),
+      };
     } catch (err: unknown) {
       if ((err as { code?: string })?.code === "23505") continue; // license_key collision — retry with a fresh key
       throw err;
@@ -218,7 +224,7 @@ export async function issueAdditionalLicense(args: IssueAdditionalLicenseArgs): 
       const result = await pool.query(
         `insert into licenses (user_id, license_key, status, expires_at, notes, feed_types, tier)
          values ($1, $2, 'active', $3, $4, $5, coalesce($6, 'paid'))
-         returning id, license_key, expires_at, tier`,
+         returning id, license_key, expires_at, tier, ${licenseNumberSql("licenses")} as license_number`,
         [args.userId, licenseKey, expiresAt, args.notes ?? null, args.feedTypes ?? [], args.tier ?? null]
       );
       const row = result.rows[0];
@@ -236,7 +242,12 @@ export async function issueAdditionalLicense(args: IssueAdditionalLicenseArgs): 
         userId: args.userId,
       }).catch(() => {});
 
-      return { id: row.id, licenseKey: row.license_key, expiresAt: row.expires_at };
+      return {
+        id: row.id,
+        licenseKey: row.license_key,
+        expiresAt: row.expires_at,
+        licenseNumber: Number(row.license_number),
+      };
     } catch (err: unknown) {
       if ((err as { code?: string })?.code === "23505") continue; // license_key collision — retry with a fresh key
       throw err;

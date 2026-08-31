@@ -59,7 +59,7 @@ export async function issueLicenseAction(
       await notifyUser(
         { telegramUserId: client?.telegramUserId, email: client?.email },
         "Your Horizon HFT license is ready",
-        `Your license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
+        `Your HH${license.licenseNumber} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
       );
       const target = await getGroupTarget(userId);
       if (target) await sendPaidGroupInvite(target);
