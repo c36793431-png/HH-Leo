@@ -19,13 +19,24 @@ function formatShortDate(iso: string): string {
   });
 }
 
-function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-4">
+function StatTile({ label, value, sub, href }: { label: string; value: string; sub?: string; href?: string }) {
+  const body = (
+    <>
       <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-zinc-100">{value}</div>
       {sub && <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>}
-    </div>
+    </>
+  );
+  if (!href) {
+    return <div className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-4">{body}</div>;
+  }
+  return (
+    <Link
+      href={href}
+      className="block rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-4 transition-colors hover:border-cyan-300/70 hover:bg-cyan-900/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 focus-visible:outline-offset-2"
+    >
+      {body}
+    </Link>
   );
 }
 
@@ -70,6 +81,7 @@ export default async function AdminDashboardPage() {
           label="Gross received"
           value={`$${revenue.grossIn.toFixed(2)}`}
           sub={`This month: $${revenue.grossInThisMonth.toFixed(2)}`}
+          href="/admin/finance"
         />
         <StatTile
           label="Costs"
@@ -80,16 +92,22 @@ export default async function AdminDashboardPage() {
           label="Net revenue"
           value={`$${revenue.net.toFixed(2)}`}
           sub={`This month: $${revenue.netThisMonth.toFixed(2)}`}
+          href="/admin/finance"
         />
         <StatTile label="MRR" value={`$${revenue.mrr.toFixed(2)}`} sub="proxy: this month's customer payments" />
-        <StatTile label="Total users" value={String(counts.total)} />
-        <StatTile label="Paid customers" value={String(counts.paid)} />
-        <StatTile label="Trial" value={String(counts.trial)} />
-        <StatTile label="Team" value={String(counts.team)} />
-        <StatTile label="Deal" value={String(counts.deal)} sub="barter/swap — not revenue" />
-        <StatTile label="Free" value={String(counts.free)} />
+        <StatTile label="Total users" value={String(counts.total)} href="/admin/users?role=user" />
+        <StatTile label="Paid customers" value={String(counts.paid)} href="/admin/users?role=user&tab=paid" />
+        <StatTile label="Trial" value={String(counts.trial)} href="/admin/users?role=user&tab=trial" />
+        <StatTile label="Team" value={String(counts.team)} href="/admin/users?role=user&tab=team" />
+        <StatTile
+          label="Deal"
+          value={String(counts.deal)}
+          sub="barter/swap — not revenue"
+          href="/admin/users?role=user&tab=deal"
+        />
+        <StatTile label="Free" value={String(counts.free)} href="/admin/users?role=user&hasLicense=none" />
         <StatTile label="Lapsed" value={String(counts.lapsed)} />
-        <StatTile label="Admins" value={String(counts.admins)} />
+        <StatTile label="Admins" value={String(counts.admins)} href="/admin/users?tab=admin" />
       </section>
 
       <section className="mb-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
