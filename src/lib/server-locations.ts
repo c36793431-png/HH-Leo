@@ -1,3 +1,6 @@
+import type { ComponentType } from "react";
+import { GbFlag, UsFlag, JpFlag } from "@/components/icons/region-flags";
+
 /** Fixed vocabulary for /account/servers grouping (marcus, overnight-builds-2026-08-30).
  * Order matches FEED_REGIONS in feed-tier-catalogue.ts (the feeds page): London, New
  * York, Chicago, Tokyo -- every region always renders, including empty ones. */
@@ -12,12 +15,15 @@ export const SERVER_LOCATION_LABELS: Record<ServerLocation, string> = {
   tokyo: "Tokyo",
 };
 
-/** ny and cme are both US -- same flag, intentionally. */
-export const SERVER_LOCATION_FLAGS: Record<ServerLocation, string> = {
-  london: "🇬🇧",
-  ny: "🇺🇸",
-  cme: "🇺🇸",
-  tokyo: "🇯🇵",
+/** ny and cme are both US -- same flag, intentionally.
+ * Inline SVG components, not emoji: regional-indicator emoji flags don't render on
+ * Windows (no flag-emoji font), so Chrome/Edge there fall back to drawing the literal
+ * two-letter code ("GB", "US", "JP") instead of a flag. */
+export const SERVER_LOCATION_FLAGS: Record<ServerLocation, ComponentType<{ className?: string }>> = {
+  london: GbFlag,
+  ny: UsFlag,
+  cme: UsFlag,
+  tokyo: JpFlag,
 };
 
 export function isServerLocation(value: string): value is ServerLocation {

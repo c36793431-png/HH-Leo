@@ -59,13 +59,14 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
         const label = key === "unspecified" ? "Unspecified location" : SERVER_LOCATION_LABELS[key];
         const isOpen = openGroup === key;
         const isAdding = addingInGroup === key;
+        const Flag = key !== "unspecified" ? SERVER_LOCATION_FLAGS[key] : null;
 
         if (groupEntries.length === 0) {
           return (
             <div className="srv-grp" key={key}>
               <div className="srv-ghead empty">
                 <span className="srv-pin dim">📍</span>
-                {key !== "unspecified" && <span className="srv-flag dim">{SERVER_LOCATION_FLAGS[key]}</span>}
+                {Flag && <Flag className="srv-flag dim" />}
                 <span className="srv-gname dim">{label} Servers</span>
                 <span className="srv-gcount zero">0 Added</span>
                 <span className="srv-gsum none">No server registered here yet</span>
@@ -113,7 +114,7 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
           <div className="srv-grp" key={key}>
             <button type="button" className={`srv-ghead${isOpen ? " open" : ""}`} onClick={() => setOpenGroup(isOpen ? null : key)}>
               <span className="srv-pin">📍</span>
-              {key !== "unspecified" && <span className="srv-flag">{SERVER_LOCATION_FLAGS[key]}</span>}
+              {Flag && <Flag className="srv-flag" />}
               <span className="srv-gname">{label} Servers</span>
               {groupEntries.length >= 2 && <span className="srv-gcount">{groupEntries.length} Added</span>}
               <span className="srv-gsum">{summary}</span>
