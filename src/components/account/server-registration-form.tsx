@@ -4,21 +4,30 @@ import { useState, useTransition } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import { emitToast } from "@/lib/toast-bus";
 import { VPS_PROVIDERS, type ServerRegistration } from "@/lib/server-registration";
+import { SERVER_LOCATIONS, SERVER_LOCATION_LABELS, effectiveServerLocation, type ServerLocation } from "@/lib/server-locations";
 
 interface ServerRegistrationFormProps {
   action: (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   value: ServerRegistration | null;
+  /** Pre-selects the location, e.g. from a group's "+ Add here" -- ignored when `value`
+   * (editing an existing registration) already has a location. */
+  defaultLocation?: ServerLocation;
+  onSaved?: () => void;
+  onCancel?: () => void;
 }
 
 const inputClass =
   "w-full rounded border border-zinc-700 bg-black/40 px-2 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-600 disabled:opacity-50";
 const labelClass = "text-xs text-zinc-500";
 
-export function ServerRegistrationForm({ action, value }: ServerRegistrationFormProps) {
+export function ServerRegistrationForm({ action, value, defaultLocation, onSaved, onCancel }: ServerRegistrationFormProps) {
   const [serverName, setServerName] = useState(value?.serverName ?? "");
   const [vpsProvider, setVpsProvider] = useState(value?.vpsProvider ?? "");
   const [vpsProviderOther, setVpsProviderOther] = useState(value?.vpsProviderOther ?? "");
-  const [serverLocation, setServerLocation] = useState(value?.serverLocation ?? "");
+  const initialLocation = value ? effectiveServerLocation(value.location, value.serverLocation) : "unspecified";
+  const [location, setLocation] = useState<ServerLocation | "">(
+    initialLocation === "unspecified" ? (defaultLocation ?? "") : initialLocation
+  );
   const [declaredIp, setDeclaredIp] = useState(value?.declaredIp ?? "");
   const [isPending, startTransition] = useTransition();
 
@@ -27,13 +36,14 @@ export function ServerRegistrationForm({ action, value }: ServerRegistrationForm
     formData.append("serverName", serverName);
     formData.append("vpsProvider", vpsProvider);
     formData.append("vpsProviderOther", vpsProviderOther);
-    formData.append("serverLocation", serverLocation);
+    formData.append("location", location);
     formData.append("declaredIp", declaredIp);
 
     startTransition(async () => {
       const result = await action(null, formData);
       if (result.ok) {
         emitToast(value ? "Server details updated" : "Server registered", "success");
+        onSaved?.();
       } else {
         emitToast(result.error, "error");
       }
@@ -89,13 +99,19 @@ export function ServerRegistrationForm({ action, value }: ServerRegistrationForm
         )}
         <div>
           <label className={labelClass}>Server location</label>
-          <input
-            value={serverLocation}
-            onChange={(e) => setServerLocation(e.target.value)}
+          <select
+            value={location}
+            onChange={(e) => setLocation(e.target.value as ServerLocation)}
             disabled={isPending}
             className={inputClass}
-            placeholder="London, UK"
-          />
+          >
+            <option value="">Select…</option>
+            {SERVER_LOCATIONS.map((loc) => (
+              <option key={loc} value={loc}>
+                {SERVER_LOCATION_LABELS[loc]}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label className={labelClass}>Server IP</label>
@@ -109,13 +125,25 @@ export function ServerRegistrationForm({ action, value }: ServerRegistrationForm
         </div>
       </div>
 
-      <button
-        type="submit"
-        disabled={isPending}
-        className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-emerald-400 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {isPending ? "Saving…" : value ? "Update server" : "Register server"}
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={isPending || !location}
+          className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-emerald-400 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isPending ? "Saving…" : value ? "Update server" : "Register server"}
+        </button>
+        {onCancel && (
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={onCancel}
+            className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }

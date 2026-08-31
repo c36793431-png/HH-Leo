@@ -2,6 +2,7 @@ import { pool } from "./db";
 import { resolveGeoIp } from "./geoip";
 import { notifyServerRegistered, notifyIpMismatch, notifyCountryChange } from "./telemetry-sink";
 import { FEED_TYPE_META, type FeedType } from "./licenses";
+import { SERVER_LOCATION_LABELS, type ServerLocation } from "./server-locations";
 
 function isFeedType(value: string): value is FeedType {
   return (["futures", "london", "ny", "crypto"] as const).includes(value as FeedType);
@@ -20,6 +21,10 @@ export interface ServerRegistration {
   vpsProvider: string;
   vpsProviderOther: string | null;
   serverLocation: string;
+  /** Canonical grouping key -- null on legacy rows and whenever migration 0072 hasn't
+   * landed on this DB yet (column simply absent from the row). Use
+   * effectiveServerLocation() to resolve a group, never this field directly. */
+  location: string | null;
   declaredIp: string;
   multipleIpsOk: boolean;
   createdAt: Date;
@@ -30,7 +35,7 @@ export interface ServerRegistrationInput {
   serverName: string;
   vpsProvider: string;
   vpsProviderOther: string | null;
-  serverLocation: string;
+  location: ServerLocation;
   declaredIp: string;
 }
 
@@ -40,6 +45,7 @@ interface RegistrationRow {
   vps_provider: string;
   vps_provider_other: string | null;
   server_location: string;
+  location?: string | null;
   declared_ip: string;
   multiple_ips_ok: boolean;
   created_at: Date;
@@ -53,11 +59,33 @@ function mapRegistration(row: RegistrationRow): ServerRegistration {
     vpsProvider: row.vps_provider,
     vpsProviderOther: row.vps_provider_other,
     serverLocation: row.server_location,
+    location: row.location ?? null,
     declaredIp: row.declared_ip,
     multipleIpsOk: row.multiple_ips_ok,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/** Cached for the life of the process -- migrations are rare and a cold start re-checks
+ * anyway, so this is the same "check once" cost as any other schema-shape assumption in
+ * this file. Lets writes degrade to the pre-0072 column list instead of erroring with
+ * 42703 undefined_column when the branch is merged/deployed ahead of the migration
+ * being applied (main auto-deploys; migrations are a separate manual step here). */
+let locationColumnExists: Promise<boolean> | null = null;
+function checkLocationColumnExists(): Promise<boolean> {
+  if (!locationColumnExists) {
+    locationColumnExists = pool
+      .query<{ exists: boolean }>(
+        `select exists (
+           select 1 from information_schema.columns
+           where table_name = 'server_registrations' and column_name = 'location'
+         ) as exists`
+      )
+      .then((r) => r.rows[0]?.exists ?? false)
+      .catch(() => false);
+  }
+  return locationColumnExists;
 }
 
 export async function getServerRegistration(licenseId: string): Promise<ServerRegistration | null> {
@@ -66,6 +94,20 @@ export async function getServerRegistration(licenseId: string): Promise<ServerRe
     [licenseId]
   );
   return result.rowCount ? mapRegistration(result.rows[0]) : null;
+}
+
+/** Servers registered across every currently-active license a user holds — same
+ * active-license criteria as computeUserActiveFeeds, so a two-license account can
+ * legitimately show 2 (one registration per license, enforced by the license_id
+ * unique constraint on server_registrations). */
+export async function countUserActiveServers(userId: string): Promise<number> {
+  const result = await pool.query<{ count: string }>(
+    `select count(*) from server_registrations sr
+     join licenses l on l.id = sr.license_id
+     where l.user_id = $1 and l.status = 'active' and l.expires_at > now()`,
+    [userId]
+  );
+  return Number(result.rows[0]?.count ?? 0);
 }
 
 /** Upserts the registration and fires the "new registration" alert only on first insert
@@ -77,20 +119,41 @@ export async function saveServerRegistration(
   adminUrl: string,
   ownerEmail: string | null
 ): Promise<void> {
-  const result = await pool.query(
-    `insert into server_registrations
-       (license_id, server_name, vps_provider, vps_provider_other, server_location, declared_ip, updated_at)
-     values ($1, $2, $3, $4, $5, $6, now())
-     on conflict (license_id) do update set
-       server_name = excluded.server_name,
-       vps_provider = excluded.vps_provider,
-       vps_provider_other = excluded.vps_provider_other,
-       server_location = excluded.server_location,
-       declared_ip = excluded.declared_ip,
-       updated_at = now()
-     returning (xmax = 0) as inserted`,
-    [licenseId, input.serverName, input.vpsProvider, input.vpsProviderOther, input.serverLocation, input.declaredIp]
-  );
+  // server_location keeps holding the human label so every existing reader (admin
+  // panel, notification templates) is unaffected by the new fixed-select location.
+  const serverLocationLabel = SERVER_LOCATION_LABELS[input.location];
+  const hasLocationColumn = await checkLocationColumnExists();
+
+  const result = hasLocationColumn
+    ? await pool.query(
+        `insert into server_registrations
+           (license_id, server_name, vps_provider, vps_provider_other, server_location, location, declared_ip, updated_at)
+         values ($1, $2, $3, $4, $5, $6, $7, now())
+         on conflict (license_id) do update set
+           server_name = excluded.server_name,
+           vps_provider = excluded.vps_provider,
+           vps_provider_other = excluded.vps_provider_other,
+           server_location = excluded.server_location,
+           location = excluded.location,
+           declared_ip = excluded.declared_ip,
+           updated_at = now()
+         returning (xmax = 0) as inserted`,
+        [licenseId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.location, input.declaredIp]
+      )
+    : await pool.query(
+        `insert into server_registrations
+           (license_id, server_name, vps_provider, vps_provider_other, server_location, declared_ip, updated_at)
+         values ($1, $2, $3, $4, $5, $6, now())
+         on conflict (license_id) do update set
+           server_name = excluded.server_name,
+           vps_provider = excluded.vps_provider,
+           vps_provider_other = excluded.vps_provider_other,
+           server_location = excluded.server_location,
+           declared_ip = excluded.declared_ip,
+           updated_at = now()
+         returning (xmax = 0) as inserted`,
+        [licenseId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.declaredIp]
+      );
 
   if (result.rows[0]?.inserted) {
     const license = await pool.query<{ feed_types: string[] }>(
@@ -102,11 +165,23 @@ export async function saveServerRegistration(
       serverName: input.serverName,
       vpsProvider: input.vpsProviderOther ? `${input.vpsProvider} (${input.vpsProviderOther})` : input.vpsProvider,
       declaredIp: input.declaredIp,
-      declaredLocation: input.serverLocation,
+      declaredLocation: serverLocationLabel,
       feeds: feedLabels(license.rows[0]?.feed_types),
       adminUrl,
     }).catch(() => {});
   }
+}
+
+/** Most recent observed IP for a license, or null if the client has never connected.
+ * Used client-side to distinguish Registered (nothing observed) from Verified (declared
+ * IP matches what we see) — the third state, mismatch, is admin-only and never
+ * computed for this surface. */
+export async function getLatestConnectionIp(licenseId: string): Promise<string | null> {
+  const result = await pool.query<{ ip: string }>(
+    "select ip from connection_ips where license_id = $1 order by captured_at desc limit 1",
+    [licenseId]
+  );
+  return result.rows[0]?.ip ?? null;
 }
 
 export async function setMultipleIpsOk(licenseId: string, value: boolean): Promise<void> {

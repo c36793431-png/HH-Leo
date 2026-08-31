@@ -12,6 +12,7 @@ import {
   FEED_TYPE_META,
 } from "@/lib/licenses";
 import { FEED_CATALOGUE, computeFeedCardStatus } from "@/lib/feeds-catalogue";
+import { countUserActiveServers } from "@/lib/server-registration";
 import { regionForFeedType } from "@/lib/feed-tier-catalogue";
 import { getTierCountsByRegion, getBestLatencyByRegion } from "@/lib/feed-tiers";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -69,7 +70,10 @@ export default async function DashboardPage() {
       ? await createOnboardingToken(session.user.id).catch(() => null)
       : null;
   const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
-  const activeFeeds = await computeUserActiveFeeds(session.user.id).catch((): typeof FEED_TYPES => []);
+  const [activeFeeds, activeServerCount] = await Promise.all([
+    computeUserActiveFeeds(session.user.id).catch((): typeof FEED_TYPES => []),
+    countUserActiveServers(session.user.id).catch(() => 0),
+  ]);
   const isAdmin = isAdminUser(session.user);
 
   const feedCatalogueByType = new Map(FEED_CATALOGUE.map((entry) => [entry.feedType, entry]));
@@ -181,6 +185,37 @@ export default async function DashboardPage() {
           adminLabel={userName}
           installedVersion={downloads.windows?.version ?? downloads.macos?.version ?? null}
         />
+
+        <div className="card full">
+          <div className="chead">
+            <span className="ic">⚡</span>
+            <h3>Activated</h3>
+            <span className="cap">This account</span>
+          </div>
+          <div className="grid g2">
+            <div className="sf-card act-tile">
+              <span className="act-tile-label">
+                Feeds — {activeFeeds.length} of {FEED_TYPES.length} active
+              </span>
+              {activeFeeds.length > 0 && (
+                <div className="act-feed-list">
+                  {activeFeeds.map((ft) => (
+                    <span key={ft} className="act-feed-chip">
+                      {FEED_TYPE_META[ft].name.replace(/ Feed$/, "")}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="sf-card act-tile">
+              <span className="act-tile-label">Servers</span>
+              <div>
+                <b className="act-count">{activeServerCount}</b>
+                <span className="act-count-label">Registered</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div className="card full" id="feeds">
           <div className="chead">
