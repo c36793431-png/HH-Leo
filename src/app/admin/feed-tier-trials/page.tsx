@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { listFeedTierTrials, TRIAL_STATUSES, type TrialStatus } from "@/lib/feed-tier-trials";
+import { feedTierMeta } from "@/lib/feed-tier-catalogue";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
+
+const LD_TRIAL_TIER_NAMES = ["ld-alpha-85", "ld-ultra"]
+  .map((key) => feedTierMeta(key)?.name)
+  .filter(Boolean)
+  .join(" / ");
 
 const STATUS_STYLES: Record<TrialStatus, string> = {
   active: "border-amber-500/40 bg-amber-500/15 text-amber-300",
@@ -49,7 +55,7 @@ export default async function AdminFeedTierTrialsPage({
         </span>
         <h1 className="mt-2 text-lg font-medium text-zinc-100">Trial usage</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          LD Alpha / LD Ultra self-service trials, tracked separately from paid signup requests.
+          {LD_TRIAL_TIER_NAMES} self-service trials, tracked separately from paid signup requests.
         </p>
       </header>
 
