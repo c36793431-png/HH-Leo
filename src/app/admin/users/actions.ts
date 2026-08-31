@@ -280,10 +280,13 @@ export async function issueNewLicenseAction(
 
 /** Deliberate second-sale path — distinct from issueNewLicenseAction, which refuses when the
  * user already has an active license. Delivers the new key the same way a first activation
- * does, but deliberately skips sendPaidGroupInvite: that function has no dedup guard against
- * an existing group_memberships row, and by construction a user reaching this action already
- * holds an active license, so is very likely already a paid-group member — inviting again
- * would insert a duplicate row and re-send a redundant DM. Not fixed here; flagged separately. */
+ * does. Checks group_memberships (the durable DB-side record, not a live Telegram lookup —
+ * see migration 0009) before inviting: a user reaching this action is very likely already a
+ * paid-group member, but "likely" isn't a guarantee, and a missed invite silently leaves a
+ * paying client without feed access. So invite whenever the latest row isn't 'joined' —
+ * re-inviting an 'invited'-but-not-yet-joined row is harmless (sendGroupInvite is idempotent
+ * on user_id+chat_id) — and skip only on confirmed 'joined'. Outcome always lands in the
+ * admin_actions log and, on failure, console.error, so a swallowed invite is never silent. */
 export async function issueAdditionalLicenseAction(
   _prevState: ActionResult | null,
   formData: FormData
@@ -297,15 +300,40 @@ export async function issueAdditionalLicenseAction(
     if (tierRaw && !LICENSE_TIERS.includes(tierRaw as LicenseTier)) throw new Error("Invalid tier");
     const tier = (tierRaw as LicenseTier) || undefined;
     const license = await issueAdditionalLicense({ userId, expiresAt, feedTypes, tier });
+
+    const target = await getGroupTarget(userId);
+    let groupInvite: { outcome: string; reason?: string } = { outcome: "not_applicable" };
+    if (target && isPaidTier(tier ?? "paid")) {
+      const membership = await pool.query<{ status: string }>(
+        `select status from group_memberships where user_id = $1 and tier = 'paid'
+         order by coalesce(joined_at, invited_at) desc limit 1`,
+        [userId]
+      );
+      if (membership.rows[0]?.status === "joined") {
+        groupInvite = { outcome: "already_member" };
+      } else {
+        const result = await sendPaidGroupInvite(target);
+        groupInvite = result.sent
+          ? { outcome: "invited" }
+          : { outcome: "invite_failed", reason: result.reason };
+        if (!result.sent) {
+          console.error("issueAdditionalLicenseAction: sendPaidGroupInvite failed", {
+            userId,
+            licenseId: license.id,
+            reason: result.reason,
+          });
+        }
+      }
+    }
+
     await logAdminAction(
       adminUserId,
       "admin_users_issue_additional_license",
       userId,
-      { licenseId: license.id, expiresAt: expiresAt.toISOString(), feedTypes, tier: tier ?? "paid" },
+      { licenseId: license.id, expiresAt: expiresAt.toISOString(), feedTypes, tier: tier ?? "paid", groupInvite },
       license.id
     );
 
-    const target = await getGroupTarget(userId);
     if (target) {
       const config = await getPortalConfig();
       const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
