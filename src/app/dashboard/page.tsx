@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import {
   isPaidUser,
-  getLicenseForUser,
+  getLatestIssuedLicenseForUser,
   getActiveLicenseDetailsForUser,
   computeLicenseDisplayStatus,
   computeUserActiveFeeds,
@@ -70,7 +70,7 @@ export default async function DashboardPage() {
     paid && telegramLinked && !telegramBotStarted
       ? await createOnboardingToken(session.user.id).catch(() => null)
       : null;
-  const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
+  const licenseDetail = await getLatestIssuedLicenseForUser(session.user.id).catch(() => null);
   const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
   const [activeFeeds, activeServerCount] = await Promise.all([
     computeUserActiveFeeds(session.user.id).catch((): typeof FEED_TYPES => []),
@@ -79,7 +79,7 @@ export default async function DashboardPage() {
   const isAdmin = isAdminUser(session.user);
 
   // Highest tier across every active license wins (thread multi-license-visibility-2026-08-31,
-  // marcus) — a paying client must never see "Trial" on a feed just because getLicenseForUser's
+  // marcus) — a paying client must never see "Trial" on a feed just because getLatestIssuedLicenseForUser's
   // latest-issued row happens to be an older trial.
   const { tier: bestActiveTier } = computePortalTierFromLicenses(false, activeLicenses);
   const bestLicenseTier = bestActiveTier === "free" ? null : bestActiveTier;
@@ -131,11 +131,11 @@ export default async function DashboardPage() {
   const soonestActiveLicense = activeLicenses.length > 0 ? activeLicenses[activeLicenses.length - 1] : null;
   const hasMultipleActiveLicenses = activeLicenses.length > 1;
   // "Expired"/"none"/"revoked" banners only apply when no other license is still granting access —
-  // otherwise the latest-issued license (which getLicenseForUser tracks) can read expired/revoked
+  // otherwise the latest-issued license (which getLatestIssuedLicenseForUser tracks) can read expired/revoked
   // while a second, still-active license means the account isn't actually locked out.
   const isExpired = activeLicenses.length === 0 && computeLicenseDisplayStatus(licenseDetail) === "expired";
   const isExpiringSoon = soonestActiveLicense !== null && computeLicenseDisplayStatus(soonestActiveLicense) === "expiring";
-  // getLicenseForUser tracks the most-recently-*issued* row, which can differ from the user's one
+  // getLatestIssuedLicenseForUser tracks the most-recently-*issued* row, which can differ from the user's one
   // active license (e.g. a later license was issued and then revoked) — prefer the active one so the
   // single-license card never shows REVOKED/EXPIRED while real access still exists.
   const singleCardLicense = activeLicenses.length === 1 ? activeLicenses[0] : licenseDetail;

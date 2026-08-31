@@ -141,7 +141,7 @@ export function PortalSidebar({
   const tierClass = tier === "free" ? "" : tier;
   const otherTiersTitle = hasOtherActiveTiers ? "Also holds an active license at another tier — see Account for details" : undefined;
 
-  // "deal" licenses fold into "paid" upstream (see computePortalTier), so this covers
+  // "deal" licenses fold into "paid" upstream (see computePortalTierFromLicenses), so this covers
   // the full paid+/team/deal/admin set the sidebar theming applies to.
   const isPaidPlus = tier === "paid" || tier === "team" || tier === "admin";
 

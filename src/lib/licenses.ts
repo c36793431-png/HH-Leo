@@ -715,23 +715,6 @@ export function computeLicenseDisplayStatus(
   return "active";
 }
 
-/** Sidebar/account nav tier bucket for a single license — folds 'deal' into 'paid' (no
- * dedicated nav slot for it) and any non-active license into 'free'. Only correct for
- * users with at most one active license; a user holding more than one active license
- * (possibly at different tiers) must go through computePortalTierFromLicenses instead,
- * since picking "the" license here means whichever one the caller happened to pass in. */
-export function computePortalTier(
-  isAdmin: boolean,
-  license: { tier: string; status: string; expiresAt: Date } | null
-): PortalTier {
-  if (isAdmin) return "admin";
-  const status = computeLicenseDisplayStatus(license);
-  if (status !== "active" && status !== "expiring") return "free";
-  if (license!.tier === "team") return "team";
-  if (license!.tier === "trial") return "trial";
-  return "paid";
-}
-
 export type PortalTier = "free" | "trial" | "paid" | "team" | "admin";
 
 function portalTierBucket(licenseTier: string): "trial" | "paid" | "team" {
@@ -764,8 +747,16 @@ export function computePortalTierFromLicenses(
   return { tier: bucket, hasOtherActiveTiers: buckets.some((b) => b !== bucket) };
 }
 
-/** Dashboard widget lookup — unlike getActiveLicenseForUser, returns the latest license regardless of status/expiry so the UI can render EXPIRED/REVOKED states. */
-export async function getLicenseForUser(userId: string): Promise<LicenseDetail | null> {
+/** Returns the most-recently-*issued* license regardless of status/expiry — unlike
+ * getActiveLicenseForUser, this can return a revoked/expired row so a display-fallback UI
+ * can render EXPIRED/REVOKED states. NEVER use this to decide access or entitlement: it
+ * ignores every other license the user holds, so a lapsed latest-issued license can shadow
+ * an older still-active one (the exact bug behind thread multi-license-visibility-2026-08-31).
+ * Access/entitlement checks must aggregate over getActiveLicensesForUser /
+ * getActiveLicenseDetailsForUser instead. As of this rename, the only remaining callers are
+ * the two display-fallback cards (dashboard, account) that need to show a lapsed license's
+ * own status text — if you're adding a third caller, it is almost certainly the wrong function. */
+export async function getLatestIssuedLicenseForUser(userId: string): Promise<LicenseDetail | null> {
   const result = await pool.query(
     `select id, license_key, status, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types,
             ${licenseNumberSql("licenses")} as license_number

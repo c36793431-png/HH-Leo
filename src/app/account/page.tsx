@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getLicenseForUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
+import { getLatestIssuedLicenseForUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
 import { getBotUsername } from "@/lib/telegram-bot";
@@ -25,12 +25,12 @@ export default async function AccountPage() {
       .catch(() => ({ telegram_user_id: null, telegram_username: null })),
     getBotUsername(),
   ]);
-  const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
+  const licenseDetail = await getLatestIssuedLicenseForUser(session.user.id).catch(() => null);
   const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
   const isAdmin = isAdminUser(session.user);
   const telegramLinked = telegramRow.telegram_user_id !== null;
   const hasMultipleActiveLicenses = activeLicenses.length > 1;
-  // getLicenseForUser tracks the most-recently-*issued* row, which can differ from the user's one
+  // getLatestIssuedLicenseForUser tracks the most-recently-*issued* row, which can differ from the user's one
   // active license (e.g. a later license was issued and then revoked) — prefer the active one so the
   // single-license card never shows REVOKED/EXPIRED while real access still exists.
   const singleCardLicense = activeLicenses.length === 1 ? activeLicenses[0] : licenseDetail;

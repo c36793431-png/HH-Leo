@@ -100,7 +100,7 @@ export async function getServerRegistration(licenseId: string): Promise<ServerRe
  * issued_at-desc order as getActiveLicensesForUser -- for single-registration banners
  * (/feeds, tiers page) that must agree with /account/servers on whether *any* active
  * license has a server registered, not just the single latest-issued one from
- * getLicenseForUser (marcus, multi-license-visibility-2026-08-31 contradiction 1: the
+ * getLatestIssuedLicenseForUser (marcus, multi-license-visibility-2026-08-31 contradiction 1: the
  * old latest-issued-only check could tell a client with a registered server on an older
  * active license that no server was registered at all). Sequential rather than
  * Promise.all so the common single-license case costs exactly one query, same as before. */
