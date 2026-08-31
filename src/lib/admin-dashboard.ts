@@ -5,8 +5,9 @@ import { ROLE_LABELS, type UserRole } from "./admin-user-roles";
 import type { ComputedLicenseStatus } from "./license-status-badge";
 
 /**
- * All counts/lists here scope to role='user' (matches listClients' convention) —
- * the single admin account isn't a business metric.
+ * getUserCounts/getSignupsPerDay scope to role='user' (matches listClients' convention) —
+ * the single admin account isn't a business metric. getRecentSignups is wider: see its
+ * own doc comment.
  */
 
 export interface UserCounts {
@@ -89,6 +90,12 @@ export interface RecentSignupRow {
   licenseStatus: ComputedLicenseStatus;
 }
 
+/**
+ * Unlike getUserCounts/getSignupsPerDay, this scopes to every role except 'admin' — a
+ * feed provider or partner registering is a signup event too, and the panel is titled
+ * "Recent signups" not "Recent customers". The single admin account stays excluded since
+ * it's a one-time bootstrap row (see admin.ts resolveAdminUserId), not a real signup.
+ */
 export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
   const result = await pool.query<{
     id: string;
@@ -118,7 +125,7 @@ export async function getRecentSignups(limit = 10): Promise<RecentSignupRow[]> {
        order by issued_at desc
        limit 1
      ) recent_l on true
-     where u.role = 'user'
+     where u.role != 'admin'
      order by u.created_at desc
      limit $1`,
     [limit]
