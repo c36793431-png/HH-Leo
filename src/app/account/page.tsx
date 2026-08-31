@@ -29,6 +29,11 @@ export default async function AccountPage() {
   const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
   const isAdmin = isAdminUser(session.user);
   const telegramLinked = telegramRow.telegram_user_id !== null;
+  const hasMultipleActiveLicenses = activeLicenses.length > 1;
+  // getLicenseForUser tracks the most-recently-*issued* row, which can differ from the user's one
+  // active license (e.g. a later license was issued and then revoked) — prefer the active one so the
+  // single-license card never shows REVOKED/EXPIRED while real access still exists.
+  const singleCardLicense = activeLicenses.length === 1 ? activeLicenses[0] : licenseDetail;
 
   const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
   const tierBadgeLabel = tier.toUpperCase() + (hasOtherActiveTiers ? "+" : "");
@@ -88,15 +93,27 @@ export default async function AccountPage() {
           </div>
         </div>
 
-        {!isAdmin && (
-          <LicenseStatusCard
-            license={licenseDetail}
-            telegramChannelUrl={config.telegramChannelUrl}
-            isAdminAccount={isAdmin}
-            adminLabel={userName}
-            showBadge={activeLicenses.length > 1}
-          />
-        )}
+        {!isAdmin &&
+          (hasMultipleActiveLicenses ? (
+            activeLicenses.map((license, index) => (
+              <LicenseStatusCard
+                key={license.id}
+                license={license}
+                telegramChannelUrl={config.telegramChannelUrl}
+                isAdminAccount={isAdmin}
+                adminLabel={userName}
+                showHeading={index === 0}
+                showBadge={hasMultipleActiveLicenses}
+              />
+            ))
+          ) : (
+            <LicenseStatusCard
+              license={singleCardLicense}
+              telegramChannelUrl={config.telegramChannelUrl}
+              isAdminAccount={isAdmin}
+              adminLabel={userName}
+            />
+          ))}
       </div>
     </PortalShell>
   );
