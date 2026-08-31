@@ -769,9 +769,11 @@ export interface AdminUserRow {
   role: string;
   joinedAt: Date;
   signupSource: "telegram" | "email-link" | "both" | null;
-  /** Most-recently-*issued* license — used for search/filter/sort/pagination (hasLicense,
-   * tierBucket, expires_at/last_verified_at sort) and as the row's display fallback when
-   * activeLicenses is empty (no active license: show whatever was issued last, active or not).
+  /** Most-recently-*issued* license — used for search/filter/pagination (hasLicense,
+   * expires_at/last_verified_at sort) and as the row's display fallback when activeLicenses
+   * is empty (no active license: show whatever was issued last, active or not). tierBucket
+   * filtering does NOT use this field (see ACTIVE_TIER_SQL) — it keys off the active-license
+   * set instead, to agree with the /admin/dashboard tile counts it's linked from.
    * Do NOT use this alone to render "the" license when activeLicenses.length > 1 — see
    * [[project_horizon_multi_license_visibility_2026-08-31]] for the bug this shape guards against. */
   licenseId: string | null;
@@ -821,6 +823,19 @@ const USERS_SORT_COLUMN_SQL: Record<UsersSortColumn, string> = {
 
 const COMPUTED_STATUS_SQL = licenseStatusCaseSql("l", { noneWhenMissing: true });
 
+/** Mirrors getUserCounts' active_tier subquery (admin-dashboard.ts) exactly — the tier of
+ * the active license with the furthest-out expiry, not whichever license was issued last.
+ * tierBucket filtering must use this same definition so an /admin/dashboard tile's count
+ * always agrees with its linked /admin/users row count; see
+ * [[project_horizon_multi_license_visibility_2026-08-31]] for the bug class this guards
+ * against (a user holding two active licenses of different tiers). */
+const ACTIVE_TIER_SQL = `(
+  select l2.tier from licenses l2
+  where l2.user_id = u.id and l2.status = 'active' and l2.expires_at > now()
+  order by l2.expires_at desc
+  limit 1
+)`;
+
 const SIGNUP_SOURCE_SQL = `
   case
     when u.telegram_user_id is not null and u.email is not null then 'both'
@@ -868,9 +883,7 @@ export async function listAllUsersWithLicenses(
     conditions.push(`u.role != 'admin' and ${COMPUTED_STATUS_SQL} not in ('active', 'expiring')`);
   } else if (options.tierBucket) {
     params.push(options.tierBucket);
-    conditions.push(
-      `u.role != 'admin' and ${COMPUTED_STATUS_SQL} in ('active', 'expiring') and l.tier = $${params.length}`
-    );
+    conditions.push(`u.role != 'admin' and ${ACTIVE_TIER_SQL} = $${params.length}`);
   }
 
   const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
