@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getActiveLicenseForUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import { isPaidUser, getActiveLicenseForUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { DownloadButton } from "@/components/download-button";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -21,19 +21,19 @@ export default async function DownloadsPage() {
   const isAdmin = isAdminUser(session.user);
   if (!paid && !isAdmin) redirect("/dashboard");
 
-  const [license, licenseDetail, downloads] = await Promise.all([
+  const [license, activeLicenses, downloads] = await Promise.all([
     getActiveLicenseForUser(session.user.id).catch(() => null),
-    getLicenseForUser(session.user.id).catch(() => null),
+    getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
     getLatestDownloads().catch((): LatestDownloads => ({})),
   ]);
 
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   const changelog = downloads.windows?.changelog ?? PLACEHOLDER_CHANGELOG;
-  const tier = computePortalTier(isAdmin, licenseDetail);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="grid g2">
         <div className="card">
           <div className="chead">

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { EDUCATION_MANUAL_VERSION, getEducationLesson, type EducationBlock } from "@/lib/education";
@@ -65,12 +65,12 @@ export default async function WhatsIncludedPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [licenseDetail, config] = await Promise.all([
-    getLicenseForUser(session.user.id).catch(() => null),
+  const [activeLicenses, config] = await Promise.all([
+    getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
     getPortalConfig(),
   ]);
   const isAdmin = isAdminUser(session.user);
-  const tier = computePortalTier(isAdmin, licenseDetail);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
@@ -91,7 +91,7 @@ export default async function WhatsIncludedPage() {
   const licensingBlocks = pickBlocks("getting-started", ["20-Character License Key", "Hardware Lock"]);
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="edu-hero">
         <div className="eyebrow">What&apos;s Included</div>
         <h2>The Horizon HFT terminal</h2>

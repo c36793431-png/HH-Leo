@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { EducationCatalog } from "@/components/education/education-catalog";
 import { EDUCATION_CATEGORIES, EDUCATION_LESSONS } from "@/lib/education";
@@ -10,9 +10,9 @@ export default async function EducationPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const licenseDetail = await getLicenseForUser(session.user.id).catch(() => null);
+  const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
   const isAdmin = isAdminUser(session.user);
-  const tier = computePortalTier(isAdmin, licenseDetail);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
@@ -22,7 +22,7 @@ export default async function EducationPage() {
   const freeCount = EDUCATION_LESSONS.filter((l) => l.free).length;
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="edu-hero">
         <div className="eyebrow">Horizon Academy</div>
         <h2>Learn to trade with Horizon HFT</h2>

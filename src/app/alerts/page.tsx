@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getRecentAlertsForUser, countDistinctAlertLicenses } from "@/lib/trading-alerts";
 import { RecentAlertsPanel } from "@/components/recent-alerts-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -16,18 +16,18 @@ export default async function AlertsPage() {
   const isAdmin = isAdminUser(session.user);
   if (!paid && !isAdmin) redirect("/dashboard");
 
-  const [licenseDetail, alerts, distinctAlertLicenses] = await Promise.all([
-    getLicenseForUser(session.user.id).catch(() => null),
+  const [activeLicenses, alerts, distinctAlertLicenses] = await Promise.all([
+    getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
     getRecentAlertsForUser(session.user.id, FULL_HISTORY_LIMIT).catch(() => []),
     countDistinctAlertLicenses(session.user.id).catch(() => 0),
   ]);
 
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
-  const tier = computePortalTier(isAdmin, licenseDetail);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <RecentAlertsPanel
         alerts={alerts}
         showLicenseTag={distinctAlertLicenses > 1}

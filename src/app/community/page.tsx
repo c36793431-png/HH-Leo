@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
 import { getBotUsername, getChatMemberCount } from "@/lib/telegram-bot";
@@ -31,10 +31,10 @@ export default async function CommunityPage() {
   if (!session?.user?.id) redirect("/login");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
-  const [paid, licenseDetail, config, telegramStatus, groupMembershipStatus, freeGroupMembershipStatus, botUsername, hftAlertBotUsername] =
+  const [paid, activeLicenses, config, telegramStatus, groupMembershipStatus, freeGroupMembershipStatus, botUsername, hftAlertBotUsername] =
     await Promise.all([
       isPaidUser(session.user.id).catch(() => false),
-      getLicenseForUser(session.user.id).catch(() => null),
+      getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
       getPortalConfig(),
       pool
         .query<{ telegram_user_id: string | null; telegram_bot_started_at: Date | null; telegram_username: string | null }>(
@@ -87,10 +87,10 @@ export default async function CommunityPage() {
 
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
-  const tier = computePortalTier(false, licenseDetail);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(false, activeLicenses);
 
   return (
-    <PortalShell tier={tier} isAdmin={false} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={false} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="comm-head">
         <h1>Community</h1>
         <p>Three ways to plug in — pick the one that fits what you&apos;re after.</p>

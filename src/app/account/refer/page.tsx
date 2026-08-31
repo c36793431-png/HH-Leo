@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { getUserReferralStats, REFERRAL_MIN_PAYOUT_USD } from "@/lib/referrals";
@@ -23,8 +23,8 @@ export default async function ReferPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [licenseDetail, isAdmin, headerList] = await Promise.all([
-    getLicenseForUser(session.user.id).catch(() => null),
+  const [activeLicenses, isAdmin, headerList] = await Promise.all([
+    getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
     Promise.resolve(isAdminUser(session.user)),
     headers(),
   ]);
@@ -33,14 +33,14 @@ export default async function ReferPage() {
   const protocol = headerList.get("x-forwarded-proto") ?? "https";
   const stats = await getUserReferralStats(session.user.id, `${protocol}://${host}`);
 
-  const tier = computePortalTier(isAdmin, licenseDetail);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
   const payoutPct = Math.min(100, Math.round((stats.clearedUsd / REFERRAL_MIN_PAYOUT_USD) * 100));
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="grid">
         <div className="card full">
           <div className="chead">

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { isPaidUser, getLicenseForUser, computePortalTier } from "@/lib/licenses";
+import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getPortalConfig } from "@/lib/portal-config";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -10,20 +10,20 @@ export default async function BrokersPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [paid, licenseDetail, config] = await Promise.all([
+  const [paid, activeLicenses, config] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
-    getLicenseForUser(session.user.id).catch(() => null),
+    getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
     getPortalConfig(),
   ]);
   const isAdmin = isAdminUser(session.user);
   const unlocked = paid || isAdmin;
 
-  const tier = computePortalTier(isAdmin, licenseDetail);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
       <div className="grid">
         <div className="card full">
           <div className="chead">
