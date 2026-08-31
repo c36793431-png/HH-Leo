@@ -13,10 +13,18 @@
 alter table server_registrations
   add column if not exists location text;
 
-alter table server_registrations
-  add constraint server_registrations_location_check
-  check (location is null or location in ('london', 'ny', 'cme', 'tokyo'));
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'server_registrations_location_check'
+  ) then
+    alter table server_registrations
+      add constraint server_registrations_location_check
+      check (location is null or location in ('london', 'ny', 'cme', 'tokyo'));
+  end if;
+end $$;
 
-insert into schema_migrations (version, name) values
-  ('0072', '0072_server_registration_location.sql')
-on conflict (version) do nothing;
+insert into schema_migrations (version, name)
+select '0072', '0072_server_registration_location.sql'
+where not exists (select 1 from schema_migrations where version = '0072');
