@@ -79,7 +79,10 @@
    full-height rail to lay the stacked card out in. Fixed line-heights replace
    the sidebar variant's default line-heights so the row math is exact instead
    of relying on font-metric guesswork. The expanded .ws-list dropdown is
-   unaffected -- it isn't nav-height constrained. */
+   unaffected -- it isn't nav-height constrained.
+   line-height: 1 is deliberate here to fit the 74px bar; descenders paint
+   outside the line box and only survive because these rules rely on the
+   default overflow: visible -- don't add overflow: hidden to them. */
 .partner-dash .ws-trigger {
   width: 220px; padding: 6px 12px; display: flex; flex-direction: column; gap: 2px;
   font: inherit; color: inherit; text-align: left; cursor: pointer;
