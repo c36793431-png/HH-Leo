@@ -115,6 +115,32 @@ export async function createSubscription(input: CreateSubscriptionInput): Promis
   }
 }
 
+/** Allocates (or reuses) this provider-subscriber pair's pseudonym without requiring a
+ * feed_subscriptions row -- lets provider-scoped wrappers over OTHER tables (feed_tier_requests,
+ * feed_tier_trials in lib/feed-providers.ts) mask identity with the same stable HH-label a
+ * subscriber gets once they actually convert to a subscription, since the pseudonym is keyed
+ * on the (provider, subscriber) pair, not on any one table. Returns null pre-migration
+ * (42P01) -- callers must treat that as "no pseudonym available", never as licence to fall
+ * back to the real identity. */
+export async function pseudonymForSubscriber(
+  providerUserId: string,
+  subscriberUserId: string
+): Promise<string | null> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const seq = await assignPseudonymSeq(client, providerUserId, subscriberUserId);
+    await client.query("commit");
+    return pseudonymLabel(seq);
+  } catch (err) {
+    await client.query("rollback");
+    if (isMissingTable(err)) return null;
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 /** Provider-facing subscriber list -- pseudonyms only. Never select subscriber_user_id,
  * email, or display_name here; leaking any of those into a provider-visible response
  * defeats the entire point of the pseudonym table. Degrades to an empty list pre-migration

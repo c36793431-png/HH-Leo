@@ -2,6 +2,7 @@ import { pool } from "./db";
 import { feedTierMeta } from "./feed-tier-catalogue";
 import { listFeedTierRequests, approveFeedTierRequest, rejectFeedTierRequest, type FeedTierRequestRow } from "./feed-tier-requests";
 import { listFeedTierTrials, type FeedTierTrialRow } from "./feed-tier-trials";
+import { pseudonymForSubscriber } from "./feed-subscriptions";
 
 /** Provider-scoped views over the shared feed_tiers/feed_tier_requests/feed_tier_trials
  * tables (bus thread leo-provider-panel-implementation-2026-08-22) -- these tables model
@@ -57,18 +58,44 @@ async function tierKeySetFor(providerUserId: string): Promise<Set<string>> {
   return new Set(await listTierKeysForProvider(providerUserId));
 }
 
+type IdentityBearing = {
+  id: string;
+  userId: string;
+  userName: string | null;
+  userEmail: string | null;
+  telegramUserId: string | null;
+};
+
+/** listFeedTierRequests/listFeedTierTrials scope rows by tier ownership but were built for
+ * the admin queue, which is allowed to see real identity -- they never strip it. This is the
+ * one place every provider-facing caller of those two tables passes through, so it's where
+ * subscriber_user_id/email/display_name/telegram get replaced with the same per-(provider,
+ * subscriber) pseudonym feed-subscriptions.ts's accounts view uses, per the no-provider-sees-
+ * real-identity rule documented there. Falls back to a request/trial-id-derived label (never
+ * the real identity) if 0071 hasn't landed yet. */
+async function maskIdentity<T extends IdentityBearing>(providerUserId: string, rows: T[]): Promise<T[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      const pseudonym = (await pseudonymForSubscriber(providerUserId, row.userId)) ?? `Client ${row.id.slice(0, 8)}`;
+      return { ...row, userEmail: pseudonym, userName: pseudonym, telegramUserId: null };
+    })
+  );
+}
+
 export async function listPendingRequestsForProvider(providerUserId: string): Promise<FeedTierRequestRow[]> {
   const owned = await tierKeySetFor(providerUserId);
   if (owned.size === 0) return [];
   const all = await listFeedTierRequests({ status: "pending" });
-  return all.filter((r) => owned.has(r.tierKey));
+  const scoped = all.filter((r) => owned.has(r.tierKey));
+  return maskIdentity(providerUserId, scoped);
 }
 
 export async function listActiveTrialsForProvider(providerUserId: string): Promise<FeedTierTrialRow[]> {
   const owned = await tierKeySetFor(providerUserId);
   if (owned.size === 0) return [];
   const all = await listFeedTierTrials({ trialStatus: "active" });
-  return all.filter((t) => owned.has(t.tierKey));
+  const scoped = all.filter((t) => owned.has(t.tierKey));
+  return maskIdentity(providerUserId, scoped);
 }
 
 export class ProviderTierMismatchError extends Error {
