@@ -71,16 +71,12 @@ export default async function PartnerDashboardLayout({ children }: { children: R
           <div className="pd-nav-acct">
             {otherPanels.length > 0 && (
               <div className="pd-panel-switch" role="group" aria-label="Switch panel">
-                {otherPanels.map((panel) => {
-                  const Icon = panel.icon;
-                  return (
-                    <a key={panel.key} className="pd-panel-switch-link" href={panel.href}>
-                      <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
-                      <span className="label">{panel.label}</span>
-                      <span className="arrow" aria-hidden="true">↗</span>
-                    </a>
-                  );
-                })}
+                {otherPanels.map((panel) => (
+                  <a key={panel.key} className="pd-panel-switch-link" href={panel.href}>
+                    <span className="label">{panel.label}</span>
+                    <span className="arrow" aria-hidden="true">↗</span>
+                  </a>
+                ))}
               </div>
             )}
             <div className="pd-acct-chip">

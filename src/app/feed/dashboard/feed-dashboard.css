@@ -59,15 +59,13 @@
 .feed-provider-v1 .fp-nav a.on::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--pfp-cyan); box-shadow: 0 0 12px var(--pfp-cyan); }
 .feed-provider-v1 .fp-nav a .pill { margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; background: var(--pfp-warn); color: #241a00; border-radius: 999px; padding: 2px 7px; min-width: 20px; text-align: center; }
 .feed-provider-v1 .fp-side-foot { padding: 14px; border-top: 1px solid var(--pfp-line-soft); }
-.feed-provider-v1 .fp-panel-switch { display: flex; flex-direction: column; gap: 4px; padding: 0 22px 18px; }
+.feed-provider-v1 .fp-panel-switch { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .feed-provider-v1 .fp-panel-switch-link {
-  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  display: flex; align-items: center; justify-content: space-between; padding: 7px 10px;
   border-radius: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--pfp-line-soft);
   font-size: 12px; font-weight: 600; color: var(--pfp-ink-3); text-decoration: none;
   transition: background 0.12s, color 0.12s;
 }
-.feed-provider-v1 .fp-panel-switch-link svg { flex: 0 0 auto; opacity: 0.85; }
-.feed-provider-v1 .fp-panel-switch-link .label { flex: 1; }
 .feed-provider-v1 .fp-panel-switch-link:hover { background: rgba(255, 255, 255, 0.06); color: var(--pfp-cyan); }
 .feed-provider-v1 .fp-panel-switch-link .arrow { opacity: 0.6; }
 .feed-provider-v1 .fp-acct { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 10px; }

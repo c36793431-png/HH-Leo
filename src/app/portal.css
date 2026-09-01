@@ -103,14 +103,12 @@
 .portal-shell .panel-switch.seg { display: flex; }
 .portal-shell .panel-switch.stack { display: flex; flex-direction: column; }
 .portal-shell .panel-switch .panel-seg {
-  display: flex; align-items: center; border-radius: 8px; padding: 7px 10px;
+  border-radius: 8px;
   font-family: var(--hz-sans); font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
   color: var(--hz-ink-3); text-decoration: none; transition: background 0.12s, color 0.12s;
 }
-.portal-shell .panel-switch .panel-seg .psrow { display: flex; align-items: center; gap: 7px; }
-.portal-shell .panel-switch .panel-seg svg { flex: 0 0 auto; opacity: 0.85; }
-.portal-shell .panel-switch.seg .panel-seg { flex: 1; justify-content: center; }
-.portal-shell .panel-switch.stack .panel-seg { justify-content: space-between; }
+.portal-shell .panel-switch.seg .panel-seg { flex: 1; text-align: center; padding: 7px 0; }
+.portal-shell .panel-switch.stack .panel-seg { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; }
 .portal-shell .panel-switch a.panel-seg:hover { background: rgba(255, 255, 255, 0.05); color: var(--hz-ink-2); }
 .portal-shell .panel-switch .panel-seg .arrow { margin-left: 4px; opacity: 0.6; }
 .portal-shell .panel-switch .panel-seg.active { background: rgba(45, 226, 230, 0.16); color: var(--hz-cyan); }
