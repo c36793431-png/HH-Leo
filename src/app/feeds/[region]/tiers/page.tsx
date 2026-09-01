@@ -51,7 +51,7 @@ const TIER_PACKAGE_KEY: Record<string, string> = {
   "ld-delta-18": "retail",
 };
 const PACKAGE_LABELS: Record<string, string> = {
-  retail: "Retail",
+  retail: "Base",
 };
 
 /** The tier_key a package's single Request access button submits under -- see the
@@ -138,7 +138,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
       : tiers;
 
   // Group tiers into packages (see TIER_PACKAGE_KEY above). A group with one member
-  // renders identically to a standalone tier card; only multi-member groups (Retail)
+  // renders identically to a standalone tier card; only multi-member groups (Base)
   // get package treatment. Sorted by each group's best (lowest-number) member rank.
   const tierGroups = (() => {
     const groups = new Map<string, { packageKey: string; rank: number; members: FeedTierDetail[] }>();
