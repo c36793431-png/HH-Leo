@@ -166,23 +166,92 @@ export async function updateUserFieldAction(
           ? null
           : value;
 
-    const current = await pool.query<{ value: string | null }>(
-      `select ${field} as value from users where id = $1`,
+    if (field === "role") {
+      await updateUserRoleField(adminUserId, userId, nextValue as EditableUserRole);
+    } else {
+      const current = await pool.query<{ value: string | null }>(
+        `select ${field} as value from users where id = $1`,
+        [userId]
+      );
+      if (current.rowCount === 0) throw new Error("User not found");
+      const previousValue = current.rows[0].value;
+
+      await pool.query(`update users set ${field} = $1 where id = $2`, [nextValue, userId]);
+      await logAdminAction(
+        adminUserId,
+        "admin_users_update_field",
+        userId,
+        { field, from: previousValue, to: nextValue },
+        null
+      );
+    }
+    revalidateUsers(userId);
+  });
+}
+
+/** The role field is the one ADMIN_EDITABLE_USER_FIELDS entry with a second source of
+ * truth (user_roles, migration 0075) -- session gating (isAdminUser et al.) reads
+ * user_roles, not users.role, so a change here must keep both in sync in one transaction
+ * or the confirm dialog's promise ("they'll immediately lose admin access") goes false.
+ * Mirrors the promotion-only/on-conflict discipline in partner-applications.ts's and
+ * provider-applications.ts's grant sites (385f1b9), plus a revoke path those sites never
+ * needed since they only ever add roles. EDITABLE_USER_ROLES is just ['user','admin'], so
+ * this only ever toggles the admin row. */
+async function updateUserRoleField(
+  adminUserId: string,
+  userId: string,
+  nextRole: EditableUserRole
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const current = await client.query<{ role: string }>(
+      `select role from users where id = $1 for update`,
       [userId]
     );
     if (current.rowCount === 0) throw new Error("User not found");
-    const previousValue = current.rows[0].value;
+    const previousRole = current.rows[0].role;
 
-    await pool.query(`update users set ${field} = $1 where id = $2`, [nextValue, userId]);
-    await logAdminAction(
-      adminUserId,
-      "admin_users_update_field",
-      userId,
-      { field, from: previousValue, to: nextValue },
-      null
+    if (previousRole === "admin" && nextRole === "user") {
+      const otherAdmins = await client.query<{ n: string }>(
+        `select count(*) as n from user_roles where role = 'admin' and user_id != $1`,
+        [userId]
+      );
+      if (Number(otherAdmins.rows[0].n) === 0) {
+        throw new Error("Cannot remove the last admin");
+      }
+    }
+
+    await client.query(`update users set role = $1 where id = $2`, [nextRole, userId]);
+
+    if (nextRole === "admin") {
+      await client.query(
+        `insert into user_roles (user_id, role, granted_by) values ($1, 'admin', $2)
+         on conflict (user_id, role) do nothing`,
+        [userId, adminUserId]
+      );
+    } else {
+      await client.query(`delete from user_roles where user_id = $1 and role = 'admin'`, [userId]);
+    }
+
+    const resolvedAdminUserId = await resolveAdminUserId(adminUserId);
+    await client.query(
+      `insert into admin_actions (admin_user_id, action_type, target_user_id, details_json)
+       values ($1, $2, $3, $4)`,
+      [
+        resolvedAdminUserId,
+        "admin_users_update_field",
+        userId,
+        JSON.stringify({ field: "role", from: previousRole, to: nextRole }),
+      ]
     );
-    revalidateUsers(userId);
-  });
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function updateUserNotesAction(
