@@ -112,7 +112,7 @@ export async function createStrategySubmission(
   notifyStrategySubmissionSubmitted({
     email: row.authorEmail,
     summary: row.name,
-    adminUrl: "/admin/strategy-submissions",
+    adminUrl: "https://portal.horizonhft.com/admin/strategy-submissions",
   }).catch(() => {});
 
   return row;

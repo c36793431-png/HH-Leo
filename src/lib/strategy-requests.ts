@@ -71,7 +71,7 @@ export async function createStrategyRequest(args: CreateStrategyRequestArgs): Pr
   notifyStrategyRequestSubmitted({
     email: row.userEmail,
     summary: row.ideaText,
-    adminUrl: "/admin/strategy-requests",
+    adminUrl: "https://portal.horizonhft.com/admin/strategy-requests",
   }).catch(() => {});
 
   return row;
