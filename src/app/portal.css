@@ -93,27 +93,31 @@
 .portal-shell .host-switch .host-seg.active.feed { background: rgba(45, 212, 191, 0.16); color: #2dd4bf; }
 .portal-shell .host-switch .host-seg.active.portal { background: rgba(45, 226, 230, 0.16); color: var(--hz-cyan); }
 
-/* Member-side panel switcher — same visual family as .host-switch above, but the
-   current panel (always "portal" here) is always one of the segments rather than a
-   fixed two-way toggle, so it needs a stacked variant once a third panel joins. */
-.portal-shell .panel-switch {
-  margin: 0 22px 16px; padding: 3px; gap: 2px;
-  background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hz-line-soft); border-radius: 10px;
+/* Cross-panel workspace card — pinned above the nav, replaces the old segmented
+   .panel-switch (shared by portal + admin, since admin renders through the same
+   PortalSidebar). Collapsed card is the disclosure trigger and shows the current
+   panel as its header; expanded card lists only the other reachable panels. See
+   src/components/shared/workspace-switcher.tsx. */
+.portal-shell .ws-group { margin: 0 22px 16px; display: flex; flex-direction: column; gap: 8px; }
+.portal-shell .ws-card { background: var(--hz-raise); border: 1px solid var(--hz-line-soft); border-radius: 12px; }
+.portal-shell .ws-trigger {
+  width: 100%; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
 }
-.portal-shell .panel-switch.seg { display: flex; }
-.portal-shell .panel-switch.stack { display: flex; flex-direction: column; }
-.portal-shell .panel-switch .panel-seg {
-  display: flex; align-items: center; border-radius: 8px; padding: 7px 10px;
-  font-family: var(--hz-sans); font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
-  color: var(--hz-ink-2); text-decoration: none; transition: background 0.12s, color 0.12s;
-}
-.portal-shell .panel-switch .panel-seg .psrow { display: flex; align-items: center; gap: 7px; }
-.portal-shell .panel-switch .panel-seg svg { flex: 0 0 auto; opacity: 0.85; }
-.portal-shell .panel-switch.seg .panel-seg { flex: 1; justify-content: center; }
-.portal-shell .panel-switch.stack .panel-seg { justify-content: space-between; }
-.portal-shell .panel-switch a.panel-seg:hover { background: rgba(255, 255, 255, 0.05); color: var(--hz-ink-2); }
-.portal-shell .panel-switch .panel-seg .arrow { margin-left: 4px; opacity: 0.6; }
-.portal-shell .panel-switch .panel-seg.active { background: rgba(45, 226, 230, 0.16); color: var(--hz-cyan); }
+.portal-shell .ws-trigger-top { display: flex; align-items: center; justify-content: space-between; }
+.portal-shell .ws-eyebrow { font-size: 9.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--hz-ink-4); }
+.portal-shell .ws-caret { color: var(--hz-ink-3); transition: transform 0.15s ease; flex: 0 0 auto; }
+.portal-shell .ws-caret.open { transform: rotate(180deg); }
+.portal-shell .ws-row { display: flex; align-items: center; gap: 8px; }
+.portal-shell .ws-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--hz-ok); box-shadow: 0 0 8px var(--hz-ok); flex: 0 0 auto; }
+.portal-shell .ws-name { font-size: 13px; font-weight: 600; color: var(--hz-ink); }
+.portal-shell .ws-domain { display: block; margin-top: 2px; margin-left: 15px; font-family: var(--hz-mono); font-size: 10.5px; color: var(--hz-ink-3); }
+.portal-shell .ws-list { display: flex; flex-direction: column; padding: 4px; gap: 2px; }
+.portal-shell .ws-list-link { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; text-decoration: none; color: inherit; transition: background 0.12s; }
+.portal-shell .ws-list-link:hover { background: rgba(255, 255, 255, 0.05); }
+.portal-shell .ws-list-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.portal-shell .ws-list-text .ws-domain { margin-left: 0; }
+.portal-shell .ws-arrow { opacity: 0.6; flex: 0 0 auto; color: var(--hz-ink-3); }
 
 .portal-shell .nav { flex: 1; overflow-y: auto; padding: 6px 14px; }
 .portal-shell .nav .grp { font-size: 10px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hz-ink-4); padding: 16px 12px 8px; }

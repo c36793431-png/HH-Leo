@@ -45,7 +45,10 @@ const PANEL_PATH: Record<PanelKey, string> = {
 
 export type PanelLink = { key: PanelKey; label: string; href: string };
 
-function panelLink(key: PanelKey): PanelLink {
+/** Exported so a sidebar/layout can build the PanelLink for the panel it's
+ * currently rendering (the workspace-card header) without a roles lookup --
+ * the caller already knows its own PanelKey. */
+export function panelLink(key: PanelKey): PanelLink {
   return { key, label: PANEL_LABEL[key], href: `https://${PANEL_HOST[key]}${PANEL_PATH[key]}` };
 }
 

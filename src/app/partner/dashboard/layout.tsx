@@ -5,23 +5,12 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { isAdminUser, isPartnerUser } from "@/lib/admin-users-panel";
 import { getPendingPartnerApplicationForUser } from "@/lib/partner-applications";
-import { getOtherPanels, type PanelKey } from "@/lib/user-roles";
+import { getOtherPanels, panelLink } from "@/lib/user-roles";
 import { SignOutButton } from "@/components/sign-out-button";
-import { User, Handshake, SatelliteDish, Shield, type LucideIcon } from "lucide-react";
+import { WorkspaceSwitcher } from "@/components/shared/workspace-switcher";
 import "./partner-dashboard.css";
 
 const PARTNER_HOST = "partner.horizonhft.com";
-
-// Panel-switcher icons, keyed by PanelLink.key -- see the same map's comment in
-// src/components/portal/sidebar.tsx. This layout is a Server Component so an icon
-// field on PanelLink itself would render fine here, but keeping PanelLink icon-free
-// everywhere avoids relanding a component reference on shared server-computed data.
-const PANEL_ICON: Record<PanelKey, LucideIcon> = {
-  portal: User,
-  partner: Handshake,
-  feed: SatelliteDish,
-  admin: Shield,
-};
 
 function initial(s: string): string {
   return s.trim().charAt(0).toUpperCase() || "?";
@@ -81,20 +70,7 @@ export default async function PartnerDashboardLayout({ children }: { children: R
           </Link>
           <span className="sp" />
           <div className="pd-nav-acct">
-            {otherPanels.length > 0 && (
-              <div className="pd-panel-switch" role="group" aria-label="Switch panel">
-                {otherPanels.map((panel) => {
-                  const Icon = PANEL_ICON[panel.key];
-                  return (
-                    <a key={panel.key} className="pd-panel-switch-link" href={panel.href}>
-                      <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
-                      <span className="label">{panel.label}</span>
-                      <span className="arrow" aria-hidden="true">↗</span>
-                    </a>
-                  );
-                })}
-              </div>
-            )}
+            <WorkspaceSwitcher current={panelLink("partner")} others={otherPanels} />
             <div className="pd-acct-chip">
               <span className="av">{initial(label)}</span>
               <span className="who">

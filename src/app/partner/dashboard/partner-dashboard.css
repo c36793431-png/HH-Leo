@@ -14,6 +14,7 @@
   --pd-bg: #05070b;
   --pd-panel: #0a1019;
   --pd-panel-2: #0d141f;
+  --pd-raise: #111a27;
   --pd-line: rgba(218, 244, 245, 0.07);
   --pd-ink: #daf4f5;
   --pd-ink-2: #8fb0b7;
@@ -67,14 +68,34 @@
 }
 .partner-dash .pd-nav .sp { flex: 1; }
 .partner-dash .pd-nav-acct { display: flex; align-items: center; gap: 14px; }
-.partner-dash .pd-panel-switch { display: flex; gap: 6px; }
-.partner-dash .pd-panel-switch-link {
-  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
-  border: 1px solid var(--pd-line); font-size: 12px; font-weight: 600; color: var(--pd-ink-2);
-  text-decoration: none; transition: color 0.12s, border-color 0.12s;
+/* Cross-panel workspace card — see src/components/shared/workspace-switcher.tsx
+   and the sibling rules under .portal-shell in src/app/portal.css. Partner has no
+   left sidebar (top pd-nav bar instead), so unlike the sidebar surfaces the
+   expanded .ws-list drops out of flow as a dropdown under the trigger. */
+.partner-dash .ws-group { position: relative; }
+.partner-dash .ws-card { background: var(--pd-raise); border: 1px solid var(--pd-line); border-radius: 12px; }
+.partner-dash .ws-trigger {
+  width: 220px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
 }
-.partner-dash .pd-panel-switch-link:hover { color: var(--pd-ink); border-color: rgba(45, 226, 230, 0.16); }
-.partner-dash .pd-panel-switch-link .arrow { opacity: 0.6; }
+.partner-dash .ws-trigger-top { display: flex; align-items: center; justify-content: space-between; }
+.partner-dash .ws-eyebrow { font-size: 9.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pd-ink-4); }
+.partner-dash .ws-caret { color: var(--pd-ink-3); transition: transform 0.15s ease; flex: 0 0 auto; }
+.partner-dash .ws-caret.open { transform: rotate(180deg); }
+.partner-dash .ws-row { display: flex; align-items: center; gap: 8px; }
+.partner-dash .ws-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pd-ok); box-shadow: 0 0 8px var(--pd-ok); flex: 0 0 auto; }
+.partner-dash .ws-name { font-size: 13px; font-weight: 600; color: var(--pd-ink); }
+.partner-dash .ws-domain { display: block; margin-top: 2px; margin-left: 15px; font-family: var(--pd-mono); font-size: 10.5px; color: var(--pd-ink-3); }
+.partner-dash .ws-list {
+  position: absolute; top: calc(100% + 8px); right: 0; width: 240px; z-index: 40;
+  display: flex; flex-direction: column; padding: 4px; gap: 2px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.partner-dash .ws-list-link { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; text-decoration: none; color: inherit; transition: background 0.12s; }
+.partner-dash .ws-list-link:hover { background: rgba(255, 255, 255, 0.05); }
+.partner-dash .ws-list-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.partner-dash .ws-list-text .ws-domain { margin-left: 0; }
+.partner-dash .ws-arrow { opacity: 0.6; flex: 0 0 auto; color: var(--pd-ink-3); }
 .partner-dash .pd-acct-chip {
   display: flex; align-items: center; gap: 11px; padding: 6px 8px 6px 6px; border-radius: 999px;
   border: 1px solid var(--pd-amber-line); background: var(--pd-amber-soft);
@@ -242,7 +263,8 @@
   .partner-dash .pd-brand .txt { font-size: 19px; }
   .partner-dash .pd-acct-chip .who { display: none; }
   .partner-dash .pd-signout span { display: none; }
-  .partner-dash .pd-panel-switch-link .label { display: none; }
+  .partner-dash .ws-trigger { width: 168px; }
+  .partner-dash .ws-list { width: 220px; }
   .partner-dash .pd-content { padding: 24px 16px 50px; }
   .partner-dash .pd-hero h1 { font-size: 27px; }
   .partner-dash .pd-hero .h-cta { margin-left: 0; width: 100%; }

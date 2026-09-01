@@ -4,18 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import type { PanelKey, PanelLink } from "@/lib/user-roles";
-import { User, Handshake, SatelliteDish, Shield, type LucideIcon } from "lucide-react";
-
-// Panel-switcher icons, keyed by PanelLink.key -- see the same map's comment in
-// src/components/portal/sidebar.tsx for why this resolves from a string key
-// client-side rather than carrying an icon field across the Server->Client boundary.
-const PANEL_ICON: Record<PanelKey, LucideIcon> = {
-  portal: User,
-  partner: Handshake,
-  feed: SatelliteDish,
-  admin: Shield,
-};
+import { panelLink, type PanelLink } from "@/lib/user-roles";
+import { WorkspaceSwitcher } from "@/components/shared/workspace-switcher";
 
 const NAV = [
   { href: "/feed/dashboard", label: "Overview", ic: "▨" },
@@ -57,20 +47,7 @@ export function FeedSidebar({
           <small>PROVIDER PANEL</small>
         </div>
       </div>
-      {otherPanels.length > 0 && (
-        <div className="fp-panel-switch" role="group" aria-label="Switch panel">
-          {otherPanels.map((panel) => {
-            const Icon = PANEL_ICON[panel.key];
-            return (
-              <a key={panel.key} className="fp-panel-switch-link" href={panel.href}>
-                <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
-                <span className="label">{panel.label}</span>
-                <span className="arrow" aria-hidden="true">↗</span>
-              </a>
-            );
-          })}
-        </div>
-      )}
+      <WorkspaceSwitcher current={panelLink("feed")} others={otherPanels} />
       <nav className="fp-nav">
         <div className="grp">Provider</div>
         {NAV.map((item) => {

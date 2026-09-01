@@ -5,6 +5,7 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { ToastHost } from "@/components/admin/toast-host";
 import { getProviderApplicationStats } from "@/lib/provider-applications";
+import { getReachablePanels } from "@/lib/user-roles";
 
 const FEED_HOST = "feed.horizonhft.com";
 
@@ -24,6 +25,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // §6: the sidebar badge and the dashboard tile must read the same selector, so it's
   // fetched once here (not recomputed in the sidebar) and passed down as a plain value.
   const pendingApplicationsCount = isFeedHost ? (await getProviderApplicationStats()).pendingCount : undefined;
+  const switchablePanels = getReachablePanels(session.user.roles);
 
   return (
     <PortalShell
@@ -33,6 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       userEmail={userEmail}
       adminSurface={isFeedHost ? "feed" : "portal"}
       pendingApplicationsCount={pendingApplicationsCount}
+      switchablePanels={switchablePanels}
     >
       {children}
       <ToastHost />
