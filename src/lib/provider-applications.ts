@@ -291,11 +291,10 @@ export async function getProviderApplicationStats(): Promise<ProviderApplication
 /** Shared by approveProviderApplication and createManualProviderApplication: match an existing
  * user by id (if already linked) or email, else create one with role 'feed_provider'. Must run
  * inside the caller's transaction (takes the connected client, not the pool). */
-/** Overwriting an existing user's role destroys any record of what it was before --
- * there is no multi-role model, so a matched account (e.g. a former admin applying
- * as a provider) would otherwise lose that fact for good. Mirrors the audit trail
- * admin/users/actions.ts's updateUserFieldAction already writes for manual role edits,
- * so both role-changing paths land in the same admin_actions table. */
+/** users.role is overwritten only when the matched account's current role is 'user' --
+ * an existing admin/partner/feed_provider role is left alone (promotion-only, never lateral
+ * or downgrade, per user-roles-migration-2026-09-01). The grant itself is always recorded in
+ * user_roles regardless, so a second role never disappears even when users.role can't show it. */
 async function linkOrCreateProviderUser(
   client: PoolClient,
   email: string,
@@ -310,11 +309,22 @@ async function linkOrCreateProviderUser(
     ]);
     userId = matched.rows[0]?.id ?? null;
   }
+  const resolvedAdminUserId = await resolveAdminUserId(actionedBy);
   if (userId) {
     const previous = await client.query<{ role: string }>(`select role from users where id = $1`, [userId]);
     const previousRole = previous.rows[0]?.role ?? null;
-    await client.query(`update users set role = 'feed_provider', updated_at = now() where id = $1`, [userId]);
-    const resolvedAdminUserId = await resolveAdminUserId(actionedBy);
+    // Never overwrite an existing non-'user' role (admin/partner/feed_provider) -- promotion-only,
+    // per marcus's user-roles-migration-2026-09-01 ruling: a lateral or downgrade overwrite would
+    // silently drop panel access for whichever role users.role stops reflecting.
+    const nextRole = previousRole === "user" ? "feed_provider" : previousRole;
+    if (previousRole === "user") {
+      await client.query(`update users set role = 'feed_provider', updated_at = now() where id = $1`, [userId]);
+    }
+    await client.query(
+      `insert into user_roles (user_id, role, granted_by) values ($1, 'feed_provider', $2)
+       on conflict (user_id, role) do nothing`,
+      [userId, resolvedAdminUserId]
+    );
     await client.query(
       `insert into admin_actions (admin_user_id, action_type, target_user_id, details_json)
        values ($1, $2, $3, $4)`,
@@ -322,7 +332,7 @@ async function linkOrCreateProviderUser(
         resolvedAdminUserId,
         "provider_role_conversion",
         userId,
-        JSON.stringify({ from: previousRole, to: "feed_provider" }),
+        JSON.stringify({ from: previousRole, to: nextRole, granted_role: "feed_provider" }),
       ]
     );
   } else {
@@ -331,6 +341,11 @@ async function linkOrCreateProviderUser(
       [email, name]
     );
     userId = created.rows[0].id;
+    await client.query(
+      `insert into user_roles (user_id, role, granted_by) values ($1, 'feed_provider', $2)
+       on conflict (user_id, role) do nothing`,
+      [userId, resolvedAdminUserId]
+    );
   }
   return userId;
 }

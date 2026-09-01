@@ -163,20 +163,45 @@ async function actionApplication(
   return row;
 }
 
-/** Same audit gap as provider-applications.ts's linkOrCreateProviderUser: overwriting an
- * existing user's role destroys any record of what it was before. Mirrors that fix
- * exactly -- read the prior role, then log the conversion to the same admin_actions
- * table before applying it. */
+/** Mirrors provider-applications.ts's linkOrCreateProviderUser: users.role is overwritten only
+ * when the current role is 'user' -- an existing admin/partner/feed_provider role is left alone
+ * (promotion-only, never lateral or downgrade, per user-roles-migration-2026-09-01). The grant
+ * is always recorded in user_roles regardless, so a second role never disappears even when
+ * users.role can't show it. Runs as one transaction so the read-then-write can't race another
+ * conversion of the same user. */
 async function recordPartnerRoleConversion(userId: string, actionedBy: string): Promise<void> {
-  const previous = await pool.query<{ role: string }>(`select role from users where id = $1`, [userId]);
-  const previousRole = previous.rows[0]?.role ?? null;
-  await pool.query(`update users set role = 'partner', updated_at = now() where id = $1`, [userId]);
-  const resolvedAdminUserId = await resolveAdminUserId(actionedBy);
-  await pool.query(
-    `insert into admin_actions (admin_user_id, action_type, target_user_id, details_json)
-     values ($1, $2, $3, $4)`,
-    [resolvedAdminUserId, "partner_role_conversion", userId, JSON.stringify({ from: previousRole, to: "partner" })]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const previous = await client.query<{ role: string }>(`select role from users where id = $1`, [userId]);
+    const previousRole = previous.rows[0]?.role ?? null;
+    const nextRole = previousRole === "user" ? "partner" : previousRole;
+    if (previousRole === "user") {
+      await client.query(`update users set role = 'partner', updated_at = now() where id = $1`, [userId]);
+    }
+    const resolvedAdminUserId = await resolveAdminUserId(actionedBy);
+    await client.query(
+      `insert into user_roles (user_id, role, granted_by) values ($1, 'partner', $2)
+       on conflict (user_id, role) do nothing`,
+      [userId, resolvedAdminUserId]
+    );
+    await client.query(
+      `insert into admin_actions (admin_user_id, action_type, target_user_id, details_json)
+       values ($1, $2, $3, $4)`,
+      [
+        resolvedAdminUserId,
+        "partner_role_conversion",
+        userId,
+        JSON.stringify({ from: previousRole, to: nextRole, granted_role: "partner" }),
+      ]
+    );
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function approvePartnerApplication(
@@ -204,6 +229,12 @@ export async function approvePartnerApplication(
         [row.email, row.name]
       );
       userId = created.rows[0].id;
+      const resolvedAdminUserId = await resolveAdminUserId(actionedBy);
+      await pool.query(
+        `insert into user_roles (user_id, role, granted_by) values ($1, 'partner', $2)
+         on conflict (user_id, role) do nothing`,
+        [userId, resolvedAdminUserId]
+      );
     }
     await pool.query(`update partner_applications set user_id = $2 where id = $1`, [row.id, userId]);
     const reloaded = await getPartnerApplication(row.id);
