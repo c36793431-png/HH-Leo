@@ -116,13 +116,6 @@ const FEED_ADMIN_LINKS = [
   { href: "/admin/feed-health", label: "Feed health", icon: Radar, soon: true },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
 
-// §2's "PLATFORM → Accounts" row: the mockup carries it as a placeholder (href="#", no
-// page behind it anywhere in this app) same as Feed health was before its tab existed —
-// so it renders "soon" rather than link to a route that doesn't exist yet.
-const FEED_PLATFORM_LINKS = [
-  { href: "/admin/accounts", label: "Accounts", icon: CircleUser, soon: true },
-] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
-
 function isActive(pathname: string, href: string): boolean {
   const [path] = href.split("#");
   if (path === "/dashboard" || path === "/account" || path === "/admin") return pathname === path;
@@ -293,21 +286,6 @@ export function PortalSidebar({
                 </Link>
               );
             })}
-
-            {adminSurface === "feed" && (
-              <>
-                <div className="grp">Platform</div>
-                {FEED_PLATFORM_LINKS.map((link) => {
-                  const Icon = link.icon;
-                  return (
-                    <span key={link.href} className="soon" aria-disabled="true">
-                      <span className="ic"><Icon size={18} strokeWidth={1.75} /></span> {link.label}
-                      <span className="pill soon-pill">Soon</span>
-                    </span>
-                  );
-                })}
-              </>
-            )}
           </div>
         )}
       </nav>

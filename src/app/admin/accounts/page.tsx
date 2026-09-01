@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { listFeedTierTrials } from "@/lib/feed-tier-trials";
 import { listBlackTrials } from "@/lib/black-trials";
@@ -97,12 +96,12 @@ export default async function AdminAccountsPage() {
                   </td>
                   <td className="py-2 pr-4 text-zinc-400">{r.latestStatus}</td>
                   <td className="py-2">
-                    <Link
-                      href={`/admin/users/${r.userId}`}
+                    <a
+                      href={`https://portal.horizonhft.com/admin/users/${r.userId}`}
                       className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-cyan-500 hover:text-cyan-300"
                     >
                       View user
-                    </Link>
+                    </a>
                   </td>
                 </tr>
               ))}
