@@ -1,29 +1,28 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import Image from "next/image";
-import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { isAdminUser, isPartnerUser } from "@/lib/admin-users-panel";
 import { getPendingPartnerApplicationForUser } from "@/lib/partner-applications";
-import { getOtherPanels, panelLink } from "@/lib/user-roles";
+import { getOtherPanels } from "@/lib/user-roles";
 import { SignOutButton } from "@/components/sign-out-button";
-import { WorkspaceSwitcher } from "@/components/shared/workspace-switcher";
+import { PartnerSidebar } from "@/components/partner/partner-sidebar";
+import { PartnerNavToggle, PartnerNavScrim } from "@/components/partner/partner-nav-toggle";
 import "./partner-dashboard.css";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 
-function initial(s: string): string {
-  return s.trim().charAt(0).toUpperCase() || "?";
-}
-
-/** Auth gate + amber top-nav shell for the partner self-service dashboard, split out from
+/** Auth gate + amber sidebar shell for the partner self-service dashboard, split out from
  * the shared /partner wrapper so partner.horizonhft.com's root can render a public landing
  * page without requiring a session — see src/app/partner/page.tsx.
  *
  * Reskinned from the plain cyan/zinc box to the V3-amber chrome (brief
  * iris-partner-dashboard-design-2026-08-22, mockups/horizon-referral-partner/
- * partner-dashboard.html) so landing -> login -> dashboard reads as one continuous amber
- * partner surface, matching partner-landing-v3's nav 1:1. */
+ * partner-dashboard.html), then from that top-nav bar to a PartnerSidebar (bus thread
+ * partner-sidebar-stage1-2026-09-01, marcus) once the panel grew a second page (Deals) --
+ * PortalSidebar couldn't be reused (tier-coupled, hard-coded portal/feed nav arrays, no
+ * partner concept), so this forks the same brand/WorkspaceSwitcher/nav/side-foot shape
+ * FeedSidebar already forked for the provider panel. Stage 1 ships two nav items only
+ * (Overview, Deals) -- see partner-sidebar.tsx for why the rest are left out entirely. */
 export default async function PartnerDashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -50,6 +49,7 @@ export default async function PartnerDashboardLayout({ children }: { children: R
   }
 
   const label = session.user.name?.trim() || session.user.email?.trim() || "Partner";
+  const isAdmin = isAdminUser(session.user);
   const otherPanels = getOtherPanels(session.user.roles, "partner");
 
   return (
@@ -57,31 +57,17 @@ export default async function PartnerDashboardLayout({ children }: { children: R
       <div className="pd-backdrop" aria-hidden="true">
         <div className="glow" />
       </div>
-      <div className="pd-wrap">
-        <nav className="pd-nav">
-          <Link className="pd-brand" href="/">
-            <span className="glyph">
-              <Image src="/brand/horizon-logo-partner.png" alt="Horizon HFT" width={42} height={42} priority />
-            </span>
-            <span className="txt">
-              HORIZON
-              <small>HFT · PARTNER PROGRAM</small>
-            </span>
-          </Link>
-          <span className="sp" />
-          <div className="pd-nav-acct">
-            <WorkspaceSwitcher current={panelLink("partner")} others={otherPanels} />
-            <div className="pd-acct-chip">
-              <span className="av">{initial(label)}</span>
-              <span className="who">
-                <b>{label}</b>
-                <span className="tag">Partner</span>
-              </span>
-            </div>
-            <SignOutButton className="pd-signout" redirectTo="/" />
-          </div>
-        </nav>
+      <PartnerNavScrim />
+      <div className="pd-app">
+        <PartnerSidebar
+          partnerLabel={label}
+          partnerEmail={session.user.email ?? null}
+          isAdmin={isAdmin}
+          otherPanels={otherPanels}
+          signOutButton={<SignOutButton className="pd-signout" redirectTo="/" />}
+        />
         <main className="pd-main">
+          <PartnerNavToggle />
           <section className="pd-content">{children}</section>
         </main>
       </div>

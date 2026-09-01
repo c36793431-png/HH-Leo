@@ -29,6 +29,7 @@
   --pd-amber-line: rgba(245, 181, 71, 0.34);
   --pd-em-soft: rgba(55, 245, 160, 0.09);
   --pd-em-line: rgba(55, 245, 160, 0.3);
+  --pd-sbw: 260px;
   --pd-sans: var(--font-inter), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   --pd-disp: var(--font-saira), "Saira Condensed", var(--pd-sans);
   --pd-mono: var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -48,83 +49,63 @@
     radial-gradient(78% 50% at 84% -14%, rgba(245, 181, 71, 0.15) 0%, rgba(5, 7, 11, 0) 55%),
     radial-gradient(62% 44% at 4% 96%, rgba(245, 181, 71, 0.06) 0%, rgba(5, 7, 11, 0) 60%);
 }
-.partner-dash .pd-wrap { position: relative; z-index: 2; display: flex; flex-direction: column; min-height: 100vh; }
-
-/* top bar -- 1:1 with landing V3 */
-.partner-dash .pd-nav {
-  height: 74px; flex: 0 0 74px; display: flex; align-items: center; gap: 16px; padding: 0 40px;
-  border-bottom: 1px solid var(--pd-line); position: sticky; top: 0;
-  background: rgba(5, 7, 11, 0.72); backdrop-filter: blur(14px); z-index: 30;
+/* sidebar shell -- forked from FeedSidebar's .fp-* rules (feed-dashboard.css) onto the
+   existing amber --pd-* tokens (bus thread partner-sidebar-stage1-2026-09-01, marcus).
+   Replaces the old horizontal pd-nav top bar now that the panel has two pages. */
+.partner-dash .pd-app { position: relative; z-index: 2; display: grid; grid-template-columns: var(--pd-sbw) 1fr; min-height: 100vh; }
+.partner-dash .pd-sidebar {
+  position: sticky; top: 0; height: 100vh;
+  background: linear-gradient(180deg, #120d05, #06090f);
+  border-right: 1px solid var(--pd-line);
+  display: flex; flex-direction: column; z-index: 40;
 }
-.partner-dash .pd-brand { display: flex; align-items: center; gap: 12px; }
-.partner-dash .pd-brand .glyph {
-  width: 42px; height: 42px; flex: 0 0 42px; display: flex; align-items: center; justify-content: center;
-  filter: drop-shadow(0 4px 16px rgba(245, 181, 71, 0.3));
-}
-.partner-dash .pd-brand .txt { font-family: var(--pd-disp); font-weight: 800; font-size: 23px; letter-spacing: 0.05em; line-height: 1; }
-.partner-dash .pd-brand .txt small {
-  display: block; font-family: var(--pd-sans); font-weight: 600; font-size: 9.5px; letter-spacing: 0.3em;
-  color: var(--pd-amber); margin-top: 3px;
-}
-.partner-dash .pd-nav .sp { flex: 1; }
-.partner-dash .pd-nav-acct { display: flex; align-items: center; gap: 14px; }
-/* Cross-panel workspace card — see src/components/shared/workspace-switcher.tsx
-   and the sibling rules under .portal-shell in src/app/portal.css. Partner has no
-   left sidebar (top pd-nav bar instead), so unlike the sidebar surfaces the
-   expanded .ws-list drops out of flow as a dropdown under the trigger. */
-.partner-dash .ws-group { position: relative; }
+.partner-dash .pd-brand { display: flex; align-items: center; gap: 12px; padding: 22px 22px 20px; }
+.partner-dash .pd-brand .glyph { width: 38px; height: 38px; flex: 0 0 38px; display: flex; align-items: center; justify-content: center; }
+.partner-dash .pd-brand .txt { font-family: var(--pd-disp); font-weight: 800; font-size: 22px; letter-spacing: 0.04em; line-height: 1; }
+.partner-dash .pd-brand .txt small { display: block; font-family: var(--pd-sans); font-weight: 600; font-size: 9.5px; letter-spacing: 0.3em; color: var(--pd-amber); margin-top: 3px; }
+.partner-dash .pd-side-nav { flex: 1; overflow-y: auto; padding: 6px 14px; }
+.partner-dash .pd-side-nav .grp { font-size: 10px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pd-ink-4); padding: 16px 12px 8px; }
+.partner-dash .pd-side-nav a { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: var(--pd-ink-2); font-size: 14px; font-weight: 500; position: relative; margin-bottom: 2px; transition: background 0.12s, color 0.12s; }
+.partner-dash .pd-side-nav a .ic { width: 18px; height: 18px; flex: 0 0 18px; opacity: 0.85; display: flex; align-items: center; justify-content: center; }
+.partner-dash .pd-side-nav a:hover { background: var(--pd-amber-soft); color: var(--pd-ink); }
+.partner-dash .pd-side-nav a.on { background: var(--pd-amber-soft); color: var(--pd-amber); }
+.partner-dash .pd-side-nav a.on::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--pd-amber); box-shadow: 0 0 12px var(--pd-amber); }
+.partner-dash .pd-side-foot { padding: 14px; border-top: 1px solid var(--pd-line); }
+/* Cross-panel workspace card — see src/components/shared/workspace-switcher.tsx and the
+   sibling rules under .feed-provider-v1 in feed-dashboard.css / .portal-shell in
+   portal.css. Sidebar surfaces stack the expanded .ws-list in-flow below the trigger,
+   unlike the old top-bar dropdown this replaces. */
+.partner-dash .ws-group { margin: 0 22px 18px; display: flex; flex-direction: column; gap: 8px; }
 .partner-dash .ws-card { background: var(--pd-raise); border: 1px solid var(--pd-line); border-radius: 12px; }
-/* Compact trigger: the collapsed disclosure has to sit inside the 74px (64px
-   on mobile) horizontal pd-nav bar, unlike the sidebar surfaces which have a
-   full-height rail to lay the stacked card out in. Fixed line-heights replace
-   the sidebar variant's default line-heights so the row math is exact instead
-   of relying on font-metric guesswork. The expanded .ws-list dropdown is
-   unaffected -- it isn't nav-height constrained.
-   line-height: 1 is deliberate here to fit the 74px bar; descenders paint
-   outside the line box and only survive because these rules rely on the
-   default overflow: visible -- don't add overflow: hidden to them. */
-.partner-dash .ws-trigger {
-  width: 220px; padding: 6px 12px; display: flex; flex-direction: column; gap: 2px;
-  font: inherit; color: inherit; text-align: left; cursor: pointer;
-}
+.partner-dash .ws-trigger { width: 100%; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .partner-dash .ws-trigger-top { display: flex; align-items: center; justify-content: space-between; }
-.partner-dash .ws-eyebrow { font-size: 9.5px; line-height: 1; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pd-ink-4); }
+.partner-dash .ws-eyebrow { font-size: 9.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pd-ink-4); }
 .partner-dash .ws-caret { color: var(--pd-ink-3); transition: transform 0.15s ease; flex: 0 0 auto; }
 .partner-dash .ws-caret.open { transform: rotate(180deg); }
-.partner-dash .ws-trigger .ws-row { display: flex; align-items: center; gap: 8px; }
-.partner-dash .ws-trigger .ws-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pd-ok); box-shadow: 0 0 8px var(--pd-ok); flex: 0 0 auto; }
-.partner-dash .ws-trigger .ws-name { font-size: 13px; line-height: 1; font-weight: 600; color: var(--pd-ink); }
-.partner-dash .ws-trigger .ws-domain { display: block; margin-top: 1px; margin-left: 15px; font-family: var(--pd-mono); font-size: 10.5px; line-height: 1; color: var(--pd-ink-3); }
+.partner-dash .ws-row { display: flex; align-items: center; gap: 8px; }
 .partner-dash .ws-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pd-ok); box-shadow: 0 0 8px var(--pd-ok); flex: 0 0 auto; }
 .partner-dash .ws-name { font-size: 13px; font-weight: 600; color: var(--pd-ink); }
 .partner-dash .ws-domain { display: block; margin-top: 2px; margin-left: 15px; font-family: var(--pd-mono); font-size: 10.5px; color: var(--pd-ink-3); }
-.partner-dash .ws-list {
-  position: absolute; top: calc(100% + 8px); right: 0; width: 240px; z-index: 40;
-  display: flex; flex-direction: column; padding: 4px; gap: 2px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-}
+.partner-dash .ws-list { display: flex; flex-direction: column; padding: 4px; gap: 2px; }
 .partner-dash .ws-list-link { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; text-decoration: none; color: inherit; transition: background 0.12s; }
-.partner-dash .ws-list-link:hover { background: rgba(255, 255, 255, 0.05); }
+.partner-dash .ws-list-link:hover { background: rgba(255, 255, 255, 0.06); }
 .partner-dash .ws-list-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .partner-dash .ws-list-text .ws-domain { margin-left: 0; }
 .partner-dash .ws-arrow { opacity: 0.6; flex: 0 0 auto; color: var(--pd-ink-3); }
-.partner-dash .pd-acct-chip {
-  display: flex; align-items: center; gap: 11px; padding: 6px 8px 6px 6px; border-radius: 999px;
-  border: 1px solid var(--pd-amber-line); background: var(--pd-amber-soft);
-}
-.partner-dash .pd-acct-chip .av {
-  width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%;
+.partner-dash .pd-side-acct { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 10px; }
+.partner-dash .pd-side-acct .av {
+  width: 34px; height: 34px; flex: 0 0 34px; border-radius: 9px;
   background: radial-gradient(120% 120% at 30% 18%, var(--pd-amber), var(--pd-amber-2)); color: #20140a;
   display: flex; align-items: center; justify-content: center; font-family: var(--pd-disp); font-weight: 800; font-size: 15px;
 }
-.partner-dash .pd-acct-chip .who { line-height: 1.25; padding-right: 4px; }
-.partner-dash .pd-acct-chip .who b { display: block; font-size: 13.5px; font-weight: 600; color: var(--pd-ink); }
-.partner-dash .pd-acct-chip .who .tag { font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pd-amber); }
-.partner-dash .pd-signout {
-  display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--pd-ink-2);
-  border: 1px solid var(--pd-line); border-radius: 10px; padding: 9px 14px; cursor: pointer; background: none;
-}
-.partner-dash .pd-signout:hover { color: var(--pd-ink); border-color: rgba(45, 226, 230, 0.16); }
+.partner-dash .pd-side-acct .who { line-height: 1.3; min-width: 0; flex: 1; }
+.partner-dash .pd-side-acct .who b { display: block; font-size: 13px; font-weight: 600; color: var(--pd-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.partner-dash .pd-side-acct .who span { font-size: 11px; color: var(--pd-ink-3); }
+.partner-dash .pd-side-acct .tag { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--pd-amber-soft); color: var(--pd-amber); border: 1px solid var(--pd-amber-line); }
+.partner-dash .pd-signout { width: 100%; margin-top: 10px; justify-content: center; display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--pd-ink-2); border: 1px solid var(--pd-line); border-radius: 10px; padding: 9px 14px; cursor: pointer; background: none; }
+.partner-dash .pd-signout:hover { color: var(--pd-ink); border-color: var(--pd-amber-line); }
+.partner-dash .pd-burger { display: none; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--pd-line); background: var(--pd-panel); color: var(--pd-ink); align-items: center; justify-content: center; cursor: pointer; font-size: 18px; margin: 20px 0 0 20px; }
+.partner-dash .pd-scrim { display: none; }
 
 /* buttons */
 .partner-dash .pd-btn {
@@ -138,20 +119,20 @@
 .partner-dash .pd-btn.amber-ghost:hover { background: rgba(245, 181, 71, 0.16); }
 
 /* content shell */
-.partner-dash .pd-main { flex: 1; display: flex; flex-direction: column; }
+.partner-dash .pd-main { min-width: 0; display: flex; flex-direction: column; }
 .partner-dash .pd-content { width: 100%; max-width: 1160px; margin: 0 auto; padding: 34px 40px 64px; }
 
-/* hero row */
-.partner-dash .pd-hero { display: flex; align-items: flex-end; gap: 22px; flex-wrap: wrap; margin-bottom: 6px; }
+/* hero row -- .pd-page-head (Deals) shares the same layout as .pd-hero (Overview) */
+.partner-dash .pd-hero, .partner-dash .pd-page-head { display: flex; align-items: flex-end; gap: 22px; flex-wrap: wrap; margin-bottom: 6px; }
 .partner-dash .pd-eyebrow {
   font-family: var(--pd-mono); font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--pd-amber);
   margin-bottom: 11px; display: flex; align-items: center; gap: 9px;
 }
 .partner-dash .pd-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pd-amber); box-shadow: 0 0 10px var(--pd-amber); }
-.partner-dash .pd-hero h1 { font-family: var(--pd-disp); font-weight: 800; font-size: 33px; letter-spacing: 0.01em; line-height: 1.03; }
+.partner-dash .pd-hero h1, .partner-dash .pd-page-head h1 { font-family: var(--pd-disp); font-weight: 800; font-size: 33px; letter-spacing: 0.01em; line-height: 1.03; }
 .partner-dash .pd-hero h1 em { font-style: normal; color: var(--pd-amber); }
-.partner-dash .pd-hero .lead { color: var(--pd-ink-2); font-size: 13.5px; margin-top: 9px; max-width: 520px; line-height: 1.55; }
-.partner-dash .pd-hero .h-cta { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
+.partner-dash .pd-hero .lead, .partner-dash .pd-page-head .lead { color: var(--pd-ink-2); font-size: 13.5px; margin-top: 9px; max-width: 520px; line-height: 1.55; }
+.partner-dash .pd-hero .h-cta, .partner-dash .pd-page-head .h-cta { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* referral link card */
 .partner-dash .pd-reflink {
@@ -271,16 +252,15 @@
   .partner-dash .pd-kpis { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
-  .partner-dash .pd-nav { padding: 0 18px; height: 64px; flex: 0 0 64px; }
-  .partner-dash .pd-brand .txt { font-size: 19px; }
-  .partner-dash .pd-acct-chip .who { display: none; }
-  .partner-dash .pd-signout span { display: none; }
-  .partner-dash .ws-trigger { width: 168px; }
-  .partner-dash .ws-list { width: 220px; }
+  .partner-dash .pd-app { grid-template-columns: 1fr; }
+  .partner-dash .pd-sidebar { position: fixed; left: 0; top: 0; width: 280px; transform: translateX(-100%); transition: transform 0.22s ease; box-shadow: 24px 0 60px rgba(0, 0, 0, 0.6); }
+  .partner-dash.nav-open .pd-sidebar { transform: translateX(0); }
+  .partner-dash.nav-open .pd-scrim { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 35; }
+  .partner-dash .pd-burger { display: inline-flex; }
   .partner-dash .pd-content { padding: 24px 16px 50px; }
-  .partner-dash .pd-hero h1 { font-size: 27px; }
-  .partner-dash .pd-hero .h-cta { margin-left: 0; width: 100%; }
-  .partner-dash .pd-hero .h-cta .pd-btn { flex: 1; justify-content: center; }
+  .partner-dash .pd-hero h1, .partner-dash .pd-page-head h1 { font-size: 27px; }
+  .partner-dash .pd-hero .h-cta, .partner-dash .pd-page-head .h-cta { margin-left: 0; width: 100%; }
+  .partner-dash .pd-hero .h-cta .pd-btn, .partner-dash .pd-page-head .h-cta .pd-btn { flex: 1; justify-content: center; }
   .partner-dash .pd-reflink { gap: 14px; }
   .partner-dash .pd-reflink .rl-act { margin-left: 0; width: 100%; }
   .partner-dash .pd-copybtn { flex: 1; justify-content: center; }
