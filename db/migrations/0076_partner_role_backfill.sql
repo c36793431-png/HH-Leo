@@ -1,3 +1,12 @@
+-- ONE-SHOT, DO NOT RE-RUN. Since role-revocation-admin-control-2026-09-01, an
+-- admin can revoke `partner` via /admin/users while leaving `partners.status`
+-- untouched (amendment 3(b): revocation is user_roles-only by design, see
+-- updateUserRolesAction in src/app/admin/users/actions.ts). Re-running this
+-- insert would silently re-grant `partner` to any such account, because the
+-- query still matches on `partners.status = 'active'` with no awareness that
+-- the role was deliberately removed. If a repair like this is ever needed
+-- again, exclude accounts with a prior revoke in admin_actions first.
+--
 -- Partner-role backfill (bus thread user-roles-migration-2026-09-01, marcus
 -- authorized 2026-09-01 after m34230/m34235). Targeted repair for the one gap
 -- found when scoping 0075's backfill against every provider/partner source

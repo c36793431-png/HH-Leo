@@ -9,7 +9,7 @@ import { ActionButton } from "@/components/admin/action-button";
 import { TierSelectForm } from "@/components/admin/tier-select-form";
 import { CopyIdButton } from "@/components/admin/copy-id-button";
 import { InlineEditField } from "@/components/admin/inline-edit-field";
-import { RoleSelectField } from "@/components/admin/role-select-field";
+import { RoleTogglesField } from "@/components/admin/role-toggles-field";
 import { FeedCheckboxes, FeedSelectForm } from "@/components/admin/feed-select-form";
 import { NotesForm } from "@/components/admin/notes-form";
 import { ConfigSummaryForm } from "@/components/admin/config-summary-form";
@@ -23,6 +23,7 @@ import {
   issueAdditionalLicenseAction,
   setUserLicenseTierAction,
   updateUserFieldAction,
+  updateUserRolesAction,
   updateLicenseFeedsAction,
   updateUserNotesAction,
   updateConfigSummaryAction,
@@ -162,10 +163,10 @@ export default async function AdminUserDetailPage({
             </dd>
           </div>
           <div className="sm:col-span-2">
-            <RoleSelectField
-              action={updateUserFieldAction}
+            <RoleTogglesField
+              action={updateUserRolesAction}
               hiddenFields={{ userId: user.userId }}
-              currentRole={user.role}
+              currentRoles={user.roles}
               subjectName={user.displayName ?? user.email ?? "this user"}
               isSelf={isSelf}
             />

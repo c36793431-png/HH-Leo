@@ -1069,6 +1069,7 @@ export interface UserDetail {
   telegramUserId: string | null;
   telegramBotStartedAt: Date | null;
   role: string;
+  roles: string[];
   joinedAt: Date;
   tierLabel: UserTierLabel;
   licenses: UserLicenseRow[];
@@ -1110,7 +1111,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
   const user = userResult.rows[0];
   if (!user) return null;
 
-  const [licensesResult, signinsResult, actionsResult, groupsResult] = await Promise.all([
+  const [licensesResult, signinsResult, actionsResult, groupsResult, rolesResult] = await Promise.all([
     pool.query(
       `select id, license_key, status, lifecycle_state, tier, issued_at, expires_at, hardware_id, last_verified_at, feed_types,
               ${licenseStatusCaseSql("licenses")} as computed_status,
@@ -1139,6 +1140,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
        order by invited_at desc`,
       [userId]
     ),
+    pool.query(`select role from user_roles where user_id = $1`, [userId]),
   ]);
 
   const activeTier = licensesResult.rows.find(
@@ -1155,6 +1157,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
     telegramUserId: user.telegram_user_id !== null ? String(user.telegram_user_id) : null,
     telegramBotStartedAt: user.telegram_bot_started_at,
     role: user.role,
+    roles: rolesResult.rows.map((r) => r.role as string),
     joinedAt: user.created_at,
     tierLabel: computeTierLabel(user.role, activeTier ?? null),
     licenses: licensesResult.rows.map((r) => ({
