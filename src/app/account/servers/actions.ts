@@ -61,7 +61,7 @@ export async function requestBlackTrialAction(licenseId: string): Promise<Action
     const registration = await getServerRegistration(validLicenseId).catch(() => null);
     if (!registration) throw new Error("Register your server before requesting a Black trial.");
 
-    await requestBlackTrial({ userId: session.user.id, licenseId: validLicenseId, adminUrl: `/admin/black-trials` });
+    await requestBlackTrial({ userId: session.user.id, licenseId: validLicenseId, adminUrl: "https://feed.horizonhft.com/admin/black-trials" });
     revalidatePath("/account/servers");
   });
 }

@@ -116,7 +116,7 @@ export async function startFeedTierTrialAction(
       licenseId: license.id,
       region,
       tierKey,
-      adminUrl: "/admin/feed-tier-trials",
+      adminUrl: "https://feed.horizonhft.com/admin/feed-tier-trials",
     });
     revalidatePath(`/feeds/${region}/tiers`);
     return { ok: true, trialId: trial.id, endsAt: trial.trialEndsAt.toISOString() };
