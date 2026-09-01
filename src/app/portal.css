@@ -105,7 +105,7 @@
 .portal-shell .panel-switch .panel-seg {
   display: flex; align-items: center; border-radius: 8px; padding: 7px 10px;
   font-family: var(--hz-sans); font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
-  color: var(--hz-ink-3); text-decoration: none; transition: background 0.12s, color 0.12s;
+  color: var(--hz-ink-2); text-decoration: none; transition: background 0.12s, color 0.12s;
 }
 .portal-shell .panel-switch .panel-seg .psrow { display: flex; align-items: center; gap: 7px; }
 .portal-shell .panel-switch .panel-seg svg { flex: 0 0 auto; opacity: 0.85; }

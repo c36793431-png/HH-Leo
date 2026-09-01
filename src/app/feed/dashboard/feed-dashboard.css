@@ -63,7 +63,7 @@
 .feed-provider-v1 .fp-panel-switch-link {
   display: flex; align-items: center; gap: 8px; padding: 7px 10px;
   border-radius: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--pfp-line-soft);
-  font-size: 12px; font-weight: 600; color: var(--pfp-ink-3); text-decoration: none;
+  font-size: 12px; font-weight: 600; color: var(--pfp-ink-2); text-decoration: none;
   transition: background 0.12s, color 0.12s;
 }
 .feed-provider-v1 .fp-panel-switch-link svg { flex: 0 0 auto; opacity: 0.85; }
