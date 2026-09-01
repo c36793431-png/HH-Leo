@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getUserDetail, maskLicenseKey, LICENSE_TIERS, type UserTierLabel } from "@/lib/licenses";
+import {
+  getUserDetail,
+  maskLicenseKey,
+  LICENSE_TIERS,
+  type UserTierLabel,
+  type UserLicenseRow,
+} from "@/lib/licenses";
 import { listPaymentsForUser } from "@/lib/payments";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
@@ -52,6 +58,140 @@ const GROUP_STATUS_STYLES: Record<string, string> = {
   removed_on_lapse: "border-red-500/40 bg-red-500/15 text-red-300",
 };
 
+function LicenseTable({
+  licenses,
+  showActions,
+  emptyMessage,
+}: {
+  licenses: UserLicenseRow[];
+  showActions: boolean;
+  emptyMessage: string;
+}) {
+  const columnCount = showActions ? 11 : 10;
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="text-zinc-500">
+          <tr>
+            <th className="pb-2 pr-4">License ID</th>
+            <th className="pb-2 pr-4">Key</th>
+            <th className="pb-2 pr-4">Status</th>
+            <th className="pb-2 pr-4">Lifecycle</th>
+            <th className="pb-2 pr-4">Tier</th>
+            <th className="pb-2 pr-4">Feeds</th>
+            <th className="pb-2 pr-4">Issued</th>
+            <th className="pb-2 pr-4">Expires</th>
+            <th className="pb-2 pr-4">HWID</th>
+            <th className="pb-2 pr-4">Last verified</th>
+            {showActions && <th className="pb-2">Actions</th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-zinc-800">
+          {licenses.map((l) => (
+            <tr key={l.id}>
+              <td className="py-2 pr-4 font-mono text-xs text-zinc-600">{l.id.slice(0, 8)}…</td>
+              <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
+                <span className="flex items-center gap-1.5">
+                  <span className="rounded-full border border-cyan-500/50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+                    HH{l.licenseNumber}
+                  </span>
+                  {maskLicenseKey(l.licenseKey)}
+                </span>
+              </td>
+              <td className="py-2 pr-4">
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${STATUS_STYLES[l.computedStatus]}`}
+                >
+                  {l.computedStatus.toUpperCase()}
+                </span>
+              </td>
+              <td className="py-2 pr-4 text-zinc-500 text-xs">{l.lifecycleState ?? "—"}</td>
+              <td className="py-2 pr-4 text-zinc-400">{l.tier}</td>
+              <td className="py-2 pr-4">
+                <div className="flex flex-wrap gap-1">
+                  {l.feedTypes.length === 0 ? (
+                    <span className="text-xs text-zinc-600">—</span>
+                  ) : (
+                    l.feedTypes.map((f) => (
+                      <span
+                        key={f}
+                        className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300"
+                      >
+                        {FEED_TYPE_META[f].name}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </td>
+              <td className="py-2 pr-4 text-zinc-400">{formatRelative(l.issuedAt)}</td>
+              <td className="py-2 pr-4 text-zinc-400">
+                {formatAbsoluteUtc(l.expiresAt)}{" "}
+                <span className="text-zinc-600">({formatRelative(l.expiresAt)})</span>
+              </td>
+              <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
+                {l.hardwareId ? `${l.hardwareId.slice(0, 4)}…` : "—"}
+              </td>
+              <td className="py-2 pr-4 text-zinc-400">
+                {l.lastVerifiedAt ? formatRelative(l.lastVerifiedAt) : "never"}
+              </td>
+              {showActions && (
+                <td className="py-2">
+                  {(l.computedStatus === "active" || l.computedStatus === "expiring") && (
+                    <div className="flex flex-wrap gap-2">
+                      <ActionButton
+                        action={expireNowAction}
+                        hiddenFields={{ licenseId: l.id }}
+                        label="Trigger expire now"
+                        successMessage="License expired"
+                      />
+                      <DurationForm
+                        action={extendLicenseAction}
+                        hiddenFields={{ licenseId: l.id }}
+                        submitLabel="Apply"
+                        successMessage="License extended"
+                        compact
+                        triggerLabel="Extend"
+                        showExtendFrom
+                        defaultAmount={30}
+                        defaultUnit="days"
+                        triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                      />
+                      <FeedSelectForm
+                        action={updateLicenseFeedsAction}
+                        hiddenFields={{ licenseId: l.id }}
+                        currentFeedTypes={l.feedTypes}
+                      />
+                      <TierSelectForm
+                        action={setUserLicenseTierAction}
+                        hiddenFields={{ licenseId: l.id }}
+                        currentTier={l.tier}
+                      />
+                      <ActionButton
+                        action={revokeAction}
+                        hiddenFields={{ licenseId: l.id }}
+                        label="Revoke"
+                        successMessage="License revoked"
+                        className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                    </div>
+                  )}
+                </td>
+              )}
+            </tr>
+          ))}
+          {licenses.length === 0 && (
+            <tr>
+              <td colSpan={columnCount} className="py-4 text-center text-zinc-500">
+                {emptyMessage}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default async function AdminUserDetailPage({
   params,
 }: {
@@ -69,6 +209,12 @@ export default async function AdminUserDetailPage({
 
   const activeLicense = user.licenses.find(
     (l) => l.computedStatus === "active" || l.computedStatus === "expiring"
+  );
+  const currentLicenses = user.licenses.filter(
+    (l) => l.computedStatus === "active" || l.computedStatus === "expiring"
+  );
+  const historyLicenses = user.licenses.filter(
+    (l) => l.computedStatus === "expired" || l.computedStatus === "revoked"
   );
 
   return (
@@ -266,6 +412,22 @@ export default async function AdminUserDetailPage({
       </section>
 
       <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
+        <h2 className="text-sm font-medium text-emerald-400">Current licences ({currentLicenses.length})</h2>
+        <LicenseTable
+          licenses={currentLicenses}
+          showActions
+          emptyMessage="No active licenses — issue one above."
+        />
+      </section>
+
+      {historyLicenses.length > 0 && (
+        <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
+          <h2 className="text-sm font-medium text-zinc-400">Licence history ({historyLicenses.length})</h2>
+          <LicenseTable licenses={historyLicenses} showActions={false} emptyMessage="" />
+        </section>
+      )}
+
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-zinc-300">Notes</h2>
           {user.notesLastEditedAt && (
@@ -295,128 +457,6 @@ export default async function AdminUserDetailPage({
         </div>
         <div className="mt-3">
           <ConfigSummaryForm action={updateConfigSummaryAction} userId={user.userId} value={configSummary} showPaste />
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
-        <h2 className="text-sm font-medium text-emerald-400">Licenses ({user.licenses.length})</h2>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-zinc-500">
-              <tr>
-                <th className="pb-2 pr-4">License ID</th>
-                <th className="pb-2 pr-4">Key</th>
-                <th className="pb-2 pr-4">Status</th>
-                <th className="pb-2 pr-4">Lifecycle</th>
-                <th className="pb-2 pr-4">Tier</th>
-                <th className="pb-2 pr-4">Feeds</th>
-                <th className="pb-2 pr-4">Issued</th>
-                <th className="pb-2 pr-4">Expires</th>
-                <th className="pb-2 pr-4">HWID</th>
-                <th className="pb-2 pr-4">Last verified</th>
-                <th className="pb-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800">
-              {user.licenses.map((l) => (
-                <tr key={l.id}>
-                  <td className="py-2 pr-4 font-mono text-xs text-zinc-600">{l.id.slice(0, 8)}…</td>
-                  <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
-                    <span className="flex items-center gap-1.5">
-                      <span className="rounded-full border border-cyan-500/50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
-                        HH{l.licenseNumber}
-                      </span>
-                      {maskLicenseKey(l.licenseKey)}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-4">
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${STATUS_STYLES[l.computedStatus]}`}
-                    >
-                      {l.computedStatus.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-4 text-zinc-500 text-xs">{l.lifecycleState ?? "—"}</td>
-                  <td className="py-2 pr-4 text-zinc-400">{l.tier}</td>
-                  <td className="py-2 pr-4">
-                    <div className="flex flex-wrap gap-1">
-                      {l.feedTypes.length === 0 ? (
-                        <span className="text-xs text-zinc-600">—</span>
-                      ) : (
-                        l.feedTypes.map((f) => (
-                          <span
-                            key={f}
-                            className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300"
-                          >
-                            {FEED_TYPE_META[f].name}
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-2 pr-4 text-zinc-400">{formatRelative(l.issuedAt)}</td>
-                  <td className="py-2 pr-4 text-zinc-400">
-                    {formatAbsoluteUtc(l.expiresAt)}{" "}
-                    <span className="text-zinc-600">({formatRelative(l.expiresAt)})</span>
-                  </td>
-                  <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
-                    {l.hardwareId ? `${l.hardwareId.slice(0, 4)}…` : "—"}
-                  </td>
-                  <td className="py-2 pr-4 text-zinc-400">
-                    {l.lastVerifiedAt ? formatRelative(l.lastVerifiedAt) : "never"}
-                  </td>
-                  <td className="py-2">
-                    {(l.computedStatus === "active" || l.computedStatus === "expiring") && (
-                      <div className="flex flex-wrap gap-2">
-                        <ActionButton
-                          action={expireNowAction}
-                          hiddenFields={{ licenseId: l.id }}
-                          label="Trigger expire now"
-                          successMessage="License expired"
-                        />
-                        <DurationForm
-                          action={extendLicenseAction}
-                          hiddenFields={{ licenseId: l.id }}
-                          submitLabel="Apply"
-                          successMessage="License extended"
-                          compact
-                          triggerLabel="Extend"
-                          showExtendFrom
-                          defaultAmount={30}
-                          defaultUnit="days"
-                          triggerClassName="cursor-pointer select-none rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
-                        />
-                        <FeedSelectForm
-                          action={updateLicenseFeedsAction}
-                          hiddenFields={{ licenseId: l.id }}
-                          currentFeedTypes={l.feedTypes}
-                        />
-                        <TierSelectForm
-                          action={setUserLicenseTierAction}
-                          hiddenFields={{ licenseId: l.id }}
-                          currentTier={l.tier}
-                        />
-                        <ActionButton
-                          action={revokeAction}
-                          hiddenFields={{ licenseId: l.id }}
-                          label="Revoke"
-                          successMessage="License revoked"
-                          className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
-                        />
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {user.licenses.length === 0 && (
-                <tr>
-                  <td colSpan={11} className="py-4 text-center text-zinc-500">
-                    No licenses yet — issue one above.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </div>
       </section>
 
