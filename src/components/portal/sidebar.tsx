@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import type { PanelLink } from "@/lib/user-roles";
+import type { PanelKey, PanelLink } from "@/lib/user-roles";
 import {
   LayoutDashboard,
   Download,
@@ -35,8 +35,22 @@ import {
   Handshake,
   UserPlus,
   ClipboardCheck,
+  User,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
+
+// Panel-switcher icons, keyed by PanelLink.key (a plain string -- not the icon itself,
+// which is a component reference and can't cross the Server->Client prop boundary that
+// switchablePanels is built across; see leo-panel-switcher-icon-boundary-fix-2026-09-01).
+// Reads as the role, not the product -- matches the icon already used for that role
+// elsewhere in the sidebar (Handshake on "Partners", SatelliteDish on "Providers").
+const PANEL_ICON: Record<PanelKey, LucideIcon> = {
+  portal: User,
+  partner: Handshake,
+  feed: SatelliteDish,
+  admin: Shield,
+};
 
 export type PortalTier = "free" | "trial" | "paid" | "team" | "admin";
 
@@ -204,18 +218,25 @@ export function PortalSidebar({
           role="group"
           aria-label="Switch panel"
         >
-          {switchablePanels.map((panel) =>
-            panel.key === "portal" ? (
+          {switchablePanels.map((panel) => {
+            const Icon = PANEL_ICON[panel.key];
+            const row = (
+              <span className="psrow">
+                <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
+                <span className="lbl">{panel.label}</span>
+              </span>
+            );
+            return panel.key === "portal" ? (
               <span key={panel.key} className="panel-seg active" aria-current="page">
-                {panel.label}
+                {row}
               </span>
             ) : (
               <a key={panel.key} className="panel-seg" href={panel.href}>
-                {panel.label}
+                {row}
                 <span className="arrow" aria-hidden="true">↗</span>
               </a>
-            )
-          )}
+            );
+          })}
         </div>
       )}
       <nav className={`nav${isPaidPlus ? " paid-theme" : ""}`}>

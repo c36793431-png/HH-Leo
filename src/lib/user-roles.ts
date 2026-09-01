@@ -27,10 +27,12 @@ export const PANEL_HOST: Record<PanelKey, string> = {
   admin: "portal.horizonhft.com",
 };
 
+// "Panel" -> "Portal" per coxwell's switcher-consistency ask (2026-09-01) -- role name stays
+// the differentiator, "Member Portal" is left as-is pending his Member vs Horizon/User call.
 const PANEL_LABEL: Record<PanelKey, string> = {
   portal: "Member Portal",
-  partner: "Partner Panel",
-  feed: "Feed Provider Panel",
+  partner: "Partner Portal",
+  feed: "Feed Provider Portal",
   admin: "Admin Panel",
 };
 
