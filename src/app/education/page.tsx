@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getOtherPanels } from "@/lib/user-roles";
+import { getReachablePanels } from "@/lib/user-roles";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -10,7 +10,7 @@ import { EDUCATION_CATEGORIES, EDUCATION_LESSONS } from "@/lib/education";
 export default async function EducationPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getOtherPanels(session.user.roles, "portal");
+  const switchablePanels = getReachablePanels(session.user.roles);
 
   const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
   const isAdmin = isAdminUser(session.user);

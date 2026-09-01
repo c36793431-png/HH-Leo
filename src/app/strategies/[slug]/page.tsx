@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { getOtherPanels } from "@/lib/user-roles";
+import { getReachablePanels } from "@/lib/user-roles";
 import {
   isPaidUser,
   getActiveLicenseDetailsForUser,
@@ -31,7 +31,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
 
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getOtherPanels(session.user.roles, "portal");
+  const switchablePanels = getReachablePanels(session.user.roles);
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, config, setfiles, activeLicenses] = await Promise.all([

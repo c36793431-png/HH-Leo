@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getOtherPanels } from "@/lib/user-roles";
+import { getReachablePanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -10,7 +10,7 @@ import { LockedLanding } from "@/components/portal/locked-landing";
 export default async function BrokersPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getOtherPanels(session.user.roles, "portal");
+  const switchablePanels = getReachablePanels(session.user.roles);
 
   const [paid, activeLicenses, config] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),

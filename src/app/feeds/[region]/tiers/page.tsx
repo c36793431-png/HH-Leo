@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { getOtherPanels } from "@/lib/user-roles";
+import { getReachablePanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
@@ -94,7 +94,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
 
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getOtherPanels(session.user.roles, "portal");
+  const switchablePanels = getReachablePanels(session.user.roles);
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [tiers, otherRegions, activeLicenses] = await Promise.all([

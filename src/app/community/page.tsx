@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getOtherPanels } from "@/lib/user-roles";
+import { getReachablePanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
@@ -30,7 +30,7 @@ function formatMemberCount(count: number | null): string | null {
 export default async function CommunityPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getOtherPanels(session.user.roles, "portal");
+  const switchablePanels = getReachablePanels(session.user.roles);
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, activeLicenses, config, telegramStatus, groupMembershipStatus, freeGroupMembershipStatus, botUsername, hftAlertBotUsername] =

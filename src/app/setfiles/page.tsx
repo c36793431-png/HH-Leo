@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getOtherPanels } from "@/lib/user-roles";
+import { getReachablePanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -30,7 +30,7 @@ function groupSetfiles(rows: SetfileRow[]): { key: StrategyKey; label: string; r
 export default async function SetfilesPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getOtherPanels(session.user.roles, "portal");
+  const switchablePanels = getReachablePanels(session.user.roles);
 
   const [paid, activeLicenses, config, setfiles] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),

@@ -93,6 +93,26 @@
 .portal-shell .host-switch .host-seg.active.feed { background: rgba(45, 212, 191, 0.16); color: #2dd4bf; }
 .portal-shell .host-switch .host-seg.active.portal { background: rgba(45, 226, 230, 0.16); color: var(--hz-cyan); }
 
+/* Member-side panel switcher — same visual family as .host-switch above, but the
+   current panel (always "portal" here) is always one of the segments rather than a
+   fixed two-way toggle, so it needs a stacked variant once a third panel joins. */
+.portal-shell .panel-switch {
+  margin: 0 22px 16px; padding: 3px; gap: 2px;
+  background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hz-line-soft); border-radius: 10px;
+}
+.portal-shell .panel-switch.seg { display: flex; }
+.portal-shell .panel-switch.stack { display: flex; flex-direction: column; }
+.portal-shell .panel-switch .panel-seg {
+  border-radius: 8px;
+  font-family: var(--hz-sans); font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--hz-ink-3); text-decoration: none; transition: background 0.12s, color 0.12s;
+}
+.portal-shell .panel-switch.seg .panel-seg { flex: 1; text-align: center; padding: 7px 0; }
+.portal-shell .panel-switch.stack .panel-seg { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; }
+.portal-shell .panel-switch a.panel-seg:hover { background: rgba(255, 255, 255, 0.05); color: var(--hz-ink-2); }
+.portal-shell .panel-switch .panel-seg .arrow { margin-left: 4px; opacity: 0.6; }
+.portal-shell .panel-switch .panel-seg.active { background: rgba(45, 226, 230, 0.16); color: var(--hz-cyan); }
+
 .portal-shell .nav { flex: 1; overflow-y: auto; padding: 6px 14px; }
 .portal-shell .nav .grp { font-size: 10px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hz-ink-4); padding: 16px 12px 8px; }
 .portal-shell .nav a {
@@ -156,15 +176,6 @@
 }
 
 .portal-shell .side-foot { padding: 14px; border-top: 1px solid var(--hz-line-soft); }
-.portal-shell .panel-switch { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
-.portal-shell .panel-switch-link {
-  display: flex; align-items: center; justify-content: space-between; padding: 7px 10px;
-  border-radius: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hz-line-soft);
-  font-family: var(--hz-sans); font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
-  color: var(--hz-ink-2); text-decoration: none; transition: background 0.12s, color 0.12s;
-}
-.portal-shell .panel-switch-link:hover { background: rgba(255, 255, 255, 0.06); color: var(--hz-cyan); }
-.portal-shell .panel-switch-link .arrow { opacity: 0.6; }
 .portal-shell .acct { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 10px; }
 .portal-shell button.acct { width: 100%; border: none; background: transparent; cursor: pointer; text-align: left; }
 .portal-shell .acct:hover { background: rgba(45, 226, 230, 0.06); }

@@ -136,9 +136,10 @@ export function PortalSidebar({
   /** True when the user holds active licenses at more than one tier, so `tier` (the
    * highest of them) is only part of the picture — see computePortalTierFromLicenses. */
   hasOtherActiveTiers?: boolean;
-  /** Other panels this account can reach (partner/feed-provider), from
-   * getOtherPanels(session.user.roles, "portal") — empty for the vast majority
-   * of accounts that hold only one role (user-roles-migration-2026-09-01 step 2). */
+  /** Every panel this account can reach, portal included, from
+   * getReachablePanels(session.user.roles) — always at least [portal], so a
+   * length of 1 means no switcher renders at all (user-roles-migration-2026-09-01
+   * step 2; placement moved to top-of-sidebar per portal-panel-switcher-placement-2026-09-01). */
   switchablePanels?: PanelLink[];
 }) {
   const pathname = usePathname();
@@ -193,6 +194,26 @@ export function PortalSidebar({
             <a className="host-seg" href="https://portal.horizonhft.com/admin/dashboard">
               Portal<span className="arrow" aria-hidden="true">↗</span>
             </a>
+          )}
+        </div>
+      )}
+      {!isAdmin && switchablePanels.length > 1 && (
+        <div
+          className={`panel-switch${switchablePanels.length === 2 ? " seg" : " stack"}`}
+          role="group"
+          aria-label="Switch panel"
+        >
+          {switchablePanels.map((panel) =>
+            panel.key === "portal" ? (
+              <span key={panel.key} className="panel-seg active" aria-current="page">
+                {panel.label}
+              </span>
+            ) : (
+              <a key={panel.key} className="panel-seg" href={panel.href}>
+                {panel.label}
+                <span className="arrow" aria-hidden="true">↗</span>
+              </a>
+            )
           )}
         </div>
       )}
@@ -268,16 +289,6 @@ export function PortalSidebar({
         )}
       </nav>
       <div className="side-foot">
-        {switchablePanels.length > 0 && (
-          <div className="panel-switch" role="group" aria-label="Switch panel">
-            {switchablePanels.map((panel) => (
-              <a key={panel.key} className="panel-switch-link" href={panel.href}>
-                {panel.label}
-                <span className="arrow" aria-hidden="true">↗</span>
-              </a>
-            ))}
-          </div>
-        )}
         <Link href="/account" className={`acct${tierClass ? ` ${tierClass}-acct` : ""}`}>
           <div className="av">{initial}</div>
           <div className="who">

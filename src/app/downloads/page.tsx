@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getOtherPanels } from "@/lib/user-roles";
+import { getReachablePanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getLatestDownloads, type LatestDownloads } from "@/lib/downloads";
 import { DownloadButton } from "@/components/download-button";
@@ -17,7 +17,7 @@ function formatSize(bytes: number): string {
 export default async function DownloadsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getOtherPanels(session.user.roles, "portal");
+  const switchablePanels = getReachablePanels(session.user.roles);
 
   const paid = await isPaidUser(session.user.id).catch(() => false);
   const isAdmin = isAdminUser(session.user);

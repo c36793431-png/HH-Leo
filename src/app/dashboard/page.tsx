@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getOtherPanels } from "@/lib/user-roles";
+import { getReachablePanels } from "@/lib/user-roles";
 import {
   isPaidUser,
   getLatestIssuedLicenseForUser,
@@ -37,7 +37,7 @@ const DASHBOARD_ALERTS_LIMIT = 10;
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getOtherPanels(session.user.roles, "portal");
+  const switchablePanels = getReachablePanels(session.user.roles);
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, config, telegramStatus, groupMembershipStatus, botUsername, downloads, feedTierCounts, feedBestLatency] =

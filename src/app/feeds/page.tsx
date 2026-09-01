@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getOtherPanels } from "@/lib/user-roles";
+import { getReachablePanels } from "@/lib/user-roles";
 import {
   isPaidUser,
   getActiveLicenseDetailsForUser,
@@ -34,7 +34,7 @@ const STATUS_LABEL: Record<FeedCardStatus, string> = {
 export default async function FeedsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getOtherPanels(session.user.roles, "portal");
+  const switchablePanels = getReachablePanels(session.user.roles);
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, config, activeLicenses] = await Promise.all([
