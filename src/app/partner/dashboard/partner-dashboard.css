@@ -74,15 +74,24 @@
    expanded .ws-list drops out of flow as a dropdown under the trigger. */
 .partner-dash .ws-group { position: relative; }
 .partner-dash .ws-card { background: var(--pd-raise); border: 1px solid var(--pd-line); border-radius: 12px; }
+/* Compact trigger: the collapsed disclosure has to sit inside the 74px (64px
+   on mobile) horizontal pd-nav bar, unlike the sidebar surfaces which have a
+   full-height rail to lay the stacked card out in. Fixed line-heights replace
+   the sidebar variant's default line-heights so the row math is exact instead
+   of relying on font-metric guesswork. The expanded .ws-list dropdown is
+   unaffected -- it isn't nav-height constrained. */
 .partner-dash .ws-trigger {
-  width: 220px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px;
+  width: 220px; padding: 6px 12px; display: flex; flex-direction: column; gap: 2px;
   font: inherit; color: inherit; text-align: left; cursor: pointer;
 }
 .partner-dash .ws-trigger-top { display: flex; align-items: center; justify-content: space-between; }
-.partner-dash .ws-eyebrow { font-size: 9.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pd-ink-4); }
+.partner-dash .ws-eyebrow { font-size: 9.5px; line-height: 1; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pd-ink-4); }
 .partner-dash .ws-caret { color: var(--pd-ink-3); transition: transform 0.15s ease; flex: 0 0 auto; }
 .partner-dash .ws-caret.open { transform: rotate(180deg); }
-.partner-dash .ws-row { display: flex; align-items: center; gap: 8px; }
+.partner-dash .ws-trigger .ws-row { display: flex; align-items: center; gap: 8px; }
+.partner-dash .ws-trigger .ws-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pd-ok); box-shadow: 0 0 8px var(--pd-ok); flex: 0 0 auto; }
+.partner-dash .ws-trigger .ws-name { font-size: 13px; line-height: 1; font-weight: 600; color: var(--pd-ink); }
+.partner-dash .ws-trigger .ws-domain { display: block; margin-top: 1px; margin-left: 15px; font-family: var(--pd-mono); font-size: 10.5px; line-height: 1; color: var(--pd-ink-3); }
 .partner-dash .ws-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pd-ok); box-shadow: 0 0 8px var(--pd-ok); flex: 0 0 auto; }
 .partner-dash .ws-name { font-size: 13px; font-weight: 600; color: var(--pd-ink); }
 .partner-dash .ws-domain { display: block; margin-top: 2px; margin-left: 15px; font-family: var(--pd-mono); font-size: 10.5px; color: var(--pd-ink-3); }
