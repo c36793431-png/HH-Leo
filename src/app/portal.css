@@ -156,6 +156,15 @@
 }
 
 .portal-shell .side-foot { padding: 14px; border-top: 1px solid var(--hz-line-soft); }
+.portal-shell .panel-switch { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.portal-shell .panel-switch-link {
+  display: flex; align-items: center; justify-content: space-between; padding: 7px 10px;
+  border-radius: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hz-line-soft);
+  font-family: var(--hz-sans); font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--hz-ink-2); text-decoration: none; transition: background 0.12s, color 0.12s;
+}
+.portal-shell .panel-switch-link:hover { background: rgba(255, 255, 255, 0.06); color: var(--hz-cyan); }
+.portal-shell .panel-switch-link .arrow { opacity: 0.6; }
 .portal-shell .acct { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 10px; }
 .portal-shell button.acct { width: 100%; border: none; background: transparent; cursor: pointer; text-align: left; }
 .portal-shell .acct:hover { background: rgba(45, 226, 230, 0.06); }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import {
   isPaidUser,
   getActiveLicenseDetailsForUser,
@@ -33,6 +34,7 @@ const STATUS_LABEL: Record<FeedCardStatus, string> = {
 export default async function FeedsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, config, activeLicenses] = await Promise.all([
@@ -53,7 +55,7 @@ export default async function FeedsPage() {
   const userEmail = session.user.email ?? "";
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <div className="comm-head">
         <h1>Feeds</h1>
         <p>Every signal feed we run — what you have, what&apos;s included, and what&apos;s next.</p>

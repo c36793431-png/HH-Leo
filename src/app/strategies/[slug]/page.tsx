@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import {
   isPaidUser,
   getActiveLicenseDetailsForUser,
@@ -30,6 +31,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
 
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, config, setfiles, activeLicenses] = await Promise.all([
@@ -54,7 +56,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   const recommendedFeed = FEED_CATALOGUE.find((f) => f.slug === meta.recommendedFeedSlug) ?? null;
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <div className="comm-head">
         <Link href="/strategies" className="btn ghost sm" style={{ marginBottom: 12, display: "inline-block" }}>
           ← All strategies

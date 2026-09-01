@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { getLatestIssuedLicenseForUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
@@ -13,6 +14,7 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 export default async function AccountPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
 
   const [config, telegramRow, botUsername] = await Promise.all([
     getPortalConfig(),
@@ -41,7 +43,7 @@ export default async function AccountPage() {
   const userEmail = session.user.email ?? "";
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <div className="grid">
         <div className="card full">
           <div className="chead">

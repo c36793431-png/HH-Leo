@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import {
   isPaidUser,
   getLatestIssuedLicenseForUser,
@@ -36,6 +37,7 @@ const DASHBOARD_ALERTS_LIMIT = 10;
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, config, telegramStatus, groupMembershipStatus, botUsername, downloads, feedTierCounts, feedBestLatency] =
@@ -149,7 +151,7 @@ export default async function DashboardPage() {
   const unlocked = paid || isAdmin;
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       {isExpired && (
         <div className="banner grey">
           <span className="bic">⏱</span>

@@ -67,6 +67,14 @@
 }
 .partner-dash .pd-nav .sp { flex: 1; }
 .partner-dash .pd-nav-acct { display: flex; align-items: center; gap: 14px; }
+.partner-dash .pd-panel-switch { display: flex; gap: 6px; }
+.partner-dash .pd-panel-switch-link {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
+  border: 1px solid var(--pd-line); font-size: 12px; font-weight: 600; color: var(--pd-ink-2);
+  text-decoration: none; transition: color 0.12s, border-color 0.12s;
+}
+.partner-dash .pd-panel-switch-link:hover { color: var(--pd-ink); border-color: rgba(45, 226, 230, 0.16); }
+.partner-dash .pd-panel-switch-link .arrow { opacity: 0.6; }
 .partner-dash .pd-acct-chip {
   display: flex; align-items: center; gap: 11px; padding: 6px 8px 6px 6px; border-radius: 999px;
   border: 1px solid var(--pd-amber-line); background: var(--pd-amber-soft);
@@ -234,6 +242,7 @@
   .partner-dash .pd-brand .txt { font-size: 19px; }
   .partner-dash .pd-acct-chip .who { display: none; }
   .partner-dash .pd-signout span { display: none; }
+  .partner-dash .pd-panel-switch-link .label { display: none; }
   .partner-dash .pd-content { padding: 24px 16px 50px; }
   .partner-dash .pd-hero h1 { font-size: 27px; }
   .partner-dash .pd-hero .h-cta { margin-left: 0; width: 100%; }

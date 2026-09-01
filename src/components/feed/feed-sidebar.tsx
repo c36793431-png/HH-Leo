@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import type { PanelLink } from "@/lib/user-roles";
 
 const NAV = [
   { href: "/feed/dashboard", label: "Overview", ic: "▨" },
@@ -20,12 +21,17 @@ export function FeedSidebar({
   providerEmail,
   pendingCount,
   role,
+  otherPanels = [],
   signOutButton,
 }: {
   providerLabel: string;
   providerEmail: string | null;
   pendingCount: number;
   role: string;
+  /** Other panels this account can reach (member portal / partner panel), from
+   * getOtherPanels(session.user.roles, "feed") — empty for the vast majority
+   * of accounts that hold only the feed_provider role. */
+  otherPanels?: PanelLink[];
   signOutButton: ReactNode;
 }) {
   const pathname = usePathname();
@@ -59,6 +65,16 @@ export function FeedSidebar({
         </span>
       </nav>
       <div className="fp-side-foot">
+        {otherPanels.length > 0 && (
+          <div className="fp-panel-switch" role="group" aria-label="Switch panel">
+            {otherPanels.map((panel) => (
+              <a key={panel.key} className="fp-panel-switch-link" href={panel.href}>
+                {panel.label}
+                <span className="arrow" aria-hidden="true">↗</span>
+              </a>
+            ))}
+          </div>
+        )}
         <div className="fp-acct">
           <div className="av">{initial}</div>
           <div className="who">

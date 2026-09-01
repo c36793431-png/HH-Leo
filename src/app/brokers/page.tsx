@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -9,6 +10,7 @@ import { LockedLanding } from "@/components/portal/locked-landing";
 export default async function BrokersPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
 
   const [paid, activeLicenses, config] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
@@ -23,7 +25,7 @@ export default async function BrokersPage() {
   const userEmail = session.user.email ?? "";
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <div className="grid">
         <div className="card full">
           <div className="chead">

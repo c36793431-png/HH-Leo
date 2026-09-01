@@ -5,6 +5,9 @@ declare module "next-auth" {
     user: {
       id: string;
       role?: string;
+      /** Every role held in user_roles, not just the display value above --
+       * see src/lib/user-roles.ts. */
+      roles?: string[];
       telegramUserId?: string;
     } & DefaultSession["user"];
   }
@@ -18,6 +21,7 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     role?: string;
+    roles?: string[];
     telegramUserId?: string;
   }
 }

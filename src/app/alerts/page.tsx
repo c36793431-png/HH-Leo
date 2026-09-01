@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getRecentAlertsForUser, countDistinctAlertLicenses } from "@/lib/trading-alerts";
 import { RecentAlertsPanel } from "@/components/recent-alerts-panel";
@@ -11,6 +12,7 @@ const FULL_HISTORY_LIMIT = 100;
 export default async function AlertsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
 
   const paid = await isPaidUser(session.user.id).catch(() => false);
   const isAdmin = isAdminUser(session.user);
@@ -27,7 +29,7 @@ export default async function AlertsPage() {
   const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <RecentAlertsPanel
         alerts={alerts}
         showLicenseTag={distinctAlertLicenses > 1}

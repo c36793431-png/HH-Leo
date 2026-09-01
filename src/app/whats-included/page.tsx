@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -64,6 +65,7 @@ const STRATEGIES: Array<{ slug: string; title: string; headings: string[] }> = [
 export default async function WhatsIncludedPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
 
   const [activeLicenses, config] = await Promise.all([
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
@@ -91,7 +93,7 @@ export default async function WhatsIncludedPage() {
   const licensingBlocks = pickBlocks("getting-started", ["20-Character License Key", "Hardware Lock"]);
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <div className="edu-hero">
         <div className="eyebrow">What&apos;s Included</div>
         <h2>The Horizon HFT terminal</h2>

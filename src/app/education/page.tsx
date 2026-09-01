@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -9,6 +10,7 @@ import { EDUCATION_CATEGORIES, EDUCATION_LESSONS } from "@/lib/education";
 export default async function EducationPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
 
   const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
   const isAdmin = isAdminUser(session.user);
@@ -22,7 +24,7 @@ export default async function EducationPage() {
   const freeCount = EDUCATION_LESSONS.filter((l) => l.free).length;
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <div className="edu-hero">
         <div className="eyebrow">Horizon Academy</div>
         <h2>Learn to trade with Horizon HFT</h2>

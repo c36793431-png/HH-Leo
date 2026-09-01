@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses, type LicenseDetail } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -64,6 +65,7 @@ function ServerCard({ license, registration, blackTrial, verified, showLicenseLa
 export default async function ServersPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
 
   const [paid, licenses, config] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
@@ -111,7 +113,7 @@ export default async function ServersPage() {
     : null;
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <Link href="/feeds" className="btn ghost sm" style={{ marginBottom: 12, display: "inline-block" }}>
         ← All feeds
       </Link>

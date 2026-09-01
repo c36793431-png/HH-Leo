@@ -5,6 +5,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { isAdminUser, isPartnerUser } from "@/lib/admin-users-panel";
 import { getPendingPartnerApplicationForUser } from "@/lib/partner-applications";
+import { getOtherPanels } from "@/lib/user-roles";
 import { SignOutButton } from "@/components/sign-out-button";
 import "./partner-dashboard.css";
 
@@ -48,6 +49,7 @@ export default async function PartnerDashboardLayout({ children }: { children: R
   }
 
   const label = session.user.name?.trim() || session.user.email?.trim() || "Partner";
+  const otherPanels = getOtherPanels(session.user.roles, "partner");
 
   return (
     <div className="partner-dash">
@@ -67,6 +69,16 @@ export default async function PartnerDashboardLayout({ children }: { children: R
           </Link>
           <span className="sp" />
           <div className="pd-nav-acct">
+            {otherPanels.length > 0 && (
+              <div className="pd-panel-switch" role="group" aria-label="Switch panel">
+                {otherPanels.map((panel) => (
+                  <a key={panel.key} className="pd-panel-switch-link" href={panel.href}>
+                    <span className="label">{panel.label}</span>
+                    <span className="arrow" aria-hidden="true">↗</span>
+                  </a>
+                ))}
+              </div>
+            )}
             <div className="pd-acct-chip">
               <span className="av">{initial(label)}</span>
               <span className="who">

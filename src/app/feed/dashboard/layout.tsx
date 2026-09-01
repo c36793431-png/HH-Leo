@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { isAdminUser, isFeedProviderUser } from "@/lib/admin-users-panel";
 import { listPendingRequestsForProvider } from "@/lib/feed-providers";
+import { getOtherPanels } from "@/lib/user-roles";
 import { FeedSidebar } from "@/components/feed/feed-sidebar";
 import { FeedNavScrim } from "@/components/feed/feed-nav-toggle";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -54,6 +55,7 @@ export default async function FeedDashboardLayout({ children }: { children: Reac
           providerEmail={session.user.email ?? null}
           pendingCount={pending.length}
           role={session.user.role ?? "user"}
+          otherPanels={getOtherPanels(session.user.roles, "feed")}
           signOutButton={<SignOutButton className="btn ghost sm fp-signout" redirectTo="/" />}
         />
         <main className="fp-main">{children}</main>

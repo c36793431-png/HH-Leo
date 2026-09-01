@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { PortalSidebar, type AdminSurface, type PortalTier } from "./sidebar";
 import { PortalTopbar } from "./topbar";
+import type { PanelLink } from "@/lib/user-roles";
 
 export function PortalShell({
   tier,
@@ -12,6 +13,7 @@ export function PortalShell({
   adminSurface,
   pendingApplicationsCount,
   hasOtherActiveTiers,
+  switchablePanels,
   children,
 }: {
   tier: PortalTier;
@@ -21,6 +23,7 @@ export function PortalShell({
   adminSurface?: AdminSurface;
   pendingApplicationsCount?: number;
   hasOtherActiveTiers?: boolean;
+  switchablePanels?: PanelLink[];
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
@@ -37,6 +40,7 @@ export function PortalShell({
           adminSurface={adminSurface}
           pendingApplicationsCount={pendingApplicationsCount}
           hasOtherActiveTiers={hasOtherActiveTiers}
+          switchablePanels={switchablePanels}
         />
         <main className="main">
           <PortalTopbar isAdmin={isAdmin} adminSurface={adminSurface} onBurgerClick={() => setNavOpen((v) => !v)} />

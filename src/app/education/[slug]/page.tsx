@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -13,6 +14,7 @@ export default async function EducationLessonPage({ params }: { params: Promise<
 
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
 
   const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
   const isAdmin = isAdminUser(session.user);
@@ -24,7 +26,7 @@ export default async function EducationLessonPage({ params }: { params: Promise<
   const isPaidTier = false;
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <LessonDetail lesson={lesson} isPaidTier={isPaidTier} />
       <div className="foot">HORIZON HFT · customer portal</div>
     </PortalShell>

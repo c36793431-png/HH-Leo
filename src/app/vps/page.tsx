@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -82,9 +83,10 @@ export default async function VpsPage() {
   const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <VpsContent />
       <div className="foot">HORIZON HFT · customer portal</div>
     </PortalShell>

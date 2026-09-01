@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
@@ -93,6 +94,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
 
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [tiers, otherRegions, activeLicenses] = await Promise.all([
@@ -159,7 +161,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const countryCode = catalogueEntry?.countryCode ?? "";
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <div className="comm-head">
         <Link href="/feeds" className="btn ghost sm" style={{ marginBottom: 12, display: "inline-block" }}>
           ← All feeds

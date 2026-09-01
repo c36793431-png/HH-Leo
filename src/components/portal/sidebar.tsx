@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import type { PanelLink } from "@/lib/user-roles";
 import {
   LayoutDashboard,
   Download,
@@ -122,6 +123,7 @@ export function PortalSidebar({
   adminSurface = "portal",
   pendingApplicationsCount = 0,
   hasOtherActiveTiers = false,
+  switchablePanels = [],
 }: {
   tier: PortalTier;
   isAdmin: boolean;
@@ -134,6 +136,10 @@ export function PortalSidebar({
   /** True when the user holds active licenses at more than one tier, so `tier` (the
    * highest of them) is only part of the picture — see computePortalTierFromLicenses. */
   hasOtherActiveTiers?: boolean;
+  /** Other panels this account can reach (partner/feed-provider), from
+   * getOtherPanels(session.user.roles, "portal") — empty for the vast majority
+   * of accounts that hold only one role (user-roles-migration-2026-09-01 step 2). */
+  switchablePanels?: PanelLink[];
 }) {
   const pathname = usePathname();
   const initial = (userName.trim()[0] ?? "?").toUpperCase();
@@ -262,6 +268,16 @@ export function PortalSidebar({
         )}
       </nav>
       <div className="side-foot">
+        {switchablePanels.length > 0 && (
+          <div className="panel-switch" role="group" aria-label="Switch panel">
+            {switchablePanels.map((panel) => (
+              <a key={panel.key} className="panel-switch-link" href={panel.href}>
+                {panel.label}
+                <span className="arrow" aria-hidden="true">↗</span>
+              </a>
+            ))}
+          </div>
+        )}
         <Link href="/account" className={`acct${tierClass ? ` ${tierClass}-acct` : ""}`}>
           <div className="av">{initial}</div>
           <div className="who">

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -12,6 +13,7 @@ import { saveMyConfigSummaryAction, deleteMyConfigSummaryAction } from "./action
 export default async function MySetupPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
 
   const [paid, activeLicenses, configSummary, config] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
@@ -27,7 +29,7 @@ export default async function MySetupPage() {
   const unlocked = paid || isAdmin;
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <div className="grid">
         <div className="card full">
           <div className="chead">

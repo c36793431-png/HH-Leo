@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
 import { pool } from "@/lib/db";
@@ -29,6 +30,7 @@ function formatMemberCount(count: number | null): string | null {
 export default async function CommunityPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, activeLicenses, config, telegramStatus, groupMembershipStatus, freeGroupMembershipStatus, botUsername, hftAlertBotUsername] =
@@ -90,7 +92,7 @@ export default async function CommunityPage() {
   const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(false, activeLicenses);
 
   return (
-    <PortalShell tier={tier} isAdmin={false} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={false} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <div className="comm-head">
         <h1>Community</h1>
         <p>Three ways to plug in — pick the one that fits what you&apos;re after.</p>

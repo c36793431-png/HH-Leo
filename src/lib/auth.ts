@@ -10,6 +10,7 @@ import { getPortalConfig } from "./portal-config";
 import { notifyFreeSignup, notifyFirstLogin } from "./telemetry-sink";
 import { getOrCreateReferralCode } from "./referrals";
 import { attributeReferralFromCookie } from "./referrals-cookie";
+import { pickPrimaryRole } from "./user-roles";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 const FEED_HOST = "feed.horizonhft.com";
@@ -319,14 +320,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.telegramUserId = user.telegramUserId;
       }
 
-      // Re-read role from the DB on every refresh, not just at sign-in, so a
+      // Re-read roles from the DB on every refresh, not just at sign-in, so a
       // role flip (e.g. partner approval) takes effect without forcing the
       // user to log out/in first (bus thread
       // leo-partner-page-broken-auth-buttons-2026-08-22).
+      //
+      // Reads user_roles, not users.role (user-roles-migration-2026-09-01 step
+      // 2) -- a user can hold more than one role, and users.role alone can't
+      // show that. This replaces the previous single-row users query one-for-
+      // one rather than adding a second query alongside it.
       if (token.sub) {
-        const dbUser = await pool.query(`select role from users where id = $1`, [token.sub]);
-        if (dbUser.rows[0]?.role) {
-          token.role = dbUser.rows[0].role;
+        const roleRows = await pool.query<{ role: string }>(
+          `select role from user_roles where user_id = $1`,
+          [token.sub]
+        );
+        const roles = roleRows.rows.map((r) => r.role);
+        if (roles.length > 0) {
+          token.roles = roles;
+          token.role = pickPrimaryRole(roles);
         }
       }
       return token;
@@ -335,6 +346,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (session.user) {
         session.user.id = token.sub as string;
         session.user.role = (token.role as string) ?? "user";
+        session.user.roles = (token.roles as string[] | undefined) ?? [session.user.role];
         session.user.telegramUserId = token.telegramUserId as string | undefined;
       }
       return session;

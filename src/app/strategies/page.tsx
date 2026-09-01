@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { getOtherPanels } from "@/lib/user-roles";
 import {
   isPaidUser,
   getActiveLicenseDetailsForUser,
@@ -45,6 +46,7 @@ function pickRepresentative(rows: SetfileRow[] | undefined): SetfileRow | null {
 export default async function StrategiesPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const switchablePanels = getOtherPanels(session.user.roles, "portal");
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
   const [paid, config, setfiles, activeLicenses] = await Promise.all([
@@ -65,7 +67,7 @@ export default async function StrategiesPage() {
   const status = computeStrategyCardStatus({ paid, licenseTier: bestLicenseTier, isAdmin });
 
   return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers}>
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <div className="comm-head">
         <h1>Strategies</h1>
         <p>Every strategy Horizon runs — what it does, how it&apos;s tuned, and what feed it wants.</p>
