@@ -46,6 +46,20 @@ export function FeedSidebar({
           <small>PROVIDER PANEL</small>
         </div>
       </div>
+      {otherPanels.length > 0 && (
+        <div className="fp-panel-switch" role="group" aria-label="Switch panel">
+          {otherPanels.map((panel) => {
+            const Icon = panel.icon;
+            return (
+              <a key={panel.key} className="fp-panel-switch-link" href={panel.href}>
+                <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
+                <span className="label">{panel.label}</span>
+                <span className="arrow" aria-hidden="true">↗</span>
+              </a>
+            );
+          })}
+        </div>
+      )}
       <nav className="fp-nav">
         <div className="grp">Provider</div>
         {NAV.map((item) => {
@@ -65,16 +79,6 @@ export function FeedSidebar({
         </span>
       </nav>
       <div className="fp-side-foot">
-        {otherPanels.length > 0 && (
-          <div className="fp-panel-switch" role="group" aria-label="Switch panel">
-            {otherPanels.map((panel) => (
-              <a key={panel.key} className="fp-panel-switch-link" href={panel.href}>
-                {panel.label}
-                <span className="arrow" aria-hidden="true">↗</span>
-              </a>
-            ))}
-          </div>
-        )}
         <div className="fp-acct">
           <div className="av">{initial}</div>
           <div className="who">

@@ -4,6 +4,8 @@
  * per marcus's user-roles-migration-2026-09-01 step 2 instruction, this must
  * not become two divergent implementations of the same fact. */
 
+import { User, Handshake, SatelliteDish, Shield, type LucideIcon } from "lucide-react";
+
 export type HorizonRole = "user" | "admin" | "partner" | "feed_provider";
 
 // Priority order for picking the single "display" role (session.user.role) out
@@ -27,11 +29,22 @@ export const PANEL_HOST: Record<PanelKey, string> = {
   admin: "portal.horizonhft.com",
 };
 
+// "Panel" -> "Portal" per coxwell's switcher-consistency ask (2026-09-01) -- role name stays
+// the differentiator, "Member Portal" is left as-is pending his Member vs Horizon/User call.
 const PANEL_LABEL: Record<PanelKey, string> = {
   portal: "Member Portal",
-  partner: "Partner Panel",
-  feed: "Feed Provider Panel",
+  partner: "Partner Portal",
+  feed: "Feed Provider Portal",
   admin: "Admin Panel",
+};
+
+// Reads as the role, not the product -- matches the icon already used for that role elsewhere
+// in the sidebar (Handshake on "Partners", SatelliteDish on "Providers").
+const PANEL_ICON: Record<PanelKey, LucideIcon> = {
+  portal: User,
+  partner: Handshake,
+  feed: SatelliteDish,
+  admin: Shield,
 };
 
 const PANEL_PATH: Record<PanelKey, string> = {
@@ -41,10 +54,15 @@ const PANEL_PATH: Record<PanelKey, string> = {
   admin: "/admin/dashboard",
 };
 
-export type PanelLink = { key: PanelKey; label: string; href: string };
+export type PanelLink = { key: PanelKey; label: string; href: string; icon: LucideIcon };
 
 function panelLink(key: PanelKey): PanelLink {
-  return { key, label: PANEL_LABEL[key], href: `https://${PANEL_HOST[key]}${PANEL_PATH[key]}` };
+  return {
+    key,
+    label: PANEL_LABEL[key],
+    href: `https://${PANEL_HOST[key]}${PANEL_PATH[key]}`,
+    icon: PANEL_ICON[key],
+  };
 }
 
 /** Every panel this set of roles unlocks. Every signed-in user reaches the

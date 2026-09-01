@@ -204,18 +204,25 @@ export function PortalSidebar({
           role="group"
           aria-label="Switch panel"
         >
-          {switchablePanels.map((panel) =>
-            panel.key === "portal" ? (
+          {switchablePanels.map((panel) => {
+            const Icon = panel.icon;
+            const row = (
+              <span className="psrow">
+                <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
+                <span className="lbl">{panel.label}</span>
+              </span>
+            );
+            return panel.key === "portal" ? (
               <span key={panel.key} className="panel-seg active" aria-current="page">
-                {panel.label}
+                {row}
               </span>
             ) : (
               <a key={panel.key} className="panel-seg" href={panel.href}>
-                {panel.label}
+                {row}
                 <span className="arrow" aria-hidden="true">↗</span>
               </a>
-            )
-          )}
+            );
+          })}
         </div>
       )}
       <nav className={`nav${isPaidPlus ? " paid-theme" : ""}`}>
