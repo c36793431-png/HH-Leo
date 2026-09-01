@@ -82,7 +82,7 @@ export default auth(async (req) => {
     // 2026-08-24). Exact-match allowlist, not a prefix -- a bare "/admin" prefix would also
     // pass through /admin/users and /admin/finance, which are portal-only and must stay
     // 404 on this host (marcus-approved list, feed-admin-dashboard-build-2026-08-24).
-    const ADMIN_FEED_ROUTES = ["/admin", "/admin/revenue", "/admin/providers", "/admin/feed-health", "/admin/provider-applications", "/admin/register-provider"];
+    const ADMIN_FEED_ROUTES = ["/admin", "/admin/revenue", "/admin/providers", "/admin/feed-health", "/admin/provider-applications", "/admin/register-provider", "/admin/feed-requests", "/admin/feed-tier-requests", "/admin/feed-tier-trials", "/admin/black-trials"];
     const isAdminFeedRoute =
       ADMIN_FEED_ROUTES.includes(pathname) || pathname.startsWith("/admin/provider-applications/");
     const isStaticAsset = /\.[a-zA-Z0-9]+$/.test(pathname);
@@ -132,7 +132,7 @@ export default auth(async (req) => {
     // "/admin" is excluded: that route file host-branches internally and is legitimately dual-host.
     // Checked after the 403 above so a non-admin still gets Forbidden, not a 404 that leaks which
     // admin routes exist.
-    const FEED_ONLY_ADMIN_ROUTES = ["/admin/revenue", "/admin/providers", "/admin/feed-health", "/admin/provider-applications", "/admin/register-provider"];
+    const FEED_ONLY_ADMIN_ROUTES = ["/admin/revenue", "/admin/providers", "/admin/feed-health", "/admin/provider-applications", "/admin/register-provider", "/admin/feed-requests", "/admin/feed-tier-requests", "/admin/feed-tier-trials", "/admin/black-trials"];
     const isFeedOnlyAdminRoute =
       FEED_ONLY_ADMIN_ROUTES.includes(pathname) || pathname.startsWith("/admin/provider-applications/");
     if (!isFeedHost && !isPartnerHost && isFeedOnlyAdminRoute) {

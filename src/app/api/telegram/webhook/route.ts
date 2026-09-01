@@ -9,8 +9,8 @@ import { approveFeedTierRequest, rejectFeedTierRequest, getFeedTierRequest } fro
 import { approvePartnerApplication, declinePartnerApplication, getPartnerApplication } from "@/lib/partner-applications";
 
 const INVITE_RATE_LIMIT_MS = 60_000;
-// Host is load-bearing: feed-tier-requests review lives on portal-admin today -- revisit if it moves surfaces.
-const FEEDREQ_ADMIN_URL = "https://portal.horizonhft.com/admin/feed-tier-requests";
+// Host is load-bearing: feed-tier-requests review moved to feed-admin (feed-admin-consolidation-2026-09-01).
+const FEEDREQ_ADMIN_URL = "https://feed.horizonhft.com/admin/feed-tier-requests";
 // Host is load-bearing: partner-applications review lives on portal-admin today -- revisit if it moves surfaces.
 const PARTNERAPP_ADMIN_URL = "https://portal.horizonhft.com/admin/partner-applications";
 

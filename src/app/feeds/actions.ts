@@ -54,7 +54,7 @@ export async function submitFeedTierRequestAction(
       licenseId: license.id,
       region,
       tierKey,
-      adminUrl: "https://portal.horizonhft.com/admin/feed-tier-requests",
+      adminUrl: "https://feed.horizonhft.com/admin/feed-tier-requests",
     });
     revalidatePath("/feeds");
   });

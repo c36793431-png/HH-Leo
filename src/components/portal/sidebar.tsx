@@ -64,8 +64,9 @@ const PORTAL_LINKS = [
   { href: "/account", label: "Account", icon: CircleUser, color: "#6FB0D8" },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; color: string; paidOnly?: boolean; lockedStaysOnPage?: boolean; isNew?: boolean }[];
 
-// portal.horizonhft.com/admin/* — everything except provider-applications, which moved
-// to the feed-admin surface below (decision_split_portal_admin_and_feed_admin_surfaces_2026-08-23).
+// portal.horizonhft.com/admin/* — everything except provider-applications and the four
+// feed-request/trial routes below, which moved to the feed-admin surface (topic-based
+// reorg, feed-admin-consolidation-2026-09-01; supersedes decision_split_portal_admin_and_feed_admin_surfaces_2026-08-23's original demand/supply split).
 const PORTAL_ADMIN_LINKS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/finance", label: "Finance", icon: DollarSign },
@@ -79,10 +80,6 @@ const PORTAL_ADMIN_LINKS = [
   { href: "/admin/licenses", label: "Licenses", icon: Server },
   { href: "/admin/downloads", label: "Publish builds", icon: Upload },
   { href: "/admin/applications", label: "Applications", icon: ClipboardList },
-  { href: "/admin/feed-requests", label: "Feed requests", icon: Rss },
-  { href: "/admin/feed-tier-requests", label: "Feed signups", icon: SatelliteDish },
-  { href: "/admin/feed-tier-trials", label: "Feed trials", icon: Gift },
-  { href: "/admin/black-trials", label: "Black trials", icon: SatelliteDish },
   { href: "/admin/strategy-requests", label: "Strategy requests", icon: Zap },
   { href: "/admin/strategy-submissions", label: "Strategy submissions", icon: BookMarked },
   { href: "/admin/history", label: "History", icon: History },
@@ -97,6 +94,10 @@ const FEED_ADMIN_LINKS = [
   { href: "/admin/providers", label: "Providers", icon: SatelliteDish },
   { href: "/admin/register-provider", label: "Register provider", icon: UserPlus },
   { href: "/admin/revenue", label: "Revenue", icon: DollarSign },
+  { href: "/admin/feed-requests", label: "Feed requests", icon: Rss },
+  { href: "/admin/feed-tier-requests", label: "Feed signups", icon: SatelliteDish },
+  { href: "/admin/feed-tier-trials", label: "Feed trials", icon: Gift },
+  { href: "/admin/black-trials", label: "Black trials", icon: SatelliteDish },
   { href: "/admin/feed-health", label: "Feed health", icon: Radar, soon: true },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
 
