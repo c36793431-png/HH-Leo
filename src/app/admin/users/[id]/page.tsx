@@ -420,13 +420,6 @@ export default async function AdminUserDetailPage({
         />
       </section>
 
-      {historyLicenses.length > 0 && (
-        <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
-          <h2 className="text-sm font-medium text-zinc-400">Licence history ({historyLicenses.length})</h2>
-          <LicenseTable licenses={historyLicenses} showActions={false} emptyMessage="" />
-        </section>
-      )}
-
       <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-zinc-300">Notes</h2>
@@ -620,6 +613,13 @@ export default async function AdminUserDetailPage({
           </table>
         </div>
       </section>
+
+      {historyLicenses.length > 0 && (
+        <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
+          <h2 className="text-sm font-medium text-zinc-400">Licence history ({historyLicenses.length})</h2>
+          <LicenseTable licenses={historyLicenses} showActions={false} emptyMessage="" />
+        </section>
+      )}
     </div>
   );
 }
