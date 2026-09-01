@@ -20,6 +20,19 @@ const TITLES: Record<string, { title: string; crumb: string }> = {
 // marcus); other title/label mismatches on the portal are coxwell's naming calls, left alone.
 const ACRONYM_WORDS = new Set(["vps", "obi"]);
 
+// admin detail routes (e.g. /admin/users/[id]) end in a raw uuid — word-casing that segment
+// produces "94529d89 Ae75 4df5 ..." (thread admin-user-detail-title-2026-09-01, marcus). The
+// topbar only has the pathname to work with (it's rendered by admin/layout.tsx, above any
+// per-page fetch), so the best generic fallback is the parent segment, singularized.
+const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function titleCaseSegment(segment: string): string {
+  return segment
+    .split("-")
+    .map((word) => (ACRONYM_WORDS.has(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join(" ");
+}
+
 // feed.horizonhft.com/admin is the feed-admin dashboard landing (spec §2), so its title
 // reads "Dashboard" there even though the same path is plain "Admin" on the portal host.
 function resolveTitle(pathname: string, adminSurface: AdminSurface): { title: string; crumb: string } {
@@ -27,11 +40,13 @@ function resolveTitle(pathname: string, adminSurface: AdminSurface): { title: st
   if (TITLES[pathname]) return TITLES[pathname];
   const segments = pathname.split("/").filter(Boolean);
   const last = segments[segments.length - 1] ?? "dashboard";
-  const title = last
-    .split("-")
-    .map((word) => (ACRONYM_WORDS.has(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
-    .join(" ");
-  return { title, crumb: segments.join(" / ") };
+  const crumb = segments.join(" / ");
+  if (UUID_SEGMENT.test(last) && segments.length > 1) {
+    const parentTitle = titleCaseSegment(segments[segments.length - 2]);
+    const singular = parentTitle.endsWith("s") ? parentTitle.slice(0, -1) : parentTitle;
+    return { title: `${singular} detail`, crumb };
+  }
+  return { title: titleCaseSegment(last), crumb };
 }
 
 export function PortalTopbar({
