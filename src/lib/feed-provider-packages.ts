@@ -16,6 +16,22 @@ export type TierGroup =
   | { kind: "package"; label: string; priceCents: number; members: ProviderTierRow[] }
   | { kind: "single"; tier: ProviderTierRow };
 
+/** London's number is FOC13's comparison score (feed-comparison-scores.ts), not a measured
+ * latency -- every other region's latency_us is a real microsecond figure. The two need
+ * different display units, and that decision drifted between the tiers page and the Feeds
+ * tab once already (feeds-tab-latency-column-2026-09-02) because it lived as an inline
+ * `region === "london"` check in two places. Shared here so it can't drift a third time. */
+export function isScoreRegion(region: string): boolean {
+  return region === "london";
+}
+
+/** Combined value+unit text for a tier's latency cell, e.g. "56/100" or "42µs". Does not
+ * change latency_us or speed_display -- display only. */
+export function formatTierLatency(region: string, t: { latencyUs: number | null; speedDisplay: string }): string {
+  if (t.latencyUs == null) return t.speedDisplay;
+  return isScoreRegion(region) ? `${t.speedDisplay}/100` : `${t.speedDisplay}µs`;
+}
+
 export function groupTiers(tiers: ProviderTierRow[]): TierGroup[] {
   const used = new Set<string>();
   const groups: TierGroup[] = [];

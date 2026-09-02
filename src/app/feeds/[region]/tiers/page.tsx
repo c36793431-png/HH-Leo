@@ -7,6 +7,7 @@ import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { isFeedRegion, FEED_REGION_TYPE } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
+import { isScoreRegion } from "@/lib/feed-provider-packages";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
 import { BlackWaitlistControl } from "@/components/feeds/black-waitlist-control";
@@ -299,12 +300,9 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                 <span className="ftd-speed-label">SCORE</span>
               )}
               <span className="ftd-speed-value">{t.speedDisplay}</span>
-              {t.latencyUs != null &&
-                (region === "london" ? (
-                  <span className="ftd-speed-unit">/100</span>
-                ) : (
-                  <span className="ftd-speed-unit">µs</span>
-                ))}
+              {t.latencyUs != null && (
+                <span className="ftd-speed-unit">{isScoreRegion(region) ? "/100" : "µs"}</span>
+              )}
             </div>
             <p className="ftd-desc">{t.description}</p>
             <TierRequestControl

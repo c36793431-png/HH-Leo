@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
 import { listTiersForProvider } from "@/lib/feed-providers";
-import { groupTiers } from "@/lib/feed-provider-packages";
+import { groupTiers, formatTierLatency } from "@/lib/feed-provider-packages";
 
 const REGION_LABEL: Record<string, string> = { london: "London", ny: "New York", cme: "CME", tokyo: "Tokyo" };
 
@@ -82,7 +82,7 @@ export default async function FeedFeedsPage() {
                             <span style={{ fontSize: 11, color: "var(--pfp-ink-3)" }}>{t.subtitle}</span>
                           </td>
                           <td>{REGION_LABEL[t.region] ?? t.region}</td>
-                          <td className="mono">{t.latencyUs != null ? `${t.latencyUs}µs` : t.speedDisplay}</td>
+                          <td className="mono">{formatTierLatency(t.region, t)}</td>
                           <td>{t.pathRedundancy}</td>
                           <td>{t.supportLevel}</td>
                           <td className="r" />
@@ -97,7 +97,7 @@ export default async function FeedFeedsPage() {
                         <span style={{ fontSize: 11, color: "var(--pfp-ink-3)" }}>{g.tier.subtitle}</span>
                       </td>
                       <td>{REGION_LABEL[g.tier.region] ?? g.tier.region}</td>
-                      <td className="mono">{g.tier.latencyUs != null ? `${g.tier.latencyUs}µs` : g.tier.speedDisplay}</td>
+                      <td className="mono">{formatTierLatency(g.tier.region, g.tier)}</td>
                       <td>{g.tier.pathRedundancy}</td>
                       <td>{g.tier.supportLevel}</td>
                       <td className="r mono">{g.tier.priceCents != null ? `${money(g.tier.priceCents)} / mo` : "—"}</td>
