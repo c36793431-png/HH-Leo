@@ -1,28 +1,30 @@
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
 import { FeedRequestRowActions } from "@/components/feed/feed-request-row-actions";
-import { listPendingRequestsForProvider, listActiveTrialsForProvider } from "@/lib/feed-providers";
+import { listPendingRequestsForProvider } from "@/lib/feed-providers";
 import { providerApproveAction, providerRejectAction } from "./actions";
 import { formatRelative } from "@/lib/format-time";
 
 /** PRIMARY interaction screen (provider-panel-spec.md §2) -- the provider approves here,
  * off the old admin/coxwell queue. Approve fires the same insertFeedTierTrial() chain the
- * admin flow uses (see lib/feed-providers.ts providerApproveFeedTierRequest). */
-export default async function FeedUsersApprovalsPage() {
+ * admin flow uses (see lib/feed-providers.ts providerApproveFeedTierRequest).
+ *
+ * Split off "Active users" (bus thread users-approvals-nav-split-2026-09-02, coxwell via
+ * marcus) -- this page is Approvals only now; live-access clients moved to
+ * /feed/dashboard/active-users. URL kept at /users (unchanged) since actions.ts's
+ * revalidatePath/adminUrl and the Overview page's queue links all point here. */
+export default async function FeedApprovalsPage() {
   const session = await auth();
   const providerId = session!.user!.id!;
 
-  const [pending, activeTrials] = await Promise.all([
-    listPendingRequestsForProvider(providerId),
-    listActiveTrialsForProvider(providerId),
-  ]);
+  const pending = await listPendingRequestsForProvider(providerId);
 
   return (
     <>
       <header className="fp-topbar">
         <FeedNavToggle />
         <div>
-          <h1>Users / Approvals</h1>
+          <h1>Approvals</h1>
           <div className="crumb">feed.horizonhft.com / users</div>
         </div>
         <div className="sp" />
@@ -85,48 +87,7 @@ export default async function FeedUsersApprovalsPage() {
           )}
         </div>
 
-        <div className="card full" style={{ marginTop: 18 }}>
-          <div className="chead">
-            <span className="ic">◉</span>
-            <h3>Active trials</h3>
-            <span className="cap">{activeTrials.length} active</span>
-          </div>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Tier</th>
-                <th>Status</th>
-                <th>Since</th>
-                <th className="r">Trial ends</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeTrials.map((t) => (
-                <tr key={t.id}>
-                  <td>
-                    <b>{t.userEmail ?? "—"}</b>
-                  </td>
-                  <td>{t.tierName}</td>
-                  <td>
-                    <span className="tb trial">🧪 Trial</span>
-                  </td>
-                  <td className="mono">{t.trialStartedAt.toISOString().slice(0, 10)}</td>
-                  <td className="r mono">{t.trialEndsAt.toISOString().slice(0, 10)}</td>
-                </tr>
-              ))}
-              {activeTrials.length === 0 && (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: "center", color: "var(--pfp-ink-3)", padding: "24px 0" }}>
-                    No active trials yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="foot">HORIZON HFT · provider panel · Users / Approvals</div>
+        <div className="foot">HORIZON HFT · provider panel · Approvals</div>
       </section>
     </>
   );
