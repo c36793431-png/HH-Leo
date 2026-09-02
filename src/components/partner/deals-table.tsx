@@ -11,7 +11,7 @@ function initial(s: string): string {
   return s.trim().charAt(0).toUpperCase() || "?";
 }
 
-const LIFECYCLE_CLASS: Record<PartnerDealRow["status"], string> = {
+export const LIFECYCLE_CLASS: Record<PartnerDealRow["status"], string> = {
   proposed: "pd-st-proposed",
   approved: "pd-st-proposed",
   active: "pd-st-active",

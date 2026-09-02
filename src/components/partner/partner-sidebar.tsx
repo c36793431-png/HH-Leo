@@ -4,18 +4,21 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { LayoutDashboard, Handshake } from "lucide-react";
+import { LayoutDashboard, Handshake, Wallet, Users } from "lucide-react";
 import { panelLink, type PanelLink } from "@/lib/user-roles";
 import { WorkspaceSwitcher } from "@/components/shared/workspace-switcher";
 
-// Stage 1 (bus thread partner-sidebar-stage1-2026-09-01, marcus): only items with real
-// data behind them get a nav entry. Clients/Earnings/Referrals/Notifications/Account/
-// "How it works" are all left out entirely (not disabled) until their data or copy
-// exists -- see tmp_bus_reply_partner_sidebar_stage1_prework_2026-09-01.md for the
-// seven-item map this was decided from.
+// Stage 2 (bus thread partner-sidebar-stage2-2026-09-02, marcus): Earnings and Clients
+// added -- both are a re-slice/group-by of data that already exists (deal_payments,
+// partner_deals), no new storage. Referrals/Notifications/Account stay out; nothing has
+// changed about those three since Stage 1 (see
+// tmp_bus_reply_partner_sidebar_stage1_prework_2026-09-01.md for the original seven-item
+// map).
 const NAV = [
   { href: "/partner/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/partner/dashboard/deals", label: "Deals", icon: Handshake },
+  { href: "/partner/dashboard/earnings", label: "Earnings", icon: Wallet },
+  { href: "/partner/dashboard/clients", label: "Clients", icon: Users },
 ] as const;
 
 function isActive(pathname: string, href: string): boolean {

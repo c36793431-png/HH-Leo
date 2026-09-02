@@ -7,6 +7,7 @@ import {
   listDealsForPartner,
   listPaymentsForDeal,
   summarizeDealCycle,
+  summarizePartnerTotals,
 } from "@/lib/partners";
 import { CopyLinkButton } from "@/components/partner/copy-link-button";
 import { PartnerDealsTable } from "@/components/partner/deals-table";
@@ -52,16 +53,7 @@ export default async function PartnerDashboardPage() {
   const referralLink = referralCode ? `${protocol}://${host}/signup?ref=${referralCode}` : null;
 
   const liveDeals = dealsWithPayments.filter((d) => d.deal.status !== "cancelled");
-
-  const totalGrossUsd = liveDeals.reduce((sum, d) => sum + d.deal.grossUsd, 0);
-  const yourShareUsd = liveDeals.reduce((sum, d) => sum + d.deal.grossUsd * d.deal.partnerPct, 0);
-  const receivedUsd = dealsWithPayments.reduce(
-    (sum, d) => sum + d.payments.reduce((s, p) => s + p.amountUsd * d.deal.partnerPct, 0),
-    0
-  );
-  const avgSplitPct = liveDeals.length
-    ? Math.round((liveDeals.reduce((sum, d) => sum + d.deal.partnerPct, 0) / liveDeals.length) * 100)
-    : 0;
+  const { totalGrossUsd, yourShareUsd, receivedUsd, avgSplitPct } = summarizePartnerTotals(dealsWithPayments);
 
   return (
     <>

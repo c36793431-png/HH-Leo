@@ -29,6 +29,7 @@ export interface PartnerDealRow {
   partnerId: string;
   clientUserId: string;
   clientEmail: string | null;
+  clientName: string | null;
   grossUsd: number;
   partnerPct: number;
   coxwellPct: number;
@@ -166,6 +167,7 @@ interface PartnerDealDbRow {
   partner_id: string;
   client_user_id: string;
   client_email: string | null;
+  client_name: string | null;
   gross_usd: string;
   partner_pct: string;
   coxwell_pct: string;
@@ -185,6 +187,7 @@ function mapDeal(r: PartnerDealDbRow): PartnerDealRow {
     partnerId: r.partner_id,
     clientUserId: r.client_user_id,
     clientEmail: r.client_email,
+    clientName: r.client_name,
     grossUsd: Number(r.gross_usd),
     partnerPct: Number(r.partner_pct),
     coxwellPct: Number(r.coxwell_pct),
@@ -200,7 +203,7 @@ function mapDeal(r: PartnerDealDbRow): PartnerDealRow {
 }
 
 const DEAL_SELECT = `
-  select pd.id, pd.partner_id, pd.client_user_id, u.email as client_email,
+  select pd.id, pd.partner_id, pd.client_user_id, u.email as client_email, u.display_name as client_name,
          pd.gross_usd, pd.partner_pct, pd.coxwell_pct, pd.status, pd.cadence, pd.tiers,
          pd.proposal_note, pd.activated_at, pd.closed_at, pd.created_at,
          coalesce((select sum(dp.amount_usd) from deal_payments dp where dp.deal_id = pd.id), 0) as received_usd
@@ -302,6 +305,78 @@ export async function listPaymentsForDeal(dealId: string): Promise<DealPaymentRo
     [dealId]
   );
   return result.rows.map(mapDealPayment);
+}
+
+export interface PartnerTotals {
+  totalGrossUsd: number;
+  yourShareUsd: number;
+  receivedUsd: number;
+  avgSplitPct: number;
+}
+
+/** The three headline numbers shown on /partner/dashboard's hero KPIs, extracted (Stage 2,
+ * bus thread partner-sidebar-stage2-2026-09-02, marcus: "if the numbers wouldn't match
+ * Overview's, stop and tell me") so Earnings' all-time summary can't drift from Overview's.
+ * totalGross/yourShare exclude cancelled deals; received sums every deal_payments row
+ * regardless of the parent deal's status -- this asymmetry is intentional and preserved
+ * unchanged from the original dashboard/page.tsx logic. */
+export function summarizePartnerTotals(
+  dealsWithPayments: { deal: PartnerDealRow; payments: DealPaymentRow[] }[]
+): PartnerTotals {
+  const liveDeals = dealsWithPayments.filter((d) => d.deal.status !== "cancelled");
+  const totalGrossUsd = liveDeals.reduce((sum, d) => sum + d.deal.grossUsd, 0);
+  const yourShareUsd = liveDeals.reduce((sum, d) => sum + d.deal.grossUsd * d.deal.partnerPct, 0);
+  const receivedUsd = dealsWithPayments.reduce(
+    (sum, d) => sum + d.payments.reduce((s, p) => s + p.amountUsd * d.deal.partnerPct, 0),
+    0
+  );
+  const avgSplitPct = liveDeals.length
+    ? Math.round((liveDeals.reduce((sum, d) => sum + d.deal.partnerPct, 0) / liveDeals.length) * 100)
+    : 0;
+  return { totalGrossUsd, yourShareUsd, receivedUsd, avgSplitPct };
+}
+
+export interface PartnerClientSummary {
+  clientUserId: string;
+  clientLabel: string;
+  dealCount: number;
+  totalGrossUsd: number;
+  yourShareUsd: number;
+  mostRecentDealStatus: DealLifecycle;
+  mostRecentDealAt: Date;
+}
+
+/** Groups a partner's deals by client_user_id -- partner_deals has no clients table, and
+ * client_user_id is a not-null FK to users (migration 0045), so this grouping key can never
+ * be null; there is no phantom "unknown client" case to guard against. Display falls back
+ * from email to display_name since users.email is nullable (migration 0001) -- a
+ * Telegram-only client would otherwise show blank. totalGross/yourShare exclude cancelled
+ * deals, same live-deal filter as summarizePartnerTotals; dealCount and the most-recent-deal
+ * status/date count every deal regardless of status. */
+export function summarizeClientsForPartner(deals: PartnerDealRow[]): PartnerClientSummary[] {
+  const byClient = new Map<string, PartnerDealRow[]>();
+  for (const deal of deals) {
+    const list = byClient.get(deal.clientUserId) ?? [];
+    list.push(deal);
+    byClient.set(deal.clientUserId, list);
+  }
+
+  const summaries: PartnerClientSummary[] = [];
+  for (const [clientUserId, clientDeals] of byClient) {
+    const liveDeals = clientDeals.filter((d) => d.status !== "cancelled");
+    const mostRecent = clientDeals.reduce((latest, d) => (d.createdAt > latest.createdAt ? d : latest));
+    summaries.push({
+      clientUserId,
+      clientLabel: clientDeals[0].clientEmail ?? clientDeals[0].clientName ?? "Unnamed client",
+      dealCount: clientDeals.length,
+      totalGrossUsd: liveDeals.reduce((sum, d) => sum + d.grossUsd, 0),
+      yourShareUsd: liveDeals.reduce((sum, d) => sum + d.grossUsd * d.partnerPct, 0),
+      mostRecentDealStatus: mostRecent.status,
+      mostRecentDealAt: mostRecent.createdAt,
+    });
+  }
+
+  return summaries.sort((a, b) => b.mostRecentDealAt.getTime() - a.mostRecentDealAt.getTime());
 }
 
 export interface CreatePartnerInput {
