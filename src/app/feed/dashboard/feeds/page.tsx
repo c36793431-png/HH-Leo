@@ -39,7 +39,7 @@ export default async function FeedFeedsPage() {
         <div className="card full">
           <div className="chead">
             <span className="ic">❖</span>
-            <h3>Your tiers</h3>
+            <h3>By package</h3>
             <span className="cap">{tiers.length} assigned</span>
           </div>
 
