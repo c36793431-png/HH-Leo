@@ -140,11 +140,14 @@ export default auth(async (req) => {
     }
   }
 
-  // Captures ?ref=<code> on signup/login into a 30-day cookie, ahead of whichever auth path
+  // Captures ?ref=<code> on any route into a 30-day cookie, ahead of whichever auth path
   // (Telegram widget or email magic link) actually creates the users row — see
-  // lib/referrals.ts attributeReferralFromCookie for where it's resolved and consumed.
+  // lib/referrals.ts attributeReferralFromCookie for where it's resolved and consumed. First
+  // touch wins: skips if a referral cookie is already set, matching attributeReferralFromCookie's
+  // own first-touch write (referred_by_user_id only set when null) so the cookie layer and the
+  // DB layer never disagree.
   const ref = req.nextUrl.searchParams.get("ref");
-  if (ref && (pathname === "/signup" || pathname === "/login")) {
+  if (ref && !req.cookies.get(REFERRAL_COOKIE)) {
     const res = NextResponse.next();
     res.cookies.set(REFERRAL_COOKIE, ref.trim(), {
       httpOnly: true,
