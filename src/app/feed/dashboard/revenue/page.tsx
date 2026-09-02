@@ -6,16 +6,15 @@ function money(cents: number): string {
   return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-/** No payment ledger tracks feed-provider revenue splits yet -- gross figures below are
- * derived from feed_tiers.price_cents x active-subscriber counts where that data exists;
- * everything else (payout history, next-payout date, bank details) is static preview
- * copy from mockups/horizon-providers/revenue.html, clearly labelled. Flagged to marcus
- * as follow-up scope (real payout pipeline). */
+/** No payment ledger tracks feed-provider revenue splits yet, and no subscriber counts
+ * exist to weight a total against. Summing price_cents across tiers would double-count
+ * London's delta/gamma/beta rows, which are sold together as one Base package rather
+ * than three separate $30 sales -- so this page shows per-tier list price and per-tier
+ * 50% share only, with no aggregate figure. Flagged to marcus as follow-up scope (real
+ * payout pipeline + a package concept to dedupe bundled tiers). */
 export default async function FeedRevenuePage() {
   const session = await auth();
   const tiers = await listTiersForProvider(session!.user!.id!);
-  const grossCents = tiers.reduce((sum, t) => sum + (t.priceCents ?? 0), 0);
-  const yourShareCents = Math.round(grossCents / 2);
 
   return (
     <>
@@ -39,45 +38,14 @@ export default async function FeedRevenuePage() {
 
         <div className="card full">
           <div className="chead">
-            <span className="ic">▦</span>
-            <h3>Your tiers · notional 50% share</h3>
-            <span className="cap">sum of list price, not actual subscriber revenue</span>
-          </div>
-          <div className="splitwrap">
-            <div className="earn">
-              <div className="k">Your 50% share</div>
-              <div className="big">{money(yourShareCents)}</div>
-              <div className="of">
-                of <b>{money(grossCents)}</b> gross list price across {tiers.length} tier{tiers.length === 1 ? "" : "s"}
-              </div>
-              <div className="splitbar">
-                <div className="track">
-                  <div className="you" />
-                  <div className="fv" />
-                </div>
-                <div className="lgd">
-                  <div className="it">
-                    <span className="sw you" /> You <b style={{ color: "var(--pfp-ink)", marginLeft: 4 }}>{money(yourShareCents)}</b>
-                  </div>
-                  <div className="it">
-                    <span className="sw fv" /> Feedverse <span style={{ marginLeft: 4 }}>{money(grossCents - yourShareCents)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="scope-note">
-            <span className="i">ⓘ</span> You see your 50% share only. A real payout pipeline (Stripe/ledger
-            integration) isn&apos;t built yet.
-          </div>
-        </div>
-
-        <div className="card full" style={{ marginTop: 18 }}>
-          <div className="chead">
             <span className="ic">◈</span>
             <h3>By tier</h3>
             <span className="cap">list price only</span>
           </div>
+          <p style={{ fontSize: 12, color: "var(--pfp-ink-3)", margin: "0 0 14px" }}>
+            LD Beta 56, LD Gamma 19 and LD Delta 18 are sold together as one London Base package —
+            each shows the $30 a client pays for that package, not a separate $30 each.
+          </p>
           <table className="tbl">
             <thead>
               <tr>
