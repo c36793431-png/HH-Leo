@@ -2,12 +2,33 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
 import { listPendingRequestsForProvider, listActiveTrialsForProvider, listTiersForProvider } from "@/lib/feed-providers";
+import type { FeedTierRequestRow } from "@/lib/feed-tier-requests";
 import { formatRelative } from "@/lib/format-time";
 import { getBotLink } from "@/lib/telegram-bot-links";
 import { FEEDS_BOT_KEY } from "@/lib/telegram-feeds-bot";
 import { getActiveSubscriberCountForProvider } from "@/lib/feed-subscriptions";
+import { packageLabelForTierKey } from "@/lib/feed-provider-packages";
 
 const TYPE_ICON: Record<string, string> = { pending: "🧪", approved: "✓", rejected: "✗", provisioned: "💳" };
+
+/** Collapses pending requests by (client, package) so a client requesting all of London
+ * Base's three tiers in one sitting reads as one row, not three -- same defect Revenue and
+ * the Feeds tab already had. Package membership comes from feed-provider-packages.ts, the
+ * one shared source; this only aggregates requests by it, it doesn't redefine it. */
+function groupActivityByClientPackage(rows: FeedTierRequestRow[]) {
+  const groups = new Map<string, { key: string; userEmail: string | null; label: string; latest: Date }>();
+  for (const r of rows) {
+    const label = packageLabelForTierKey(r.tierKey) ?? r.tierName;
+    const key = `${r.userId}::${label}`;
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { key, userEmail: r.userEmail, label, latest: r.createdAt });
+    } else if (r.createdAt > existing.latest) {
+      existing.latest = r.createdAt;
+    }
+  }
+  return Array.from(groups.values()).sort((a, b) => b.latest.getTime() - a.latest.getTime());
+}
 
 export default async function FeedOverviewPage() {
   const session = await auth();
@@ -135,16 +156,18 @@ export default async function FeedOverviewPage() {
               </div>
             ) : (
               <div className="act">
-                {pending.slice(0, 5).map((r) => (
-                  <div className="ai" key={r.id}>
-                    <div className="ic trial">{TYPE_ICON[r.status] ?? "🔔"}</div>
+                {groupActivityByClientPackage(pending)
+                  .slice(0, 5)
+                  .map((g) => (
+                  <div className="ai" key={g.key}>
+                    <div className="ic trial">{TYPE_ICON.pending}</div>
                     <div className="txt">
                       <b>
-                        {r.userEmail ?? "unknown"} — {r.tierName}
+                        {g.userEmail ?? "unknown"} — {g.label}
                       </b>
-                      <span>requested {formatRelative(r.createdAt)}</span>
+                      <span>requested {formatRelative(g.latest)}</span>
                     </div>
-                    <div className="tm">{formatRelative(r.createdAt)}</div>
+                    <div className="tm">{formatRelative(g.latest)}</div>
                   </div>
                 ))}
               </div>

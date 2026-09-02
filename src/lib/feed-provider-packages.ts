@@ -12,6 +12,13 @@ export const PACKAGES: { label: string; tierKeys: string[] }[] = [
   { label: "NY", tierKeys: ["ny-normal", "ny-fast"] },
 ];
 
+/** Package label for a tier_key, or null if it isn't in any PACKAGES entry (renders
+ * standalone). Single lookup point so Overview's per-client activity grouping uses the
+ * same membership data as groupTiers instead of a second literal. */
+export function packageLabelForTierKey(tierKey: string): string | null {
+  return PACKAGES.find((pkg) => pkg.tierKeys.includes(tierKey))?.label ?? null;
+}
+
 export type TierGroup =
   | { kind: "package"; label: string; priceCents: number; members: ProviderTierRow[] }
   | { kind: "single"; tier: ProviderTierRow };
