@@ -9,6 +9,7 @@ import { WorkspaceSwitcher } from "@/components/shared/workspace-switcher";
 
 const NAV = [
   { href: "/feed/dashboard", label: "Overview", ic: "▨" },
+  { href: "/feed/dashboard/feeds", label: "Feeds", ic: "❖" },
   { href: "/feed/dashboard/users", label: "Users / Approvals", ic: "◉" },
   { href: "/feed/dashboard/accounts", label: "Accounts", ic: "◎" },
   { href: "/feed/dashboard/notifications", label: "Notifications", ic: "✦" },
