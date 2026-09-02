@@ -55,7 +55,7 @@ export default async function FeedOverviewPage() {
             </div>
             <div className="val">{tiers.length}</div>
             <div className="sub">
-              <Link href="/feed/dashboard/tiers" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
+              <Link href="/feed/dashboard/feeds" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
                 Manage →
               </Link>
             </div>

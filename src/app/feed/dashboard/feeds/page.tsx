@@ -10,7 +10,11 @@ function money(cents: number): string {
 
 /** Read-only catalogue view (bus thread feed-provider-feeds-tab-2026-09-02, Stage 1) --
  * one row per feed_tiers row owned by this provider. No per-row actions: coxwell's standing
- * rule is list = summary, detail page = editing, and no editing surface exists yet. */
+ * rule is list = summary, detail page = editing, and no editing surface exists yet.
+ * Columns beyond identity are what the tier is sold on (latency, redundancy, support) --
+ * description is dropped from the row: it's a full sentence and would dominate/duplicate
+ * the subtitle line. is_flagship is left off deliberately -- Horizon's curation flag, not
+ * a fact about the provider's own feed. */
 export default async function FeedFeedsPage() {
   const session = await auth();
   const tiers = await listTiersForProvider(session!.user!.id!);
@@ -48,8 +52,10 @@ export default async function FeedFeedsPage() {
               <thead>
                 <tr>
                   <th>Tier</th>
-                  <th>Tier key</th>
                   <th>Region</th>
+                  <th>Latency</th>
+                  <th>Redundancy</th>
+                  <th>Support</th>
                   <th className="r">List price</th>
                 </tr>
               </thead>
@@ -61,8 +67,10 @@ export default async function FeedFeedsPage() {
                       <br />
                       <span style={{ fontSize: 11, color: "var(--pfp-ink-3)" }}>{t.subtitle}</span>
                     </td>
-                    <td className="mono">{t.tierKey}</td>
                     <td>{REGION_LABEL[t.region] ?? t.region}</td>
+                    <td className="mono">{t.latencyUs != null ? `${t.latencyUs}µs` : t.speedDisplay}</td>
+                    <td>{t.pathRedundancy}</td>
+                    <td>{t.supportLevel}</td>
                     <td className="r mono">{t.priceCents != null ? `${money(t.priceCents)} / mo` : "—"}</td>
                   </tr>
                 ))}

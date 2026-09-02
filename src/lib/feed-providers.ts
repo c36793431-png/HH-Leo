@@ -19,6 +19,11 @@ export interface ProviderTierRow {
   subtitle: string;
   priceCents: number | null;
   sortOrder: number;
+  speedDisplay: string;
+  latencyUs: number | null;
+  pathRedundancy: string;
+  supportLevel: string;
+  description: string;
 }
 
 export async function listTierKeysForProvider(providerUserId: string): Promise<string[]> {
@@ -38,8 +43,14 @@ export async function listTiersForProvider(providerUserId: string): Promise<Prov
     subtitle: string;
     price_cents: number | null;
     sort_order: number;
+    speed_display: string;
+    latency_us: number | null;
+    path_redundancy: string;
+    support_level: string;
+    description: string;
   }>(
-    `select id, tier_key, region_key, name, subtitle, price_cents, sort_order
+    `select id, tier_key, region_key, name, subtitle, price_cents, sort_order,
+            speed_display, latency_us, path_redundancy, support_level, description
      from feed_tiers where provider_user_id = $1 order by sort_order`,
     [providerUserId]
   );
@@ -51,6 +62,11 @@ export async function listTiersForProvider(providerUserId: string): Promise<Prov
     subtitle: r.subtitle,
     priceCents: r.price_cents,
     sortOrder: r.sort_order,
+    speedDisplay: r.speed_display,
+    latencyUs: r.latency_us,
+    pathRedundancy: r.path_redundancy,
+    supportLevel: r.support_level,
+    description: r.description,
   }));
 }
 
