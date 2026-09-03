@@ -35,6 +35,7 @@ export interface ProviderSubscriberRow {
   subscriptionId: string;
   pseudonym: string;
   tierName: string;
+  regionKey: string | null;
   status: SubscriptionStatus;
   startedAt: Date;
 }
@@ -209,10 +210,12 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       id: string;
       seq: number;
       tier_name: string;
+      region_key: string | null;
       status: SubscriptionStatus;
       started_at: Date;
     }>(
-      `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, ${EFFECTIVE_STATUS_SQL} as status, s.started_at
+      `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, ft.region_key,
+              ${EFFECTIVE_STATUS_SQL} as status, s.started_at
        from feed_subscriptions s
        join provider_client_pseudonyms p
          on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
@@ -226,6 +229,7 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       subscriptionId: row.id,
       pseudonym: pseudonymLabel(row.seq),
       tierName: row.tier_name,
+      regionKey: row.region_key,
       status: row.status,
       startedAt: row.started_at,
     }));
