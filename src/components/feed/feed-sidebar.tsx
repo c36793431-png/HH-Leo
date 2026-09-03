@@ -11,7 +11,7 @@ const NAV = [
   { href: "/feed/dashboard", label: "Overview", ic: "▨" },
   { href: "/feed/dashboard/feeds", label: "Feeds", ic: "❖" },
   { href: "/feed/dashboard/users", label: "Approvals", ic: "⚑" },
-  { href: "/feed/dashboard/active-users", label: "Active Users", ic: "◉" },
+  { href: "/feed/dashboard/active-users", label: "Subscribers", ic: "◉" },
   { href: "/feed/dashboard/accounts", label: "Accounts", ic: "◎" },
   { href: "/feed/dashboard/notifications", label: "Notifications", ic: "✦" },
   { href: "/feed/dashboard/revenue", label: "Revenue", ic: "▦" },

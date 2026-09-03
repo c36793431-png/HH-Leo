@@ -6,7 +6,8 @@ import { listActiveTrialsForProvider } from "@/lib/feed-providers";
  * coxwell via marcus) -- clients with live access, separate from the Approvals queue.
  * Still backed by listActiveTrialsForProvider/feed_tier_trials, same data the old combined
  * page showed under "Active trials"; that term is already settled (used on the Overview
- * stat), so the card keeps it even though the nav tab is "Active Users". */
+ * stat), so the card keeps it even though the nav tab is "Subscribers" (renamed from "Active
+ * Users", coxwell 2026-09-03 -- copy only, route/query unchanged). */
 export default async function FeedActiveUsersPage() {
   const session = await auth();
   const providerId = session!.user!.id!;
@@ -18,7 +19,7 @@ export default async function FeedActiveUsersPage() {
       <header className="fp-topbar">
         <FeedNavToggle />
         <div>
-          <h1>Active Users</h1>
+          <h1>Subscribers</h1>
           <div className="crumb">feed.horizonhft.com / active-users</div>
         </div>
         <div className="sp" />
@@ -68,7 +69,7 @@ export default async function FeedActiveUsersPage() {
           )}
         </div>
 
-        <div className="foot">HORIZON HFT · provider panel · Active Users</div>
+        <div className="foot">HORIZON HFT · provider panel · Subscribers</div>
       </section>
     </>
   );
