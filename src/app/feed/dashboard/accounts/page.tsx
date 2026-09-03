@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
-import { listSubscribersForProvider } from "@/lib/feed-subscriptions";
+import { getActiveSubscriberCountForProvider, listSubscribersForProvider } from "@/lib/feed-subscriptions";
 
 const STATUS_ICON: Record<string, string> = { trial: "🧪", active: "✓", lapsed: "✗" };
 
@@ -12,7 +12,11 @@ export default async function FeedAccountsPage() {
   const session = await auth();
   const providerId = session!.user!.id!;
 
-  const subscribers = await listSubscribersForProvider(providerId);
+  const [subscribers, activeCount] = await Promise.all([
+    listSubscribersForProvider(providerId),
+    getActiveSubscriberCountForProvider(providerId),
+  ]);
+  const lapsedCount = subscribers.filter((s) => s.status === "lapsed").length;
 
   return (
     <>
@@ -30,7 +34,10 @@ export default async function FeedAccountsPage() {
           <div className="chead">
             <span className="ic">◎</span>
             <h3>Subscribers</h3>
-            <span className="cap">{subscribers.length} · trial + active + lapsed</span>
+            <span className="cap">
+              {activeCount} · trial + active
+              {lapsedCount > 0 ? ` · ${lapsedCount} lapsed (shown below)` : ""}
+            </span>
           </div>
 
           {subscribers.length === 0 ? (
