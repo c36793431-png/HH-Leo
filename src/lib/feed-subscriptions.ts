@@ -46,11 +46,31 @@ export interface ProviderSubscriberRow {
  * regardless of license state -- it's a one-way ratchet, the exception path. */
 const REGION_TO_FEED_TYPE_SQL = `case ft.region_key when 'london' then 'london' when 'ny' then 'ny' when 'tokyo' then 'crypto' else null end`;
 
+/** Bus thread feed-approve-request-creates-subscription-item3-2026-09-03 (marcus ruling):
+ * a trial-originated subscription (approveFeedTierRequest -> assignFeedTierSubscription, same
+ * function the admin picker uses) is written with status='active' like any other grant, so it
+ * can't be told apart from a purchased one by s.status alone. Its subscriber also frequently
+ * has no license carrying the region yet -- that's the point of a trial -- so without a
+ * carve-out it would immediately read 'lapsed' via the license-exists check below, hiding the
+ * one case item 3 exists for. feed_tier_trials is the authority instead: a row here means the
+ * subscriber independently earned access to this exact tier_key regardless of what's on their
+ * license, and its own trial_ends_at is when that access should stop, not the license check.
+ * Once the trial ends (expired) or the subscriber buys in (converted), this stops matching and
+ * falls through to the license gate below, same as any other row. Same shape as the
+ * provider_tier_id and cme carve-outs above -- a case where the license-entitlement question
+ * doesn't apply to this row at all. */
 const EFFECTIVE_STATUS_SQL = `
   case
     when s.status = 'lapsed' then 'lapsed'
     when ft.region_key is null then s.status
     when ${REGION_TO_FEED_TYPE_SQL} is null then s.status
+    when exists (
+      select 1 from feed_tier_trials ftt
+      where ftt.user_id = s.subscriber_user_id
+        and ftt.tier_key = ft.tier_key
+        and ftt.trial_status = 'active'
+        and ftt.trial_ends_at > now()
+    ) then s.status
     when exists (
       select 1 from licenses l
       where l.user_id = s.subscriber_user_id

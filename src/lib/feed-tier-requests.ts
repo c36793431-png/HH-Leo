@@ -8,6 +8,7 @@ import {
   TrialAlreadyClaimedError,
   TrialNotEligibleError,
 } from "./feed-tier-trials";
+import { assignFeedTierSubscription } from "./feed-subscriptions";
 
 export const FEED_TIER_REQUEST_STATUSES = ["pending", "approved", "rejected", "provisioned"] as const;
 export type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number];
@@ -204,6 +205,20 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
 }
 
 export async function approveFeedTierRequest(id: string, actionedBy: string, adminUrl: string): Promise<FeedTierRequestRow> {
+  const pending = await getFeedTierRequest(id);
+  if (!pending) throw new Error("feed tier request not found");
+
+  // Trial row (if eligible) goes in first -- best-effort, see activateTrialIfEligible -- so
+  // EFFECTIVE_STATUS_SQL's trial carve-out already sees it before the subscription row it
+  // backs becomes visible on the provider's Accounts page.
+  await activateTrialIfEligible(pending, adminUrl);
+
+  // Records the approval as a real feed_subscriptions row -- same function the admin picker
+  // uses, no second insert path (bus thread feed-approve-request-creates-subscription-item3-
+  // 2026-09-03). Must succeed before the request flips to "approved": a client the provider
+  // can't see approved-but-unrecorded is worse than a request left pending for a retry.
+  await assignFeedTierSubscription(pending.userId, pending.tierKey);
+
   const row = await actionRequest(id, "approved", actionedBy, null);
   // Trial-eligible tiers get the richer notifyTrialClientActivated() DM instead (see
   // activateTrialIfEligible) -- sending both would double-DM the client
@@ -211,7 +226,6 @@ export async function approveFeedTierRequest(id: string, actionedBy: string, adm
   if (!isTrialEligibleTier(row.tierKey)) {
     await notifyClient(row, `<b>✅ Feed access approved</b>\n${row.tierName} is approved on your account.`);
   }
-  await activateTrialIfEligible(row, adminUrl);
   return row;
 }
 
