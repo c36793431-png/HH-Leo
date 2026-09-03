@@ -31,6 +31,36 @@ export interface ProviderSubscriberRow {
   startedAt: Date;
 }
 
+/** Bus thread feed-subscription-recording-build-2026-09-03 (marcus ruling, 2026-09-03,
+ * no coxwell/migration needed): a Horizon-catalogue (feed_tier_id-backed) subscription's
+ * true entitlement is the union of feed_types across ALL of the subscriber's currently
+ * active licenses, not a single linked license_id -- a client can hold two active licenses
+ * (e.g. London lapses, CME stays active) and adding license_id would wrongly pin the
+ * subscription to one of them. So this maps a feed_tiers.region_key to the licenses.feed_types
+ * entry it corresponds to (same mapping as FEED_REGION_TYPE in feed-tier-catalogue.ts, inlined
+ * here since that table has no FK to licenses) and treats "no mapping" (cme today) as
+ * ungated -- there's no license concept for that region yet, so it must not read as
+ * permanently inactive. provider_tier_id rows (ft.region_key is null, third-party
+ * self-serve) are never license-gated at all; they're outside licenses.feed_types' domain.
+ * An explicit admin lapse (status='lapsed', deactivateFeedTierSubscription) always wins
+ * regardless of license state -- it's a one-way ratchet, the exception path. */
+const REGION_TO_FEED_TYPE_SQL = `case ft.region_key when 'london' then 'london' when 'ny' then 'ny' when 'tokyo' then 'crypto' else null end`;
+
+const EFFECTIVE_STATUS_SQL = `
+  case
+    when s.status = 'lapsed' then 'lapsed'
+    when ft.region_key is null then s.status
+    when ${REGION_TO_FEED_TYPE_SQL} is null then s.status
+    when exists (
+      select 1 from licenses l
+      where l.user_id = s.subscriber_user_id
+        and l.status = 'active' and l.expires_at > now()
+        and ${REGION_TO_FEED_TYPE_SQL} = any(l.feed_types)
+    ) then s.status
+    else 'lapsed'
+  end
+`;
+
 export function pseudonymLabel(seq: number): string {
   return `HH${seq}`;
 }
@@ -154,7 +184,7 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       status: SubscriptionStatus;
       started_at: Date;
     }>(
-      `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, s.status, s.started_at
+      `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, ${EFFECTIVE_STATUS_SQL} as status, s.started_at
        from feed_subscriptions s
        join provider_client_pseudonyms p
          on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
@@ -177,15 +207,17 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
   }
 }
 
-/** Overview panel's "Subscribers" stat -- distinct subscribers currently trial/active
- * (lapsed excluded: this answers "who subscribes to this provider's packages right now").
- * Degrades to 0 pre-migration, same rule as every other counter this panel renders. */
+/** Overview panel's "Subscribers" stat -- distinct subscribers currently trial/active,
+ * where a Horizon-catalogue row counts only if its region is still license-entitled (see
+ * EFFECTIVE_STATUS_SQL above) as well as not explicitly lapsed. Degrades to 0
+ * pre-migration, same rule as every other counter this panel renders. */
 export async function getActiveSubscriberCountForProvider(providerUserId: string): Promise<number> {
   try {
     const result = await pool.query<{ count: string }>(
-      `select count(distinct subscriber_user_id) as count
-       from feed_subscriptions
-       where provider_user_id = $1 and status in ('trial', 'active')`,
+      `select count(distinct s.subscriber_user_id) as count
+       from feed_subscriptions s
+       left join feed_tiers ft on ft.id = s.feed_tier_id
+       where s.provider_user_id = $1 and (${EFFECTIVE_STATUS_SQL}) != 'lapsed'`,
       [providerUserId]
     );
     return Number(result.rows[0]?.count ?? 0);
