@@ -21,7 +21,7 @@ import { NotesForm } from "@/components/admin/notes-form";
 import { ConfigSummaryForm } from "@/components/admin/config-summary-form";
 import { FEED_TYPE_META } from "@/lib/licenses";
 import { getConfigSummary } from "@/lib/config-summary";
-import { FeedTierSelectForm, computeFeedAssignmentRows } from "@/components/admin/feed-tier-select-form";
+import { FeedTierSelectForm } from "@/components/admin/feed-tier-select-form";
 import { getFeedTierSubscriptionsForSubscriber, listFeedTiersForAdminPicker } from "@/lib/feed-subscriptions";
 import {
   expireNowAction,
@@ -225,7 +225,6 @@ export default async function AdminUserDetailPage({
   // Same "active or expiring" set as computeUserActiveFeeds' raw status/expiry check --
   // reuses currentLicenses rather than a second DB query for the same fact.
   const entitledFeedTypes = [...new Set(currentLicenses.flatMap((l) => l.feedTypes))];
-  const feedAssignmentRows = computeFeedAssignmentRows(feedTiers, feedSubscriptions, entitledFeedTypes);
 
   return (
     <div className="flex flex-1 flex-col gap-6">
@@ -327,23 +326,23 @@ export default async function AdminUserDetailPage({
               isSelf={isSelf}
             />
           </div>
-          {feedAssignmentRows.length > 0 && (
-            <div>
-              <dt className="text-xs text-zinc-500">Feed provider assignment</dt>
-              <dd className="text-zinc-200">
-                <p className="mb-1.5 max-w-xs text-[11px] leading-snug text-zinc-500">
-                  The client&apos;s licence grants regional feed access; this assigns which provider actually serves it.
-                </p>
-                <FeedTierSelectForm
-                  assignAction={assignFeedSubscriptionAction}
-                  deactivateAction={deactivateFeedSubscriptionAction}
-                  userId={user.userId}
-                  rows={feedAssignmentRows}
-                  subjectName={user.displayName ?? user.email ?? "this user"}
-                />
-              </dd>
-            </div>
-          )}
+          <div>
+            <dt className="text-xs text-zinc-500">Feed provider assignment</dt>
+            <dd className="text-zinc-200">
+              <p className="mb-1.5 max-w-xs text-[11px] leading-snug text-zinc-500">
+                The licence below grants regional feed access; this assigns which provider actually serves it.
+              </p>
+              <FeedTierSelectForm
+                assignAction={assignFeedSubscriptionAction}
+                deactivateAction={deactivateFeedSubscriptionAction}
+                userId={user.userId}
+                tiers={feedTiers}
+                subscriptions={feedSubscriptions}
+                entitledFeedTypes={entitledFeedTypes}
+                subjectName={user.displayName ?? user.email ?? "this user"}
+              />
+            </dd>
+          </div>
           <div>
             <dt className="text-xs text-zinc-500">Active IP</dt>
             <dd className="text-zinc-200">

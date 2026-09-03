@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import type { FeedTierPickerRow, SubscriberFeedTierSubscription } from "@/lib/feed-subscriptions";
 import { emitToast } from "@/lib/toast-bus";
-import { FEED_REGION_TYPE, FEED_REGIONS, isFeedRegion, regionForFeedType, type FeedRegion } from "@/lib/feed-tier-catalogue";
+import { FEED_REGION_TYPE, isFeedRegion } from "@/lib/feed-tier-catalogue";
 import type { FeedType } from "@/lib/licenses";
 import { formatRelative } from "@/lib/format-time";
 
@@ -27,110 +27,56 @@ function isRegionOfferable(regionKey: string, entitledFeedTypes: Set<FeedType>, 
   return entitledFeedTypes.has(feedType);
 }
 
-export interface FeedAssignmentRow {
-  regionKey: string;
-  /** "unavailable" -- client is entitled to this region but the catalogue has no tiers for
-   * it yet (tokyo today). Rendered as a disabled row naming the reason rather than hidden,
-   * so the entitlement isn't silently unfulfillable-looking (Item C,
-   * feed-subscription-recording-build-2026-09-03). */
-  kind: "assignable" | "unavailable";
-  tiers: FeedTierPickerRow[];
-  subscription: SubscriberFeedTierSubscription | null;
-  /** True when this row is only offerable because of an existing subscription row, not
-   * current licence entitlement (e.g. the licence expired/downgraded after the assignment
-   * was made). Never true for an already-lapsed subscription -- that's the separate
-   * "Access ended" state. */
-  entitlementLapsed: boolean;
-}
-
-/** Single source of truth for which regions render on /admin/users/[id]'s feed-assignment
- * block and what each one shows -- both the block's visibility (page.tsx) and its contents
- * (FeedTierSelectForm below) read this same computed list, so they can't drift apart
- * (Item A, feed-subscription-recording-build-2026-09-03, marcus ruling). */
-export function computeFeedAssignmentRows(
-  tiers: FeedTierPickerRow[],
-  subscriptions: SubscriberFeedTierSubscription[],
-  entitledFeedTypes: FeedType[]
-): FeedAssignmentRow[] {
-  const entitled = new Set(entitledFeedTypes);
-  const rows: FeedAssignmentRow[] = [];
-  const seen = new Set<string>();
-
-  const catalogueRegions = [...new Set(tiers.map((t) => t.regionKey))];
-  for (const regionKey of catalogueRegions) {
-    const subscription = subscriptions.find((s) => s.regionKey === regionKey) ?? null;
-    const hasExistingSubscription = subscription !== null;
-    if (!isRegionOfferable(regionKey, entitled, hasExistingSubscription)) continue;
-    seen.add(regionKey);
-    const feedType = isFeedRegion(regionKey) ? FEED_REGION_TYPE[regionKey] : null;
-    const isCurrentlyEntitled = feedType === null ? true : entitled.has(feedType);
-    rows.push({
-      regionKey,
-      kind: "assignable",
-      tiers: tiers.filter((t) => t.regionKey === regionKey),
-      subscription,
-      entitlementLapsed: hasExistingSubscription && !isCurrentlyEntitled && subscription?.status !== "lapsed",
-    });
-  }
-
-  // Entitled regions the catalogue has no tiers for at all (tokyo today) never surface via
-  // the loop above since they have no rows in `tiers` to begin with.
-  for (const feedType of entitled) {
-    const regionKey = regionForFeedType(feedType);
-    if (!regionKey || seen.has(regionKey)) continue;
-    seen.add(regionKey);
-    rows.push({ regionKey, kind: "unavailable", tiers: [], subscription: null, entitlementLapsed: false });
-  }
-
-  return rows.sort(
-    (a, b) => FEED_REGIONS.indexOf(a.regionKey as FeedRegion) - FEED_REGIONS.indexOf(b.regionKey as FeedRegion)
-  );
-}
-
 interface FeedTierSelectFormProps {
   assignAction: Action;
   deactivateAction: Action;
   userId: string;
-  rows: FeedAssignmentRow[];
+  tiers: FeedTierPickerRow[];
+  subscriptions: SubscriberFeedTierSubscription[];
+  entitledFeedTypes: FeedType[];
   subjectName: string;
 }
 
-/** Feed provider assignment control for /admin/users/[id] -- one row per region the client
- * is either entitled to (licenses.feed_types) or already has a subscription in. `rows` is
- * computed once by the caller via computeFeedAssignmentRows and also drives whether the
- * surrounding block renders at all, so this component never re-derives the region list. */
-export function FeedTierSelectForm({ assignAction, deactivateAction, userId, rows, subjectName }: FeedTierSelectFormProps) {
+/** Feed provider assignment control for /admin/users/[id] -- one control per REGION the
+ * client is actually entitled to (licenses.feed_types), not every region in the catalogue.
+ * A client can hold Horizon-catalogue access in more than one region at once (London Base
+ * and NY are separately purchasable packages), so the grain here mirrors
+ * lib/feed-subscriptions.ts's (subscriber, region) grain (bus thread
+ * feed-subscription-recording-build-2026-09-03, marcus ruling). Offering a region the client
+ * has no licence entitlement for reads as incoherent next to the licence's own Feeds chip, so
+ * the region list is derived from entitlement, not rendered unconditionally. */
+export function FeedTierSelectForm({
+  assignAction,
+  deactivateAction,
+  userId,
+  tiers,
+  subscriptions,
+  entitledFeedTypes,
+  subjectName,
+}: FeedTierSelectFormProps) {
+  const entitled = new Set(entitledFeedTypes);
+  const regions: string[] = [];
+  for (const t of tiers) {
+    const hasExistingSubscription = subscriptions.some((s) => s.regionKey === t.regionKey);
+    if (!regions.includes(t.regionKey) && isRegionOfferable(t.regionKey, entitled, hasExistingSubscription)) {
+      regions.push(t.regionKey);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-1.5">
-      {rows.map((row) =>
-        row.kind === "unavailable" ? (
-          <FeedTierUnavailableRow key={row.regionKey} regionKey={row.regionKey} />
-        ) : (
-          <FeedTierRegionControl
-            key={row.regionKey}
-            assignAction={assignAction}
-            deactivateAction={deactivateAction}
-            userId={userId}
-            regionKey={row.regionKey}
-            tiers={row.tiers}
-            subscription={row.subscription}
-            entitlementLapsed={row.entitlementLapsed}
-            subjectName={subjectName}
-          />
-        )
-      )}
-    </div>
-  );
-}
-
-/** A region the client is entitled to but the catalogue has no tiers for -- named so an
- * unfulfillable entitlement isn't indistinguishable from a broken page (Item C). */
-function FeedTierUnavailableRow({ regionKey }: { regionKey: string }) {
-  const regionLabel = REGION_LABELS[regionKey] ?? regionKey;
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-14 shrink-0 text-xs text-zinc-500">{regionLabel}</span>
-      <span className="text-xs italic text-zinc-600">No provider tiers available yet</span>
+      {regions.map((regionKey) => (
+        <FeedTierRegionControl
+          key={regionKey}
+          assignAction={assignAction}
+          deactivateAction={deactivateAction}
+          userId={userId}
+          regionKey={regionKey}
+          tiers={tiers.filter((t) => t.regionKey === regionKey)}
+          subscription={subscriptions.find((s) => s.regionKey === regionKey) ?? null}
+          subjectName={subjectName}
+        />
+      ))}
     </div>
   );
 }
@@ -146,7 +92,6 @@ function FeedTierRegionControl({
   regionKey,
   tiers,
   subscription,
-  entitlementLapsed,
   subjectName,
 }: {
   assignAction: Action;
@@ -155,7 +100,6 @@ function FeedTierRegionControl({
   regionKey: string;
   tiers: FeedTierPickerRow[];
   subscription: SubscriberFeedTierSubscription | null;
-  entitlementLapsed: boolean;
   subjectName: string;
 }) {
   const [assignState, assignFormAction, assignPending] = useActionState(assignAction, null);
@@ -190,55 +134,47 @@ function FeedTierRegionControl({
   return (
     <div className="flex items-center gap-2">
       <span className="w-14 shrink-0 text-xs text-zinc-500">{regionLabel}</span>
-      <div className="flex flex-col gap-0.5">
-        <form ref={assignFormRef} action={assignFormAction}>
-          <input type="hidden" name="userId" value={userId} />
-          <select
-            name="tierKey"
-            defaultValue={selectValue}
-            disabled={assignPending || deactivatePending}
-            onChange={(e) => {
-              const next = e.target.value;
+      <form ref={assignFormRef} action={assignFormAction}>
+        <input type="hidden" name="userId" value={userId} />
+        <select
+          name="tierKey"
+          defaultValue={selectValue}
+          disabled={assignPending || deactivatePending}
+          onChange={(e) => {
+            const next = e.target.value;
 
-              if (next === NO_ACCESS_OPTION) {
-                if (
-                  !window.confirm(
-                    `Deactivate ${subjectName}'s ${regionLabel} feed provider assignment? They will lose feed access.`
-                  )
-                ) {
-                  e.target.value = selectValue;
-                  return;
-                }
-                deactivateFormRef.current?.requestSubmit();
-                return;
-              }
-
+            if (next === NO_ACCESS_OPTION) {
               if (
-                !window.confirm(`Set ${subjectName}'s ${regionLabel} feed tier to ${e.target.selectedOptions[0].text}?`)
+                !window.confirm(
+                  `Deactivate ${subjectName}'s ${regionLabel} feed provider assignment? They will lose feed access.`
+                )
               ) {
                 e.target.value = selectValue;
                 return;
               }
-              assignFormRef.current?.requestSubmit();
-            }}
-            className="rounded border border-zinc-700 bg-black/40 px-1.5 py-0.5 text-xs text-zinc-200 disabled:opacity-50"
-          >
-            <option value={NO_ACCESS_OPTION}>{placeholderLabel}</option>
-            {tiers.map((t) => (
-              // Reassigning to a different tier isn't offered once entitlement has lapsed --
-              // deactivate (the NO_ACCESS_OPTION above) stays the only enabled action besides
-              // the current, already-selected value (Item D).
-              <option key={t.tierKey} value={t.tierKey} disabled={entitlementLapsed}>
-                {t.name}
-                {!t.providerUserId ? " (unassigned)" : ""}
-              </option>
-            ))}
-          </select>
-        </form>
-        {entitlementLapsed && (
-          <span className="text-[10px] text-amber-500">Entitlement lapsed — assignment retained</span>
-        )}
-      </div>
+              deactivateFormRef.current?.requestSubmit();
+              return;
+            }
+
+            if (
+              !window.confirm(`Set ${subjectName}'s ${regionLabel} feed tier to ${e.target.selectedOptions[0].text}?`)
+            ) {
+              e.target.value = selectValue;
+              return;
+            }
+            assignFormRef.current?.requestSubmit();
+          }}
+          className="rounded border border-zinc-700 bg-black/40 px-1.5 py-0.5 text-xs text-zinc-200 disabled:opacity-50"
+        >
+          <option value={NO_ACCESS_OPTION}>{placeholderLabel}</option>
+          {tiers.map((t) => (
+            <option key={t.tierKey} value={t.tierKey}>
+              {t.name}
+              {!t.providerUserId ? " (unassigned)" : ""}
+            </option>
+          ))}
+        </select>
+      </form>
 
       {/* Separate form so deactivate posts only userId + region, never a tierKey value. */}
       <form ref={deactivateFormRef} action={deactivateFormAction} className="hidden">
