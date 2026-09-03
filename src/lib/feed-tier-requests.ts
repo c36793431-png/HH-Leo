@@ -8,7 +8,7 @@ import {
   TrialAlreadyClaimedError,
   TrialNotEligibleError,
 } from "./feed-tier-trials";
-import { assignFeedTierSubscription } from "./feed-subscriptions";
+import { FeedTierNotAssignedError, getFeedTierForAssignment, upsertFeedSubscriptionForRequest } from "./feed-subscriptions";
 
 export const FEED_TIER_REQUEST_STATUSES = ["pending", "approved", "rejected", "provisioned"] as const;
 export type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number];
@@ -31,6 +31,11 @@ export interface FeedTierRequestRow {
   reason: string | null;
   createdAt: Date;
   actionedAt: Date | null;
+  /** The feed_subscriptions row this request's approval wrote, or null if it's not
+   * (yet) approved. Written back in the same transaction as the status flip to 'approved'
+   * (migration 0078 / m35715) so "approved with no backing grant" becomes impossible to
+   * represent, not just unlikely -- see approveFeedTierRequest below. */
+  subscriptionId: string | null;
 }
 
 interface RequestRow {
@@ -50,6 +55,7 @@ interface RequestRow {
   reason: string | null;
   created_at: Date;
   actioned_at: Date | null;
+  subscription_id: string | null;
 }
 
 function mapRow(row: RequestRow): FeedTierRequestRow {
@@ -72,13 +78,14 @@ function mapRow(row: RequestRow): FeedTierRequestRow {
     reason: row.reason,
     createdAt: row.created_at,
     actionedAt: row.actioned_at,
+    subscriptionId: row.subscription_id,
   };
 }
 
 const SELECT_BASE = `
   select ftr.id, ftr.user_id, u.display_name as user_name, u.email as user_email, u.telegram_user_id,
          ftr.license_id, l.license_key, ftr.region, ftr.tier_key, ftr.status, ftr.reason,
-         ftr.created_at, ftr.actioned_at,
+         ftr.created_at, ftr.actioned_at, ftr.subscription_id,
          sr.server_name, sr.declared_ip, ci.ip as captured_ip
   from feed_tier_requests ftr
   join users u on u.id = ftr.user_id
@@ -204,22 +211,56 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
   }
 }
 
+/** Approve = one transaction: the grant write and the status flip must land together or not
+ * at all (Fable's ruling, thread leo-region-vs-tier-subscription-key-collision-2026-09-03,
+ * m35715 -- "the request read approved while no grant existed" was exactly this pair of
+ * writes being two separate, uncoordinated calls). The grant write upserts on THIS request's
+ * id, not on the tier (upsertFeedSubscriptionForRequest, feed-subscriptions.ts) -- a
+ * DuplicateTierGrantError (this tier already has a live grant from a DIFFERENT request) rolls
+ * the whole transaction back, so the request stays 'pending' and the admin sees a real error
+ * instead of a silent merge into someone else's row. subscription_id is written back onto the
+ * request in the same statement as the 'approved' flip (migration 0078), so "approved with no
+ * backing grant" stops being representable in the data at all. */
 export async function approveFeedTierRequest(id: string, actionedBy: string, adminUrl: string): Promise<FeedTierRequestRow> {
   const pending = await getFeedTierRequest(id);
   if (!pending) throw new Error("feed tier request not found");
 
   // Trial row (if eligible) goes in first -- best-effort, see activateTrialIfEligible -- so
   // EFFECTIVE_STATUS_SQL's trial carve-out already sees it before the subscription row it
-  // backs becomes visible on the provider's Accounts page.
+  // backs becomes visible on the provider's Accounts page. Deliberately outside the
+  // transaction below: a trial-insert failure must never roll back a successful approval.
   await activateTrialIfEligible(pending, adminUrl);
 
-  // Records the approval as a real feed_subscriptions row -- same function the admin picker
-  // uses, no second insert path (bus thread feed-approve-request-creates-subscription-item3-
-  // 2026-09-03). Must succeed before the request flips to "approved": a client the provider
-  // can't see approved-but-unrecorded is worse than a request left pending for a retry.
-  await assignFeedTierSubscription(pending.userId, pending.tierKey);
+  const tier = await getFeedTierForAssignment(pending.tierKey);
+  if (!tier.providerUserId) throw new FeedTierNotAssignedError(tier.tierName, tier.regionKey);
 
-  const row = await actionRequest(id, "approved", actionedBy, null);
+  const client = await pool.connect();
+  let subscriptionId: string;
+  try {
+    await client.query("begin");
+    subscriptionId = await upsertFeedSubscriptionForRequest(client, {
+      requestId: pending.id,
+      providerUserId: tier.providerUserId,
+      subscriberUserId: pending.userId,
+      feedTierId: tier.feedTierId,
+      tierName: tier.tierName,
+    });
+    await client.query(
+      `update feed_tier_requests
+       set status = 'approved', reason = null, actioned_at = now(), actioned_by = $2, subscription_id = $3
+       where id = $1`,
+      [id, actionedBy, subscriptionId]
+    );
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  const row = await getFeedTierRequest(id);
+  if (!row) throw new Error("feed tier request not found after approval");
   // Trial-eligible tiers get the richer notifyTrialClientActivated() DM instead (see
   // activateTrialIfEligible) -- sending both would double-DM the client
   // (coxwell green-light, leo-feed-activation-notification-2026-08-17 / m22397).

@@ -15,6 +15,12 @@ function isMissingTable(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "42P01";
 }
 
+/** Postgres unique_violation. Used to tell "this insert collided with a real constraint"
+ * apart from any other failure -- see upsertFeedSubscriptionForRequest below. */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
+}
+
 export type SubscriptionStatus = "trial" | "active" | "lapsed";
 
 export interface CreateSubscriptionInput {
@@ -435,6 +441,70 @@ export class FeedTierNotAssignedError extends Error {
   }
 }
 
+export class DuplicateTierGrantError extends Error {
+  constructor(tierName: string) {
+    super(`${tierName} already has a live (trial/active) subscription via a different request -- refusing to create a second grant for the same tier`);
+    this.name = "DuplicateTierGrantError";
+  }
+}
+
+export interface FeedTierForAssignment {
+  feedTierId: string;
+  tierName: string;
+  regionKey: string;
+  providerUserId: string | null;
+}
+
+/** Shared tier lookup for both grant paths below (admin-direct and request-approval) -- one
+ * query, one "unknown tier key" error, so the two paths can't drift on what "the tier" means.
+ * Exported so approveFeedTierRequest (feed-tier-requests.ts) can resolve the tier's
+ * feedTierId/providerUserId before opening its own transaction, without duplicating this
+ * query. */
+export async function getFeedTierForAssignment(tierKey: string): Promise<FeedTierForAssignment> {
+  const tier = await pool.query<{ id: string; name: string; region_key: string; provider_user_id: string | null }>(
+    `select id, name, region_key, provider_user_id from feed_tiers where tier_key = $1`,
+    [tierKey]
+  );
+  if (!tier.rowCount) throw new Error(`Unknown feed tier: ${tierKey}`);
+  const row = tier.rows[0];
+  return { feedTierId: row.id, tierName: row.name, regionKey: row.region_key, providerUserId: row.provider_user_id };
+}
+
+/** Approval-path write -- Fable's ruling, thread leo-region-vs-tier-subscription-key-
+ * collision-2026-09-03 (m35715): "never upsert on a business key." The identity of what's
+ * being written during approval is the feed_tier_requests row, not (subscriber, tier), so
+ * this upserts `on conflict (request_id)` (migration 0078's unique index on request_id) --
+ * replaying the same request (retry, double-click) reactivates the SAME row, never inserts a
+ * second one. The business key still carries its own partial unique index scoped to live rows
+ * (subscriber_user_id, feed_tier_id/provider_tier_id) WHERE status IN ('trial','active'): if a
+ * DIFFERENT request_id collides with an already-live grant for the same tier, the insert
+ * throws a Postgres unique_violation on that index, which this rethrows as
+ * DuplicateTierGrantError so the caller's transaction rolls back -- approving the same tier
+ * twice via two different requests is an error a human sees, not a silent merge. Must run
+ * inside the SAME transaction as the request's status flip to 'approved' (caller's job) so
+ * "approved" and "has a subscription_id" can never diverge. */
+export async function upsertFeedSubscriptionForRequest(
+  client: PoolClient,
+  args: { requestId: string; providerUserId: string; subscriberUserId: string; feedTierId: string; tierName: string }
+): Promise<string> {
+  const { requestId, providerUserId, subscriberUserId, feedTierId, tierName } = args;
+  await assignPseudonymSeq(client, providerUserId, subscriberUserId);
+  try {
+    const result = await client.query<{ id: string }>(
+      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, feed_tier_id, status, request_id)
+       values ($1, $2, $3, 'active', $4)
+       on conflict (request_id) where request_id is not null do update
+         set status = 'active', lapsed_at = null, provider_user_id = excluded.provider_user_id, updated_at = now()
+       returning id`,
+      [providerUserId, subscriberUserId, feedTierId, requestId]
+    );
+    return result.rows[0].id;
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
+    throw err;
+  }
+}
+
 /** Admin-facing upsert: grants a subscriber ONE specific Horizon-catalogue TIER. Idempotent --
  * re-saving the same tierKey is a no-op (reactivates if lapsed). A region can hold more than
  * one simultaneous tier subscription (the London Base package is three London tiers sold as
@@ -447,14 +517,13 @@ export class FeedTierNotAssignedError extends Error {
  * (e.g. a plan upgrade that should end the old tier) is two calls: assign the new tier, then
  * deactivateFeedTierSubscription the old one -- not this function's job to infer that intent.
  * Status is 'active' (not createSubscription's 'trial' default): this is a direct admin grant,
- * not the request/trial flow. */
+ * not the request/trial flow. Unlike upsertFeedSubscriptionForRequest above, this still upserts
+ * on the business key (subscriber, tier) -- there is no request identity here to upsert on
+ * instead, and idempotent re-click-to-reactivate is the desired admin UX, not an error
+ * condition. Fable's "never upsert on a business key" targets the approval path specifically,
+ * where a retried/duplicated REQUEST must not silently coalesce into an unrelated grant. */
 export async function assignFeedTierSubscription(subscriberUserId: string, tierKey: string): Promise<void> {
-  const tier = await pool.query<{ id: string; name: string; region_key: string; provider_user_id: string | null }>(
-    `select id, name, region_key, provider_user_id from feed_tiers where tier_key = $1`,
-    [tierKey]
-  );
-  if (!tier.rowCount) throw new Error(`Unknown feed tier: ${tierKey}`);
-  const { id: feedTierId, name: tierName, region_key: regionKey, provider_user_id: providerUserId } = tier.rows[0];
+  const { feedTierId, tierName, regionKey, providerUserId } = await getFeedTierForAssignment(tierKey);
   if (!providerUserId) throw new FeedTierNotAssignedError(tierName, regionKey);
 
   const existing = await pool.query<{ id: string; provider_user_id: string }>(
