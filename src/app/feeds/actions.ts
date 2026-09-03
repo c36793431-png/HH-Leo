@@ -7,6 +7,7 @@ import { createFeedTierRequest } from "@/lib/feed-tier-requests";
 import { joinTierWaitlist } from "@/lib/tier-waitlist";
 import { feedTierMeta, isFeedRegion } from "@/lib/feed-tier-catalogue";
 import { getActiveLicenseForUser } from "@/lib/licenses";
+import { getServerRegistrationForUserInRegion } from "@/lib/server-registration";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { startFeedTierTrial, cancelFeedTierTrial, getFeedTierTrial } from "@/lib/feed-tier-trials";
 
@@ -48,6 +49,9 @@ export async function submitFeedTierRequestAction(
 
     const license = await getActiveLicenseForUser(session.user.id);
     if (!license) throw new Error("No active license on this account");
+
+    const serverRegistration = await getServerRegistrationForUserInRegion(session.user.id, region);
+    if (!serverRegistration) throw new Error("No server registered in this region");
 
     await createFeedTierRequest({
       userId: session.user.id,
