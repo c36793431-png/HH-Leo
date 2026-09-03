@@ -22,7 +22,7 @@ import { ConfigSummaryForm } from "@/components/admin/config-summary-form";
 import { FEED_TYPE_META } from "@/lib/licenses";
 import { getConfigSummary } from "@/lib/config-summary";
 import { FeedTierSelectForm } from "@/components/admin/feed-tier-select-form";
-import { getFeedTierSubscriptionForSubscriber, listFeedTiersForAdminPicker } from "@/lib/feed-subscriptions";
+import { getFeedTierSubscriptionsForSubscriber, listFeedTiersForAdminPicker } from "@/lib/feed-subscriptions";
 import {
   expireNowAction,
   extendLicenseAction,
@@ -202,13 +202,13 @@ export default async function AdminUserDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [session, user, payments, configSummary, feedTiers, feedSubscription] = await Promise.all([
+  const [session, user, payments, configSummary, feedTiers, feedSubscriptions] = await Promise.all([
     auth(),
     getUserDetail(id),
     listPaymentsForUser(id),
     getConfigSummary(id),
     listFeedTiersForAdminPicker(),
-    getFeedTierSubscriptionForSubscriber(id),
+    getFeedTierSubscriptionsForSubscriber(id),
   ]);
   if (!user) notFound();
   const isSelf = session?.user?.id === user.userId;
@@ -331,7 +331,7 @@ export default async function AdminUserDetailPage({
                 deactivateAction={deactivateFeedSubscriptionAction}
                 userId={user.userId}
                 tiers={feedTiers}
-                currentTierKey={feedSubscription?.status === "lapsed" ? null : (feedSubscription?.tierKey ?? null)}
+                subscriptions={feedSubscriptions}
                 subjectName={user.displayName ?? user.email ?? "this user"}
               />
             </dd>
