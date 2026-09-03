@@ -11,7 +11,7 @@ import { isScoreRegion } from "@/lib/feed-provider-packages";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
 import { BlackWaitlistControl } from "@/components/feeds/black-waitlist-control";
-import { getAnyServerRegistrationForUser } from "@/lib/server-registration";
+import { getAnyServerRegistrationForUser, getServerRegistrationForUserInRegion } from "@/lib/server-registration";
 import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { hasJoinedTierWaitlist } from "@/lib/tier-waitlist";
@@ -114,8 +114,9 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
-  const [serverRegistration, existingRequests, blackWaitlisted] = await Promise.all([
+  const [serverRegistration, regionServerRegistration, existingRequests, blackWaitlisted] = await Promise.all([
     getAnyServerRegistrationForUser(session.user.id),
+    getServerRegistrationForUserInRegion(session.user.id, region),
     listFeedTierRequests({ userId: session.user.id }),
     region === "london" ? hasJoinedTierWaitlist(session.user.id, "london", "black") : Promise.resolve(false),
   ]);
@@ -254,8 +255,8 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                   tierKey={PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey}
                   tierName={`${label} package`}
                   alreadyRequested={requestedTierKeys.has(PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey)}
-                  serverName={serverRegistration?.serverName ?? null}
-                  serverIp={serverRegistration?.declaredIp ?? null}
+                  serverName={regionServerRegistration?.serverName ?? null}
+                  serverIp={regionServerRegistration?.declaredIp ?? null}
                   licenseTail={licenseTail}
                   variant="primary"
                 />
@@ -310,8 +311,8 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               tierKey={t.tierKey}
               tierName={t.name}
               alreadyRequested={requestedTierKeys.has(t.tierKey)}
-              serverName={serverRegistration?.serverName ?? null}
-              serverIp={serverRegistration?.declaredIp ?? null}
+              serverName={regionServerRegistration?.serverName ?? null}
+              serverIp={regionServerRegistration?.declaredIp ?? null}
               licenseTail={licenseTail}
               variant={isInstitutional ? "amber" : "primary"}
             />

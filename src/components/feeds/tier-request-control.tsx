@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { submitFeedTierRequestAction } from "@/app/feeds/actions";
 import { emitToast } from "@/lib/toast-bus";
 
@@ -93,9 +94,15 @@ export function TierRequestControl({
               </div>
             </div>
 
-            <p className="ftd-sla">
-              Reviewed within 24h. Once approved, we&apos;ll DM you on Telegram — no need to check back here.
-            </p>
+            {serverName ? (
+              <p className="ftd-sla">
+                Reviewed within 24h. Once approved, we&apos;ll DM you on Telegram — no need to check back here.
+              </p>
+            ) : (
+              <p className="ftd-sla ftd-sla-warn">
+                No server registered in this region yet. <Link href="/account/servers">Register one first →</Link>
+              </p>
+            )}
 
             <div className="fp-form-actions">
               <button type="button" className="btn ghost sm" onClick={() => setOpen(false)} disabled={isPending}>
@@ -105,7 +112,8 @@ export function TierRequestControl({
                 type="button"
                 className={`btn ${variant === "amber" ? "amber" : "primary"} sm`}
                 onClick={handleConfirm}
-                disabled={isPending}
+                disabled={isPending || !serverName}
+                title={!serverName ? "Register a server in this region before requesting access" : undefined}
               >
                 {isPending ? "Submitting…" : "Confirm request"}
               </button>

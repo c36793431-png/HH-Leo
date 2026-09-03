@@ -2,7 +2,7 @@ import { pool } from "./db";
 import { resolveGeoIp } from "./geoip";
 import { notifyServerRegistered, notifyIpMismatch, notifyCountryChange } from "./telemetry-sink";
 import { FEED_TYPE_META, getActiveLicensesForUser, type FeedType } from "./licenses";
-import { SERVER_LOCATION_LABELS, type ServerLocation } from "./server-locations";
+import { SERVER_LOCATION_LABELS, effectiveServerLocation, type ServerLocation } from "./server-locations";
 
 function isFeedType(value: string): value is FeedType {
   return (["futures", "london", "ny", "crypto"] as const).includes(value as FeedType);
@@ -109,6 +109,26 @@ export async function getAnyServerRegistrationForUser(userId: string): Promise<S
   for (const license of licenses) {
     const registration = await getServerRegistration(license.id);
     if (registration) return registration;
+  }
+  return null;
+}
+
+/** Same license iteration as getAnyServerRegistrationForUser, but scoped to a single
+ * region -- for the feed tier request modal (feeds/[region]/tiers), which must offer
+ * the server that would actually serve *that* region's tier, not just whichever
+ * registration happens to be found first. A London-only account viewing the NY page
+ * must see no server here, not its London box. effectiveServerLocation() gives legacy
+ * free-text rows the same fallback the /account/servers grouping already relies on. */
+export async function getServerRegistrationForUserInRegion(
+  userId: string,
+  region: ServerLocation
+): Promise<ServerRegistration | null> {
+  const licenses = await getActiveLicensesForUser(userId);
+  for (const license of licenses) {
+    const registration = await getServerRegistration(license.id);
+    if (registration && effectiveServerLocation(registration.location, registration.serverLocation) === region) {
+      return registration;
+    }
   }
   return null;
 }

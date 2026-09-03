@@ -894,6 +894,8 @@
 .portal-shell .fp-modal .ftd-echo-row .k { color: var(--hz-ink-3); }
 .portal-shell .fp-modal .ftd-echo-row .v { color: var(--hz-ink); font-family: var(--hz-mono); }
 .portal-shell .fp-modal .ftd-sla { font-size: 12px; color: var(--hz-ink-3); line-height: 1.6; margin-top: 10px; }
+.portal-shell .fp-modal .ftd-sla-warn { color: var(--hz-warn); }
+.portal-shell .fp-modal .ftd-sla-warn a { color: inherit; text-decoration: underline; }
 
 /* ---- Trial CTA (LD Alpha / LD Ultra tier-detail cards) ---- */
 .portal-shell .ftd-trial-start { margin-top: 4px; }
