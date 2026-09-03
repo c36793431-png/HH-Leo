@@ -6,8 +6,8 @@ import { createFeedRequest } from "@/lib/feed-requests";
 import { createFeedTierRequest } from "@/lib/feed-tier-requests";
 import { joinTierWaitlist } from "@/lib/tier-waitlist";
 import { feedTierMeta, isFeedRegion } from "@/lib/feed-tier-catalogue";
-import { getActiveLicenseForUser } from "@/lib/licenses";
-import { getServerRegistrationForUserInRegion } from "@/lib/server-registration";
+import { getActiveLicenseForUser, getActiveLicensesForUser } from "@/lib/licenses";
+import { getServerRegistration } from "@/lib/server-registration";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { startFeedTierTrial, cancelFeedTierTrial, getFeedTierTrial } from "@/lib/feed-tier-trials";
 
@@ -30,9 +30,12 @@ export async function submitFeedRequestAction(
   });
 }
 
-/** Backend for the tier-signup flow (region + tier -> admin review queue). No UI wired
- * to this yet -- client side waits on Iris's /feeds region-detail mock; this is here so
- * that page can call straight into it once it lands. */
+/** Backend for the tier-signup flow (region + tier -> admin review queue), wired to the
+ * TierRequestControl modal. Cross-region binding is legitimate (coxwell,
+ * leo-cross-region-server-picker-2026-09-04: "yes they can if they wish"), so the client
+ * picks which registered server the request is for and this only re-checks that the
+ * submitted server/licence actually belongs to them -- ownership must be enforced
+ * server-side, never trusted from the form. */
 export async function submitFeedTierRequestAction(
   _prevState: ActionResult | null,
   formData: FormData
@@ -43,15 +46,18 @@ export async function submitFeedTierRequestAction(
 
     const region = (formData.get("region") as string) ?? "";
     const tierKey = (formData.get("tierKey") as string) ?? "";
+    const licenseId = (formData.get("licenseId") as string) ?? "";
     if (!isFeedRegion(region)) throw new Error("Invalid region");
     const tier = feedTierMeta(tierKey);
     if (!tier || tier.region !== region) throw new Error("Invalid tier");
+    if (!licenseId) throw new Error("Select a server");
 
-    const license = await getActiveLicenseForUser(session.user.id);
-    if (!license) throw new Error("No active license on this account");
+    const licenses = await getActiveLicensesForUser(session.user.id);
+    const license = licenses.find((l) => l.id === licenseId);
+    if (!license) throw new Error("Invalid server selection");
 
-    const serverRegistration = await getServerRegistrationForUserInRegion(session.user.id, region);
-    if (!serverRegistration) throw new Error("No server registered in this region");
+    const serverRegistration = await getServerRegistration(licenseId);
+    if (!serverRegistration) throw new Error("No server registered on that license");
 
     await createFeedTierRequest({
       userId: session.user.id,

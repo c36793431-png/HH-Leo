@@ -9,9 +9,10 @@ import { isFeedRegion, FEED_REGION_TYPE } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { isScoreRegion } from "@/lib/feed-provider-packages";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
-import { TierRequestControl } from "@/components/feeds/tier-request-control";
+import { TierRequestControl, type TierRequestServerOption } from "@/components/feeds/tier-request-control";
 import { BlackWaitlistControl } from "@/components/feeds/black-waitlist-control";
-import { getAnyServerRegistrationForUser, getServerRegistrationForUserInRegion } from "@/lib/server-registration";
+import { getAnyServerRegistrationForUser, getServerRegistrationsForUser } from "@/lib/server-registration";
+import { effectiveServerLocation } from "@/lib/server-locations";
 import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { hasJoinedTierWaitlist } from "@/lib/tier-waitlist";
@@ -114,12 +115,23 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
-  const [serverRegistration, regionServerRegistration, existingRequests, blackWaitlisted] = await Promise.all([
+  const [serverRegistration, userServerRegistrations, existingRequests, blackWaitlisted] = await Promise.all([
     getAnyServerRegistrationForUser(session.user.id),
-    getServerRegistrationForUserInRegion(session.user.id, region),
+    getServerRegistrationsForUser(session.user.id),
     listFeedTierRequests({ userId: session.user.id }),
     region === "london" ? hasJoinedTierWaitlist(session.user.id, "london", "black") : Promise.resolve(false),
   ]);
+  // Cross-region binding is legitimate (coxwell, leo-cross-region-server-picker-2026-09-04:
+  // "yes they can if they wish") -- the request modal picks from every server the client
+  // has registered across their active licenses, not just the tier's own region.
+  const licenseKeyByLicenseId = new Map(activeLicenses.map((l) => [l.id, l.licenseKey]));
+  const serverOptions: TierRequestServerOption[] = userServerRegistrations.map((r) => ({
+    licenseId: r.licenseId,
+    serverName: r.serverName,
+    declaredIp: r.declaredIp,
+    region: effectiveServerLocation(r.location, r.serverLocation),
+    licenseKeyTail: licenseKeyByLicenseId.get(r.licenseId)?.slice(-4) ?? "—",
+  }));
   const requestedTierKeys = new Set(
     existingRequests.filter((r) => r.region === region && r.status !== "rejected").map((r) => r.tierKey)
   );
@@ -255,9 +267,8 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                   tierKey={PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey}
                   tierName={`${label} package`}
                   alreadyRequested={requestedTierKeys.has(PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey)}
-                  serverName={regionServerRegistration?.serverName ?? null}
-                  serverIp={regionServerRegistration?.declaredIp ?? null}
-                  licenseTail={licenseTail}
+                  servers={serverOptions}
+                  fallbackLicenseTail={licenseTail}
                   variant="primary"
                 />
               </div>
@@ -311,9 +322,8 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               tierKey={t.tierKey}
               tierName={t.name}
               alreadyRequested={requestedTierKeys.has(t.tierKey)}
-              serverName={regionServerRegistration?.serverName ?? null}
-              serverIp={regionServerRegistration?.declaredIp ?? null}
-              licenseTail={licenseTail}
+              servers={serverOptions}
+              fallbackLicenseTail={licenseTail}
               variant={isInstitutional ? "amber" : "primary"}
             />
           </div>

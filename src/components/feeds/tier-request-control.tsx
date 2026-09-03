@@ -4,16 +4,36 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { submitFeedTierRequestAction } from "@/app/feeds/actions";
 import { emitToast } from "@/lib/toast-bus";
+import { SERVER_LOCATION_LABELS, type ServerLocation } from "@/lib/server-locations";
+
+export interface TierRequestServerOption {
+  licenseId: string;
+  serverName: string;
+  declaredIp: string;
+  region: ServerLocation | "unspecified";
+  licenseKeyTail: string;
+}
 
 interface TierRequestControlProps {
   region: string;
   tierKey: string;
   tierName: string;
   alreadyRequested: boolean;
-  serverName: string | null;
-  serverIp: string | null;
-  licenseTail: string;
+  servers: TierRequestServerOption[];
+  fallbackLicenseTail: string;
   variant?: "primary" | "amber";
+}
+
+/** Pre-selects a server per coxwell's ruling (leo-cross-region-server-picker-2026-09-04):
+ * one server -> that one. Two-plus -> the one matching the tier's own region only if
+ * exactly one does, otherwise no default so the client must choose. */
+function defaultServerId(servers: TierRequestServerOption[], region: string): string | null {
+  if (servers.length === 1) return servers[0].licenseId;
+  if (servers.length >= 2) {
+    const matches = servers.filter((s) => s.region === region);
+    if (matches.length === 1) return matches[0].licenseId;
+  }
+  return null;
 }
 
 export function TierRequestControl({
@@ -21,14 +41,14 @@ export function TierRequestControl({
   tierKey,
   tierName,
   alreadyRequested,
-  serverName,
-  serverIp,
-  licenseTail,
+  servers,
+  fallbackLicenseTail,
   variant = "primary",
 }: TierRequestControlProps) {
   const [open, setOpen] = useState(false);
   const [requested, setRequested] = useState(alreadyRequested);
   const [isPending, startTransition] = useTransition();
+  const [selectedId, setSelectedId] = useState<string | null>(() => defaultServerId(servers, region));
 
   if (requested) {
     return (
@@ -38,10 +58,20 @@ export function TierRequestControl({
     );
   }
 
+  const selected = servers.find((s) => s.licenseId === selectedId) ?? null;
+  const canSubmit = !!selected;
+
+  function handleOpen() {
+    setSelectedId(defaultServerId(servers, region));
+    setOpen(true);
+  }
+
   function handleConfirm() {
+    if (!selected) return;
     const formData = new FormData();
     formData.set("region", region);
     formData.set("tierKey", tierKey);
+    formData.set("licenseId", selected.licenseId);
     startTransition(async () => {
       const result = await submitFeedTierRequestAction(null, formData);
       if (result.ok) {
@@ -58,7 +88,7 @@ export function TierRequestControl({
       <button
         type="button"
         className={`btn ${variant === "amber" ? "amber" : "primary"} sm ftd-unlock`}
-        onClick={() => setOpen(true)}
+        onClick={handleOpen}
       >
         Request access
       </button>
@@ -80,27 +110,49 @@ export function TierRequestControl({
                 <span className="k">Tier</span>
                 <span className="v">{tierName}</span>
               </div>
-              <div className="ftd-echo-row">
-                <span className="k">Server</span>
-                <span className="v">{serverName ?? "not registered"}</span>
-              </div>
+
+              {servers.length >= 2 ? (
+                <div className="ftd-echo-row">
+                  <span className="k">Server</span>
+                  <select
+                    className="v ftd-server-select"
+                    value={selectedId ?? ""}
+                    onChange={(e) => setSelectedId(e.target.value || null)}
+                  >
+                    <option value="" disabled>
+                      Choose a server…
+                    </option>
+                    {servers.map((s) => (
+                      <option key={s.licenseId} value={s.licenseId}>
+                        {s.serverName} — {SERVER_LOCATION_LABELS[s.region as ServerLocation] ?? "Unspecified"} ({s.declaredIp})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="ftd-echo-row">
+                  <span className="k">Server</span>
+                  <span className="v">{selected?.serverName ?? "not registered"}</span>
+                </div>
+              )}
+
               <div className="ftd-echo-row">
                 <span className="k">IP</span>
-                <span className="v">{serverIp ?? "—"}</span>
+                <span className="v">{selected?.declaredIp ?? "—"}</span>
               </div>
               <div className="ftd-echo-row">
                 <span className="k">License</span>
-                <span className="v">{licenseTail}</span>
+                <span className="v">{selected?.licenseKeyTail ?? fallbackLicenseTail}</span>
               </div>
             </div>
 
-            {serverName ? (
-              <p className="ftd-sla">
-                Reviewed within 24h. Once approved, we&apos;ll DM you on Telegram — no need to check back here.
-              </p>
-            ) : (
+            {servers.length === 0 ? (
               <p className="ftd-sla ftd-sla-warn">
                 No server registered in this region yet. <Link href="/account/servers">Register one first →</Link>
+              </p>
+            ) : (
+              <p className="ftd-sla">
+                Reviewed within 24h. Once approved, we&apos;ll DM you on Telegram — no need to check back here.
               </p>
             )}
 
@@ -112,8 +164,14 @@ export function TierRequestControl({
                 type="button"
                 className={`btn ${variant === "amber" ? "amber" : "primary"} sm`}
                 onClick={handleConfirm}
-                disabled={isPending || !serverName}
-                title={!serverName ? "Register a server in this region before requesting access" : undefined}
+                disabled={isPending || !canSubmit}
+                title={
+                  !canSubmit
+                    ? servers.length === 0
+                      ? "Register a server before requesting access"
+                      : "Select a server before requesting access"
+                    : undefined
+                }
               >
                 {isPending ? "Submitting…" : "Confirm request"}
               </button>
