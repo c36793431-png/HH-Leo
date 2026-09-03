@@ -194,3 +194,147 @@ export async function getActiveSubscriberCountForProvider(providerUserId: string
     throw err;
   }
 }
+
+/** Bus thread feed-subscription-recording-build-2026-09-03 (marcus, coxwell-authorised).
+ * Records access clients actually hold via Horizon's own regional catalogue (feed_tiers) --
+ * distinct from the self-onboarded provider_tiers path, which createSubscription/
+ * listSubscribersForProvider already handle generically. Admin-facing only. */
+
+export interface FeedTierPickerRow {
+  id: string;
+  tierKey: string;
+  name: string;
+  regionKey: string;
+  providerUserId: string | null;
+  sortOrder: number;
+}
+
+/** Picker source for /admin/users/[id] -- reads feed_tiers directly rather than the
+ * app-code FEED_TIERS catalogue (feed-tier-catalogue.ts) since this control needs the
+ * row's id and provider_user_id to write a subscription, and 0074 confirmed the DB name
+ * and the catalogue name are already in sync. providerUserId null means the tier exists
+ * in the catalogue but isn't assigned to a provider account yet (e.g. Ultra/Alpha 85 per
+ * coxwell) -- still offered here, assignFeedTierSubscription rejects saving it. */
+export async function listFeedTiersForAdminPicker(): Promise<FeedTierPickerRow[]> {
+  const result = await pool.query<{
+    id: string;
+    tier_key: string;
+    name: string;
+    region_key: string;
+    provider_user_id: string | null;
+    sort_order: number;
+  }>(
+    `select id, tier_key, name, region_key, provider_user_id, sort_order
+     from feed_tiers
+     order by region_key, sort_order`
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    tierKey: row.tier_key,
+    name: row.name,
+    regionKey: row.region_key,
+    providerUserId: row.provider_user_id,
+    sortOrder: row.sort_order,
+  }));
+}
+
+export interface SubscriberFeedTierSubscription {
+  subscriptionId: string;
+  tierKey: string;
+  tierName: string;
+  status: SubscriptionStatus;
+}
+
+/** The subscriber's current Horizon-catalogue (feed_tier_id-backed) subscription, if any --
+ * deliberately excludes provider_tier_id rows, which belong to real third-party providers
+ * and are never something this admin control should read, show, or touch. At most one such
+ * row is expected per subscriber (assignFeedTierSubscription enforces that going forward);
+ * if more than one somehow exists, the most recently started row wins for display/edit. */
+export async function getFeedTierSubscriptionForSubscriber(
+  subscriberUserId: string
+): Promise<SubscriberFeedTierSubscription | null> {
+  const result = await pool.query<{ id: string; tier_key: string; name: string; status: SubscriptionStatus }>(
+    `select s.id, ft.tier_key, ft.name, s.status
+     from feed_subscriptions s
+     join feed_tiers ft on ft.id = s.feed_tier_id
+     where s.subscriber_user_id = $1
+     order by s.started_at desc
+     limit 1`,
+    [subscriberUserId]
+  );
+  if (!result.rowCount) return null;
+  const row = result.rows[0];
+  return { subscriptionId: row.id, tierKey: row.tier_key, tierName: row.name, status: row.status };
+}
+
+export class FeedTierNotAssignedError extends Error {
+  constructor(tierKey: string) {
+    super(`${tierKey} isn't assigned to a provider account yet -- ask coxwell before granting it`);
+    this.name = "FeedTierNotAssignedError";
+  }
+}
+
+/** Admin-facing upsert: grants (or moves) a subscriber's ONE Horizon-catalogue subscription.
+ * Idempotent -- re-saving the same tierKey is a no-op, and switching tiers reuses the
+ * existing row (update) rather than inserting a second one, so a client can never end up
+ * with two feed_tier_id rows from this control. Status is 'active' (not createSubscription's
+ * 'trial' default): this is a direct admin grant, not the request/trial flow. */
+export async function assignFeedTierSubscription(subscriberUserId: string, tierKey: string): Promise<void> {
+  const tier = await pool.query<{ id: string; provider_user_id: string | null }>(
+    `select id, provider_user_id from feed_tiers where tier_key = $1`,
+    [tierKey]
+  );
+  if (!tier.rowCount) throw new Error(`Unknown feed tier: ${tierKey}`);
+  const { id: feedTierId, provider_user_id: providerUserId } = tier.rows[0];
+  if (!providerUserId) throw new FeedTierNotAssignedError(tierKey);
+
+  const existing = await pool.query<{ id: string; feed_tier_id: string; provider_user_id: string }>(
+    `select id, feed_tier_id, provider_user_id from feed_subscriptions
+     where subscriber_user_id = $1 and feed_tier_id is not null
+     order by started_at desc limit 1`,
+    [subscriberUserId]
+  );
+
+  if (existing.rowCount) {
+    const row = existing.rows[0];
+    if (row.feed_tier_id === feedTierId && row.provider_user_id === providerUserId) {
+      await pool.query(
+        `update feed_subscriptions set status = 'active', lapsed_at = null, updated_at = now() where id = $1`,
+        [row.id]
+      );
+      return;
+    }
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await assignPseudonymSeq(client, providerUserId, subscriberUserId);
+      await client.query(
+        `update feed_subscriptions
+         set feed_tier_id = $2, provider_user_id = $3, status = 'active', lapsed_at = null, updated_at = now()
+         where id = $1`,
+        [row.id, feedTierId, providerUserId]
+      );
+      await client.query("commit");
+    } catch (err) {
+      await client.query("rollback");
+      throw err;
+    } finally {
+      client.release();
+    }
+    return;
+  }
+
+  await createSubscription({ providerUserId, subscriberUserId, feedTierId, status: "active" });
+}
+
+/** Ends the subscriber's Horizon-catalogue subscription -- sets status='lapsed' so it drops
+ * out of getActiveSubscriberCountForProvider and the provider's Accounts list shows it as
+ * lapsed (existing behaviour, not new). No-op if there's no such row or it's already lapsed. */
+export async function deactivateFeedTierSubscription(subscriberUserId: string): Promise<void> {
+  await pool.query(
+    `update feed_subscriptions
+     set status = 'lapsed', lapsed_at = now(), updated_at = now()
+     where subscriber_user_id = $1 and feed_tier_id is not null and status != 'lapsed'`,
+    [subscriberUserId]
+  );
+}

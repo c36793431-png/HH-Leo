@@ -21,6 +21,8 @@ import { NotesForm } from "@/components/admin/notes-form";
 import { ConfigSummaryForm } from "@/components/admin/config-summary-form";
 import { FEED_TYPE_META } from "@/lib/licenses";
 import { getConfigSummary } from "@/lib/config-summary";
+import { FeedTierSelectForm } from "@/components/admin/feed-tier-select-form";
+import { getFeedTierSubscriptionForSubscriber, listFeedTiersForAdminPicker } from "@/lib/feed-subscriptions";
 import {
   expireNowAction,
   extendLicenseAction,
@@ -33,6 +35,8 @@ import {
   updateLicenseFeedsAction,
   updateUserNotesAction,
   updateConfigSummaryAction,
+  assignFeedSubscriptionAction,
+  deactivateFeedSubscriptionAction,
 } from "../actions";
 
 const STATUS_STYLES = {
@@ -198,11 +202,13 @@ export default async function AdminUserDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [session, user, payments, configSummary] = await Promise.all([
+  const [session, user, payments, configSummary, feedTiers, feedSubscription] = await Promise.all([
     auth(),
     getUserDetail(id),
     listPaymentsForUser(id),
     getConfigSummary(id),
+    listFeedTiersForAdminPicker(),
+    getFeedTierSubscriptionForSubscriber(id),
   ]);
   if (!user) notFound();
   const isSelf = session?.user?.id === user.userId;
@@ -316,6 +322,19 @@ export default async function AdminUserDetailPage({
               subjectName={user.displayName ?? user.email ?? "this user"}
               isSelf={isSelf}
             />
+          </div>
+          <div>
+            <dt className="text-xs text-zinc-500">Feed subscription</dt>
+            <dd className="text-zinc-200">
+              <FeedTierSelectForm
+                assignAction={assignFeedSubscriptionAction}
+                deactivateAction={deactivateFeedSubscriptionAction}
+                userId={user.userId}
+                tiers={feedTiers}
+                currentTierKey={feedSubscription?.status === "lapsed" ? null : (feedSubscription?.tierKey ?? null)}
+                subjectName={user.displayName ?? user.email ?? "this user"}
+              />
+            </dd>
           </div>
           <div>
             <dt className="text-xs text-zinc-500">Active IP</dt>

@@ -34,6 +34,7 @@ import {
 } from "@/lib/config-summary";
 import { ALL_USER_ROLES, REVOKE_ONLY_ROLES, ROLE_LABELS, type UserRole } from "@/lib/admin-user-roles";
 import { pickPrimaryRole } from "@/lib/user-roles";
+import { assignFeedTierSubscription, deactivateFeedTierSubscription } from "@/lib/feed-subscriptions";
 
 async function requireAdminUsersPanel(): Promise<string> {
   const session = await auth();
@@ -136,6 +137,34 @@ export async function updateLicenseFeedsAction(
     await setLicenseFeedTypes(licenseId, feedTypes);
     await logAdminAction(adminUserId, "admin_users_set_feeds", ownerId, { licenseId, feedTypes }, licenseId);
     revalidateUsers(ownerId);
+  });
+}
+
+export async function assignFeedSubscriptionAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to assign feed tier", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const userId = formData.get("userId") as string;
+    const tierKey = formData.get("tierKey") as string;
+    if (!tierKey) throw new Error("Tier is required");
+    await assignFeedTierSubscription(userId, tierKey);
+    await logAdminAction(adminUserId, "admin_users_assign_feed_subscription", userId, { tierKey }, null);
+    revalidateUsers(userId);
+  });
+}
+
+export async function deactivateFeedSubscriptionAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to deactivate feed subscription", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const userId = formData.get("userId") as string;
+    await deactivateFeedTierSubscription(userId);
+    await logAdminAction(adminUserId, "admin_users_deactivate_feed_subscription", userId, null, null);
+    revalidateUsers(userId);
   });
 }
 
