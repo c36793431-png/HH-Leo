@@ -43,6 +43,23 @@ export const FEED_TIERS: FeedTierMeta[] = [
   { key: "ld-retail-package", name: "Base Package (Beta 56 / Gamma 19 / Delta 18)", region: "london" },
 ];
 
+/** Package pseudo-tier -> its real member tier keys. Provider scoping (feed-providers.ts
+ * listPendingRequestsForProvider/assertOwnsRequestTier) has to expand a package request's
+ * tier_key against this before matching it to a provider's owned feed_tiers rows, since no
+ * provider ever owns "ld-retail-package" itself (bug confirmed m35243, live since
+ * 2026-08-29: package requests were invisible to every provider's queue and unapprovable
+ * even manually). Single source of truth for that expansion -- both call sites in
+ * feed-providers.ts import expandTierKey() rather than each hardcoding the member list.
+ * Keep in sync with tiers/page.tsx's TIER_PACKAGE_KEY (the display-grouping inverse of
+ * this, used to render the three members as one card). */
+export const PACKAGE_TIER_KEYS: Record<string, string[]> = {
+  "ld-retail-package": ["ld-beta-56", "ld-gamma-19", "ld-delta-18"],
+};
+
+export function expandTierKey(tierKey: string): string[] {
+  return PACKAGE_TIER_KEYS[tierKey] ?? [tierKey];
+}
+
 /** Only the entry tier and the flagship get a trial CTA (coxwell, trial feature add-on,
  * horizon-portal-v2051-polish-2026-08-13) -- middle tiers stay paid-only. NY has no middle
  * tier (2 tiers total), so both are trial-eligible (coxwell, leo-ny-feed-trial-option-2026-08-15). */

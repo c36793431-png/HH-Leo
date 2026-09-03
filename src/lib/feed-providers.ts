@@ -1,5 +1,5 @@
 import { pool } from "./db";
-import { feedTierMeta } from "./feed-tier-catalogue";
+import { feedTierMeta, expandTierKey } from "./feed-tier-catalogue";
 import { listFeedTierRequests, approveFeedTierRequest, rejectFeedTierRequest, type FeedTierRequestRow } from "./feed-tier-requests";
 import { listFeedTierTrials, type FeedTierTrialRow } from "./feed-tier-trials";
 import { pseudonymForSubscriber } from "./feed-subscriptions";
@@ -102,7 +102,7 @@ export async function listPendingRequestsForProvider(providerUserId: string): Pr
   const owned = await tierKeySetFor(providerUserId);
   if (owned.size === 0) return [];
   const all = await listFeedTierRequests({ status: "pending" });
-  const scoped = all.filter((r) => owned.has(r.tierKey));
+  const scoped = all.filter((r) => expandTierKey(r.tierKey).some((k) => owned.has(k)));
   return maskIdentity(providerUserId, scoped);
 }
 
@@ -123,7 +123,7 @@ export class ProviderTierMismatchError extends Error {
 async function assertOwnsRequestTier(providerUserId: string, requestId: string): Promise<void> {
   const owned = await tierKeySetFor(providerUserId);
   const [row] = (await listFeedTierRequests({})).filter((r) => r.id === requestId);
-  if (!row || !owned.has(row.tierKey)) throw new ProviderTierMismatchError();
+  if (!row || !expandTierKey(row.tierKey).some((k) => owned.has(k))) throw new ProviderTierMismatchError();
 }
 
 /** Provider-approve — MUST stay on the exact same approveFeedTierRequest()/
