@@ -108,10 +108,14 @@ export default async function DashboardPage() {
     // matching /feeds (thread multi-license-visibility-2026-08-31, marcus).
     const tierBadge = hasDrillIn ? `${tierCount} TIER${tierCount === 1 ? "" : "S"}` : null;
 
-    const action =
-      pill.color === "red"
-        ? { label: "Upgrade →", href: config.telegramChannelUrl, external: true }
-        : { label: "See tiers →", href: hasDrillIn && region ? `/feeds/${region}/tiers` : "/feeds", external: false };
+    // Both branches route in-product now (coxwell, leo-cross-region-server-picker-2026-09-04:
+    // "yes feed picker instead of telegram") — a paying client hitting a locked feed used to be
+    // sent to Telegram instead of the tier picker they actually needed.
+    const action = {
+      label: pill.color === "red" ? "Upgrade →" : "See tiers →",
+      href: hasDrillIn && region ? `/feeds/${region}/tiers` : "/feeds",
+      external: false,
+    };
 
     const bestLatency = region ? feedBestLatency[region] : undefined;
     const stat = bestLatency != null ? `${bestLatency}µs · ${meta.coloCode} co-lo` : `${meta.coloCode} co-lo`;
