@@ -122,16 +122,22 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
     region === "london" ? hasJoinedTierWaitlist(session.user.id, "london", "black") : Promise.resolve(false),
   ]);
   // Cross-region binding is legitimate (coxwell, leo-cross-region-server-picker-2026-09-04:
-  // "yes they can if they wish") -- the request modal picks from every server the client
-  // has registered across their active licenses, not just the tier's own region.
-  const licenseKeyByLicenseId = new Map(activeLicenses.map((l) => [l.id, l.licenseKey]));
-  const serverOptions: TierRequestServerOption[] = userServerRegistrations.map((r) => ({
-    licenseId: r.licenseId,
-    serverName: r.serverName,
-    declaredIp: r.declaredIp,
-    region: effectiveServerLocation(r.location, r.serverLocation),
-    licenseKeyTail: licenseKeyByLicenseId.get(r.licenseId)?.slice(-4) ?? "—",
-  }));
+  // "yes they can if they wish") -- the request modal picks from every active license the
+  // client holds, not just servers registered in the tier's own region. A license with no
+  // registration stays listed (Fable's R6 "binding unconfirmed" downstream) -- deliberate,
+  // do not filter it out here.
+  const registrationByLicenseId = new Map(userServerRegistrations.map((r) => [r.licenseId, r]));
+  const serverOptions: TierRequestServerOption[] = activeLicenses.map((l) => {
+    const r = registrationByLicenseId.get(l.id);
+    return {
+      licenseId: l.id,
+      serverName: r?.serverName ?? null,
+      declaredIp: r?.declaredIp ?? null,
+      region: r ? effectiveServerLocation(r.location, r.serverLocation) : null,
+      licenseKeyTail: l.licenseKey.slice(-4),
+      registered: !!r,
+    };
+  });
   const requestedTierKeys = new Set(
     existingRequests.filter((r) => r.region === region && r.status !== "rejected").map((r) => r.tierKey)
   );

@@ -8,10 +8,21 @@ import { SERVER_LOCATION_LABELS, type ServerLocation } from "@/lib/server-locati
 
 export interface TierRequestServerOption {
   licenseId: string;
-  serverName: string;
-  declaredIp: string;
-  region: ServerLocation | "unspecified";
+  serverName: string | null;
+  declaredIp: string | null;
+  region: ServerLocation | "unspecified" | null;
   licenseKeyTail: string;
+  /** False when this active license has no server_registrations row. Kept listable and
+   * submittable (coxwell, leo-cross-region-server-picker-2026-09-04 refinement 3) -- it
+   * lands in Fable's R6 "binding unconfirmed" list downstream. Do not filter or disable
+   * on this. */
+  registered: boolean;
+}
+
+function optionLabel(s: TierRequestServerOption): string {
+  if (!s.registered) return `Not registered — License ****${s.licenseKeyTail}`;
+  const location = SERVER_LOCATION_LABELS[s.region as ServerLocation] ?? "Unspecified";
+  return `${s.serverName} — ${location} (${s.declaredIp})`;
 }
 
 interface TierRequestControlProps {
@@ -124,7 +135,7 @@ export function TierRequestControl({
                     </option>
                     {servers.map((s) => (
                       <option key={s.licenseId} value={s.licenseId}>
-                        {s.serverName} — {SERVER_LOCATION_LABELS[s.region as ServerLocation] ?? "Unspecified"} ({s.declaredIp})
+                        {optionLabel(s)}
                       </option>
                     ))}
                   </select>
@@ -132,7 +143,7 @@ export function TierRequestControl({
               ) : (
                 <div className="ftd-echo-row">
                   <span className="k">Server</span>
-                  <span className="v">{selected?.serverName ?? "not registered"}</span>
+                  <span className="v">{selected ? optionLabel(selected) : "no active license"}</span>
                 </div>
               )}
 
@@ -148,7 +159,7 @@ export function TierRequestControl({
 
             {servers.length === 0 ? (
               <p className="ftd-sla ftd-sla-warn">
-                No server registered in this region yet. <Link href="/account/servers">Register one first →</Link>
+                No active license on this account yet. <Link href="/account/servers">Register a server →</Link>
               </p>
             ) : (
               <p className="ftd-sla">
@@ -168,7 +179,7 @@ export function TierRequestControl({
                 title={
                   !canSubmit
                     ? servers.length === 0
-                      ? "Register a server before requesting access"
+                      ? "No active license on this account"
                       : "Select a server before requesting access"
                     : undefined
                 }

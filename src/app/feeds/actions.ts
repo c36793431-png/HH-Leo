@@ -7,7 +7,6 @@ import { createFeedTierRequest } from "@/lib/feed-tier-requests";
 import { joinTierWaitlist } from "@/lib/tier-waitlist";
 import { feedTierMeta, isFeedRegion } from "@/lib/feed-tier-catalogue";
 import { getActiveLicenseForUser, getActiveLicensesForUser } from "@/lib/licenses";
-import { getServerRegistration } from "@/lib/server-registration";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { startFeedTierTrial, cancelFeedTierTrial, getFeedTierTrial } from "@/lib/feed-tier-trials";
 
@@ -56,9 +55,9 @@ export async function submitFeedTierRequestAction(
     const license = licenses.find((l) => l.id === licenseId);
     if (!license) throw new Error("Invalid server selection");
 
-    const serverRegistration = await getServerRegistration(licenseId);
-    if (!serverRegistration) throw new Error("No server registered on that license");
-
+    // A license with no server_registrations row is a deliberate allowed submission
+    // (coxwell, leo-cross-region-server-picker-2026-09-04 refinement 3) -- it lands in
+    // Fable's R6 "binding unconfirmed" list downstream. Do not reintroduce a guard here.
     await createFeedTierRequest({
       userId: session.user.id,
       licenseId: license.id,
