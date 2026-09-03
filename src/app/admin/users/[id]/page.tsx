@@ -222,6 +222,9 @@ export default async function AdminUserDetailPage({
   const historyLicenses = user.licenses.filter(
     (l) => l.computedStatus === "expired" || l.computedStatus === "revoked"
   );
+  // Same "active or expiring" set as computeUserActiveFeeds' raw status/expiry check --
+  // reuses currentLicenses rather than a second DB query for the same fact.
+  const entitledFeedTypes = [...new Set(currentLicenses.flatMap((l) => l.feedTypes))];
 
   return (
     <div className="flex flex-1 flex-col gap-6">
@@ -324,14 +327,18 @@ export default async function AdminUserDetailPage({
             />
           </div>
           <div>
-            <dt className="text-xs text-zinc-500">Feed subscription</dt>
+            <dt className="text-xs text-zinc-500">Feed provider assignment</dt>
             <dd className="text-zinc-200">
+              <p className="mb-1.5 max-w-xs text-[11px] leading-snug text-zinc-500">
+                The licence below grants regional feed access; this assigns which provider actually serves it.
+              </p>
               <FeedTierSelectForm
                 assignAction={assignFeedSubscriptionAction}
                 deactivateAction={deactivateFeedSubscriptionAction}
                 userId={user.userId}
                 tiers={feedTiers}
                 subscriptions={feedSubscriptions}
+                entitledFeedTypes={entitledFeedTypes}
                 subjectName={user.displayName ?? user.email ?? "this user"}
               />
             </dd>

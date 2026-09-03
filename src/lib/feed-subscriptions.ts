@@ -276,6 +276,7 @@ export interface SubscriberFeedTierSubscription {
   tierName: string;
   regionKey: string;
   status: SubscriptionStatus;
+  lapsedAt: Date | null;
 }
 
 const REGION_LABELS: Record<string, string> = { london: "London", ny: "New York", cme: "CME", tokyo: "Tokyo" };
@@ -296,8 +297,9 @@ export async function getFeedTierSubscriptionsForSubscriber(
     name: string;
     region_key: string;
     status: SubscriptionStatus;
+    lapsed_at: Date | null;
   }>(
-    `select distinct on (ft.region_key) s.id, ft.tier_key, ft.name, ft.region_key, s.status
+    `select distinct on (ft.region_key) s.id, ft.tier_key, ft.name, ft.region_key, s.status, s.lapsed_at
      from feed_subscriptions s
      join feed_tiers ft on ft.id = s.feed_tier_id
      where s.subscriber_user_id = $1
@@ -310,6 +312,7 @@ export async function getFeedTierSubscriptionsForSubscriber(
     tierName: row.name,
     regionKey: row.region_key,
     status: row.status,
+    lapsedAt: row.lapsed_at,
   }));
 }
 

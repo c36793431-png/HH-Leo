@@ -4,6 +4,9 @@ import { useActionState, useEffect, useRef } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import type { FeedTierPickerRow, SubscriberFeedTierSubscription } from "@/lib/feed-subscriptions";
 import { emitToast } from "@/lib/toast-bus";
+import { FEED_REGION_TYPE, isFeedRegion } from "@/lib/feed-tier-catalogue";
+import type { FeedType } from "@/lib/licenses";
+import { formatRelative } from "@/lib/format-time";
 
 const NO_ACCESS_OPTION = "__none__";
 
@@ -11,32 +14,53 @@ type Action = (prevState: ActionResult | null, formData: FormData) => Promise<Ac
 
 const REGION_LABELS: Record<string, string> = { london: "London", ny: "New York", cme: "CME", tokyo: "Tokyo" };
 
+/** A region with no FEED_REGION_TYPE mapping (cme today) has no licence concept at all yet,
+ * so it can't be gated by entitlement -- same "ungated" treatment feed-subscriptions.ts's
+ * EFFECTIVE_STATUS_SQL gives it on the provider-facing side. A region the client already has
+ * a subscription row in (any status) also stays visible even if entitlement has since lapsed,
+ * so admin can still see/deactivate it rather than losing the control entirely. */
+function isRegionOfferable(regionKey: string, entitledFeedTypes: Set<FeedType>, hasExistingSubscription: boolean): boolean {
+  if (hasExistingSubscription) return true;
+  if (!isFeedRegion(regionKey)) return true;
+  const feedType = FEED_REGION_TYPE[regionKey];
+  if (feedType === null) return true;
+  return entitledFeedTypes.has(feedType);
+}
+
 interface FeedTierSelectFormProps {
   assignAction: Action;
   deactivateAction: Action;
   userId: string;
   tiers: FeedTierPickerRow[];
   subscriptions: SubscriberFeedTierSubscription[];
+  entitledFeedTypes: FeedType[];
   subjectName: string;
 }
 
-/** Feed-subscription control for /admin/users/[id] -- one control per REGION present in the
- * catalogue, not a single global select. A client can hold Horizon-catalogue access in more
- * than one region at once (London Base and NY are separately purchasable packages), so the
- * grain here mirrors lib/feed-subscriptions.ts's (subscriber, region) grain (bus thread
- * feed-subscription-recording-build-2026-09-03, marcus ruling). Regions are derived from the
- * tiers actually present in feed_tiers, so a third region needs no change here. */
+/** Feed provider assignment control for /admin/users/[id] -- one control per REGION the
+ * client is actually entitled to (licenses.feed_types), not every region in the catalogue.
+ * A client can hold Horizon-catalogue access in more than one region at once (London Base
+ * and NY are separately purchasable packages), so the grain here mirrors
+ * lib/feed-subscriptions.ts's (subscriber, region) grain (bus thread
+ * feed-subscription-recording-build-2026-09-03, marcus ruling). Offering a region the client
+ * has no licence entitlement for reads as incoherent next to the licence's own Feeds chip, so
+ * the region list is derived from entitlement, not rendered unconditionally. */
 export function FeedTierSelectForm({
   assignAction,
   deactivateAction,
   userId,
   tiers,
   subscriptions,
+  entitledFeedTypes,
   subjectName,
 }: FeedTierSelectFormProps) {
+  const entitled = new Set(entitledFeedTypes);
   const regions: string[] = [];
   for (const t of tiers) {
-    if (!regions.includes(t.regionKey)) regions.push(t.regionKey);
+    const hasExistingSubscription = subscriptions.some((s) => s.regionKey === t.regionKey);
+    if (!regions.includes(t.regionKey) && isRegionOfferable(t.regionKey, entitled, hasExistingSubscription)) {
+      regions.push(t.regionKey);
+    }
   }
 
   return (
@@ -49,9 +73,7 @@ export function FeedTierSelectForm({
           userId={userId}
           regionKey={regionKey}
           tiers={tiers.filter((t) => t.regionKey === regionKey)}
-          currentTierKey={
-            subscriptions.find((s) => s.regionKey === regionKey && s.status !== "lapsed")?.tierKey ?? null
-          }
+          subscription={subscriptions.find((s) => s.regionKey === regionKey) ?? null}
           subjectName={subjectName}
         />
       ))}
@@ -69,7 +91,7 @@ function FeedTierRegionControl({
   userId,
   regionKey,
   tiers,
-  currentTierKey,
+  subscription,
   subjectName,
 }: {
   assignAction: Action;
@@ -77,7 +99,7 @@ function FeedTierRegionControl({
   userId: string;
   regionKey: string;
   tiers: FeedTierPickerRow[];
-  currentTierKey: string | null;
+  subscription: SubscriberFeedTierSubscription | null;
   subjectName: string;
 }) {
   const [assignState, assignFormAction, assignPending] = useActionState(assignAction, null);
@@ -98,8 +120,16 @@ function FeedTierRegionControl({
     );
   }, [deactivateState]);
 
+  const isLapsed = subscription?.status === "lapsed";
+  const currentTierKey = subscription && !isLapsed ? subscription.tierKey : null;
   const selectValue = currentTierKey ?? NO_ACCESS_OPTION;
   const regionLabel = REGION_LABELS[regionKey] ?? regionKey;
+
+  // Three distinguishable states, never the same string for two of them: never assigned a
+  // provider, deliberately ended (lapsed_at set), and (via the tier options below) assigned.
+  const placeholderLabel = isLapsed
+    ? `Access ended${subscription?.lapsedAt ? ` (${formatRelative(subscription.lapsedAt)})` : ""}`
+    : "Not assigned to a provider yet";
 
   return (
     <div className="flex items-center gap-2">
@@ -116,7 +146,7 @@ function FeedTierRegionControl({
             if (next === NO_ACCESS_OPTION) {
               if (
                 !window.confirm(
-                  `Deactivate ${subjectName}'s ${regionLabel} feed subscription? They will lose feed access.`
+                  `Deactivate ${subjectName}'s ${regionLabel} feed provider assignment? They will lose feed access.`
                 )
               ) {
                 e.target.value = selectValue;
@@ -136,7 +166,7 @@ function FeedTierRegionControl({
           }}
           className="rounded border border-zinc-700 bg-black/40 px-1.5 py-0.5 text-xs text-zinc-200 disabled:opacity-50"
         >
-          <option value={NO_ACCESS_OPTION}>No feed access</option>
+          <option value={NO_ACCESS_OPTION}>{placeholderLabel}</option>
           {tiers.map((t) => (
             <option key={t.tierKey} value={t.tierKey}>
               {t.name}
