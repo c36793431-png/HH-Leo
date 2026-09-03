@@ -563,7 +563,12 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
     return;
   }
 
-  await createSubscription({ providerUserId, subscriberUserId, feedTierId, status: "active" });
+  try {
+    await createSubscription({ providerUserId, subscriberUserId, feedTierId, status: "active" });
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
+    throw err;
+  }
 }
 
 /** Ends the subscriber's Horizon-catalogue subscription for ONE specific TIER -- sets
