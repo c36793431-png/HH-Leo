@@ -1,5 +1,7 @@
 import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
+import type { FeedType } from "./licenses";
+import { FEED_REGION_TYPE, FEED_REGIONS, isFeedRegion, regionForFeedType, type FeedRegion } from "./feed-tier-catalogue";
 
 /** Bus thread provider-feed-subscriber-linkage-2026-08-29 (marcus, overnight block 2,
  * migration 0071). Joins a portal account to a provider's package and masks the
@@ -334,6 +336,83 @@ export async function getFeedTierSubscriptionsForSubscriber(
     status: row.status,
     lapsedAt: row.lapsed_at,
   }));
+}
+
+/** A region with no FEED_REGION_TYPE mapping (cme today) has no licence concept at all yet,
+ * so it can't be gated by entitlement -- same "ungated" treatment EFFECTIVE_STATUS_SQL above
+ * gives it on the provider-facing side. A region the client already has a subscription row in
+ * (any status) also stays visible even if entitlement has since lapsed, so admin can still
+ * see/deactivate it rather than losing the control entirely. */
+function isRegionOfferable(regionKey: string, entitledFeedTypes: Set<FeedType>, hasExistingSubscription: boolean): boolean {
+  if (hasExistingSubscription) return true;
+  if (!isFeedRegion(regionKey)) return true;
+  const feedType = FEED_REGION_TYPE[regionKey];
+  if (feedType === null) return true;
+  return entitledFeedTypes.has(feedType);
+}
+
+export interface FeedAssignmentRow {
+  regionKey: string;
+  /** "unavailable" -- client is entitled to this region but the catalogue has no tiers for
+   * it yet (tokyo today). Rendered as a disabled row naming the reason rather than hidden,
+   * so the entitlement isn't silently unfulfillable-looking (Item C,
+   * feed-subscription-recording-build-2026-09-03). */
+  kind: "assignable" | "unavailable";
+  tiers: FeedTierPickerRow[];
+  subscription: SubscriberFeedTierSubscription | null;
+  /** True when this row is only offerable because of an existing subscription row, not
+   * current licence entitlement (e.g. the licence expired/downgraded after the assignment
+   * was made). Never true for an already-lapsed subscription -- that's the separate
+   * "Access ended" state. */
+  entitlementLapsed: boolean;
+}
+
+/** Single source of truth for which regions render on /admin/users/[id]'s feed-assignment
+ * block and what each one shows -- both the block's visibility (page.tsx) and its contents
+ * (FeedTierSelectForm) read this same computed list, so they can't drift apart (Item A,
+ * feed-subscription-recording-build-2026-09-03, marcus ruling). Lives here rather than in
+ * feed-tier-select-form.tsx because that module is "use client" -- a Server Component calling
+ * a function exported from a client module gets an opaque client reference back, not the
+ * function, and throws at request time (incident e44fef2, root-caused 2026-09-03). This module
+ * has no "use client" directive, so both the server page and the client form can import it. */
+export function computeFeedAssignmentRows(
+  tiers: FeedTierPickerRow[],
+  subscriptions: SubscriberFeedTierSubscription[],
+  entitledFeedTypes: FeedType[]
+): FeedAssignmentRow[] {
+  const entitled = new Set(entitledFeedTypes);
+  const rows: FeedAssignmentRow[] = [];
+  const seen = new Set<string>();
+
+  const catalogueRegions = [...new Set(tiers.map((t) => t.regionKey))];
+  for (const regionKey of catalogueRegions) {
+    const subscription = subscriptions.find((s) => s.regionKey === regionKey) ?? null;
+    const hasExistingSubscription = subscription !== null;
+    if (!isRegionOfferable(regionKey, entitled, hasExistingSubscription)) continue;
+    seen.add(regionKey);
+    const feedType = isFeedRegion(regionKey) ? FEED_REGION_TYPE[regionKey] : null;
+    const isCurrentlyEntitled = feedType === null ? true : entitled.has(feedType);
+    rows.push({
+      regionKey,
+      kind: "assignable",
+      tiers: tiers.filter((t) => t.regionKey === regionKey),
+      subscription,
+      entitlementLapsed: hasExistingSubscription && !isCurrentlyEntitled && subscription?.status !== "lapsed",
+    });
+  }
+
+  // Entitled regions the catalogue has no tiers for at all (tokyo today) never surface via
+  // the loop above since they have no rows in `tiers` to begin with.
+  for (const feedType of entitled) {
+    const regionKey = regionForFeedType(feedType);
+    if (!regionKey || seen.has(regionKey)) continue;
+    seen.add(regionKey);
+    rows.push({ regionKey, kind: "unavailable", tiers: [], subscription: null, entitlementLapsed: false });
+  }
+
+  return rows.sort(
+    (a, b) => FEED_REGIONS.indexOf(a.regionKey as FeedRegion) - FEED_REGIONS.indexOf(b.regionKey as FeedRegion)
+  );
 }
 
 export class FeedTierNotAssignedError extends Error {
