@@ -171,7 +171,8 @@ function FeedTierRowControl({
         <input type="hidden" name="tierKey" value={tier.tierKey} />
         <button
           type="button"
-          disabled={pending || isActive || entitlementLapsed}
+          disabled={pending || isActive || entitlementLapsed || !tier.providerUserId}
+          title={!tier.providerUserId ? "No provider assigned to this tier yet" : undefined}
           onClick={() => {
             if (!window.confirm(`Grant ${subjectName} access to ${tier.name} (${regionLabel})?`)) return;
             assignFormRef.current?.requestSubmit();
