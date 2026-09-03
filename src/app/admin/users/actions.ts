@@ -162,10 +162,10 @@ export async function deactivateFeedSubscriptionAction(
   return runAction("Failed to deactivate feed subscription", async () => {
     const adminUserId = await requireAdminUsersPanel();
     const userId = formData.get("userId") as string;
-    const region = formData.get("region") as string;
-    if (!region) throw new Error("Region is required");
-    await deactivateFeedTierSubscription(userId, region);
-    await logAdminAction(adminUserId, "admin_users_deactivate_feed_subscription", userId, { region }, null);
+    const tierKey = formData.get("tierKey") as string;
+    if (!tierKey) throw new Error("Tier is required");
+    await deactivateFeedTierSubscription(userId, tierKey);
+    await logAdminAction(adminUserId, "admin_users_deactivate_feed_subscription", userId, { tierKey }, null);
     revalidateUsers(userId);
   });
 }

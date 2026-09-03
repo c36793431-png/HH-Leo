@@ -304,12 +304,14 @@ export interface SubscriberFeedTierSubscription {
 const REGION_LABELS: Record<string, string> = { london: "London", ny: "New York", cme: "CME", tokyo: "Tokyo" };
 
 /** The subscriber's current Horizon-catalogue (feed_tier_id-backed) subscriptions, one per
- * region -- deliberately excludes provider_tier_id rows, which belong to real third-party
- * providers and are never something this admin control should read, show, or touch. A client
- * can hold access in more than one region at once (London Base and NY are separately
- * purchasable packages), so the grain here is (subscriber, region), not (subscriber). At most
- * one row per region is expected (assignFeedTierSubscription enforces that going forward); if
- * more than one somehow exists for a region, the most recently started row wins. */
+ * TIER -- deliberately excludes provider_tier_id rows, which belong to real third-party
+ * providers and are never something this admin control should read, show, or touch. A region
+ * can hold more than one simultaneous tier subscription (the London Base package is three
+ * London tiers sold as one unit -- coxwell ruling, thread leo-region-vs-tier-subscription-key-
+ * collision-2026-09-03), so the grain here is (subscriber, tier), not (subscriber, region).
+ * Formerly `distinct on (ft.region_key)` collapsed to one row per region and silently hid
+ * every tier but the most recently started one -- see the sibling migration/collision writeup
+ * for how that lost two of HH1's three approved London tiers. */
 export async function getFeedTierSubscriptionsForSubscriber(
   subscriberUserId: string
 ): Promise<SubscriberFeedTierSubscription[]> {
@@ -321,7 +323,7 @@ export async function getFeedTierSubscriptionsForSubscriber(
     status: SubscriptionStatus;
     lapsed_at: Date | null;
   }>(
-    `select distinct on (ft.region_key) s.id, ft.tier_key, ft.name, ft.region_key, s.status, s.lapsed_at
+    `select s.id, ft.tier_key, ft.name, ft.region_key, s.status, s.lapsed_at
      from feed_subscriptions s
      join feed_tiers ft on ft.id = s.feed_tier_id
      where s.subscriber_user_id = $1
@@ -359,7 +361,12 @@ export interface FeedAssignmentRow {
    * feed-subscription-recording-build-2026-09-03). */
   kind: "assignable" | "unavailable";
   tiers: FeedTierPickerRow[];
-  subscription: SubscriberFeedTierSubscription | null;
+  /** ALL of this subscriber's subscription rows in this region, not just one -- a region can
+   * hold more than one simultaneous tier (the London Base package is three London tiers sold
+   * as one unit). Formerly a single nullable `subscription`; renamed and pluralized during the
+   * region-to-tier-key migration (thread leo-region-vs-tier-subscription-key-collision-2026-09-03)
+   * since collapsing to one silently hid every tier but the most recently started. */
+  subscriptions: SubscriberFeedTierSubscription[];
   /** True when this row is only offerable because of an existing subscription row, not
    * current licence entitlement (e.g. the licence expired/downgraded after the assignment
    * was made). Never true for an already-lapsed subscription -- that's the separate
@@ -386,18 +393,23 @@ export function computeFeedAssignmentRows(
 
   const catalogueRegions = [...new Set(tiers.map((t) => t.regionKey))];
   for (const regionKey of catalogueRegions) {
-    const subscription = subscriptions.find((s) => s.regionKey === regionKey) ?? null;
-    const hasExistingSubscription = subscription !== null;
+    const regionSubscriptions = subscriptions.filter((s) => s.regionKey === regionKey);
+    const hasExistingSubscription = regionSubscriptions.length > 0;
     if (!isRegionOfferable(regionKey, entitled, hasExistingSubscription)) continue;
     seen.add(regionKey);
     const feedType = isFeedRegion(regionKey) ? FEED_REGION_TYPE[regionKey] : null;
     const isCurrentlyEntitled = feedType === null ? true : entitled.has(feedType);
+    // entitlementLapsed considers the region's most recently started row -- any one row
+    // switching a lapsed license back to active re-covers every tier in the region alike, so a
+    // single representative is enough to decide the banner; individual rows still render their
+    // own status independently below it.
+    const mostRecent = regionSubscriptions[0] ?? null;
     rows.push({
       regionKey,
       kind: "assignable",
       tiers: tiers.filter((t) => t.regionKey === regionKey),
-      subscription,
-      entitlementLapsed: hasExistingSubscription && !isCurrentlyEntitled && subscription?.status !== "lapsed",
+      subscriptions: regionSubscriptions,
+      entitlementLapsed: hasExistingSubscription && !isCurrentlyEntitled && mostRecent?.status !== "lapsed",
     });
   }
 
@@ -407,7 +419,7 @@ export function computeFeedAssignmentRows(
     const regionKey = regionForFeedType(feedType);
     if (!regionKey || seen.has(regionKey)) continue;
     seen.add(regionKey);
-    rows.push({ regionKey, kind: "unavailable", tiers: [], subscription: null, entitlementLapsed: false });
+    rows.push({ regionKey, kind: "unavailable", tiers: [], subscriptions: [], entitlementLapsed: false });
   }
 
   return rows.sort(
@@ -423,16 +435,19 @@ export class FeedTierNotAssignedError extends Error {
   }
 }
 
-/** Admin-facing upsert: grants (or moves) a subscriber's ONE Horizon-catalogue subscription
- * per REGION. Idempotent -- re-saving the same tierKey is a no-op, and switching tiers within
- * a region reuses that region's existing row (update) rather than inserting a second one, so a
- * client can never end up with two feed_tier_id rows for the same region from this control.
- * Assigning a tier in a different region than any existing subscription is a separate grant,
- * not a move -- a client can hold London and NY access at once (bus thread
- * feed-subscription-recording-build-2026-09-03, marcus ruling: key on (subscriber, region),
- * not (subscriber), since the two are independently purchasable packages). Status is 'active'
- * (not createSubscription's 'trial' default): this is a direct admin grant, not the
- * request/trial flow. */
+/** Admin-facing upsert: grants a subscriber ONE specific Horizon-catalogue TIER. Idempotent --
+ * re-saving the same tierKey is a no-op (reactivates if lapsed). A region can hold more than
+ * one simultaneous tier subscription (the London Base package is three London tiers sold as
+ * one unit -- coxwell ruling, thread leo-region-vs-tier-subscription-key-collision-2026-09-03),
+ * so this never touches or moves any OTHER tier's row, including other tiers in the same
+ * region -- assigning ld-gamma-19 to a client who already holds ld-beta-56 is purely an ADD.
+ * (Formerly keyed the lookup on region_key and UPDATEd that region's one row in place, which
+ * silently discarded every previously-granted tier in the region but the last one -- see the
+ * same thread for the confirmed live data loss this caused.) An explicit tier-to-tier move
+ * (e.g. a plan upgrade that should end the old tier) is two calls: assign the new tier, then
+ * deactivateFeedTierSubscription the old one -- not this function's job to infer that intent.
+ * Status is 'active' (not createSubscription's 'trial' default): this is a direct admin grant,
+ * not the request/trial flow. */
 export async function assignFeedTierSubscription(subscriberUserId: string, tierKey: string): Promise<void> {
   const tier = await pool.query<{ id: string; name: string; region_key: string; provider_user_id: string | null }>(
     `select id, name, region_key, provider_user_id from feed_tiers where tier_key = $1`,
@@ -442,33 +457,32 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
   const { id: feedTierId, name: tierName, region_key: regionKey, provider_user_id: providerUserId } = tier.rows[0];
   if (!providerUserId) throw new FeedTierNotAssignedError(tierName, regionKey);
 
-  const existing = await pool.query<{ id: string; feed_tier_id: string; provider_user_id: string }>(
-    `select s.id, s.feed_tier_id, s.provider_user_id
-     from feed_subscriptions s
-     join feed_tiers ft on ft.id = s.feed_tier_id
-     where s.subscriber_user_id = $1 and ft.region_key = $2
-     order by s.started_at desc limit 1`,
-    [subscriberUserId, regionKey]
+  const existing = await pool.query<{ id: string; provider_user_id: string }>(
+    `select id, provider_user_id from feed_subscriptions where subscriber_user_id = $1 and feed_tier_id = $2`,
+    [subscriberUserId, feedTierId]
   );
 
   if (existing.rowCount) {
     const row = existing.rows[0];
-    if (row.feed_tier_id === feedTierId && row.provider_user_id === providerUserId) {
+    if (row.provider_user_id === providerUserId) {
       await pool.query(
         `update feed_subscriptions set status = 'active', lapsed_at = null, updated_at = now() where id = $1`,
         [row.id]
       );
       return;
     }
+    // Same tier, different provider_user_id -- the tier's provider assignment changed since
+    // this row was created (feed_tiers.provider_user_id is reassignable). Follow the tier's
+    // current owner rather than leaving the row pointed at a stale provider.
     const client = await pool.connect();
     try {
       await client.query("begin");
       await assignPseudonymSeq(client, providerUserId, subscriberUserId);
       await client.query(
         `update feed_subscriptions
-         set feed_tier_id = $2, provider_user_id = $3, status = 'active', lapsed_at = null, updated_at = now()
+         set provider_user_id = $2, status = 'active', lapsed_at = null, updated_at = now()
          where id = $1`,
-        [row.id, feedTierId, providerUserId]
+        [row.id, providerUserId]
       );
       await client.query("commit");
     } catch (err) {
@@ -483,20 +497,21 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
   await createSubscription({ providerUserId, subscriberUserId, feedTierId, status: "active" });
 }
 
-/** Ends the subscriber's Horizon-catalogue subscription for ONE region -- sets status='lapsed'
- * so it drops out of getActiveSubscriberCountForProvider and the provider's Accounts list
- * shows it as lapsed (existing behaviour, not new). Scoped to regionKey so ending NY access
- * never touches a client's separate London row. No-op if there's no such row or it's already
- * lapsed. */
-export async function deactivateFeedTierSubscription(subscriberUserId: string, regionKey: string): Promise<void> {
+/** Ends the subscriber's Horizon-catalogue subscription for ONE specific TIER -- sets
+ * status='lapsed' so it drops out of getActiveSubscriberCountForProvider and the provider's
+ * Accounts list shows it as lapsed (existing behaviour, not new). Scoped to tierKey (not
+ * regionKey) so ending one London tier never touches the client's other, separately-held
+ * London tiers -- a region-scoped deactivate would incorrectly lapse an entire bundle when
+ * only one member tier was meant to end. No-op if there's no such row or it's already lapsed. */
+export async function deactivateFeedTierSubscription(subscriberUserId: string, tierKey: string): Promise<void> {
   await pool.query(
     `update feed_subscriptions s
      set status = 'lapsed', lapsed_at = now(), updated_at = now()
      from feed_tiers ft
      where s.feed_tier_id = ft.id
        and s.subscriber_user_id = $1
-       and ft.region_key = $2
+       and ft.tier_key = $2
        and s.status != 'lapsed'`,
-    [subscriberUserId, regionKey]
+    [subscriberUserId, tierKey]
   );
 }
