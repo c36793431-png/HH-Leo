@@ -68,11 +68,24 @@ const REGION_TO_FEED_TYPE_SQL = `case ft.region_key when 'london' then 'london' 
  * falls through to the license gate below, same as any other row. Same shape as the
  * provider_tier_id and cme carve-outs above -- a case where the license-entitlement question
  * doesn't apply to this row at all. */
+/** Ledger v1.38 step 2e0 (Fable ruling, ADDITIVE): a subscription created from an
+ * approved feed_tier_requests row is entitled by the license that request named
+ * (r.license_id), not by re-deriving a license via the subscriber's feed_types --
+ * the license-exists check below can miss it if licenses.feed_types hasn't been
+ * updated to carry this specific tier yet, even though the approved request is the
+ * entitlement of record. Carry-never-derive: no user_id cross-check against the
+ * subscriber, the license is whichever one the request carried. */
 const EFFECTIVE_STATUS_SQL = `
   case
     when s.status = 'lapsed' then 'lapsed'
     when ft.region_key is null then s.status
     when ${REGION_TO_FEED_TYPE_SQL} is null then s.status
+    when s.request_id is not null and exists (
+      select 1 from feed_tier_requests r
+      join licenses l on l.id = r.license_id
+      where r.id = s.request_id
+        and l.status = 'active' and l.expires_at > now()
+    ) then s.status
     when exists (
       select 1 from feed_tier_trials ftt
       where ftt.user_id = s.subscriber_user_id
