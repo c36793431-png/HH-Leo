@@ -31,6 +31,12 @@ interface TierRequestControlProps {
   tierName: string;
   alreadyRequested: boolean;
   servers: TierRequestServerOption[];
+  /** False when the client has active license(s) but has never registered a server on any
+   * of them. R6 (leo-cross-region-server-picker-2026-09-04) only keeps an unregistered
+   * license listable/selectable when the client is registered elsewhere -- a client with
+   * zero registrations anywhere must still hard-stop, since a request with no server has
+   * nothing for the provider to allowlist. */
+  hasAnyRegisteredServer: boolean;
   fallbackLicenseTail: string;
   variant?: "primary" | "amber";
 }
@@ -53,6 +59,7 @@ export function TierRequestControl({
   tierName,
   alreadyRequested,
   servers,
+  hasAnyRegisteredServer,
   fallbackLicenseTail,
   variant = "primary",
 }: TierRequestControlProps) {
@@ -70,7 +77,7 @@ export function TierRequestControl({
   }
 
   const selected = servers.find((s) => s.licenseId === selectedId) ?? null;
-  const canSubmit = !!selected;
+  const canSubmit = !!selected && hasAnyRegisteredServer;
 
   function handleOpen() {
     setSelectedId(defaultServerId(servers, region));
@@ -161,6 +168,10 @@ export function TierRequestControl({
               <p className="ftd-sla ftd-sla-warn">
                 No active license on this account yet. <Link href="/account/servers">Register a server →</Link>
               </p>
+            ) : !hasAnyRegisteredServer ? (
+              <p className="ftd-sla ftd-sla-warn">
+                No server registered on this account yet. <Link href="/account/servers">Register one first →</Link>
+              </p>
             ) : (
               <p className="ftd-sla">
                 Reviewed within 24h. Once approved, we&apos;ll DM you on Telegram — no need to check back here.
@@ -180,7 +191,9 @@ export function TierRequestControl({
                   !canSubmit
                     ? servers.length === 0
                       ? "No active license on this account"
-                      : "Select a server before requesting access"
+                      : !hasAnyRegisteredServer
+                        ? "Register a server before requesting access"
+                        : "Select a server before requesting access"
                     : undefined
                 }
               >

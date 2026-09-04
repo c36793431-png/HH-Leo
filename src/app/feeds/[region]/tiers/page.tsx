@@ -127,6 +127,11 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   // registration stays listed (Fable's R6 "binding unconfirmed" downstream) -- deliberate,
   // do not filter it out here.
   const registrationByLicenseId = new Map(userServerRegistrations.map((r) => [r.licenseId, r]));
+  // Distinct from serverOptions.length === 0 (no active license): this is "active license(s),
+  // but not one of them has ever had a server registered" -- R6's "binding unconfirmed" listing
+  // only covers a client who has at least one registration elsewhere (marcus,
+  // leo-cross-region-server-picker-2026-09-04 ruling). Zero here must still hard-stop.
+  const hasAnyRegisteredServer = userServerRegistrations.length > 0;
   const serverOptions: TierRequestServerOption[] = activeLicenses.map((l) => {
     const r = registrationByLicenseId.get(l.id);
     return {
@@ -274,6 +279,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                   tierName={`${label} package`}
                   alreadyRequested={requestedTierKeys.has(PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey)}
                   servers={serverOptions}
+                  hasAnyRegisteredServer={hasAnyRegisteredServer}
                   fallbackLicenseTail={licenseTail}
                   variant="primary"
                 />
@@ -329,6 +335,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               tierName={t.name}
               alreadyRequested={requestedTierKeys.has(t.tierKey)}
               servers={serverOptions}
+              hasAnyRegisteredServer={hasAnyRegisteredServer}
               fallbackLicenseTail={licenseTail}
               variant={isInstitutional ? "amber" : "primary"}
             />

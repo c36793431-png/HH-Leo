@@ -7,6 +7,7 @@ import { createFeedTierRequest } from "@/lib/feed-tier-requests";
 import { joinTierWaitlist } from "@/lib/tier-waitlist";
 import { feedTierMeta, isFeedRegion } from "@/lib/feed-tier-catalogue";
 import { getActiveLicenseForUser, getActiveLicensesForUser } from "@/lib/licenses";
+import { getServerRegistrationsForUser } from "@/lib/server-registration";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { startFeedTierTrial, cancelFeedTierTrial, getFeedTierTrial } from "@/lib/feed-tier-trials";
 
@@ -55,9 +56,16 @@ export async function submitFeedTierRequestAction(
     const license = licenses.find((l) => l.id === licenseId);
     if (!license) throw new Error("Invalid server selection");
 
-    // A license with no server_registrations row is a deliberate allowed submission
-    // (coxwell, leo-cross-region-server-picker-2026-09-04 refinement 3) -- it lands in
-    // Fable's R6 "binding unconfirmed" list downstream. Do not reintroduce a guard here.
+    // A license with no server_registrations row of its own is a deliberate allowed
+    // submission (coxwell, leo-cross-region-server-picker-2026-09-04 refinement 3) -- it
+    // lands in Fable's R6 "binding unconfirmed" list downstream. But R6 never extends to a
+    // client with zero registrations anywhere (marcus, same thread, 2026-09-04 ruling): that
+    // request would carry no server for the provider to allowlist. The client-side disabled
+    // state must not be the only thing enforcing this -- check the user, not the per-license
+    // row, so it still catches an unregistered license paired with a tampered form submit.
+    const registrations = await getServerRegistrationsForUser(session.user.id);
+    if (registrations.length === 0) throw new Error("Register a server before requesting access");
+
     await createFeedTierRequest({
       userId: session.user.id,
       licenseId: license.id,
