@@ -51,9 +51,12 @@ const TIER_PACKAGE_KEY: Record<string, string> = {
   "ld-beta-56": "retail",
   "ld-gamma-19": "retail",
   "ld-delta-18": "retail",
+  "ny-fast": "ny-retail",
+  "ny-normal": "ny-retail",
 };
 const PACKAGE_LABELS: Record<string, string> = {
   retail: "Base",
+  "ny-retail": "Base",
 };
 
 /** The tier_key a package's single Request access button submits under -- see the
@@ -61,6 +64,7 @@ const PACKAGE_LABELS: Record<string, string> = {
  * rather than the three real member tier keys. */
 const PACKAGE_REQUEST_TIER_KEY: Record<string, string> = {
   retail: "ld-retail-package",
+  "ny-retail": "ny-retail-package",
 };
 
 /** Institutional ($10k+) vs retail segment split (marcus/coxwell,
@@ -254,8 +258,12 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             const label = PACKAGE_LABELS[group.packageKey] ?? group.packageKey;
             return (
               <div key={group.packageKey} className="card ftd-tier-card ftd-package">
-                <span className="ftd-rank-badge">#{group.rank}</span>
-                <span className="ftd-segment-badge">RETAIL LATENCY</span>
+                {region === "london" && (
+                  <>
+                    <span className="ftd-rank-badge">#{group.rank}</span>
+                    <span className="ftd-segment-badge">RETAIL LATENCY</span>
+                  </>
+                )}
                 <h3 className="ftd-name">{label}</h3>
                 <p className="ftd-desc">
                   {group.members.length} feeds from one provider, sold as a single bundle at one price.
@@ -267,7 +275,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                         <span className="ftd-pkg-member-name">{m.name}</span>
                         <span className="ftd-pkg-member-score">
                           {m.speedDisplay}
-                          <span className="ftd-speed-unit">/100</span>
+                          <span className="ftd-speed-unit">{isScoreRegion(region) ? "/100" : "µs"}</span>
                         </span>
                       </div>
                     </div>
