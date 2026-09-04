@@ -12,7 +12,6 @@ import {
   FeedTierNotAssignedError,
   getFeedTierForAssignment,
   upsertFeedSubscriptionForRequest,
-  upsertFeedSubscriptionMemberForRequest,
 } from "./feed-subscriptions";
 
 export const FEED_TIER_REQUEST_STATUSES = ["pending", "approved", "rejected", "provisioned"] as const;
@@ -36,11 +35,6 @@ export interface FeedTierRequestRow {
   reason: string | null;
   createdAt: Date;
   actionedAt: Date | null;
-  /** The feed_subscriptions row this request's approval wrote, or null if it's not
-   * (yet) approved. Written back in the same transaction as the status flip to 'approved'
-   * (migration 0078 / m35715) so "approved with no backing grant" becomes impossible to
-   * represent, not just unlikely -- see approveFeedTierRequest below. */
-  subscriptionId: string | null;
 }
 
 interface RequestRow {
@@ -60,7 +54,6 @@ interface RequestRow {
   reason: string | null;
   created_at: Date;
   actioned_at: Date | null;
-  subscription_id: string | null;
 }
 
 function mapRow(row: RequestRow): FeedTierRequestRow {
@@ -83,14 +76,13 @@ function mapRow(row: RequestRow): FeedTierRequestRow {
     reason: row.reason,
     createdAt: row.created_at,
     actionedAt: row.actioned_at,
-    subscriptionId: row.subscription_id,
   };
 }
 
 const SELECT_BASE = `
   select ftr.id, ftr.user_id, u.display_name as user_name, u.email as user_email, u.telegram_user_id,
          ftr.license_id, l.license_key, ftr.region, ftr.tier_key, ftr.status, ftr.reason,
-         ftr.created_at, ftr.actioned_at, ftr.subscription_id,
+         ftr.created_at, ftr.actioned_at,
          sr.server_name, sr.declared_ip, ci.ip as captured_ip
   from feed_tier_requests ftr
   join users u on u.id = ftr.user_id
@@ -216,28 +208,26 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
   }
 }
 
-/** Approve = one transaction: the grant write and the status flip must land together or not
- * at all (Fable's ruling, thread leo-region-vs-tier-subscription-key-collision-2026-09-03,
- * m35715 -- "the request read approved while no grant existed" was exactly this pair of
- * writes being two separate, uncoordinated calls). The grant write upserts on THIS request's
- * id, not on the tier (upsertFeedSubscriptionForRequest, feed-subscriptions.ts) -- a
- * DuplicateTierGrantError (this tier already has a live grant from a DIFFERENT request) rolls
- * the whole transaction back, so the request stays 'pending' and the admin sees a real error
- * instead of a silent merge into someone else's row. subscription_id is written back onto the
- * request in the same statement as the 'approved' flip (migration 0078), so "approved with no
- * backing grant" stops being representable in the data at all.
+/** Approve = one transaction: every grant write and the status flip must land together or not
+ * at all (Fable's ruling, specs/horizon-feed-provisioning-ledger-v1.md section 3.3, d108353,
+ * relayed m36289, thread leo-package-grant-fix-2026-09-04 -- "one approval action, N grant
+ * rows, one transaction"). Each grant upserts on (request_id, feed_tier_id)
+ * (upsertFeedSubscriptionForRequest, feed-subscriptions.ts) -- a DuplicateTierGrantError (this
+ * tier already has a live grant from a DIFFERENT request) rolls the whole transaction back, so
+ * the request stays 'pending' and the admin sees a real error instead of a silent merge into
+ * someone else's row. There is no "is this a package" branch and no primary/member split: a
+ * single-tier request is the N = 1 case of the same loop below. feed_tier_requests carries no
+ * subscription_id column (dropped, migration 0080) -- the relation is
+ * feed_subscriptions.request_id (the only direction a 1-to-N relation can point), and "is this
+ * request granted" is this row's own status column, not a pointer to one arbitrary grant.
  *
  * pending.tierKey may be a package pseudo-key (ld-retail-package, ny-retail-package -- see
  * PACKAGE_TIER_KEYS in feed-tier-catalogue.ts) with no feed_tiers row of its own, so it's
  * expanded via expandTierKey() -- the same expansion feed-providers.ts already uses to scope
  * package requests into a provider's queue -- before any tier lookup runs. A non-package key
- * expands to itself, so this is a no-op for the single-tier case. Every member is resolved and
- * provider-checked up front so a mid-grant failure never leaves a package half-assigned. Only
- * the first member can carry the request's own id (feed_subscriptions_request_uidx allows one
- * subscription row per request_id); the rest grant via upsertFeedSubscriptionMemberForRequest's
- * business-key upsert in the same transaction (leo-package-grant-fix-2026-09-04 -- previously
- * a package approval threw "Unknown feed tier" on this lookup before ever reaching a grant
- * write). */
+ * expands to a single member, so this is a no-op shape for the single-tier case. Every member
+ * is resolved and provider-checked up front so a mid-grant failure never leaves a package
+ * half-assigned. */
 export async function approveFeedTierRequest(id: string, actionedBy: string, adminUrl: string): Promise<FeedTierRequestRow> {
   const pending = await getFeedTierRequest(id);
   if (!pending) throw new Error("feed tier request not found");
@@ -248,26 +238,17 @@ export async function approveFeedTierRequest(id: string, actionedBy: string, adm
   // transaction below: a trial-insert failure must never roll back a successful approval.
   await activateTrialIfEligible(pending, adminUrl);
 
-  const [primaryKey, ...memberKeys] = expandTierKey(pending.tierKey);
-  const primary = await getFeedTierForAssignment(primaryKey);
-  if (!primary.providerUserId) throw new FeedTierNotAssignedError(primary.tierName, primary.regionKey);
+  const memberKeys = expandTierKey(pending.tierKey);
   const members = await Promise.all(memberKeys.map((k) => getFeedTierForAssignment(k)));
   const unassigned = members.find((m) => !m.providerUserId);
   if (unassigned) throw new FeedTierNotAssignedError(unassigned.tierName, unassigned.regionKey);
 
   const client = await pool.connect();
-  let subscriptionId: string;
   try {
     await client.query("begin");
-    subscriptionId = await upsertFeedSubscriptionForRequest(client, {
-      requestId: pending.id,
-      providerUserId: primary.providerUserId,
-      subscriberUserId: pending.userId,
-      feedTierId: primary.feedTierId,
-      tierName: primary.tierName,
-    });
     for (const member of members) {
-      await upsertFeedSubscriptionMemberForRequest(client, {
+      await upsertFeedSubscriptionForRequest(client, {
+        requestId: pending.id,
         providerUserId: member.providerUserId!,
         subscriberUserId: pending.userId,
         feedTierId: member.feedTierId,
@@ -276,9 +257,9 @@ export async function approveFeedTierRequest(id: string, actionedBy: string, adm
     }
     await client.query(
       `update feed_tier_requests
-       set status = 'approved', reason = null, actioned_at = now(), actioned_by = $2, subscription_id = $3
+       set status = 'approved', reason = null, actioned_at = now(), actioned_by = $2
        where id = $1`,
-      [id, actionedBy, subscriptionId]
+      [id, actionedBy]
     );
     await client.query("commit");
   } catch (err) {

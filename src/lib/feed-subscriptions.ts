@@ -474,19 +474,26 @@ export async function getFeedTierForAssignment(tierKey: string): Promise<FeedTie
   return { feedTierId: row.id, tierName: row.name, regionKey: row.region_key, providerUserId: row.provider_user_id };
 }
 
-/** Approval-path write -- Fable's ruling, thread leo-region-vs-tier-subscription-key-
- * collision-2026-09-03 (m35715): "never upsert on a business key." The identity of what's
- * being written during approval is the feed_tier_requests row, not (subscriber, tier), so
- * this upserts `on conflict (request_id)` (migration 0078's unique index on request_id) --
- * replaying the same request (retry, double-click) reactivates the SAME row, never inserts a
- * second one. The business key still carries its own partial unique index scoped to live rows
- * (subscriber_user_id, feed_tier_id/provider_tier_id) WHERE status IN ('trial','active'): if a
- * DIFFERENT request_id collides with an already-live grant for the same tier, the insert
- * throws a Postgres unique_violation on that index, which this rethrows as
- * DuplicateTierGrantError so the caller's transaction rolls back -- approving the same tier
- * twice via two different requests is an error a human sees, not a silent merge. Must run
- * inside the SAME transaction as the request's status flip to 'approved' (caller's job) so
- * "approved" and "has a subscription_id" can never diverge. */
+/** Approval-path write -- Fable's ruling, specs/horizon-feed-provisioning-ledger-v1.md
+ * section 3.3 item 1 (d108353, relayed m36289, thread leo-package-grant-fix-2026-09-04):
+ * "the identity of the approval is the request; the identity of a grant is (request, tier)."
+ * One approval can back N grant rows (a package tier_key expands to N member tiers via
+ * expandTierKey, feed-tier-catalogue.ts), so the conflict target is the pair, not request_id
+ * alone -- `on conflict (request_id, feed_tier_id)` against
+ * feed_subscriptions_request_tier_uidx (migration 0079). A single-tier request is the N = 1
+ * case of this same call, made once from approveFeedTierRequest's loop; there is no separate
+ * "primary" vs "member" path. Replaying the same request (retry, double-click, re-approving an
+ * already-approved request) reactivates the SAME N rows via their (request_id, feed_tier_id)
+ * identity, never inserts new ones. The business key still carries its own partial unique index
+ * scoped to live rows (subscriber_user_id, feed_tier_id) WHERE status IN ('trial','active'): if
+ * a DIFFERENT request_id collides with an already-live grant for the same tier (including a
+ * different member of the same package colliding with an unrelated direct grant), the insert
+ * throws a Postgres unique_violation on THAT index, which this rethrows as
+ * DuplicateTierGrantError -- the caller's transaction rolls back and the whole approval fails
+ * loudly, no partial package grant. Must run inside the SAME transaction as the request's status
+ * flip to 'approved' (caller's job) -- feed_tier_requests carries no subscription_id column
+ * (dropped, migration 0080); the relation is feed_subscriptions.request_id, and "is this request
+ * granted" is the request's own status column. */
 export async function upsertFeedSubscriptionForRequest(
   client: PoolClient,
   args: { requestId: string; providerUserId: string; subscriberUserId: string; feedTierId: string; tierName: string }
@@ -497,54 +504,10 @@ export async function upsertFeedSubscriptionForRequest(
     const result = await client.query<{ id: string }>(
       `insert into feed_subscriptions (provider_user_id, subscriber_user_id, feed_tier_id, status, request_id)
        values ($1, $2, $3, 'active', $4)
-       on conflict (request_id) where request_id is not null do update
+       on conflict (request_id, feed_tier_id) where request_id is not null and feed_tier_id is not null do update
          set status = 'active', lapsed_at = null, provider_user_id = excluded.provider_user_id, updated_at = now()
        returning id`,
       [providerUserId, subscriberUserId, feedTierId, requestId]
-    );
-    return result.rows[0].id;
-  } catch (err) {
-    if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
-    throw err;
-  }
-}
-
-/** A package approval (e.g. ld-retail-package) grants several member tiers from ONE request,
- * but feed_subscriptions_request_uidx (migration 0078) allows at most one subscription row per
- * request_id -- only the package's first member can be tagged with the request's id via
- * upsertFeedSubscriptionForRequest above. The remaining members upsert on the business key
- * (subscriber, tier) instead, same as the admin-direct grant path (assignFeedTierSubscription),
- * just run inside the SAME client/transaction as the rest of the approval so a partial package
- * grant (e.g. 1 of 3 tiers landing before a later member's write fails) can never be committed.
- * Approving twice replays into the same rows either way: the primary via its request_id, every
- * other member via its own (subscriber, tier) identity -- no dependence on request_id for
- * these. */
-export async function upsertFeedSubscriptionMemberForRequest(
-  client: PoolClient,
-  args: { providerUserId: string; subscriberUserId: string; feedTierId: string; tierName: string }
-): Promise<string> {
-  const { providerUserId, subscriberUserId, feedTierId, tierName } = args;
-  await assignPseudonymSeq(client, providerUserId, subscriberUserId);
-
-  const existing = await client.query<{ id: string }>(
-    `select id from feed_subscriptions where subscriber_user_id = $1 and feed_tier_id = $2`,
-    [subscriberUserId, feedTierId]
-  );
-  if (existing.rowCount) {
-    await client.query(
-      `update feed_subscriptions set provider_user_id = $2, status = 'active', lapsed_at = null, updated_at = now()
-       where id = $1`,
-      [existing.rows[0].id, providerUserId]
-    );
-    return existing.rows[0].id;
-  }
-
-  try {
-    const result = await client.query<{ id: string }>(
-      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, feed_tier_id, status)
-       values ($1, $2, $3, 'active')
-       returning id`,
-      [providerUserId, subscriberUserId, feedTierId]
     );
     return result.rows[0].id;
   } catch (err) {
