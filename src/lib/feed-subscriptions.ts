@@ -509,6 +509,50 @@ export async function upsertFeedSubscriptionForRequest(
   }
 }
 
+/** A package approval (e.g. ld-retail-package) grants several member tiers from ONE request,
+ * but feed_subscriptions_request_uidx (migration 0078) allows at most one subscription row per
+ * request_id -- only the package's first member can be tagged with the request's id via
+ * upsertFeedSubscriptionForRequest above. The remaining members upsert on the business key
+ * (subscriber, tier) instead, same as the admin-direct grant path (assignFeedTierSubscription),
+ * just run inside the SAME client/transaction as the rest of the approval so a partial package
+ * grant (e.g. 1 of 3 tiers landing before a later member's write fails) can never be committed.
+ * Approving twice replays into the same rows either way: the primary via its request_id, every
+ * other member via its own (subscriber, tier) identity -- no dependence on request_id for
+ * these. */
+export async function upsertFeedSubscriptionMemberForRequest(
+  client: PoolClient,
+  args: { providerUserId: string; subscriberUserId: string; feedTierId: string; tierName: string }
+): Promise<string> {
+  const { providerUserId, subscriberUserId, feedTierId, tierName } = args;
+  await assignPseudonymSeq(client, providerUserId, subscriberUserId);
+
+  const existing = await client.query<{ id: string }>(
+    `select id from feed_subscriptions where subscriber_user_id = $1 and feed_tier_id = $2`,
+    [subscriberUserId, feedTierId]
+  );
+  if (existing.rowCount) {
+    await client.query(
+      `update feed_subscriptions set provider_user_id = $2, status = 'active', lapsed_at = null, updated_at = now()
+       where id = $1`,
+      [existing.rows[0].id, providerUserId]
+    );
+    return existing.rows[0].id;
+  }
+
+  try {
+    const result = await client.query<{ id: string }>(
+      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, feed_tier_id, status)
+       values ($1, $2, $3, 'active')
+       returning id`,
+      [providerUserId, subscriberUserId, feedTierId]
+    );
+    return result.rows[0].id;
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
+    throw err;
+  }
+}
+
 /** Admin-facing upsert: grants a subscriber ONE specific Horizon-catalogue TIER. Idempotent --
  * re-saving the same tierKey is a no-op (reactivates if lapsed). A region can hold more than
  * one simultaneous tier subscription (the London Base package is three London tiers sold as

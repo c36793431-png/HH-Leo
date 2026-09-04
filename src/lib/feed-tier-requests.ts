@@ -1,14 +1,19 @@
 import { pool } from "./db";
 import { notifyFeedTierRequestSubmitted, notifyFeedTierTrialActivated } from "./telemetry-sink";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
-import { feedTierMeta, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
+import { expandTierKey, feedTierMeta, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
 import {
   insertFeedTierTrial,
   notifyTrialClientActivated,
   TrialAlreadyClaimedError,
   TrialNotEligibleError,
 } from "./feed-tier-trials";
-import { FeedTierNotAssignedError, getFeedTierForAssignment, upsertFeedSubscriptionForRequest } from "./feed-subscriptions";
+import {
+  FeedTierNotAssignedError,
+  getFeedTierForAssignment,
+  upsertFeedSubscriptionForRequest,
+  upsertFeedSubscriptionMemberForRequest,
+} from "./feed-subscriptions";
 
 export const FEED_TIER_REQUEST_STATUSES = ["pending", "approved", "rejected", "provisioned"] as const;
 export type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number];
@@ -220,7 +225,19 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
  * the whole transaction back, so the request stays 'pending' and the admin sees a real error
  * instead of a silent merge into someone else's row. subscription_id is written back onto the
  * request in the same statement as the 'approved' flip (migration 0078), so "approved with no
- * backing grant" stops being representable in the data at all. */
+ * backing grant" stops being representable in the data at all.
+ *
+ * pending.tierKey may be a package pseudo-key (ld-retail-package, ny-retail-package -- see
+ * PACKAGE_TIER_KEYS in feed-tier-catalogue.ts) with no feed_tiers row of its own, so it's
+ * expanded via expandTierKey() -- the same expansion feed-providers.ts already uses to scope
+ * package requests into a provider's queue -- before any tier lookup runs. A non-package key
+ * expands to itself, so this is a no-op for the single-tier case. Every member is resolved and
+ * provider-checked up front so a mid-grant failure never leaves a package half-assigned. Only
+ * the first member can carry the request's own id (feed_subscriptions_request_uidx allows one
+ * subscription row per request_id); the rest grant via upsertFeedSubscriptionMemberForRequest's
+ * business-key upsert in the same transaction (leo-package-grant-fix-2026-09-04 -- previously
+ * a package approval threw "Unknown feed tier" on this lookup before ever reaching a grant
+ * write). */
 export async function approveFeedTierRequest(id: string, actionedBy: string, adminUrl: string): Promise<FeedTierRequestRow> {
   const pending = await getFeedTierRequest(id);
   if (!pending) throw new Error("feed tier request not found");
@@ -231,8 +248,12 @@ export async function approveFeedTierRequest(id: string, actionedBy: string, adm
   // transaction below: a trial-insert failure must never roll back a successful approval.
   await activateTrialIfEligible(pending, adminUrl);
 
-  const tier = await getFeedTierForAssignment(pending.tierKey);
-  if (!tier.providerUserId) throw new FeedTierNotAssignedError(tier.tierName, tier.regionKey);
+  const [primaryKey, ...memberKeys] = expandTierKey(pending.tierKey);
+  const primary = await getFeedTierForAssignment(primaryKey);
+  if (!primary.providerUserId) throw new FeedTierNotAssignedError(primary.tierName, primary.regionKey);
+  const members = await Promise.all(memberKeys.map((k) => getFeedTierForAssignment(k)));
+  const unassigned = members.find((m) => !m.providerUserId);
+  if (unassigned) throw new FeedTierNotAssignedError(unassigned.tierName, unassigned.regionKey);
 
   const client = await pool.connect();
   let subscriptionId: string;
@@ -240,11 +261,19 @@ export async function approveFeedTierRequest(id: string, actionedBy: string, adm
     await client.query("begin");
     subscriptionId = await upsertFeedSubscriptionForRequest(client, {
       requestId: pending.id,
-      providerUserId: tier.providerUserId,
+      providerUserId: primary.providerUserId,
       subscriberUserId: pending.userId,
-      feedTierId: tier.feedTierId,
-      tierName: tier.tierName,
+      feedTierId: primary.feedTierId,
+      tierName: primary.tierName,
     });
+    for (const member of members) {
+      await upsertFeedSubscriptionMemberForRequest(client, {
+        providerUserId: member.providerUserId!,
+        subscriberUserId: pending.userId,
+        feedTierId: member.feedTierId,
+        tierName: member.tierName,
+      });
+    }
     await client.query(
       `update feed_tier_requests
        set status = 'approved', reason = null, actioned_at = now(), actioned_by = $2, subscription_id = $3
