@@ -86,7 +86,12 @@ export default async function FeedOverviewPage() {
               <span className="si">◎</span> Subscribers
             </div>
             <div className="val">{subscriberCount}</div>
-            <div className="sub">trial + active, across your packages</div>
+            <div className="sub">
+              trial + active, across your packages ·{" "}
+              <Link href="/feed/dashboard/active-users" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
+                View →
+              </Link>
+            </div>
           </div>
           <div className={`stat${pending.length > 0 ? " hot" : ""}`}>
             <div className="lab">
@@ -94,16 +99,10 @@ export default async function FeedOverviewPage() {
             </div>
             <div className="val">{pending.length}</div>
             <div className="sub">
-              {oldest ? (
-                <>
-                  oldest waiting · {formatRelative(oldest.createdAt)} ·{" "}
-                  <Link href="/feed/dashboard/users" style={{ color: "var(--pfp-warn)", fontWeight: 600 }}>
-                    Open →
-                  </Link>
-                </>
-              ) : (
-                "queue is clear"
-              )}
+              {oldest ? <>oldest waiting · {formatRelative(oldest.createdAt)} · </> : "queue is clear · "}
+              <Link href="/feed/dashboard/users" style={{ color: "var(--pfp-warn)", fontWeight: 600 }}>
+                Open →
+              </Link>
             </div>
           </div>
           <div className="stat">
@@ -111,7 +110,12 @@ export default async function FeedOverviewPage() {
               <span className="si">◉</span> Active trials
             </div>
             <div className="val">{trials.length}</div>
-            <div className="sub">across your managed tiers</div>
+            <div className="sub">
+              across your managed tiers ·{" "}
+              <Link href="/feed/dashboard/active-users" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
+                View →
+              </Link>
+            </div>
           </div>
           <div className="stat">
             <div className="lab">
