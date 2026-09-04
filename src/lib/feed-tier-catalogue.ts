@@ -40,10 +40,10 @@ export const FEED_TIERS: FeedTierMeta[] = [
    * name is client-facing via feed-tier-requests.ts's admin queue + Telegram approve/decline
    * DM (feedTierMeta lookup) -- renamed Retail -> Base per coxwell (marcus, feed-tier-entitlement-2026-09-01),
    * tier_key ("ld-retail-package") intentionally unchanged, same pattern as 0074's Alpha/Ultra rename. */
-  { key: "ld-retail-package", name: "Base Package (Beta 56 / Gamma 19 / Delta 18)", region: "london" },
+  { key: "ld-retail-package", name: "LD Base Package (Beta 56 / Gamma 19 / Delta 18)", region: "london" },
   /** Same pseudo-tier pattern as ld-retail-package, for NY's Base bundle
    * (marcus/coxwell, leo-ny-base-package-2026-09-04). No feed_tiers row either. */
-  { key: "ny-retail-package", name: "Base Package (NY Alpha / NY Beta)", region: "ny" },
+  { key: "ny-retail-package", name: "NY Base Package (NY Alpha / NY Beta)", region: "ny" },
 ];
 
 /** Package pseudo-tier -> its real member tier keys. Provider scoping (feed-providers.ts
