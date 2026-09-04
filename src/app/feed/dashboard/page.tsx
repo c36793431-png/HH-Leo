@@ -87,8 +87,8 @@ export default async function FeedOverviewPage() {
             </div>
             <div className="val">{subscriberCount}</div>
             <div className="sub">
-              trial + active, across your packages ·{" "}
-              <Link href="/feed/dashboard/active-users" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
+              active, across your packages ·{" "}
+              <Link href="/feed/dashboard/accounts" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
                 View →
               </Link>
             </div>

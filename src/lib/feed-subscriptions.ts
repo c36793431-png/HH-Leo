@@ -103,6 +103,36 @@ const EFFECTIVE_STATUS_SQL = `
   end
 `;
 
+/** Same branch order as EFFECTIVE_STATUS_SQL but without the feed_tier_trials branch --
+ * a row that's non-lapsed ONLY because a live trial covers its tier doesn't count as a
+ * Subscriber under bus thread leo-provider-panel-naming-pass-2026-09-04 (coxwell ruling:
+ * "Trials tab have trials, Subscribers is live paying clients"). A row that's non-lapsed
+ * for any OTHER reason (ungated region, request-license, direct license) still counts even
+ * if a trial row happens to also exist for the same tier -- that grant doesn't depend on
+ * the trial. Used only by getActiveSubscriberCountForProvider below; listSubscribersForProvider
+ * still uses EFFECTIVE_STATUS_SQL since its own status column (including "trial") is out of
+ * scope for this naming pass. */
+const SUBSCRIBER_STATUS_SQL = `
+  case
+    when s.status = 'lapsed' then 'lapsed'
+    when ft.region_key is null then s.status
+    when ${REGION_TO_FEED_TYPE_SQL} is null then s.status
+    when s.request_id is not null and exists (
+      select 1 from feed_tier_requests r
+      join licenses l on l.id = r.license_id
+      where r.id = s.request_id
+        and l.status = 'active' and l.expires_at > now()
+    ) then s.status
+    when exists (
+      select 1 from licenses l
+      where l.user_id = s.subscriber_user_id
+        and l.status = 'active' and l.expires_at > now()
+        and ${REGION_TO_FEED_TYPE_SQL} = any(l.feed_types)
+    ) then s.status
+    else 'lapsed'
+  end
+`;
+
 export function pseudonymLabel(seq: number): string {
   return `HH${seq}`;
 }
@@ -252,17 +282,17 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
   }
 }
 
-/** Overview panel's "Subscribers" stat -- distinct subscribers currently trial/active,
+/** Overview panel's "Subscribers" stat -- distinct subscribers with a live, non-trial grant,
  * where a Horizon-catalogue row counts only if its region is still license-entitled (see
- * EFFECTIVE_STATUS_SQL above) as well as not explicitly lapsed. Degrades to 0
- * pre-migration, same rule as every other counter this panel renders. */
+ * SUBSCRIBER_STATUS_SQL above) as well as not explicitly lapsed and not merely trial-covered.
+ * Degrades to 0 pre-migration, same rule as every other counter this panel renders. */
 export async function getActiveSubscriberCountForProvider(providerUserId: string): Promise<number> {
   try {
     const result = await pool.query<{ count: string }>(
       `select count(distinct s.subscriber_user_id) as count
        from feed_subscriptions s
        left join feed_tiers ft on ft.id = s.feed_tier_id
-       where s.provider_user_id = $1 and (${EFFECTIVE_STATUS_SQL}) != 'lapsed'`,
+       where s.provider_user_id = $1 and (${SUBSCRIBER_STATUS_SQL}) != 'lapsed'`,
       [providerUserId]
     );
     return Number(result.rows[0]?.count ?? 0);
