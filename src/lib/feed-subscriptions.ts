@@ -39,6 +39,7 @@ export interface ProviderSubscriberRow {
   regionKey: string | null;
   status: SubscriptionStatus;
   startedAt: Date;
+  serverIp: string | null;
 }
 
 /** Bus thread feed-subscription-recording-build-2026-09-03 (marcus ruling, 2026-09-03,
@@ -247,7 +248,14 @@ export async function pseudonymForSubscriber(
 /** Provider-facing subscriber list -- pseudonyms only. Never select subscriber_user_id,
  * email, or display_name here; leaking any of those into a provider-visible response
  * defeats the entire point of the pseudonym table. Degrades to an empty list pre-migration
- * (42P01) rather than a 500 on a live client-facing panel. */
+ * (42P01) rather than a 500 on a live client-facing panel.
+ *
+ * server_registrations is joined on s.license_id (unique per license_id, so this can never
+ * fan out a row) to surface the client's own registered server IP (coxwell, 2026-09-04:
+ * "provider needs to see the IP ... he allowlists that IP on his own box"). Registered IP
+ * only -- no captured_ip fallback, no mismatch/verification state; that stays admin-only
+ * per the 2026-08-29 ruling. Null when the client has no server registered at all, which is
+ * the true state for most of the London backfill rows, not a bug to paper over. */
 export async function listSubscribersForProvider(providerUserId: string): Promise<ProviderSubscriberRow[]> {
   try {
     const result = await pool.query<{
@@ -258,14 +266,16 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       region_key: string | null;
       status: SubscriptionStatus;
       started_at: Date;
+      declared_ip: string | null;
     }>(
       `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, ft.tier_key, ft.region_key,
-              ${EFFECTIVE_STATUS_SQL} as status, s.started_at
+              ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip
        from feed_subscriptions s
        join provider_client_pseudonyms p
          on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
        left join feed_tiers ft on ft.id = s.feed_tier_id
        left join provider_tiers pt on pt.id = s.provider_tier_id
+       left join server_registrations sr on sr.license_id = s.license_id
        where s.provider_user_id = $1
        order by p.seq`,
       [providerUserId]
@@ -278,6 +288,7 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       regionKey: row.region_key,
       status: row.status,
       startedAt: row.started_at,
+      serverIp: row.declared_ip,
     }));
   } catch (err) {
     if (isMissingTable(err)) return [];

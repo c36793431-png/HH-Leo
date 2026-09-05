@@ -119,6 +119,7 @@ export default async function FeedAccountsPage() {
                   <th>Account</th>
                   <th>Tier</th>
                   <th>Status</th>
+                  <th>Server IP</th>
                   <th className="r">Since</th>
                 </tr>
               </thead>
@@ -138,6 +139,7 @@ export default async function FeedAccountsPage() {
                             {STATUS_ICON[g.status] ?? "•"} {g.status}
                           </span>
                         </td>
+                        <td className="mono">{g.members[0].serverIp ?? ""}</td>
                         <td className="r" />
                       </tr>
                       {g.members.map((m) => (
@@ -149,6 +151,7 @@ export default async function FeedAccountsPage() {
                               {STATUS_ICON[m.status] ?? "•"} {m.status}
                             </span>
                           </td>
+                          <td />
                           <td className="r mono">{m.startedAt.toISOString().slice(0, 10)}</td>
                         </tr>
                       ))}
@@ -164,6 +167,7 @@ export default async function FeedAccountsPage() {
                           {STATUS_ICON[g.row.status] ?? "•"} {g.row.status}
                         </span>
                       </td>
+                      <td className="mono">{g.row.serverIp ?? ""}</td>
                       <td className="r mono">{g.row.startedAt.toISOString().slice(0, 10)}</td>
                     </tr>
                   )
