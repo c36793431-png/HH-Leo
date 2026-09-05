@@ -69,7 +69,7 @@ export default async function FeedRevenuePage() {
                         <td style={{ paddingLeft: 28 }}>
                           {t.name}
                           <br />
-                          <span style={{ fontSize: 11, color: "var(--pfp-ink-hi)" }}>{t.speedDisplay}</span>
+                          <span style={{ fontSize: 11, color: "var(--pfp-ink-hi)" }}>{t.subtitle}</span>
                         </td>
                         <td className="r" />
                         <td className="r" />
