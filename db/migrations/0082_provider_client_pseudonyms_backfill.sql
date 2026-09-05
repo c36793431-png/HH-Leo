@@ -21,50 +21,58 @@
 --     this batch). Multiple ROWS per pair (3 for each Base-package client) is expected and is
 --     exactly what per-pair (not per-row) pseudonym assignment is for.
 --
--- ANOMALY FLAGGED, NOT SILENTLY RESOLVED: one of the 8 pairs is provider_user_id =
--- subscriber_user_id = 94529d89-ae75-4df5-a15f-1f8a004509d1 -- the provider account
--- subscribing to itself (2 lapsed rows, ld-beta-56 + ny-normal, started 2026-09-03T19:08).
--- This is the same c36793431@gmail.com smoke-test account flagged in 0081's header (ten
--- license rows, not deleted, awaiting coxwell's call) and in
--- project_horizon_london_feed_backfill_7_clients addendum #2. It is one of the 23 rows Job 8
--- was scoped to, so it's included below to keep the population exact and reviewable, but it
--- is not a real client -- confirm with coxwell whether to carve it out before running. If it
--- should be dropped, delete its VALUES line below and drop preflight B's 8th tuple; nothing
--- else in this file depends on it.
+-- DROPPED, PER MARCUS RULING (thread leo-provider-panel-package-labels-2026-09-04): one of the
+-- 8 orphaned pairs was provider_user_id = subscriber_user_id = 94529d89-ae75-4df5-a15f-1f8a004509d1
+-- -- the provider account subscribing to itself (2 lapsed rows, ld-beta-56 + ny-normal, started
+-- 2026-09-03T19:08). Flagged, not silently resolved, in the prior version of this file. Ruling:
+-- a pseudonym is a client-facing label, and this is coxwell's own smoke-test account (same one
+-- flagged in 0081's header and in project_horizon_london_feed_backfill_7_clients addendum #2)
+-- -- allocating it a seq would print a fabricated client into a provider's own account list
+-- forever. Its VALUES line and preflight-B tuple are removed. The backfill now covers 7 pairs,
+-- not 8; that pair's 2 rows stay invisible on the provider panel, which is the correct outcome.
 --
 -- NUMBERING: reuses assignPseudonymSeq's own algorithm (feed-subscriptions.ts) verbatim --
 -- read-or-insert provider_pseudonym_counters, UPDATE ... RETURNING next_seq - 1 AS seq, then
 -- INSERT ... ON CONFLICT DO NOTHING -- run once per pair inside a single DO block, in this
 -- transaction, so it is provably the same numbering source as the app code and not a
 -- hand-rolled range. Live read 2026-09-04: provider_pseudonym_counters.next_seq = 13 for this
--- provider (max existing seq = 12across the 4 untouched pairs). Preflight A aborts if that
+-- provider (max existing seq = 12 across the 4 untouched pairs). Preflight A aborts if that
 -- baseline has drifted. The 6 existing pseudonym rows (seq 1, 2, 6, 12) are never written by
--- this migration -- only ON CONFLICT DO NOTHING inserts for the 8 new pairs, so even a
--- baseline that somehow already included one of the 8 would no-op that row rather than
+-- this migration -- only ON CONFLICT DO NOTHING inserts for the 7 new pairs, so even a
+-- baseline that somehow already included one of the 7 would no-op that row rather than
 -- collide or renumber it.
 --
--- ORDER: chronological by first feed_subscriptions.started_at per pair -- the self-subscription
--- pair (started 2026-09-03) sorts first, then the 7 London Base pairs (all started
--- 2026-09-04T17:24:01, same instant) in the same left-to-right order 0081 used for them.
--- Expected allocation: seq 13 (self), 14=741108888@qq.com, 15=abizokium@gmail.com,
--- 16=bwalyadavid099@gmail.com, 17=giang2000ln@gmail.com, 18=jorgbuteijn@gmail.com,
--- 19=mujunik824@gmail.com, 20=rasoolx55@gmail.com.
+-- ORDER: chronological by first feed_subscriptions.started_at per pair -- with the
+-- self-subscription pair dropped, the 7 London Base pairs (all started 2026-09-04T17:24:01,
+-- same instant) keep the same left-to-right order 0081 used for them, and the whole allocation
+-- shifts up by one seq since the dropped pair is no longer first in line. Final allocation:
+-- seq 13=741108888@qq.com, 14=abizokium@gmail.com, 15=bwalyadavid099@gmail.com,
+-- 16=giang2000ln@gmail.com, 17=jorgbuteijn@gmail.com, 18=mujunik824@gmail.com,
+-- 19=rasoolx55@gmail.com.
 --
 -- IDEMPOTENT: safe to attempt twice, not silent on the second attempt -- preflight B checks
--- the live orphaned-pair set still matches this exact hardcoded list of 8 and aborts
+-- the live orphaned-pair set still matches this exact hardcoded list of 7 and aborts
 -- (raises, whole transaction rolls back) on any drift, same shape as 0081's preflight B. A
 -- second run after a successful first run will find 0 orphaned pairs left and fail preflight
 -- B loudly rather than silently no-op or double-insert.
 --
 -- ROLLBACK: db/migrations/0082_rollback.sql (companion file, not applied by this migration,
--- not run automatically) -- DELETEs the 8 rows by (provider_user_id, subscriber_user_id) and
+-- not run automatically) -- DELETEs the 7 rows by (provider_user_id, subscriber_user_id) and
 -- resets provider_pseudonym_counters.next_seq back to 13.
+--
+-- FIX 2026-09-04 (pre-send drift check): preflight B's orphaned_count sub-query originally
+-- counted ALL orphaned pairs unfiltered, which includes the self-subscription pair
+-- (94529d89 -> 94529d89) -- permanently orphaned by design, per the DROPPED section above.
+-- That made live orphaned_count = 8 against an expected 7, so the preflight would raise and
+-- roll back on every run regardless of data state. Added an explicit exclusion for that one
+-- pair to orphaned_count's where clause so the check again measures only the 7 pairs this
+-- migration allocates. Verified live post-fix: orphaned_count=7, match_count=7, no abort.
 
 begin;
 
 -- Preflight A: the counter this migration allocates from must still be at the baseline read
 -- during prep, or the seq values below (implicit in allocation order, not literals) would
--- land somewhere other than 13-20.
+-- land somewhere other than 13-19.
 do $$
 declare
   current_next_seq integer;
@@ -79,7 +87,7 @@ begin
   end if;
 end $$;
 
--- Preflight B: the orphaned-pair population must exactly match these 8 pairs -- both count
+-- Preflight B: the orphaned-pair population must exactly match these 7 pairs -- both count
 -- and identity. Aborts the whole transaction on any drift since prep (a new subscription,
 -- a manually-assigned pseudonym, etc. landing between prep and execution).
 do $$
@@ -94,6 +102,8 @@ begin
     left join provider_client_pseudonyms p
       on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
     where p.provider_user_id is null
+      and not (s.provider_user_id = '94529d89-ae75-4df5-a15f-1f8a004509d1'::uuid
+               and s.subscriber_user_id = '94529d89-ae75-4df5-a15f-1f8a004509d1'::uuid)
   ) orphaned;
 
   select count(*) into match_count
@@ -104,7 +114,6 @@ begin
       on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
     where p.provider_user_id is null
       and (s.provider_user_id, s.subscriber_user_id) in (
-        ('94529d89-ae75-4df5-a15f-1f8a004509d1'::uuid, '94529d89-ae75-4df5-a15f-1f8a004509d1'::uuid),
         ('94529d89-ae75-4df5-a15f-1f8a004509d1'::uuid, '9239faa5-88a0-4789-9774-b0c161823b29'::uuid),
         ('94529d89-ae75-4df5-a15f-1f8a004509d1'::uuid, 'a66d928c-6830-4cb3-80af-06cfca4ad3b6'::uuid),
         ('94529d89-ae75-4df5-a15f-1f8a004509d1'::uuid, '5182a8be-96ab-4ad7-8b3c-ff2603e8f784'::uuid),
@@ -115,9 +124,9 @@ begin
       )
   ) matched;
 
-  if orphaned_count != 8 or match_count != 8 then
+  if orphaned_count != 7 or match_count != 7 then
     raise exception
-      'pseudonym-backfill population drift since prep: orphaned=% match=% (expected 8/8)',
+      'pseudonym-backfill population drift since prep: orphaned=% match=% (expected 7/7)',
       orphaned_count, match_count;
   end if;
 end $$;
@@ -136,7 +145,6 @@ declare
   candidate_seq integer;
   inserted_seq integer;
   subscribers uuid[] := array[
-    '94529d89-ae75-4df5-a15f-1f8a004509d1'::uuid, -- self-subscription anomaly, see header
     '9239faa5-88a0-4789-9774-b0c161823b29'::uuid, -- 741108888@qq.com
     'a66d928c-6830-4cb3-80af-06cfca4ad3b6'::uuid, -- abizokium@gmail.com
     '5182a8be-96ab-4ad7-8b3c-ff2603e8f784'::uuid, -- bwalyadavid099@gmail.com
