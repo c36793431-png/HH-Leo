@@ -1,6 +1,8 @@
--- NOT APPLIED. Written only -- marcus reviews, coxwell names the migration id and confirms
--- 94529d89-ae75-4df5-a15f-1f8a004509d1 is the account whose panel should show these seven,
--- then marcus/FOC16/coxwell executes. Do not run this against prod.
+-- APPLIED 2026-09-04 17:24Z by marcus. All gates passed, 29 rows verified (8 existing + 21
+-- new); confirmed present in schema_migrations. This header previously read "NOT APPLIED --
+-- do not run against prod" from when the migration was written but not yet executed; corrected
+-- here (marcus, thread leo-provider-panel-package-labels-2026-09-04) so it doesn't mislead a
+-- future reader into thinking this was never run.
 -- Thread leo-london-backfill-2026-09-04. Spec is Fable's, relayed by marcus (m36633, m36648,
 -- m36651): "2d is a MIGRATION, not a script" -- feed_subscriptions.license_id does not exist
 -- yet, and 21 admin-direct-grant calls to assignFeedTierSubscription() would be up to 42
