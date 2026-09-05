@@ -21,6 +21,9 @@
   --pfp-ink-2: #8fb0b7;
   --pfp-ink-3: #546e74;
   --pfp-ink-4: #3a5157;
+  /* Clears WCAG AA 4.5:1 against both --pfp-panel and --pfp-bg-1 (the two dark backgrounds
+     this sits on) -- ink-3/ink-4 measure 3.60:1 and 2.27:1 there, both AA failures. */
+  --pfp-ink-hi: #6f8a90;
   --pfp-ok: #37f5a0;
   --pfp-warn: #ffc24b;
   --pfp-bad: #ff5c7a;
@@ -176,7 +179,8 @@
 
 /* tables */
 .feed-provider-v1 .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-.feed-provider-v1 .tbl th { text-align: left; font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pfp-ink-4); padding: 0 14px 12px; border-bottom: 1px solid var(--pfp-line-soft); }
+.feed-provider-v1 .tbl th { text-align: left; font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pfp-ink-hi); padding: 0 14px 12px; border-bottom: 1px solid var(--pfp-line-soft); }
+.feed-provider-v1 .tbl .note-row td { color: var(--pfp-ink-hi); font-size: 11px; font-style: italic; padding-top: 0; }
 .feed-provider-v1 .tbl th.r, .feed-provider-v1 .tbl td.r { text-align: right; }
 .feed-provider-v1 .tbl td { padding: 14px; border-bottom: 1px solid var(--pfp-line-soft); color: var(--pfp-ink-2); }
 .feed-provider-v1 .tbl tr:last-child td { border-bottom: 0; }
@@ -205,7 +209,7 @@
 .feed-provider-v1 .payout .amt { font-family: var(--pfp-disp); font-weight: 800; font-size: 30px; color: var(--pfp-ink); margin: 8px 0 4px; }
 .feed-provider-v1 .payout .when { font-size: 12px; color: var(--pfp-ink-2); }
 .feed-provider-v1 .payout .when b { color: var(--pfp-ok); }
-.feed-provider-v1 .scope-note { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--pfp-ink-3); background: var(--pfp-bg-1); border: 1px solid var(--pfp-line-soft); border-radius: 9px; padding: 10px 13px; margin-top: 14px; }
+.feed-provider-v1 .scope-note { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--pfp-ink-hi); background: var(--pfp-bg-1); border: 1px solid var(--pfp-line-soft); border-radius: 9px; padding: 10px 13px; margin-top: 14px; }
 .feed-provider-v1 .scope-note .i { color: var(--pfp-info); }
 
 /* activity feed */

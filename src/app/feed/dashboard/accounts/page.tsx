@@ -25,6 +25,16 @@ function countLabel(feeds: number, clients: number, word: string): string {
   return `${clients} ${word} client${clients === 1 ? "" : "s"} · ${feeds} feeds`;
 }
 
+/** Bus thread leo-provider-panel-package-labels-2026-09-05 (marcus, finding 3): countLabel's
+ * bare-number shortcut (feeds === clients) reads fine standalone in the header cap, but "By
+ * location" packs several of these into one sentence with no header nearby to disambiguate --
+ * a bare "1 paying" there could mean 1 client or 1 feed. Always spell both nouns in that
+ * context, and (unlike countLabel's hardcoded plural "feeds") pluralize correctly since a
+ * single location can land on exactly 1 feed. */
+function locationCountLabel(feeds: number, clients: number, word: string): string {
+  return `${clients} ${word} client${clients === 1 ? "" : "s"} · ${feeds} feed${feeds === 1 ? "" : "s"}`;
+}
+
 /** Bus thread leo-provider-panel-package-labels-2026-09-04 (marcus, follow-up B): a package
  * group's header has no `started_at` of its own -- it's an aggregate of its members' rows --
  * so this reports the earliest member's date as the account's start with this package. */
@@ -168,9 +178,9 @@ export default async function FeedAccountsPage() {
                 {Array.from(byLocation.entries())
                   .map(([location, c]) => {
                     const parts = [
-                      c.paying > 0 ? countLabel(c.paying, c.payingClients.size, "paying") : null,
-                      c.trial > 0 ? countLabel(c.trial, c.trialClients.size, "trial") : null,
-                      c.lapsed > 0 ? countLabel(c.lapsed, c.lapsedClients.size, "lapsed") : null,
+                      c.paying > 0 ? locationCountLabel(c.paying, c.payingClients.size, "paying") : null,
+                      c.trial > 0 ? locationCountLabel(c.trial, c.trialClients.size, "trial") : null,
+                      c.lapsed > 0 ? locationCountLabel(c.lapsed, c.lapsedClients.size, "lapsed") : null,
                     ].filter(Boolean);
                     return `${location}: ${parts.join(", ")}`;
                   })
@@ -201,6 +211,11 @@ export default async function FeedAccountsPage() {
                 </tr>
               </thead>
               <tbody>
+                <tr className="note-row">
+                  <td colSpan={6} className="r">
+                    * Notional list-price split — there is no payout ledger or per-subscriber billing yet.
+                  </td>
+                </tr>
                 {accountGroups.map((g) =>
                   g.kind === "package" ? (
                     <Fragment key={`${g.pseudonym}-${g.label}`}>
@@ -256,13 +271,6 @@ export default async function FeedAccountsPage() {
                 )}
               </tbody>
             </table>
-          )}
-
-          {subscribers.length > 0 && (
-            <div className="scope-note">
-              <span className="i">◈</span>
-              <span>* Notional list-price split — there is no payout ledger or per-subscriber billing yet.</span>
-            </div>
           )}
         </div>
 
