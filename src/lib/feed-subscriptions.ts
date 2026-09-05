@@ -42,19 +42,24 @@ export interface ProviderSubscriberRow {
   serverIp: string | null;
 }
 
-/** Bus thread feed-subscription-recording-build-2026-09-03 (marcus ruling, 2026-09-03,
- * no coxwell/migration needed): a Horizon-catalogue (feed_tier_id-backed) subscription's
- * true entitlement is the union of feed_types across ALL of the subscriber's currently
- * active licenses, not a single linked license_id -- a client can hold two active licenses
- * (e.g. London lapses, CME stays active) and adding license_id would wrongly pin the
- * subscription to one of them. So this maps a feed_tiers.region_key to the licenses.feed_types
- * entry it corresponds to (same mapping as FEED_REGION_TYPE in feed-tier-catalogue.ts, inlined
- * here since that table has no FK to licenses) and treats "no mapping" (cme today) as
- * ungated -- there's no license concept for that region yet, so it must not read as
- * permanently inactive. provider_tier_id rows (ft.region_key is null, third-party
- * self-serve) are never license-gated at all; they're outside licenses.feed_types' domain.
- * An explicit admin lapse (status='lapsed', deactivateFeedTierSubscription) always wins
- * regardless of license state -- it's a one-way ratchet, the exception path. */
+/** Bus thread leo-provider-panel-package-labels-2026-09-04 (Fable ruling, ledger v1.46,
+ * 81dd73c) overrules the union-of-licenses reasoning this comment used to carry. What still
+ * stands: this maps a feed_tiers.region_key to the licenses.feed_types entry it corresponds to
+ * (same mapping as FEED_REGION_TYPE in feed-tier-catalogue.ts, inlined here since that table has
+ * no FK to licenses), for the ungated carve-outs below only -- "no mapping" (cme today) has no
+ * license concept yet so it must not read as permanently inactive, and provider_tier_id rows
+ * (ft.region_key is null, third-party self-serve) are never license-gated at all. What's
+ * retracted is treating feed_types union across a subscriber's licenses as the entitlement test
+ * for a bound row: a grant is per-server grain (one server's IP on one license -- that's what
+ * the vendor allowlisted), a license id is stable across renewal (renewal is an UPDATE by id, so
+ * a pinned row goes live again on its own), and feed_types is legacy -- request-to-approve is
+ * the entitlement of record, not the checkbox array. This comment's own former example decides
+ * against union semantics: London lapses, CME stays live, and the London row must read lapsed
+ * so a human deprovisions that specific server -- union semantics would keep it active while any
+ * license of the client is live, a silent revenue leak. See the license branch below (replacing
+ * former step 2e0) for the shape this drives. An explicit admin lapse (status='lapsed',
+ * deactivateFeedTierSubscription) still always wins regardless of license state -- it's a
+ * one-way ratchet, unchanged. */
 const REGION_TO_FEED_TYPE_SQL = `case ft.region_key when 'london' then 'london' when 'ny' then 'ny' when 'tokyo' then 'crypto' else null end`;
 
 /** Bus thread feed-approve-request-creates-subscription-item3-2026-09-03 (marcus ruling):
@@ -70,22 +75,24 @@ const REGION_TO_FEED_TYPE_SQL = `case ft.region_key when 'london' then 'london' 
  * falls through to the license gate below, same as any other row. Same shape as the
  * provider_tier_id and cme carve-outs above -- a case where the license-entitlement question
  * doesn't apply to this row at all. */
-/** Ledger v1.38 step 2e0 (Fable ruling, ADDITIVE): a subscription created from an
- * approved feed_tier_requests row is entitled by the license that request named
- * (r.license_id), not by re-deriving a license via the subscriber's feed_types --
- * the license-exists check below can miss it if licenses.feed_types hasn't been
- * updated to carry this specific tier yet, even though the approved request is the
- * entitlement of record. Carry-never-derive: no user_id cross-check against the
- * subscriber, the license is whichever one the request carried. */
+/** Ledger v1.46 (Fable ruling, thread leo-provider-panel-package-labels-2026-09-04): retires
+ * step 2e0 and the feed_types-union branch it used to sit beside -- both collapse into this one
+ * branch, pinned to s.license_id (added and backfilled by migration 0081). Per-server grain: the
+ * entitlement is whichever license is bound to this row, not re-derived via the subscriber's
+ * feed_types array. Carry-never-derive: no user_id cross-check against the subscriber. Both
+ * liveness conjuncts (status = 'active' AND expires_at > now()) stay -- expires_at is
+ * read-time-only and this is the only expiry test in the whole CASE; drop either and every row
+ * here reads permanently active. Movers verified against the live 29-row table before this
+ * landed: 2 rows flip lapsed->active (a bound license was live but had never carried the
+ * region's feed_types tick), 0 flip active->lapsed. */
 const EFFECTIVE_STATUS_SQL = `
   case
     when s.status = 'lapsed' then 'lapsed'
     when ft.region_key is null then s.status
     when ${REGION_TO_FEED_TYPE_SQL} is null then s.status
-    when s.request_id is not null and exists (
-      select 1 from feed_tier_requests r
-      join licenses l on l.id = r.license_id
-      where r.id = s.request_id
+    when exists (
+      select 1 from licenses l
+      where l.id = s.license_id
         and l.status = 'active' and l.expires_at > now()
     ) then s.status
     when exists (
@@ -95,12 +102,6 @@ const EFFECTIVE_STATUS_SQL = `
         and ftt.trial_status = 'active'
         and ftt.trial_ends_at > now()
     ) then s.status
-    when exists (
-      select 1 from licenses l
-      where l.user_id = s.subscriber_user_id
-        and l.status = 'active' and l.expires_at > now()
-        and ${REGION_TO_FEED_TYPE_SQL} = any(l.feed_types)
-    ) then s.status
     else 'lapsed'
   end
 `;
@@ -109,27 +110,20 @@ const EFFECTIVE_STATUS_SQL = `
  * a row that's non-lapsed ONLY because a live trial covers its tier doesn't count as a
  * Subscriber under bus thread leo-provider-panel-naming-pass-2026-09-04 (coxwell ruling:
  * "Trials tab have trials, Subscribers is live paying clients"). A row that's non-lapsed
- * for any OTHER reason (ungated region, request-license, direct license) still counts even
- * if a trial row happens to also exist for the same tier -- that grant doesn't depend on
- * the trial. Used only by getActiveSubscriberCountForProvider below; listSubscribersForProvider
- * still uses EFFECTIVE_STATUS_SQL since its own status column (including "trial") is out of
- * scope for this naming pass. */
+ * for any OTHER reason (ungated region, direct license) still counts even if a trial row
+ * happens to also exist for the same tier -- that grant doesn't depend on the trial. Used
+ * only by getActiveSubscriberCountForProvider below; listSubscribersForProvider still uses
+ * EFFECTIVE_STATUS_SQL since its own status column (including "trial") is out of scope for
+ * this naming pass. */
 const SUBSCRIBER_STATUS_SQL = `
   case
     when s.status = 'lapsed' then 'lapsed'
     when ft.region_key is null then s.status
     when ${REGION_TO_FEED_TYPE_SQL} is null then s.status
-    when s.request_id is not null and exists (
-      select 1 from feed_tier_requests r
-      join licenses l on l.id = r.license_id
-      where r.id = s.request_id
-        and l.status = 'active' and l.expires_at > now()
-    ) then s.status
     when exists (
       select 1 from licenses l
-      where l.user_id = s.subscriber_user_id
+      where l.id = s.license_id
         and l.status = 'active' and l.expires_at > now()
-        and ${REGION_TO_FEED_TYPE_SQL} = any(l.feed_types)
     ) then s.status
     else 'lapsed'
   end
