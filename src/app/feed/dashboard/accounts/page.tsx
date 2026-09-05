@@ -2,11 +2,40 @@ import { Fragment } from "react";
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
 import { listSubscribersForProvider, type ProviderSubscriberRow } from "@/lib/feed-subscriptions";
-import { PACKAGES } from "@/lib/feed-provider-packages";
+import { listTiersForProvider } from "@/lib/feed-providers";
+import { PACKAGES, groupTiers } from "@/lib/feed-provider-packages";
 
 const STATUS_ICON: Record<string, string> = { trial: "🧪", active: "✓", lapsed: "✗" };
 const REGION_LABELS: Record<string, string> = { london: "London", ny: "New York", cme: "CME", tokyo: "Tokyo" };
 const OTHER_LOCATION = "Other";
+
+function money(cents: number): string {
+  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+/** Provider's notional 50% share for one account row, bus thread
+ * leo-provider-panel-package-labels-2026-09-04 (coxwell, Job 6): "50% of the payment is paid
+ * to the feed provider ... for the paying clients not the trial." Blank (not $0) for anything
+ * other than the page's own `status === "active"` (EFFECTIVE_STATUS_SQL, same predicate as the
+ * Status badge) and for a row with no priceCents on record -- a $0 reads as "worth nothing",
+ * a blank reads as "no payment applies", and this page's price data (sourced only from
+ * feed_tiers via listTiersForProvider/groupTiers, see below) doesn't cover a provider_tier_id
+ * self-serve row at all.
+ *
+ * Reuses groupTiers()'s own computed priceCents rather than re-deriving a package price here,
+ * so there is exactly one place a package's list price can be wrong. Two things this number
+ * gets right only by coincidence today, both worth knowing before trusting it as a real
+ * payable: a package's priceCents is its first member tier's price, not a sum (see groupTiers
+ * in feed-provider-packages.ts) -- if a package's member tiers are ever priced differently
+ * this silently misstates the package; and the 50% is a hardcoded /2 with no stored
+ * per-provider split term (unlike provider_tiers' own client_price_cents/provider_split_pct
+ * for self-serve providers) -- a real per-provider split added later would need this function
+ * updated too, not just its data source. There is no payout ledger and no per-subscriber
+ * billing anywhere in the schema, so list price is the only number that exists here. */
+function providerShareFor(status: ProviderSubscriberRow["status"], priceCents: number | null | undefined): string | null {
+  if (status !== "active" || priceCents == null) return null;
+  return money(Math.round(priceCents / 2));
+}
 
 type AccountRowGroup =
   | { kind: "package"; pseudonym: string; label: string; status: ProviderSubscriberRow["status"]; members: ProviderSubscriberRow[] }
@@ -48,11 +77,22 @@ export default async function FeedAccountsPage() {
   const session = await auth();
   const providerId = session!.user!.id!;
 
-  const subscribers = await listSubscribersForProvider(providerId);
+  const [subscribers, tiers] = await Promise.all([
+    listSubscribersForProvider(providerId),
+    listTiersForProvider(providerId),
+  ]);
   const accountGroups = groupAccountSubscriptions(subscribers);
   const payingCount = subscribers.filter((s) => s.status === "active").length;
   const trialCount = subscribers.filter((s) => s.status === "trial").length;
   const lapsedCount = subscribers.filter((s) => s.status === "lapsed").length;
+
+  const tierGroups = groupTiers(tiers);
+  const packagePriceByLabel = new Map(
+    tierGroups.filter((g) => g.kind === "package").map((g) => [g.label, g.priceCents] as const)
+  );
+  const singlePriceByTierKey = new Map(
+    tierGroups.filter((g) => g.kind === "single").map((g) => [g.tier.tierKey, g.tier.priceCents] as const)
+  );
 
   const byLocation = new Map<string, { paying: number; trial: number; lapsed: number }>();
   for (const s of subscribers) {
@@ -119,6 +159,7 @@ export default async function FeedAccountsPage() {
                   <th>Account</th>
                   <th>Tier</th>
                   <th>Status</th>
+                  <th className="r">Your 50%*</th>
                   <th>Server IP</th>
                   <th className="r">Since</th>
                 </tr>
@@ -139,6 +180,7 @@ export default async function FeedAccountsPage() {
                             {STATUS_ICON[g.status] ?? "•"} {g.status}
                           </span>
                         </td>
+                        <td className="r share">{providerShareFor(g.status, packagePriceByLabel.get(g.label))}</td>
                         <td className="mono">{g.members[0].serverIp ?? ""}</td>
                         <td className="r" />
                       </tr>
@@ -151,6 +193,7 @@ export default async function FeedAccountsPage() {
                               {STATUS_ICON[m.status] ?? "•"} {m.status}
                             </span>
                           </td>
+                          <td />
                           <td />
                           <td className="r mono">{m.startedAt.toISOString().slice(0, 10)}</td>
                         </tr>
@@ -167,6 +210,9 @@ export default async function FeedAccountsPage() {
                           {STATUS_ICON[g.row.status] ?? "•"} {g.row.status}
                         </span>
                       </td>
+                      <td className="r share">
+                        {providerShareFor(g.row.status, g.row.tierKey ? singlePriceByTierKey.get(g.row.tierKey) : null)}
+                      </td>
                       <td className="mono">{g.row.serverIp ?? ""}</td>
                       <td className="r mono">{g.row.startedAt.toISOString().slice(0, 10)}</td>
                     </tr>
@@ -174,6 +220,13 @@ export default async function FeedAccountsPage() {
                 )}
               </tbody>
             </table>
+          )}
+
+          {subscribers.length > 0 && (
+            <div className="scope-note">
+              <span className="i">◈</span>
+              <span>* Notional list-price split — there is no payout ledger or per-subscriber billing yet.</span>
+            </div>
           )}
         </div>
 
