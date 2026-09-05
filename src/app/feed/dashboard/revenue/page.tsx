@@ -81,7 +81,7 @@ export default async function FeedRevenuePage() {
                     <td>
                       <b>{g.tier.name}</b>
                       <br />
-                      <span style={{ fontSize: 11, color: "var(--pfp-ink-hi)" }}>{money(g.tier.priceCents ?? 0)} / mo</span>
+                      <span style={{ fontSize: 11, color: "var(--pfp-ink-hi)" }}>{g.tier.subtitle}</span>
                     </td>
                     <td className="r mono">{money(g.tier.priceCents ?? 0)}</td>
                     <td className="r share">{money(Math.round((g.tier.priceCents ?? 0) / 2))}</td>
