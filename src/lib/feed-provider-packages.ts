@@ -8,8 +8,8 @@ import type { ProviderTierRow } from "./feed-providers";
  * list needs a manual update to fold it into a package. Shared by the Revenue and Feeds
  * tabs so there is exactly one place this mapping can drift. */
 export const PACKAGES: { label: string; tierKeys: string[] }[] = [
-  { label: "London Base", tierKeys: ["ld-beta-56", "ld-gamma-19", "ld-delta-18"] },
-  { label: "NY", tierKeys: ["ny-normal", "ny-fast"] },
+  { label: "LD Base", tierKeys: ["ld-beta-56", "ld-gamma-19", "ld-delta-18"] },
+  { label: "NY Base", tierKeys: ["ny-normal", "ny-fast"] },
 ];
 
 /** Package label for a tier_key, or null if it isn't in any PACKAGES entry (renders
