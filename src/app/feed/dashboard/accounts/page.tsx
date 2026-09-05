@@ -13,6 +13,25 @@ function money(cents: number): string {
   return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
+/** Bus thread leo-provider-panel-package-labels-2026-09-04 (marcus, follow-up A): since the
+ * Job 2/3 regroup, one status count can mean either "N feeds" or "N clients" depending on
+ * whether any client in that status holds more than one tier -- the two read the same before
+ * grouping existed. Rather than silently pick a unit, show the feed count (unchanged) and only
+ * add the client count when it actually differs from it, so the common case stays a single
+ * plain number and only the ambiguous case grows a qualifier. */
+function countLabel(feeds: number, clients: number, word: string): string {
+  if (feeds === 0) return `0 ${word}`;
+  if (feeds === clients) return `${feeds} ${word}`;
+  return `${clients} ${word} client${clients === 1 ? "" : "s"} · ${feeds} feeds`;
+}
+
+/** Bus thread leo-provider-panel-package-labels-2026-09-04 (marcus, follow-up B): a package
+ * group's header has no `started_at` of its own -- it's an aggregate of its members' rows --
+ * so this reports the earliest member's date as the account's start with this package. */
+function earliestStartedAt(members: ProviderSubscriberRow[]): Date {
+  return members.reduce((earliest, m) => (m.startedAt < earliest ? m.startedAt : earliest), members[0].startedAt);
+}
+
 /** Provider's notional 50% share for one account row, bus thread
  * leo-provider-panel-package-labels-2026-09-04 (coxwell, Job 6): "50% of the payment is paid
  * to the feed provider ... for the paying clients not the trial." Blank (not $0) for anything
@@ -85,6 +104,9 @@ export default async function FeedAccountsPage() {
   const payingCount = subscribers.filter((s) => s.status === "active").length;
   const trialCount = subscribers.filter((s) => s.status === "trial").length;
   const lapsedCount = subscribers.filter((s) => s.status === "lapsed").length;
+  const payingClientCount = new Set(subscribers.filter((s) => s.status === "active").map((s) => s.pseudonym)).size;
+  const trialClientCount = new Set(subscribers.filter((s) => s.status === "trial").map((s) => s.pseudonym)).size;
+  const lapsedClientCount = new Set(subscribers.filter((s) => s.status === "lapsed").map((s) => s.pseudonym)).size;
 
   const tierGroups = groupTiers(tiers);
   const packagePriceByLabel = new Map(
@@ -94,11 +116,25 @@ export default async function FeedAccountsPage() {
     tierGroups.filter((g) => g.kind === "single").map((g) => [g.tier.tierKey, g.tier.priceCents] as const)
   );
 
-  const byLocation = new Map<string, { paying: number; trial: number; lapsed: number }>();
+  const byLocation = new Map<
+    string,
+    { paying: number; trial: number; lapsed: number; payingClients: Set<string>; trialClients: Set<string>; lapsedClients: Set<string> }
+  >();
   for (const s of subscribers) {
     const location = (s.regionKey && REGION_LABELS[s.regionKey]) || OTHER_LOCATION;
-    const counts = byLocation.get(location) ?? { paying: 0, trial: 0, lapsed: 0 };
-    counts[s.status === "active" ? "paying" : s.status]++;
+    const counts =
+      byLocation.get(location) ??
+      { paying: 0, trial: 0, lapsed: 0, payingClients: new Set<string>(), trialClients: new Set<string>(), lapsedClients: new Set<string>() };
+    if (s.status === "active") {
+      counts.paying++;
+      counts.payingClients.add(s.pseudonym);
+    } else if (s.status === "trial") {
+      counts.trial++;
+      counts.trialClients.add(s.pseudonym);
+    } else {
+      counts.lapsed++;
+      counts.lapsedClients.add(s.pseudonym);
+    }
     byLocation.set(location, counts);
   }
 
@@ -119,8 +155,8 @@ export default async function FeedAccountsPage() {
             <span className="ic">◎</span>
             <h3>Subscribers</h3>
             <span className="cap">
-              {payingCount} paying · {trialCount} trial
-              {lapsedCount > 0 ? ` · ${lapsedCount} lapsed` : ""}
+              {countLabel(payingCount, payingClientCount, "paying")} · {countLabel(trialCount, trialClientCount, "trial")}
+              {lapsedCount > 0 ? ` · ${countLabel(lapsedCount, lapsedClientCount, "lapsed")}` : ""}
             </span>
           </div>
 
@@ -132,9 +168,9 @@ export default async function FeedAccountsPage() {
                 {Array.from(byLocation.entries())
                   .map(([location, c]) => {
                     const parts = [
-                      c.paying > 0 ? `${c.paying} paying` : null,
-                      c.trial > 0 ? `${c.trial} trial` : null,
-                      c.lapsed > 0 ? `${c.lapsed} lapsed` : null,
+                      c.paying > 0 ? countLabel(c.paying, c.payingClients.size, "paying") : null,
+                      c.trial > 0 ? countLabel(c.trial, c.trialClients.size, "trial") : null,
+                      c.lapsed > 0 ? countLabel(c.lapsed, c.lapsedClients.size, "lapsed") : null,
                     ].filter(Boolean);
                     return `${location}: ${parts.join(", ")}`;
                   })
@@ -182,7 +218,7 @@ export default async function FeedAccountsPage() {
                         </td>
                         <td className="r share">{providerShareFor(g.status, packagePriceByLabel.get(g.label))}</td>
                         <td className="mono">{g.members[0].serverIp ?? ""}</td>
-                        <td className="r" />
+                        <td className="r mono">{earliestStartedAt(g.members).toISOString().slice(0, 10)}</td>
                       </tr>
                       {g.members.map((m) => (
                         <tr key={m.subscriptionId}>
