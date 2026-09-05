@@ -182,9 +182,9 @@ export default async function FeedAccountsPage() {
                       c.trial > 0 ? locationCountLabel(c.trial, c.trialClients.size, "trial") : null,
                       c.lapsed > 0 ? locationCountLabel(c.lapsed, c.lapsedClients.size, "lapsed") : null,
                     ].filter(Boolean);
-                    return `${location}: ${parts.join(", ")}`;
+                    return `${location}: ${parts.join("; ")}`;
                   })
-                  .join("  ·  ")}
+                  .join("   |   ")}
               </span>
             </div>
           )}

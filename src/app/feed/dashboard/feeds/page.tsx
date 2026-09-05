@@ -79,7 +79,7 @@ export default async function FeedFeedsPage() {
                           <td style={{ paddingLeft: 28 }}>
                             {t.name}
                             <br />
-                            <span style={{ fontSize: 11, color: "var(--pfp-ink-3)" }}>{t.subtitle}</span>
+                            <span style={{ fontSize: 11, color: "var(--pfp-ink-hi)" }}>{t.subtitle}</span>
                           </td>
                           <td>{REGION_LABEL[t.region] ?? t.region}</td>
                           <td className="mono">{formatTierLatency(t.region, t)}</td>
@@ -94,7 +94,7 @@ export default async function FeedFeedsPage() {
                       <td>
                         <b>{g.tier.name}</b>
                         <br />
-                        <span style={{ fontSize: 11, color: "var(--pfp-ink-3)" }}>{g.tier.subtitle}</span>
+                        <span style={{ fontSize: 11, color: "var(--pfp-ink-hi)" }}>{g.tier.subtitle}</span>
                       </td>
                       <td>{REGION_LABEL[g.tier.region] ?? g.tier.region}</td>
                       <td className="mono">{formatTierLatency(g.tier.region, g.tier)}</td>
