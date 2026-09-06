@@ -116,7 +116,7 @@ function FeedRegionBlock({
               label="Price"
               type="number"
             />
-            {currentPriceCents == null && <span className="italic">(using default)</span>}
+            {currentPriceCents == null && <span className="italic">(not set — no payout figure)</span>}
           </span>
         )}
       </div>

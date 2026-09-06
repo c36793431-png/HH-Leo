@@ -2,8 +2,7 @@ import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
 import { AccountPackageRows } from "@/components/feed/account-package-rows";
 import { listSubscribersForProvider, type ProviderSubscriberRow } from "@/lib/feed-subscriptions";
-import { listTiersForProvider } from "@/lib/feed-providers";
-import { PACKAGES, groupTiers } from "@/lib/feed-provider-packages";
+import { PACKAGES, providerShareCentsFor, providerShareFor } from "@/lib/feed-provider-packages";
 
 const STATUS_ICON: Record<string, string> = { trial: "🧪", active: "✓", lapsed: "✗" };
 const REGION_LABELS: Record<string, string> = { london: "London", ny: "New York", cme: "CME", tokyo: "Tokyo" };
@@ -42,47 +41,21 @@ function earliestStartedAt(members: ProviderSubscriberRow[]): Date {
   return members.reduce((earliest, m) => (m.startedAt < earliest ? m.startedAt : earliest), members[0].startedAt);
 }
 
-/** Provider's notional 50% share for one account row, bus thread
- * leo-provider-panel-package-labels-2026-09-04 (coxwell, Job 6): "50% of the payment is paid
- * to the feed provider ... for the paying clients not the trial." Blank (not $0) for anything
- * other than the page's own `status === "active"` (EFFECTIVE_STATUS_SQL, same predicate as the
- * Status badge) and for a row with no priceCents resolvable at all -- a $0 reads as "worth
- * nothing", a blank reads as "no payment applies".
- *
- * The 50% is still a hardcoded /2 with no stored per-provider split term (unlike provider_tiers'
- * own client_price_cents/provider_split_pct for self-serve providers) -- a real per-provider
- * split added later would need this function updated too, not just its data source. There is
- * still no payout ledger anywhere in the schema; this is list-price-derived, not a reconciled
- * payment. */
-function providerShareCentsFor(status: ProviderSubscriberRow["status"], priceCents: number | null | undefined): number | null {
-  if (status !== "active" || priceCents == null) return null;
-  return Math.round(priceCents / 2);
-}
-
-function providerShareFor(status: ProviderSubscriberRow["status"], priceCents: number | null | undefined): string | null {
-  const cents = providerShareCentsFor(status, priceCents);
-  return cents == null ? null : money(cents);
-}
-
 /** Job C (bus thread leo-provider-subscribers-page-2026-09-06, coxwell-authorised): the price
  * a payout reads is THIS client's own negotiated feed_subscriptions.price_cents, never a
  * catalogue/package-wide constant -- a partner on a different number must produce a different
- * line. Falls back to the package/tier's default list price only when no subscription in the
- * group carries an override. For a package, every member row is written the same price together
+ * line. Per marcus's m46504 ruling, there is NO fallback to the package/tier default list
+ * price here -- a group with no override anywhere resolves to null (unset), which
+ * providerShareFor renders as "Not set" and providerShareCentsFor counts as zero, never as
+ * the catalogue's $30. For a package, every member row is written the same price together
  * (setFeedSubscriptionPriceForPackage) so any one member's non-null value speaks for the whole
  * group; this does not sum or average across members, and does not read feed_tiers/ProviderTierRow
  * catalogue prices directly -- that was the members[0]-off-the-catalogue bug this job fixed. */
-function resolvedPriceCentsFor(
-  group: AccountRowGroup,
-  packagePriceByLabel: Map<string, number>,
-  singlePriceByTierKey: Map<string, number | null>
-): number | null {
+function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
   if (group.kind === "package") {
-    const override = group.members.map((m) => m.priceCents).find((c) => c != null) ?? null;
-    return override ?? packagePriceByLabel.get(group.label) ?? null;
+    return group.members.map((m) => m.priceCents).find((c) => c != null) ?? null;
   }
-  if (group.row.priceCents != null) return group.row.priceCents;
-  return group.row.tierKey ? singlePriceByTierKey.get(group.row.tierKey) ?? null : null;
+  return group.row.priceCents ?? null;
 }
 
 type AccountRowGroup =
@@ -125,10 +98,7 @@ export default async function FeedSubscribersPage() {
   const session = await auth();
   const providerId = session!.user!.id!;
 
-  const [subscribers, tiers] = await Promise.all([
-    listSubscribersForProvider(providerId),
-    listTiersForProvider(providerId),
-  ]);
+  const subscribers = await listSubscribersForProvider(providerId);
   const accountGroups = groupAccountSubscriptions(subscribers);
   const payingCount = subscribers.filter((s) => s.status === "active").length;
   const trialCount = subscribers.filter((s) => s.status === "trial").length;
@@ -137,23 +107,16 @@ export default async function FeedSubscribersPage() {
   const trialClientCount = new Set(subscribers.filter((s) => s.status === "trial").map((s) => s.pseudonym)).size;
   const lapsedClientCount = new Set(subscribers.filter((s) => s.status === "lapsed").map((s) => s.pseudonym)).size;
 
-  const tierGroups = groupTiers(tiers);
-  const packagePriceByLabel = new Map(
-    tierGroups.filter((g) => g.kind === "package").map((g) => [g.label, g.priceCents] as const)
-  );
-  const singlePriceByTierKey = new Map(
-    tierGroups.filter((g) => g.kind === "single").map((g) => [g.tier.tierKey, g.tier.priceCents] as const)
-  );
-
   /** Job A2 (marcus/coxwell, bus thread leo-provider-subscribers-page-2026-09-06): "LD Base =
    * $30/mo and NY Base = $30/mo, flat 50/50" -- foots the same providerShareCentsFor()/-For()
    * pair every row cell already uses, so the total can never disagree with the sum a reader
    * would get by adding up the visible cells themselves. Job C: each row now resolves its OWN
-   * price (client override, falling back to package/tier default) via resolvedPriceCentsFor,
-   * so this sums real per-row values rather than a constant multiplied by a count. */
+   * price (client override only, no package/tier default -- m46504) via resolvedPriceCentsFor,
+   * so this sums real per-row values rather than a constant multiplied by a count; an unset
+   * row contributes zero, same as a non-active one. */
   const totalShareCents = accountGroups.reduce((sum, g) => {
     const status = g.kind === "package" ? g.status : g.row.status;
-    const cents = providerShareCentsFor(status, resolvedPriceCentsFor(g, packagePriceByLabel, singlePriceByTierKey));
+    const cents = providerShareCentsFor(status, resolvedPriceCentsFor(g));
     return sum + (cents ?? 0);
   }, 0);
 
@@ -255,7 +218,7 @@ export default async function FeedSubscribersPage() {
                       pseudonym={g.pseudonym}
                       label={g.label}
                       status={g.status}
-                      share={providerShareFor(g.status, resolvedPriceCentsFor(g, packagePriceByLabel, singlePriceByTierKey))}
+                      share={providerShareFor(g.status, resolvedPriceCentsFor(g))}
                       serverIp={g.members[0].serverIp ?? null}
                       sinceISO={earliestStartedAt(g.members).toISOString().slice(0, 10)}
                       members={g.members.map((m) => ({
@@ -277,7 +240,7 @@ export default async function FeedSubscribersPage() {
                         </span>
                       </td>
                       <td className="r share">
-                        {providerShareFor(g.row.status, resolvedPriceCentsFor(g, packagePriceByLabel, singlePriceByTierKey))}
+                        {providerShareFor(g.row.status, resolvedPriceCentsFor(g))}
                       </td>
                       <td className="mono">{g.row.serverIp ?? ""}</td>
                       <td className="r mono">{g.row.startedAt.toISOString().slice(0, 10)}</td>

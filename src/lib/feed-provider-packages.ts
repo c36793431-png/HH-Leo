@@ -8,13 +8,16 @@ import type { ProviderTierRow } from "./feed-providers";
  * list needs a manual update to fold it into a package. Shared by the Revenue and Feeds
  * tabs so there is exactly one place this mapping can drift. */
 /** defaultPriceCents (bus thread leo-provider-subscribers-page-2026-09-06, Job C, coxwell:
- * "Ld base 30 nd ny base 30") is the pre-fill/fallback list price for a package -- it is NOT
- * what a payout reads once a client has its own negotiated feed_subscriptions.price_cents (a
- * partner can sit on a different number). Read paths must do
- * COALESCE(subscription.price_cents, package default) themselves; this literal only supplies
- * the second half of that. Previously this default was derived as `members[0].priceCents` off
- * whichever feed_tiers row happened to sort first -- an arbitrary catalogue row standing in for
- * a commercial decision that was never made per-tier. That was the bug named in Job C (also hit
+ * "Ld base 30 nd ny base 30") is list-price reference only -- the Revenue catalogue view's
+ * "list price" column and a future pre-fill affordance. Marcus's m46504 ruling revoked the
+ * read path's original COALESCE(subscription.price_cents, package default) shape: a payout
+ * total must never silently substitute this for an unset per-client price (a client whose
+ * price has never been negotiated would render as if it had one -- fabricated money on a
+ * dashboard read as fact). providerShareCentsFor/-For below take ONLY the subscription's own
+ * price_cents; a null there renders and totals as unset, full stop, no fallback. Previously
+ * the catalogue-view default was derived as `members[0].priceCents` off whichever feed_tiers
+ * row happened to sort first -- an arbitrary catalogue row standing in for a commercial
+ * decision that was never made per-tier. That was the bug named in Job C (also hit
  * /feed/dashboard/revenue, which reads groupTiers() directly) -- a literal here removes the
  * dependency on catalogue row order entirely. */
 export const PACKAGES: { label: string; tierKeys: string[]; defaultPriceCents: number }[] = [
@@ -65,4 +68,35 @@ export function groupTiers(tiers: ProviderTierRow[]): TierGroup[] {
   }
 
   return groups;
+}
+
+function money(cents: number): string {
+  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+type ShareStatus = "trial" | "active" | "lapsed";
+
+/** Provider's notional 50% share for one subscription/package, bus thread
+ * leo-provider-panel-package-labels-2026-09-04 (coxwell, Job 6): "50% of the payment is paid
+ * to the feed provider ... for the paying clients not the trial." Shared by every dashboard
+ * surface that shows a payout figure (Subscribers row/total, Overview card, Revenue) per
+ * marcus's m46504 ruling -- one function so they cannot disagree; a mismatch would be a data
+ * problem, never two call sites drifting apart.
+ *
+ * Returns null for anything other than `status === "active"` (EFFECTIVE_STATUS_SQL, same
+ * predicate as the Status badge) AND for a row with no priceCents at all -- there is no
+ * default-price fallback here (m46504: a hardcoded default reads as a real negotiated price
+ * once it flows into a revenue total). Callers must treat null as "unset", not $0. */
+export function providerShareCentsFor(status: ShareStatus, priceCents: number | null | undefined): number | null {
+  if (status !== "active" || priceCents == null) return null;
+  return Math.round(priceCents / 2);
+}
+
+/** Display text for providerShareCentsFor. Three distinct outcomes: null (status isn't
+ * active -- "no payment applies", renders blank), "Not set" (active, but no price has ever
+ * been negotiated for this client -- distinct from a real $0), or the dollar figure. */
+export function providerShareFor(status: ShareStatus, priceCents: number | null | undefined): string | null {
+  if (status !== "active") return null;
+  const cents = providerShareCentsFor(status, priceCents);
+  return cents == null ? "Not set" : money(cents);
 }

@@ -42,8 +42,10 @@ export interface ProviderSubscriberRow {
   startedAt: Date;
   serverIp: string | null;
   /** This client's own negotiated price (Job C, bus thread
-   * leo-provider-subscribers-page-2026-09-06) -- null means no override has been set and a
-   * caller must fall back to the package/tier's default list price, never read as $0. */
+   * leo-provider-subscribers-page-2026-09-06) -- null means no price has ever been negotiated
+   * for this client. Per marcus's m46504 ruling there is no fallback to any package/tier
+   * default: a caller must render and total null as unset, never substitute a list price and
+   * never read it as $0. See providerShareCentsFor/-For in feed-provider-packages.ts. */
   priceCents: number | null;
 }
 
@@ -367,8 +369,9 @@ export interface SubscriberFeedTierSubscription {
   regionKey: string;
   status: SubscriptionStatus;
   lapsedAt: Date | null;
-  /** null means no per-client override -- admin UI should read this as "using the package's
-   * default list price", never as $0. See setFeedSubscriptionPriceForPackage below. */
+  /** null means no per-client price has ever been negotiated -- admin UI should present this
+   * as unset ("Not set"/"—"), never as $0 and never as the package's list price (m46504: no
+   * default fallback). See setFeedSubscriptionPriceForPackage below. */
   priceCents: number | null;
 }
 
