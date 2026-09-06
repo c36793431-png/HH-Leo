@@ -6,6 +6,7 @@ import {
   groupAccountSubscriptions,
   resolvedPriceCentsFor,
   sumProviderShareCents,
+  sumMonthlyGrossCents,
   type AccountRowGroup,
 } from "@/lib/feed-subscriptions";
 import { providerShareCentsFor } from "@/lib/feed-provider-packages";
@@ -73,12 +74,11 @@ export default async function FeedRevenuePage() {
   const subscribers = await listSubscribersForProvider(session!.user!.id!);
   const accountGroups = groupAccountSubscriptions(subscribers);
   const groups = buildPackageRevenueGroups(accountGroups);
-  const totalMonthlyCents = groups.reduce((sum, g) => sum + g.monthlyCents, 0);
-  /** Per marcus's m46511/m46518 ruling (same summation everywhere): this is the identical
-   * function Subscribers' footer and the Overview card call, on the same accountGroups this
-   * page already grouped -- not a second reduce over the by-package rows above. Monthly (gross,
-   * pre-split) has no equivalent shared total yet since nothing else on the panel shows gross;
-   * only the 50% share figure is required to agree across all three surfaces. */
+  /** Per marcus's m46511/m46518/m46522 rulings (same summation everywhere): both totals below
+   * are the identical functions Subscribers' footer and the Overview card call, on the same
+   * accountGroups this page already grouped -- never a second reduce over the by-package rows
+   * above, gross or split. */
+  const totalMonthlyCents = sumMonthlyGrossCents(accountGroups);
   const totalShareCents = sumProviderShareCents(accountGroups);
 
   return (

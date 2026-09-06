@@ -367,6 +367,21 @@ export function sumProviderShareCents(groups: AccountRowGroup[]): number {
   }, 0);
 }
 
+/** Same-shape sibling of sumProviderShareCents for the gross (pre-split) monthly figure --
+ * bus thread leo-provider-subscribers-page-2026-09-06 (marcus's closing ruling, m46522):
+ * extracted now, before any surface renders a gross total, since coxwell's "total made, which
+ * amount made on which base" ask is all gross figures and a second reduce added after three
+ * surfaces already show gross would need reconciling instead of just existing. Only
+ * status === "active" groups count, same predicate as sumProviderShareCents; a null resolved
+ * price contributes zero, distinguishable from a real $0. */
+export function sumMonthlyGrossCents(groups: AccountRowGroup[]): number {
+  return groups.reduce((sum, g) => {
+    const status = g.kind === "package" ? g.status : g.row.status;
+    if (status !== "active") return sum;
+    return sum + (resolvedPriceCentsFor(g) ?? 0);
+  }, 0);
+}
+
 /** Fetch-and-sum wrapper around sumProviderShareCents for callers (Overview) that don't
  * already have the provider's groups in memory. Callers that do (Subscribers, Revenue) should
  * call sumProviderShareCents directly on their existing groups instead of re-querying. */
