@@ -7,9 +7,19 @@ import type { ProviderTierRow } from "./feed-providers";
  * be picked up here automatically -- it falls through to its own ungrouped row, and this
  * list needs a manual update to fold it into a package. Shared by the Revenue and Feeds
  * tabs so there is exactly one place this mapping can drift. */
-export const PACKAGES: { label: string; tierKeys: string[] }[] = [
-  { label: "LD Base", tierKeys: ["ld-beta-56", "ld-gamma-19", "ld-delta-18"] },
-  { label: "NY Base", tierKeys: ["ny-normal", "ny-fast"] },
+/** defaultPriceCents (bus thread leo-provider-subscribers-page-2026-09-06, Job C, coxwell:
+ * "Ld base 30 nd ny base 30") is the pre-fill/fallback list price for a package -- it is NOT
+ * what a payout reads once a client has its own negotiated feed_subscriptions.price_cents (a
+ * partner can sit on a different number). Read paths must do
+ * COALESCE(subscription.price_cents, package default) themselves; this literal only supplies
+ * the second half of that. Previously this default was derived as `members[0].priceCents` off
+ * whichever feed_tiers row happened to sort first -- an arbitrary catalogue row standing in for
+ * a commercial decision that was never made per-tier. That was the bug named in Job C (also hit
+ * /feed/dashboard/revenue, which reads groupTiers() directly) -- a literal here removes the
+ * dependency on catalogue row order entirely. */
+export const PACKAGES: { label: string; tierKeys: string[]; defaultPriceCents: number }[] = [
+  { label: "LD Base", tierKeys: ["ld-beta-56", "ld-gamma-19", "ld-delta-18"], defaultPriceCents: 3000 },
+  { label: "NY Base", tierKeys: ["ny-normal", "ny-fast"], defaultPriceCents: 3000 },
 ];
 
 /** Package label for a tier_key, or null if it isn't in any PACKAGES entry (renders
@@ -47,7 +57,7 @@ export function groupTiers(tiers: ProviderTierRow[]): TierGroup[] {
     const members = tiers.filter((t) => pkg.tierKeys.includes(t.tierKey));
     if (members.length === 0) continue;
     members.forEach((t) => used.add(t.id));
-    groups.push({ kind: "package", label: pkg.label, priceCents: members[0].priceCents ?? 0, members });
+    groups.push({ kind: "package", label: pkg.label, priceCents: pkg.defaultPriceCents, members });
   }
 
   for (const t of tiers) {

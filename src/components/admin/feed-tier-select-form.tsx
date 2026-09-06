@@ -5,6 +5,7 @@ import type { ActionResult } from "@/lib/action-result";
 import type { FeedAssignmentRow, FeedTierPickerRow, SubscriberFeedTierSubscription } from "@/lib/feed-subscriptions";
 import { emitToast } from "@/lib/toast-bus";
 import { formatRelative } from "@/lib/format-time";
+import { InlineEditField } from "@/components/admin/inline-edit-field";
 
 type Action = (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 
@@ -13,6 +14,7 @@ const REGION_LABELS: Record<string, string> = { london: "London", ny: "New York"
 interface FeedTierSelectFormProps {
   assignAction: Action;
   deactivateAction: Action;
+  priceAction: Action;
   userId: string;
   rows: FeedAssignmentRow[];
   subjectName: string;
@@ -32,7 +34,7 @@ interface FeedTierSelectFormProps {
  * not a signed-off UX redesign -- coxwell/marcus should treat the interaction model (independent
  * per-tier toggles vs. some other affordance) as still open for review, separate from the
  * data-correctness fix underneath it. */
-export function FeedTierSelectForm({ assignAction, deactivateAction, userId, rows, subjectName }: FeedTierSelectFormProps) {
+export function FeedTierSelectForm({ assignAction, deactivateAction, priceAction, userId, rows, subjectName }: FeedTierSelectFormProps) {
   return (
     <div className="flex flex-col gap-3">
       {rows.map((row) =>
@@ -43,6 +45,7 @@ export function FeedTierSelectForm({ assignAction, deactivateAction, userId, row
             key={row.regionKey}
             assignAction={assignAction}
             deactivateAction={deactivateAction}
+            priceAction={priceAction}
             userId={userId}
             regionKey={row.regionKey}
             tiers={row.tiers}
@@ -71,6 +74,7 @@ function FeedTierUnavailableRow({ regionKey }: { regionKey: string }) {
 function FeedRegionBlock({
   assignAction,
   deactivateAction,
+  priceAction,
   userId,
   regionKey,
   tiers,
@@ -80,6 +84,7 @@ function FeedRegionBlock({
 }: {
   assignAction: Action;
   deactivateAction: Action;
+  priceAction: Action;
   userId: string;
   regionKey: string;
   tiers: FeedTierPickerRow[];
@@ -88,10 +93,33 @@ function FeedRegionBlock({
   subjectName: string;
 }) {
   const regionLabel = REGION_LABELS[regionKey] ?? regionKey;
+  // One price per (subscriber, package) -- setFeedSubscriptionPriceForPackage fans a write out
+  // to every member tier's row, so any one of this region's subscriptions carrying a non-null
+  // price_cents reflects the whole package's override. A representative tierKey (any live
+  // subscription's, else the region's first catalogue tier) is enough for the action to resolve
+  // the package server-side; it does not have to be the specific tier a client happens to hold.
+  const currentPriceCents = subscriptions.find((s) => s.priceCents != null)?.priceCents ?? null;
+  const representativeTierKey = subscriptions[0]?.tierKey ?? tiers[0]?.tierKey;
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs text-zinc-500">{regionLabel}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-zinc-500">{regionLabel}</span>
+        {subscriptions.length > 0 && representativeTierKey && (
+          <span className="flex items-center gap-1 text-[10px] text-zinc-500">
+            Price/mo
+            <InlineEditField
+              action={priceAction}
+              hiddenFields={{ userId, tierKey: representativeTierKey }}
+              field="priceCents"
+              value={currentPriceCents != null ? (currentPriceCents / 100).toFixed(2) : ""}
+              label="Price"
+              type="number"
+            />
+            {currentPriceCents == null && <span className="italic">(using default)</span>}
+          </span>
+        )}
+      </div>
       <div className="flex flex-col gap-0.5 pl-2">
         {tiers.map((tier) => (
           <FeedTierRowControl

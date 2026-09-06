@@ -46,21 +46,14 @@ function earliestStartedAt(members: ProviderSubscriberRow[]): Date {
  * leo-provider-panel-package-labels-2026-09-04 (coxwell, Job 6): "50% of the payment is paid
  * to the feed provider ... for the paying clients not the trial." Blank (not $0) for anything
  * other than the page's own `status === "active"` (EFFECTIVE_STATUS_SQL, same predicate as the
- * Status badge) and for a row with no priceCents on record -- a $0 reads as "worth nothing",
- * a blank reads as "no payment applies", and this page's price data (sourced only from
- * feed_tiers via listTiersForProvider/groupTiers, see below) doesn't cover a provider_tier_id
- * self-serve row at all.
+ * Status badge) and for a row with no priceCents resolvable at all -- a $0 reads as "worth
+ * nothing", a blank reads as "no payment applies".
  *
- * Reuses groupTiers()'s own computed priceCents rather than re-deriving a package price here,
- * so there is exactly one place a package's list price can be wrong. Two things this number
- * gets right only by coincidence today, both worth knowing before trusting it as a real
- * payable: a package's priceCents is its first member tier's price, not a sum (see groupTiers
- * in feed-provider-packages.ts) -- if a package's member tiers are ever priced differently
- * this silently misstates the package; and the 50% is a hardcoded /2 with no stored
- * per-provider split term (unlike provider_tiers' own client_price_cents/provider_split_pct
- * for self-serve providers) -- a real per-provider split added later would need this function
- * updated too, not just its data source. There is no payout ledger and no per-subscriber
- * billing anywhere in the schema, so list price is the only number that exists here. */
+ * The 50% is still a hardcoded /2 with no stored per-provider split term (unlike provider_tiers'
+ * own client_price_cents/provider_split_pct for self-serve providers) -- a real per-provider
+ * split added later would need this function updated too, not just its data source. There is
+ * still no payout ledger anywhere in the schema; this is list-price-derived, not a reconciled
+ * payment. */
 function providerShareCentsFor(status: ProviderSubscriberRow["status"], priceCents: number | null | undefined): number | null {
   if (status !== "active" || priceCents == null) return null;
   return Math.round(priceCents / 2);
@@ -69,6 +62,27 @@ function providerShareCentsFor(status: ProviderSubscriberRow["status"], priceCen
 function providerShareFor(status: ProviderSubscriberRow["status"], priceCents: number | null | undefined): string | null {
   const cents = providerShareCentsFor(status, priceCents);
   return cents == null ? null : money(cents);
+}
+
+/** Job C (bus thread leo-provider-subscribers-page-2026-09-06, coxwell-authorised): the price
+ * a payout reads is THIS client's own negotiated feed_subscriptions.price_cents, never a
+ * catalogue/package-wide constant -- a partner on a different number must produce a different
+ * line. Falls back to the package/tier's default list price only when no subscription in the
+ * group carries an override. For a package, every member row is written the same price together
+ * (setFeedSubscriptionPriceForPackage) so any one member's non-null value speaks for the whole
+ * group; this does not sum or average across members, and does not read feed_tiers/ProviderTierRow
+ * catalogue prices directly -- that was the members[0]-off-the-catalogue bug this job fixed. */
+function resolvedPriceCentsFor(
+  group: AccountRowGroup,
+  packagePriceByLabel: Map<string, number>,
+  singlePriceByTierKey: Map<string, number | null>
+): number | null {
+  if (group.kind === "package") {
+    const override = group.members.map((m) => m.priceCents).find((c) => c != null) ?? null;
+    return override ?? packagePriceByLabel.get(group.label) ?? null;
+  }
+  if (group.row.priceCents != null) return group.row.priceCents;
+  return group.row.tierKey ? singlePriceByTierKey.get(group.row.tierKey) ?? null : null;
 }
 
 type AccountRowGroup =
@@ -134,12 +148,12 @@ export default async function FeedSubscribersPage() {
   /** Job A2 (marcus/coxwell, bus thread leo-provider-subscribers-page-2026-09-06): "LD Base =
    * $30/mo and NY Base = $30/mo, flat 50/50" -- foots the same providerShareCentsFor()/-For()
    * pair every row cell already uses, so the total can never disagree with the sum a reader
-   * would get by adding up the visible cells themselves. */
+   * would get by adding up the visible cells themselves. Job C: each row now resolves its OWN
+   * price (client override, falling back to package/tier default) via resolvedPriceCentsFor,
+   * so this sums real per-row values rather than a constant multiplied by a count. */
   const totalShareCents = accountGroups.reduce((sum, g) => {
-    const cents =
-      g.kind === "package"
-        ? providerShareCentsFor(g.status, packagePriceByLabel.get(g.label))
-        : providerShareCentsFor(g.row.status, g.row.tierKey ? singlePriceByTierKey.get(g.row.tierKey) : null);
+    const status = g.kind === "package" ? g.status : g.row.status;
+    const cents = providerShareCentsFor(status, resolvedPriceCentsFor(g, packagePriceByLabel, singlePriceByTierKey));
     return sum + (cents ?? 0);
   }, 0);
 
@@ -241,7 +255,7 @@ export default async function FeedSubscribersPage() {
                       pseudonym={g.pseudonym}
                       label={g.label}
                       status={g.status}
-                      share={providerShareFor(g.status, packagePriceByLabel.get(g.label))}
+                      share={providerShareFor(g.status, resolvedPriceCentsFor(g, packagePriceByLabel, singlePriceByTierKey))}
                       serverIp={g.members[0].serverIp ?? null}
                       sinceISO={earliestStartedAt(g.members).toISOString().slice(0, 10)}
                       members={g.members.map((m) => ({
@@ -263,7 +277,7 @@ export default async function FeedSubscribersPage() {
                         </span>
                       </td>
                       <td className="r share">
-                        {providerShareFor(g.row.status, g.row.tierKey ? singlePriceByTierKey.get(g.row.tierKey) : null)}
+                        {providerShareFor(g.row.status, resolvedPriceCentsFor(g, packagePriceByLabel, singlePriceByTierKey))}
                       </td>
                       <td className="mono">{g.row.serverIp ?? ""}</td>
                       <td className="r mono">{g.row.startedAt.toISOString().slice(0, 10)}</td>

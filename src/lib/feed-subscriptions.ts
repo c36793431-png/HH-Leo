@@ -2,6 +2,7 @@ import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
 import type { FeedType } from "./licenses";
 import { FEED_REGION_TYPE, FEED_REGIONS, isFeedRegion, regionForFeedType, type FeedRegion } from "./feed-tier-catalogue";
+import { PACKAGES, packageLabelForTierKey } from "./feed-provider-packages";
 
 /** Bus thread provider-feed-subscriber-linkage-2026-08-29 (marcus, overnight block 2,
  * migration 0071). Joins a portal account to a provider's package and masks the
@@ -40,6 +41,10 @@ export interface ProviderSubscriberRow {
   status: SubscriptionStatus;
   startedAt: Date;
   serverIp: string | null;
+  /** This client's own negotiated price (Job C, bus thread
+   * leo-provider-subscribers-page-2026-09-06) -- null means no override has been set and a
+   * caller must fall back to the package/tier's default list price, never read as $0. */
+  priceCents: number | null;
 }
 
 /** Bus thread leo-provider-panel-package-labels-2026-09-04 (Fable ruling, ledger v1.46,
@@ -261,9 +266,10 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       status: SubscriptionStatus;
       started_at: Date;
       declared_ip: string | null;
+      price_cents: number | null;
     }>(
       `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, ft.tier_key, ft.region_key,
-              ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip
+              ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip, s.price_cents
        from feed_subscriptions s
        join provider_client_pseudonyms p
          on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
@@ -283,6 +289,7 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       status: row.status,
       startedAt: row.started_at,
       serverIp: row.declared_ip,
+      priceCents: row.price_cents,
     }));
   } catch (err) {
     if (isMissingTable(err)) return [];
@@ -360,6 +367,9 @@ export interface SubscriberFeedTierSubscription {
   regionKey: string;
   status: SubscriptionStatus;
   lapsedAt: Date | null;
+  /** null means no per-client override -- admin UI should read this as "using the package's
+   * default list price", never as $0. See setFeedSubscriptionPriceForPackage below. */
+  priceCents: number | null;
 }
 
 const REGION_LABELS: Record<string, string> = { london: "London", ny: "New York", cme: "CME", tokyo: "Tokyo" };
@@ -383,8 +393,9 @@ export async function getFeedTierSubscriptionsForSubscriber(
     region_key: string;
     status: SubscriptionStatus;
     lapsed_at: Date | null;
+    price_cents: number | null;
   }>(
-    `select s.id, ft.tier_key, ft.name, ft.region_key, s.status, s.lapsed_at
+    `select s.id, ft.tier_key, ft.name, ft.region_key, s.status, s.lapsed_at, s.price_cents
      from feed_subscriptions s
      join feed_tiers ft on ft.id = s.feed_tier_id
      where s.subscriber_user_id = $1
@@ -398,6 +409,7 @@ export async function getFeedTierSubscriptionsForSubscriber(
     regionKey: row.region_key,
     status: row.status,
     lapsedAt: row.lapsed_at,
+    priceCents: row.price_cents,
   }));
 }
 
@@ -649,5 +661,35 @@ export async function deactivateFeedTierSubscription(subscriberUserId: string, t
        and ft.tier_key = $2
        and s.status != 'lapsed'`,
     [subscriberUserId, tierKey]
+  );
+}
+
+/** Admin-facing price write, Job C (bus thread leo-provider-subscribers-page-2026-09-06,
+ * coxwell-authorised 2026-09-05/06). price_cents lives on the SUBSCRIPTION, not the catalogue,
+ * because the provider's 50% cut is of what THIS client actually pays -- a partner on a
+ * different number must produce a different payout line, which a catalogue-level price could
+ * never do. A package is the unit of sale (same rule Job A1 applied to row layout), so setting
+ * a price here fans out to every member tier's subscription row for this subscriber, not just
+ * the one tierKey passed in -- a client's package must always read one price, never a
+ * per-member split the schema was never designed to hold. A tier outside any PACKAGES entry
+ * updates only itself. Only touches rows that already exist for this subscriber (no upsert,
+ * no create) -- there is nothing sensible to price before a grant exists. null clears the
+ * override, and the read side's COALESCE falls back to the package/tier's default list price,
+ * not to $0. */
+export async function setFeedSubscriptionPriceForPackage(
+  subscriberUserId: string,
+  tierKey: string,
+  priceCents: number | null
+): Promise<void> {
+  const label = packageLabelForTierKey(tierKey);
+  const siblingTierKeys = label ? PACKAGES.find((p) => p.label === label)!.tierKeys : [tierKey];
+  await pool.query(
+    `update feed_subscriptions s
+     set price_cents = $3, updated_at = now()
+     from feed_tiers ft
+     where s.feed_tier_id = ft.id
+       and s.subscriber_user_id = $1
+       and ft.tier_key = any($2)`,
+    [subscriberUserId, siblingTierKeys, priceCents]
   );
 }

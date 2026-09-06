@@ -41,6 +41,7 @@ import {
   updateConfigSummaryAction,
   assignFeedSubscriptionAction,
   deactivateFeedSubscriptionAction,
+  setFeedSubscriptionPriceAction,
 } from "../actions";
 
 const STATUS_STYLES = {
@@ -341,6 +342,7 @@ export default async function AdminUserDetailPage({
                 <FeedTierSelectForm
                   assignAction={assignFeedSubscriptionAction}
                   deactivateAction={deactivateFeedSubscriptionAction}
+                  priceAction={setFeedSubscriptionPriceAction}
                   userId={user.userId}
                   rows={feedAssignmentRows}
                   subjectName={user.displayName ?? user.email ?? "this user"}

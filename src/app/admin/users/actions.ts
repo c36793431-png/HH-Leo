@@ -34,7 +34,7 @@ import {
 } from "@/lib/config-summary";
 import { ALL_USER_ROLES, REVOKE_ONLY_ROLES, ROLE_LABELS, type UserRole } from "@/lib/admin-user-roles";
 import { pickPrimaryRole } from "@/lib/user-roles";
-import { assignFeedTierSubscription, deactivateFeedTierSubscription } from "@/lib/feed-subscriptions";
+import { assignFeedTierSubscription, deactivateFeedTierSubscription, setFeedSubscriptionPriceForPackage } from "@/lib/feed-subscriptions";
 
 async function requireAdminUsersPanel(): Promise<string> {
   const session = await auth();
@@ -166,6 +166,28 @@ export async function deactivateFeedSubscriptionAction(
     if (!tierKey) throw new Error("Tier is required");
     await deactivateFeedTierSubscription(userId, tierKey);
     await logAdminAction(adminUserId, "admin_users_deactivate_feed_subscription", userId, { tierKey }, null);
+    revalidateUsers(userId);
+  });
+}
+
+export async function setFeedSubscriptionPriceAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to set subscription price", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const userId = formData.get("userId") as string;
+    const tierKey = formData.get("tierKey") as string;
+    const rawValue = ((formData.get("value") as string) ?? "").trim();
+    if (!tierKey) throw new Error("Tier is required");
+    let priceCents: number | null = null;
+    if (rawValue !== "") {
+      const dollars = Number(rawValue);
+      if (!Number.isFinite(dollars) || dollars < 0) throw new Error("Enter a valid non-negative price");
+      priceCents = Math.round(dollars * 100);
+    }
+    await setFeedSubscriptionPriceForPackage(userId, tierKey, priceCents);
+    await logAdminAction(adminUserId, "admin_users_set_feed_subscription_price", userId, { tierKey, priceCents }, null);
     revalidateUsers(userId);
   });
 }
