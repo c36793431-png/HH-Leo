@@ -187,6 +187,11 @@
 .feed-provider-v1 .tbl td b { color: var(--pfp-ink); font-weight: 600; }
 .feed-provider-v1 .tbl td .mono { font-family: var(--pfp-mono); color: var(--pfp-ink); }
 .feed-provider-v1 .tbl .share { color: var(--pfp-cyan); font-family: var(--pfp-mono); font-weight: 600; }
+.feed-provider-v1 .tbl .total-row td { border-top: 1px solid var(--pfp-line-soft); padding-top: 14px; }
+.feed-provider-v1 .tbl .total-row b { color: var(--pfp-ink); }
+.feed-provider-v1 .acct-disclosure { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.feed-provider-v1 .acct-disclosure .chev { color: var(--pfp-cyan); font-size: 10px; width: 10px; display: inline-block; }
+.feed-provider-v1 .acct-disclosure:hover .chev { color: var(--pfp-ink); }
 
 /* 50/50 split bar */
 .feed-provider-v1 .splitwrap { display: flex; align-items: center; gap: 30px; flex-wrap: wrap; }

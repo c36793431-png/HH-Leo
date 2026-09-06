@@ -1,6 +1,6 @@
-import { Fragment } from "react";
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
+import { AccountPackageRows } from "@/components/feed/account-package-rows";
 import { listSubscribersForProvider, type ProviderSubscriberRow } from "@/lib/feed-subscriptions";
 import { listTiersForProvider } from "@/lib/feed-providers";
 import { PACKAGES, groupTiers } from "@/lib/feed-provider-packages";
@@ -61,9 +61,14 @@ function earliestStartedAt(members: ProviderSubscriberRow[]): Date {
  * for self-serve providers) -- a real per-provider split added later would need this function
  * updated too, not just its data source. There is no payout ledger and no per-subscriber
  * billing anywhere in the schema, so list price is the only number that exists here. */
-function providerShareFor(status: ProviderSubscriberRow["status"], priceCents: number | null | undefined): string | null {
+function providerShareCentsFor(status: ProviderSubscriberRow["status"], priceCents: number | null | undefined): number | null {
   if (status !== "active" || priceCents == null) return null;
-  return money(Math.round(priceCents / 2));
+  return Math.round(priceCents / 2);
+}
+
+function providerShareFor(status: ProviderSubscriberRow["status"], priceCents: number | null | undefined): string | null {
+  const cents = providerShareCentsFor(status, priceCents);
+  return cents == null ? null : money(cents);
 }
 
 type AccountRowGroup =
@@ -102,7 +107,7 @@ function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): AccountRowGro
  * see feed-subscriptions.ts's listSubscribersForProvider() for why no email/name/user_id
  * ever reaches this template. Reads real rows once migration 0071 is applied; the query
  * degrades to an empty list before that, so this page just shows the empty state today. */
-export default async function FeedAccountsPage() {
+export default async function FeedSubscribersPage() {
   const session = await auth();
   const providerId = session!.user!.id!;
 
@@ -125,6 +130,18 @@ export default async function FeedAccountsPage() {
   const singlePriceByTierKey = new Map(
     tierGroups.filter((g) => g.kind === "single").map((g) => [g.tier.tierKey, g.tier.priceCents] as const)
   );
+
+  /** Job A2 (marcus/coxwell, bus thread leo-provider-subscribers-page-2026-09-06): "LD Base =
+   * $30/mo and NY Base = $30/mo, flat 50/50" -- foots the same providerShareCentsFor()/-For()
+   * pair every row cell already uses, so the total can never disagree with the sum a reader
+   * would get by adding up the visible cells themselves. */
+  const totalShareCents = accountGroups.reduce((sum, g) => {
+    const cents =
+      g.kind === "package"
+        ? providerShareCentsFor(g.status, packagePriceByLabel.get(g.label))
+        : providerShareCentsFor(g.row.status, g.row.tierKey ? singlePriceByTierKey.get(g.row.tierKey) : null);
+    return sum + (cents ?? 0);
+  }, 0);
 
   const byLocation = new Map<
     string,
@@ -153,8 +170,8 @@ export default async function FeedAccountsPage() {
       <header className="fp-topbar">
         <FeedNavToggle />
         <div>
-          <h1>Accounts</h1>
-          <div className="crumb">feed.horizonhft.com / accounts</div>
+          <h1>Subscribers</h1>
+          <div className="crumb">feed.horizonhft.com / subscribers</div>
         </div>
         <div className="sp" />
       </header>
@@ -165,7 +182,8 @@ export default async function FeedAccountsPage() {
             <span className="ic">◎</span>
             <h3>Subscribers</h3>
             <span className="cap">
-              {countLabel(payingCount, payingClientCount, "paying")} · {countLabel(trialCount, trialClientCount, "trial")}
+              {countLabel(payingCount, payingClientCount, "paying")} · {money(totalShareCents)}/mo ·{" "}
+              {countLabel(trialCount, trialClientCount, "trial")}
               {lapsedCount > 0 ? ` · ${countLabel(lapsedCount, lapsedClientCount, "lapsed")}` : ""}
             </span>
           </div>
@@ -218,38 +236,21 @@ export default async function FeedAccountsPage() {
                 </tr>
                 {accountGroups.map((g) =>
                   g.kind === "package" ? (
-                    <Fragment key={`${g.pseudonym}-${g.label}`}>
-                      <tr>
-                        <td>
-                          <b className="mono">{g.pseudonym}</b>
-                        </td>
-                        <td>
-                          <b>{g.label}</b>
-                        </td>
-                        <td>
-                          <span className={`tb ${g.status}`}>
-                            {STATUS_ICON[g.status] ?? "•"} {g.status}
-                          </span>
-                        </td>
-                        <td className="r share">{providerShareFor(g.status, packagePriceByLabel.get(g.label))}</td>
-                        <td className="mono">{g.members[0].serverIp ?? ""}</td>
-                        <td className="r mono">{earliestStartedAt(g.members).toISOString().slice(0, 10)}</td>
-                      </tr>
-                      {g.members.map((m) => (
-                        <tr key={m.subscriptionId}>
-                          <td />
-                          <td style={{ paddingLeft: 28 }}>{m.tierName}</td>
-                          <td>
-                            <span className={`tb ${m.status}`}>
-                              {STATUS_ICON[m.status] ?? "•"} {m.status}
-                            </span>
-                          </td>
-                          <td />
-                          <td />
-                          <td className="r mono">{m.startedAt.toISOString().slice(0, 10)}</td>
-                        </tr>
-                      ))}
-                    </Fragment>
+                    <AccountPackageRows
+                      key={`${g.pseudonym}-${g.label}`}
+                      pseudonym={g.pseudonym}
+                      label={g.label}
+                      status={g.status}
+                      share={providerShareFor(g.status, packagePriceByLabel.get(g.label))}
+                      serverIp={g.members[0].serverIp ?? null}
+                      sinceISO={earliestStartedAt(g.members).toISOString().slice(0, 10)}
+                      members={g.members.map((m) => ({
+                        subscriptionId: m.subscriptionId,
+                        tierName: m.tierName,
+                        status: m.status,
+                        startedAtISO: m.startedAt.toISOString().slice(0, 10),
+                      }))}
+                    />
                   ) : (
                     <tr key={g.row.subscriptionId}>
                       <td>
@@ -269,12 +270,21 @@ export default async function FeedAccountsPage() {
                     </tr>
                   )
                 )}
+                <tr className="total-row">
+                  <td colSpan={3} className="r">
+                    <b>Total</b>
+                  </td>
+                  <td className="r share">
+                    <b>{money(totalShareCents)}</b>
+                  </td>
+                  <td colSpan={2} />
+                </tr>
               </tbody>
             </table>
           )}
         </div>
 
-        <div className="foot">HORIZON HFT · provider panel · Accounts</div>
+        <div className="foot">HORIZON HFT · provider panel · Subscribers</div>
       </section>
     </>
   );
