@@ -6,8 +6,12 @@ import type { FeedTierRequestRow } from "@/lib/feed-tier-requests";
 import { formatRelative } from "@/lib/format-time";
 import { getBotLink } from "@/lib/telegram-bot-links";
 import { FEEDS_BOT_KEY } from "@/lib/telegram-feeds-bot";
-import { getActiveSubscriberCountForProvider } from "@/lib/feed-subscriptions";
+import { getActiveSubscriberCountForProvider, getProviderMonthlyShareCents } from "@/lib/feed-subscriptions";
 import { packageLabelForTierKey } from "@/lib/feed-provider-packages";
+
+function money(cents: number): string {
+  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
 
 const TYPE_ICON: Record<string, string> = { pending: "🧪", approved: "✓", rejected: "✗", provisioned: "💳" };
 
@@ -34,12 +38,13 @@ export default async function FeedOverviewPage() {
   const session = await auth();
   const providerId = session!.user!.id!;
 
-  const [pending, trials, tiers, telegramLink, subscriberCount] = await Promise.all([
+  const [pending, trials, tiers, telegramLink, subscriberCount, monthlyShareCents] = await Promise.all([
     listPendingRequestsForProvider(providerId),
     listActiveTrialsForProvider(providerId),
     listTiersForProvider(providerId),
     getBotLink(providerId, FEEDS_BOT_KEY),
     getActiveSubscriberCountForProvider(providerId),
+    getProviderMonthlyShareCents(providerId),
   ]);
 
   const oldest = pending[pending.length - 1];
@@ -182,13 +187,17 @@ export default async function FeedOverviewPage() {
             <div className="chead">
               <span className="ic">▦</span>
               <h3>Revenue</h3>
-              <span className="cap">placeholder</span>
+            </div>
+            <div className="stat" style={{ padding: 0, background: "transparent", border: "none", borderRadius: 0 }}>
+              <div className="lab">Estimated monthly</div>
+              <div className="val">{money(monthlyShareCents)}</div>
+              <div className="sub">based on active subscriptions</div>
             </div>
             <div className="scope-note">
               <span className="i">ⓘ</span>
               <span>
-                No payment-ledger split exists for feed providers yet — this card will show your 50% share once
-                that&apos;s wired up. See <Link href="/feed/dashboard/revenue">Revenue</Link> for the mockup preview.
+                No payout ledger exists yet — this is a list-price estimate, not money received. See{" "}
+                <Link href="/feed/dashboard/revenue">Revenue</Link> for the breakdown.
               </span>
             </div>
           </div>

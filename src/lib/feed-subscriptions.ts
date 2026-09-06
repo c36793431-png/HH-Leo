@@ -2,7 +2,7 @@ import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
 import type { FeedType } from "./licenses";
 import { FEED_REGION_TYPE, FEED_REGIONS, isFeedRegion, regionForFeedType, type FeedRegion } from "./feed-tier-catalogue";
-import { PACKAGES, packageLabelForTierKey } from "./feed-provider-packages";
+import { PACKAGES, packageLabelForTierKey, providerShareCentsFor } from "./feed-provider-packages";
 
 /** Bus thread provider-feed-subscriber-linkage-2026-08-29 (marcus, overnight block 2,
  * migration 0071). Joins a portal account to a provider's package and masks the
@@ -297,6 +297,75 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
     if (isMissingTable(err)) return [];
     throw err;
   }
+}
+
+export type AccountRowGroup =
+  | { kind: "package"; pseudonym: string; label: string; status: ProviderSubscriberRow["status"]; members: ProviderSubscriberRow[] }
+  | { kind: "single"; row: ProviderSubscriberRow };
+
+/** Mirrors groupTiers' package/single split (feed-provider-packages.ts) but scoped per
+ * account instead of per provider -- Revenue groups every tier a provider sells, this groups
+ * one client's own granted tiers, so a client holding all of LD Base's three tiers reads as
+ * one group instead of three unrelated rows. A tier with no PACKAGES entry keeps its own row.
+ * Shared by the Subscribers page (rendering) and getProviderMonthlyShareCents below (the
+ * Overview/Revenue total) so both walk the exact same groups -- moved here from the
+ * Subscribers page 2026-09-06 (Job C follow-up, m46504) for that reason. */
+export function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): AccountRowGroup[] {
+  const byAccount = new Map<string, ProviderSubscriberRow[]>();
+  for (const row of rows) {
+    const list = byAccount.get(row.pseudonym) ?? [];
+    list.push(row);
+    byAccount.set(row.pseudonym, list);
+  }
+
+  const groups: AccountRowGroup[] = [];
+  for (const [pseudonym, accountRows] of byAccount) {
+    const used = new Set<string>();
+    for (const pkg of PACKAGES) {
+      const members = accountRows.filter((r) => r.tierKey && pkg.tierKeys.includes(r.tierKey));
+      if (members.length === 0) continue;
+      members.forEach((m) => used.add(m.subscriptionId));
+      groups.push({ kind: "package", pseudonym, label: pkg.label, status: members[0].status, members });
+    }
+    for (const row of accountRows) {
+      if (!used.has(row.subscriptionId)) groups.push({ kind: "single", row });
+    }
+  }
+  return groups;
+}
+
+/** Job C (bus thread leo-provider-subscribers-page-2026-09-06, coxwell-authorised): the price
+ * a payout reads is THIS client's own negotiated feed_subscriptions.price_cents, never a
+ * catalogue/package-wide constant -- a partner on a different number must produce a different
+ * line. Per marcus's m46504 ruling, there is NO fallback to any package/tier default list
+ * price -- a group with no override anywhere resolves to null (unset), which providerShareFor
+ * renders as "Not set" and providerShareCentsFor counts as zero, never as the catalogue's
+ * $30. For a package, every member row is written the same price together
+ * (setFeedSubscriptionPriceForPackage) so any one member's non-null value speaks for the whole
+ * group; this does not sum or average across members, and does not read feed_tiers/ProviderTierRow
+ * catalogue prices directly -- that was the members[0]-off-the-catalogue bug this job fixed. */
+export function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
+  if (group.kind === "package") {
+    return group.members.map((m) => m.priceCents).find((c) => c != null) ?? null;
+  }
+  return group.row.priceCents ?? null;
+}
+
+/** The provider's total monthly payout estimate across every client, bus thread
+ * leo-provider-subscribers-page-2026-09-06 (marcus, Job D/E: "Three surfaces, one function
+ * ... so they cannot disagree; if they ever do, it's a data problem and not an arithmetic
+ * one"). Subscribers' footer/header, the Overview Revenue card, and the Revenue page all call
+ * THIS, rather than each re-deriving the group-then-sum shape -- the only way to guarantee
+ * they can't drift apart is for there to be exactly one place that walks the groups and adds
+ * them up. */
+export async function getProviderMonthlyShareCents(providerUserId: string): Promise<number> {
+  const subscribers = await listSubscribersForProvider(providerUserId);
+  const groups = groupAccountSubscriptions(subscribers);
+  return groups.reduce((sum, g) => {
+    const status = g.kind === "package" ? g.status : g.row.status;
+    const cents = providerShareCentsFor(status, resolvedPriceCentsFor(g));
+    return sum + (cents ?? 0);
+  }, 0);
 }
 
 /** Overview panel's "Subscribers" stat -- distinct subscribers with a live, non-trial grant,
