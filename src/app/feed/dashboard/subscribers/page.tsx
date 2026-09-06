@@ -5,9 +5,10 @@ import {
   listSubscribersForProvider,
   groupAccountSubscriptions,
   resolvedPriceCentsFor,
+  sumProviderShareCents,
   type ProviderSubscriberRow,
 } from "@/lib/feed-subscriptions";
-import { providerShareCentsFor, providerShareFor } from "@/lib/feed-provider-packages";
+import { providerShareFor } from "@/lib/feed-provider-packages";
 
 const STATUS_ICON: Record<string, string> = { trial: "🧪", active: "✓", lapsed: "✗" };
 const REGION_LABELS: Record<string, string> = { london: "London", ny: "New York", cme: "CME", tokyo: "Tokyo" };
@@ -67,14 +68,12 @@ export default async function FeedSubscribersPage() {
    * $30/mo and NY Base = $30/mo, flat 50/50" -- foots the same providerShareCentsFor()/-For()
    * pair every row cell already uses, so the total can never disagree with the sum a reader
    * would get by adding up the visible cells themselves. Job C: each row now resolves its OWN
-   * price (client override only, no package/tier default -- m46504) via resolvedPriceCentsFor,
-   * so this sums real per-row values rather than a constant multiplied by a count; an unset
-   * row contributes zero, same as a non-active one. */
-  const totalShareCents = accountGroups.reduce((sum, g) => {
-    const status = g.kind === "package" ? g.status : g.row.status;
-    const cents = providerShareCentsFor(status, resolvedPriceCentsFor(g));
-    return sum + (cents ?? 0);
-  }, 0);
+   * price (client override only, no package/tier default -- m46504) via resolvedPriceCentsFor.
+   * Per marcus's m46511/m46518 ruling, this calls sumProviderShareCents (feed-subscriptions.ts)
+   * on the same accountGroups already in memory rather than reducing them here itself -- the
+   * Overview card and Revenue's Total row call the identical function, so a lapsed row, a null
+   * price, or a second region can't make this footer disagree with either of them. */
+  const totalShareCents = sumProviderShareCents(accountGroups);
 
   const byLocation = new Map<
     string,

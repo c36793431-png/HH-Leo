@@ -5,7 +5,8 @@ import {
   listSubscribersForProvider,
   groupAccountSubscriptions,
   resolvedPriceCentsFor,
-  type ProviderSubscriberRow,
+  sumProviderShareCents,
+  type AccountRowGroup,
 } from "@/lib/feed-subscriptions";
 import { providerShareCentsFor } from "@/lib/feed-provider-packages";
 
@@ -31,8 +32,7 @@ interface PackageRevenueGroup {
  * Overview card call) summed across that package's paying clients, never the catalogue's $30
  * list price times a headcount. Only `status === "active"` groups count -- trial/lapsed
  * clients generate no revenue, same predicate as every other payout figure on this panel. */
-function buildPackageRevenueGroups(subscribers: ProviderSubscriberRow[]): PackageRevenueGroup[] {
-  const accountGroups = groupAccountSubscriptions(subscribers);
+function buildPackageRevenueGroups(accountGroups: AccountRowGroup[]): PackageRevenueGroup[] {
   const byKey = new Map<string, PackageRevenueGroup>();
 
   for (const g of accountGroups) {
@@ -71,9 +71,15 @@ function buildPackageRevenueGroups(subscribers: ProviderSubscriberRow[]): Packag
 export default async function FeedRevenuePage() {
   const session = await auth();
   const subscribers = await listSubscribersForProvider(session!.user!.id!);
-  const groups = buildPackageRevenueGroups(subscribers);
+  const accountGroups = groupAccountSubscriptions(subscribers);
+  const groups = buildPackageRevenueGroups(accountGroups);
   const totalMonthlyCents = groups.reduce((sum, g) => sum + g.monthlyCents, 0);
-  const totalShareCents = groups.reduce((sum, g) => sum + g.shareCents, 0);
+  /** Per marcus's m46511/m46518 ruling (same summation everywhere): this is the identical
+   * function Subscribers' footer and the Overview card call, on the same accountGroups this
+   * page already grouped -- not a second reduce over the by-package rows above. Monthly (gross,
+   * pre-split) has no equivalent shared total yet since nothing else on the panel shows gross;
+   * only the 50% share figure is required to agree across all three surfaces. */
+  const totalShareCents = sumProviderShareCents(accountGroups);
 
   return (
     <>

@@ -351,21 +351,29 @@ export function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
   return group.row.priceCents ?? null;
 }
 
-/** The provider's total monthly payout estimate across every client, bus thread
- * leo-provider-subscribers-page-2026-09-06 (marcus, Job D/E: "Three surfaces, one function
- * ... so they cannot disagree; if they ever do, it's a data problem and not an arithmetic
- * one"). Subscribers' footer/header, the Overview Revenue card, and the Revenue page all call
- * THIS, rather than each re-deriving the group-then-sum shape -- the only way to guarantee
- * they can't drift apart is for there to be exactly one place that walks the groups and adds
- * them up. */
-export async function getProviderMonthlyShareCents(providerUserId: string): Promise<number> {
-  const subscribers = await listSubscribersForProvider(providerUserId);
-  const groups = groupAccountSubscriptions(subscribers);
+/** The one place that walks account groups and adds up the provider's 50% share, bus thread
+ * leo-provider-subscribers-page-2026-09-06 (marcus, m46511/m46518: "is the summation also one
+ * implementation, or does Subscribers' footer run its own reduce ... agreement at zero is not
+ * agreement"). Subscribers' footer/header, the Overview Revenue card (via
+ * getProviderMonthlyShareCents below), and the Revenue page's Total row all call THIS on
+ * groups they derive from groupAccountSubscriptions -- never their own reduce over the same
+ * shape -- so a lapsed row, a null price, or a second region can't make one surface disagree
+ * with another. */
+export function sumProviderShareCents(groups: AccountRowGroup[]): number {
   return groups.reduce((sum, g) => {
     const status = g.kind === "package" ? g.status : g.row.status;
     const cents = providerShareCentsFor(status, resolvedPriceCentsFor(g));
     return sum + (cents ?? 0);
   }, 0);
+}
+
+/** Fetch-and-sum wrapper around sumProviderShareCents for callers (Overview) that don't
+ * already have the provider's groups in memory. Callers that do (Subscribers, Revenue) should
+ * call sumProviderShareCents directly on their existing groups instead of re-querying. */
+export async function getProviderMonthlyShareCents(providerUserId: string): Promise<number> {
+  const subscribers = await listSubscribersForProvider(providerUserId);
+  const groups = groupAccountSubscriptions(subscribers);
+  return sumProviderShareCents(groups);
 }
 
 /** Overview panel's "Subscribers" stat -- distinct subscribers with a live, non-trial grant,
