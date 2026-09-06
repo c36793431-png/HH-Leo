@@ -1,23 +1,79 @@
-import { Fragment } from "react";
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
-import { listTiersForProvider } from "@/lib/feed-providers";
-import { groupTiers } from "@/lib/feed-provider-packages";
+import { PackageRevenueRow } from "@/components/feed/package-revenue-rows";
+import {
+  listSubscribersForProvider,
+  groupAccountSubscriptions,
+  resolvedPriceCentsFor,
+  type ProviderSubscriberRow,
+} from "@/lib/feed-subscriptions";
+import { providerShareCentsFor } from "@/lib/feed-provider-packages";
 
 function money(cents: number): string {
   return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-/** No payment ledger tracks feed-provider revenue splits yet, and no subscriber counts
- * exist to weight a total against, so this page shows per-package list price and per-tier
- * 50% share only, with no aggregate figure. Flagged to marcus as follow-up scope (real
- * payout pipeline + a package concept to dedupe bundled tiers). Package grouping itself
- * lives in @/lib/feed-provider-packages, shared with the Feeds tab. */
+interface PackageRevenueGroup {
+  key: string;
+  label: string;
+  memberTierNames: string[];
+  subscriberCount: number;
+  monthlyCents: number;
+  shareCents: number;
+}
+
+/** Job E, bus thread leo-provider-subscribers-page-2026-09-06 (marcus/coxwell): Revenue used
+ * to be the Feeds catalogue with a price column bolted on -- every tier the provider manages,
+ * whether or not anyone was paying for it. This is a MONEY view, driven by subscribers, not a
+ * product view driven by the catalogue: a row exists only because at least one paying client
+ * holds it, and "Monthly"/"Your 50%" are real per-client resolved prices
+ * (resolvedPriceCentsFor/providerShareCentsFor -- the same functions Subscribers and the
+ * Overview card call) summed across that package's paying clients, never the catalogue's $30
+ * list price times a headcount. Only `status === "active"` groups count -- trial/lapsed
+ * clients generate no revenue, same predicate as every other payout figure on this panel. */
+function buildPackageRevenueGroups(subscribers: ProviderSubscriberRow[]): PackageRevenueGroup[] {
+  const accountGroups = groupAccountSubscriptions(subscribers);
+  const byKey = new Map<string, PackageRevenueGroup>();
+
+  for (const g of accountGroups) {
+    const status = g.kind === "package" ? g.status : g.row.status;
+    if (status !== "active") continue;
+
+    const priceCents = resolvedPriceCentsFor(g);
+    const monthlyCents = priceCents ?? 0;
+    const shareCents = providerShareCentsFor(status, priceCents) ?? 0;
+    const key = g.kind === "package" ? g.label : g.row.tierKey ?? g.row.tierName;
+    const memberNames = g.kind === "package" ? g.members.map((m) => m.tierName) : [];
+
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.subscriberCount += 1;
+      existing.monthlyCents += monthlyCents;
+      existing.shareCents += shareCents;
+      for (const name of memberNames) {
+        if (!existing.memberTierNames.includes(name)) existing.memberTierNames.push(name);
+      }
+    } else {
+      byKey.set(key, {
+        key,
+        label: g.kind === "package" ? g.label : g.row.tierName,
+        memberTierNames: memberNames,
+        subscriberCount: 1,
+        monthlyCents,
+        shareCents,
+      });
+    }
+  }
+
+  return Array.from(byKey.values());
+}
 
 export default async function FeedRevenuePage() {
   const session = await auth();
-  const tiers = await listTiersForProvider(session!.user!.id!);
-  const groups = groupTiers(tiers);
+  const subscribers = await listSubscribersForProvider(session!.user!.id!);
+  const groups = buildPackageRevenueGroups(subscribers);
+  const totalMonthlyCents = groups.reduce((sum, g) => sum + g.monthlyCents, 0);
+  const totalShareCents = groups.reduce((sum, g) => sum + g.shareCents, 0);
 
   return (
     <>
@@ -34,8 +90,9 @@ export default async function FeedRevenuePage() {
         <div className="banner info">
           <span className="bic">▦</span>
           <div>
-            <b>No payout ledger yet</b> — figures below are notional (per-package list price ÷ 2), not a real
-            payment split. Payout history and next-payout date are static preview copy.
+            <b>No payout ledger yet</b> — nothing has ever been charged, so the figures below are an estimate
+            from each client&apos;s own price, not a reconciled payment or money actually collected. Payout
+            history and next-payout date are static preview copy.
           </div>
         </div>
 
@@ -43,60 +100,50 @@ export default async function FeedRevenuePage() {
           <div className="chead">
             <span className="ic">◈</span>
             <h3>By package</h3>
-            <span className="cap">list price only</span>
+            <span className="cap">paying subscribers</span>
           </div>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Package / tier</th>
-                <th className="r">List price</th>
-                <th className="r">Your 50%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((g) =>
-                g.kind === "package" ? (
-                  <Fragment key={`pkg-${g.label}`}>
-                    <tr>
-                      <td>
-                        <b>{g.label}</b>
-                      </td>
-                      <td className="r mono">{money(g.priceCents)}</td>
-                      <td className="r share">{money(Math.round(g.priceCents / 2))}</td>
-                    </tr>
-                    {g.members.map((t) => (
-                      <tr key={t.id}>
-                        <td style={{ paddingLeft: 28 }}>
-                          {t.name}
-                          <br />
-                          <span style={{ fontSize: 11, color: "var(--pfp-ink-hi)" }}>{t.subtitle}</span>
-                        </td>
-                        <td className="r" />
-                        <td className="r" />
-                      </tr>
-                    ))}
-                  </Fragment>
-                ) : (
-                  <tr key={g.tier.id}>
-                    <td>
-                      <b>{g.tier.name}</b>
-                      <br />
-                      <span style={{ fontSize: 11, color: "var(--pfp-ink-hi)" }}>{g.tier.subtitle}</span>
-                    </td>
-                    <td className="r mono">{money(g.tier.priceCents ?? 0)}</td>
-                    <td className="r share">{money(Math.round((g.tier.priceCents ?? 0) / 2))}</td>
-                  </tr>
-                )
-              )}
-              {tiers.length === 0 && (
+          {groups.length === 0 ? (
+            <div className="empty">
+              <div className="eic">◈</div>
+              <b>No paying subscribers yet</b>
+              <p>Revenue by package appears here once a client holds an active, paid subscription.</p>
+            </div>
+          ) : (
+            <table className="tbl">
+              <thead>
                 <tr>
-                  <td colSpan={3} style={{ textAlign: "center", color: "var(--pfp-ink-3)", padding: "24px 0" }}>
-                    No tiers assigned yet.
+                  <th>Package</th>
+                  <th className="r">Subscribers</th>
+                  <th className="r">Monthly</th>
+                  <th className="r">Your 50%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((g) => (
+                  <PackageRevenueRow
+                    key={g.key}
+                    label={g.label}
+                    memberTierNames={g.memberTierNames}
+                    subscriberCount={g.subscriberCount}
+                    monthlyCents={g.monthlyCents}
+                    shareCents={g.shareCents}
+                  />
+                ))}
+                <tr className="total-row">
+                  <td className="r">
+                    <b>Total</b>
+                  </td>
+                  <td className="r" />
+                  <td className="r mono">
+                    <b>{money(totalMonthlyCents)}</b>
+                  </td>
+                  <td className="r share">
+                    <b>{money(totalShareCents)}</b>
                   </td>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          )}
         </div>
 
         <div className="foot">HORIZON HFT · provider panel · Revenue</div>
