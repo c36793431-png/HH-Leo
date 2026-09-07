@@ -1,4 +1,5 @@
 import type { ProviderTierRow } from "./feed-providers";
+import { scoreForTierKey } from "./feed-comparison-scores";
 
 /** feed_tiers has no package concept (coxwell hasn't decided that schema yet) -- this
  * grouping is a hardcoded literal, not data. It exists only to stop a tier list from
@@ -46,10 +47,23 @@ export function isScoreRegion(region: string): boolean {
 }
 
 /** Combined value+unit text for a tier's latency cell, e.g. "56/100" or "42µs". Does not
- * change latency_us or speed_display -- display only. */
-export function formatTierLatency(region: string, t: { latencyUs: number | null; speedDisplay: string }): string {
-  if (t.latencyUs == null) return t.speedDisplay;
-  return isScoreRegion(region) ? `${t.speedDisplay}/100` : `${t.speedDisplay}µs`;
+ * change latency_us or speed_display -- display only.
+ *
+ * Score regions (London) never read latency_us/speedDisplay -- feed_tiers holds FOC13's
+ * comparison score there, not real microseconds, and it has drifted from the canonical
+ * FEED_COMPARISON_SCORES before (marcus, leo-london-tier-score-mismatch-2026-09-07). Keyed
+ * by tier_key via scoreForTierKey, same source as the tiers page and getBestLatencyByRegion
+ * so the three can't drift from each other. A tier_key with no score entry renders "--"
+ * rather than falling back to the untrusted DB value. */
+export function formatTierLatency(
+  region: string,
+  t: { tierKey: string; latencyUs: number | null; speedDisplay: string }
+): string {
+  if (isScoreRegion(region)) {
+    const score = scoreForTierKey(t.tierKey);
+    return score != null ? `${score.toFixed(1)}/100` : "--";
+  }
+  return t.latencyUs == null ? t.speedDisplay : `${t.speedDisplay}µs`;
 }
 
 export function groupTiers(tiers: ProviderTierRow[]): TierGroup[] {

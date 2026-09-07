@@ -1,5 +1,6 @@
 import { pool } from "./db";
 import { FEED_REGIONS, isFeedRegion, type FeedRegion } from "./feed-tier-catalogue";
+import { isScoreRegion } from "./feed-provider-packages";
 
 export interface FeedTierDetail {
   regionKey: FeedRegion;
@@ -79,14 +80,21 @@ export async function getMultiTierRegions(): Promise<FeedRegion[]> {
 
 /** Region -> lowest known latency_us, for the Dashboard compact feed cards' stat line.
  * Tiers with no confirmed figure yet (latency_us null, e.g. flagship "MIN" tiers or NY's
- * pending rows) are excluded rather than treated as 0. */
+ * pending rows) are excluded rather than treated as 0. London is excluded outright
+ * (marcus, leo-london-tier-score-mismatch-2026-09-07): feed_tiers.latency_us for London
+ * rows holds FOC13's comparison score, not real microseconds, and this function's caller
+ * renders its result as "<n>µs" with no way to swap in a score unit -- a score printed as
+ * µs is a fabricated latency figure, so London gets no entry (no stat) rather than a wrong
+ * one. Other regions' latency_us is genuine and untouched by this exclusion. */
 export async function getBestLatencyByRegion(): Promise<Partial<Record<FeedRegion, number>>> {
   const result = await pool.query<{ region_key: string; min_latency: number | null }>(
     `select region_key, min(latency_us) as min_latency from feed_tiers where latency_us is not null group by region_key`
   );
   const best: Partial<Record<FeedRegion, number>> = {};
   for (const row of result.rows) {
-    if (isFeedRegion(row.region_key) && row.min_latency != null) best[row.region_key] = row.min_latency;
+    if (isFeedRegion(row.region_key) && row.min_latency != null && !isScoreRegion(row.region_key)) {
+      best[row.region_key] = row.min_latency;
+    }
   }
   return best;
 }

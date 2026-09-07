@@ -56,3 +56,24 @@ export const FEED_COMPARISON_SCORES: FeedScoreEntry[] = [
     note: "Offline — 3 ticks in 51 hours.",
   },
 ];
+
+/** tier_key -> FEED_COMPARISON_SCORES entry name, for London's score tiers plus the
+ * standalone Black flagship. Keyed by tier_key rather than feed_tiers.name (marcus,
+ * leo-london-tier-score-mismatch-2026-09-07) — 0074 only short-formed Alpha/Ultra's name,
+ * so a name-string match would silently miss Beta/Gamma/Delta. Single source for every
+ * surface that needs London's canonical score by tier_key (feeds/[region]/tiers page,
+ * formatTierLatency, getBestLatencyByRegion) so it can't drift a third time. */
+const SCORE_TIER_NAMES: Record<string, string> = {
+  "ld-alpha-85": "Alpha",
+  "ld-beta-56": "Beta",
+  "ld-gamma-19": "Gamma",
+  "ld-delta-18": "Delta",
+  "ld-ultra": "Ultra",
+  black: "Black",
+};
+
+export function scoreForTierKey(tierKey: string): number | null {
+  const name = SCORE_TIER_NAMES[tierKey];
+  const entry = name ? FEED_COMPARISON_SCORES.find((f) => f.name === name) : undefined;
+  return entry ? entry.score : null;
+}

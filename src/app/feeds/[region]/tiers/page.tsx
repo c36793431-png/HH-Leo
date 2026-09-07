@@ -17,7 +17,7 @@ import { ServerRegistrationBand } from "@/components/feeds/server-registration-b
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { hasJoinedTierWaitlist } from "@/lib/tier-waitlist";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
-import { FEED_COMPARISON_SCORES } from "@/lib/feed-comparison-scores";
+import { scoreForTierKey } from "@/lib/feed-comparison-scores";
 import { SectionPills } from "@/components/shared/section-pills";
 import type { FeedTierDetail } from "@/lib/feed-tiers";
 
@@ -45,24 +45,15 @@ const BLACK_RANK = 1;
 /** London's card/ref-table SCORE slot reads FEED_COMPARISON_SCORES exclusively (marcus,
  * leo-london-tier-score-mismatch-2026-09-07): feed_tiers.speed_display/latency_us for
  * London rows hold FOC13's comparison score, not real microseconds (b2702d2), and the
- * two disagreed once already for Ultra. Keyed by tier_key rather than feed_tiers.name --
- * 0074 short-formed Alpha/Ultra's name to match this list but never touched Beta/Gamma/
- * Delta, which are still "LD Beta 56" etc in the DB. */
-const LONDON_SCORE_TIER_NAMES: Record<string, string> = {
-  "ld-alpha-85": "Alpha",
-  "ld-beta-56": "Beta",
-  "ld-gamma-19": "Gamma",
-  "ld-delta-18": "Delta",
-  "ld-ultra": "Ultra",
-};
-
+ * two disagreed once already for Ultra. scoreForTierKey (feed-comparison-scores.ts) keys
+ * by tier_key rather than feed_tiers.name -- 0074 short-formed Alpha/Ultra's name to match
+ * this list but never touched Beta/Gamma/Delta, which are still "LD Beta 56" etc in the DB. */
 function londonScoreDisplay(tierKey: string): string | null {
-  const name = LONDON_SCORE_TIER_NAMES[tierKey];
-  const entry = name ? FEED_COMPARISON_SCORES.find((f) => f.name === name) : undefined;
-  return entry ? entry.score.toFixed(1) : null;
+  const score = scoreForTierKey(tierKey);
+  return score != null ? score.toFixed(1) : null;
 }
 
-const BLACK_SCORE_DISPLAY = FEED_COMPARISON_SCORES.find((f) => f.name === "Black")?.score.toFixed(1) ?? "—";
+const BLACK_SCORE_DISPLAY = scoreForTierKey("black")?.toFixed(1) ?? "—";
 
 /** Interim v1 packaging: Beta/Gamma/Delta are three feeds from one provider sold as a
  * single bundle at one price, so they render as one card instead of three competing
