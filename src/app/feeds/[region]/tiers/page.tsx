@@ -17,6 +17,7 @@ import { ServerRegistrationBand } from "@/components/feeds/server-registration-b
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { hasJoinedTierWaitlist } from "@/lib/tier-waitlist";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
+import { FEED_COMPARISON_SCORES } from "@/lib/feed-comparison-scores";
 import { SectionPills } from "@/components/shared/section-pills";
 import type { FeedTierDetail } from "@/lib/feed-tiers";
 
@@ -40,6 +41,28 @@ const LONDON_TIER_RANK: Record<string, number> = {
   "ld-ultra": 3,
 };
 const BLACK_RANK = 1;
+
+/** London's card/ref-table SCORE slot reads FEED_COMPARISON_SCORES exclusively (marcus,
+ * leo-london-tier-score-mismatch-2026-09-07): feed_tiers.speed_display/latency_us for
+ * London rows hold FOC13's comparison score, not real microseconds (b2702d2), and the
+ * two disagreed once already for Ultra. Keyed by tier_key rather than feed_tiers.name --
+ * 0074 short-formed Alpha/Ultra's name to match this list but never touched Beta/Gamma/
+ * Delta, which are still "LD Beta 56" etc in the DB. */
+const LONDON_SCORE_TIER_NAMES: Record<string, string> = {
+  "ld-alpha-85": "Alpha",
+  "ld-beta-56": "Beta",
+  "ld-gamma-19": "Gamma",
+  "ld-delta-18": "Delta",
+  "ld-ultra": "Ultra",
+};
+
+function londonScoreDisplay(tierKey: string): string | null {
+  const name = LONDON_SCORE_TIER_NAMES[tierKey];
+  const entry = name ? FEED_COMPARISON_SCORES.find((f) => f.name === name) : undefined;
+  return entry ? entry.score.toFixed(1) : null;
+}
+
+const BLACK_SCORE_DISPLAY = FEED_COMPARISON_SCORES.find((f) => f.name === "Black")?.score.toFixed(1) ?? "—";
 
 /** Interim v1 packaging: Beta/Gamma/Delta are three feeds from one provider sold as a
  * single bundle at one price, so they render as one card instead of three competing
@@ -84,8 +107,8 @@ const BLACK_TIER: FeedTierDetail = {
   tierKey: "black",
   name: "Black",
   subtitle: "FLAGSHIP",
-  speedDisplay: "94.8",
-  latencyUs: 94.8,
+  speedDisplay: BLACK_SCORE_DISPLAY,
+  latencyUs: null,
   description:
     "Our fastest institutional feed -- exchange-native, co-located, and #1 on the Horizon Feed Comparison.",
   priceCents: null,
@@ -269,17 +292,20 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                   {group.members.length} feeds from one provider, sold as a single bundle at one price.
                 </p>
                 <div className="ftd-pkg-members">
-                  {group.members.map((m) => (
-                    <div key={m.tierKey} className="ftd-pkg-member">
-                      <div className="ftd-pkg-member-row">
-                        <span className="ftd-pkg-member-name">{m.name}</span>
-                        <span className="ftd-pkg-member-score">
-                          {m.speedDisplay}
-                          <span className="ftd-speed-unit">{isScoreRegion(region) ? "/100" : "µs"}</span>
-                        </span>
+                  {group.members.map((m) => {
+                    const londonScore = region === "london" ? londonScoreDisplay(m.tierKey) : null;
+                    return (
+                      <div key={m.tierKey} className="ftd-pkg-member">
+                        <div className="ftd-pkg-member-row">
+                          <span className="ftd-pkg-member-name">{m.name}</span>
+                          <span className="ftd-pkg-member-score">
+                            {londonScore ?? m.speedDisplay}
+                            <span className="ftd-speed-unit">{isScoreRegion(region) ? "/100" : "µs"}</span>
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <TierRequestControl
                   region={region}
@@ -297,6 +323,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
 
           const t = group.members[0];
           const isInstitutional = region === "london" && INSTITUTIONAL_TIER_KEYS.has(t.tierKey);
+          const londonScore = region === "london" ? londonScoreDisplay(t.tierKey) : null;
           return (
           <div
             key={t.tierKey}
@@ -328,11 +355,9 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             )}
             <h3 className="ftd-name">{t.name}</h3>
             <div className="ftd-speed">
-              {region === "london" && t.latencyUs != null && (
-                <span className="ftd-speed-label">SCORE</span>
-              )}
-              <span className="ftd-speed-value">{t.speedDisplay}</span>
-              {t.latencyUs != null && (
+              {londonScore != null && <span className="ftd-speed-label">SCORE</span>}
+              <span className="ftd-speed-value">{londonScore ?? t.speedDisplay}</span>
+              {(londonScore != null || t.latencyUs != null) && (
                 <span className="ftd-speed-unit">{isScoreRegion(region) ? "/100" : "µs"}</span>
               )}
             </div>
@@ -370,18 +395,21 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             {COMPARE_ROWS.map((row) => (
               <tr key={row.key}>
                 <td>{row.label}</td>
-                {tiers.map((t) => (
-                  <td key={t.tierKey}>
-                    {row.key === "latency" &&
-                      (t.latencyUs != null
-                        ? region === "london"
-                          ? `${t.speedDisplay}/100 score`
-                          : `${t.speedDisplay}µs`
-                        : t.speedDisplay)}
-                    {row.key === "redundancy" && t.pathRedundancy}
-                    {row.key === "support" && t.supportLevel}
-                  </td>
-                ))}
+                {tiers.map((t) => {
+                  const londonScore = region === "london" ? londonScoreDisplay(t.tierKey) : null;
+                  return (
+                    <td key={t.tierKey}>
+                      {row.key === "latency" &&
+                        (londonScore != null
+                          ? `${londonScore}/100 score`
+                          : t.latencyUs != null
+                            ? `${t.speedDisplay}µs`
+                            : t.speedDisplay)}
+                      {row.key === "redundancy" && t.pathRedundancy}
+                      {row.key === "support" && t.supportLevel}
+                    </td>
+                  );
+                })}
                 {region === "london" && (
                   <td key={BLACK_TIER.tierKey}>
                     {row.key === "latency" && BLACK_TIER.speedDisplay}
