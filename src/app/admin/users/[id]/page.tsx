@@ -232,6 +232,10 @@ export default async function AdminUserDetailPage({
   const entitledFeedTypes = [...new Set(currentLicenses.flatMap((l) => l.feedTypes))];
   const feedAssignmentRows = computeFeedAssignmentRows(feedTiers, feedSubscriptions, entitledFeedTypes);
 
+  // Combined purchases = money actually paid in by this client, not partner intake or provider costs.
+  const customerPurchases = payments.filter((p) => p.direction === "in" && p.category === "customer");
+  const combinedPurchaseTotal = customerPurchases.reduce((sum, p) => sum + p.amountUsd, 0);
+
   return (
     <div className="flex flex-1 flex-col gap-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -549,7 +553,14 @@ export default async function AdminUserDetailPage({
       </section>
 
       <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
-        <h2 className="text-sm font-medium text-amber-400">Payments</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-medium text-amber-400">Payments</h2>
+          <p className="text-xs text-zinc-400">
+            Combined purchases (customer, incoming):{" "}
+            <span className="font-semibold text-emerald-400">${combinedPurchaseTotal.toFixed(2)}</span>{" "}
+            across {customerPurchases.length} payment{customerPurchases.length === 1 ? "" : "s"}
+          </p>
+        </div>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-zinc-500">
@@ -557,6 +568,7 @@ export default async function AdminUserDetailPage({
                 <th className="pb-2 pr-4">Date</th>
                 <th className="pb-2 pr-4">Amount</th>
                 <th className="pb-2 pr-4">Direction</th>
+                <th className="pb-2 pr-4">Category</th>
                 <th className="pb-2">Memo</th>
               </tr>
             </thead>
@@ -570,12 +582,13 @@ export default async function AdminUserDetailPage({
                     {p.direction === "in" ? "+" : "−"}${p.amountUsd.toFixed(2)} {p.currency}
                   </td>
                   <td className="py-2 pr-4 text-zinc-400">{p.direction.toUpperCase()}</td>
+                  <td className="py-2 pr-4 text-zinc-400">{p.category}</td>
                   <td className="py-2 text-zinc-300">{p.memo ?? "—"}</td>
                 </tr>
               ))}
               {payments.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-zinc-500">
+                  <td colSpan={5} className="py-4 text-center text-zinc-500">
                     No payments logged.
                   </td>
                 </tr>
