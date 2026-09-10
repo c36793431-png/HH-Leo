@@ -1,6 +1,6 @@
 import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
-import { getActiveLicenseForUser, type FeedType } from "./licenses";
+import { getActiveLicensesForUser, type ActiveLicense, type FeedType } from "./licenses";
 import { FEED_REGION_TYPE, FEED_REGIONS, isFeedRegion, regionForFeedType, type FeedRegion } from "./feed-tier-catalogue";
 import { PACKAGES, packageLabelForTierKey, providerShareCentsFor } from "./feed-provider-packages";
 
@@ -635,6 +635,34 @@ export class NoActiveLicenseForFeedGrantError extends Error {
   }
 }
 
+/** Thrown by assignFeedTierSubscription when the target subscriber holds MORE than one active,
+ * unexpired licence. A grant binds to exactly one licence and a licence names one server, so
+ * taking the furthest-expiring row would tie the grant to a server the admin never chose -- and
+ * no surface anywhere renders which licence a subscription is bound to, so that choice would be
+ * invisible until it was wrong. Hence a refusal rather than a tiebreak (marcus's ruling, thread
+ * leo-feed-subscriptions-license-id-2026-09-10): a grant path must never silently pick between
+ * two live licences. *Choosing* between them is a business decision and stays queued with the
+ * feed-only plan; *refusing* to choose is the honest default and needs no such decision.
+ * Deliberately NOT enforced inside getActiveLicenseForUser (same ruling) -- that resolver is
+ * shared with callers who legitimately want *a* licence, and making it raise would break them.
+ * The route that already works for a multi-licence subscriber is the client's own feed-tier
+ * request: it carries feed_tier_requests.license_id, the licence they registered the server
+ * against, so approving it binds the grain the client picked instead of one this path guessed.
+ * Licences are named by the HH<n> label (licenseNumberSql) the admin already sees on the user's
+ * row and detail page, so the message points at something on screen -- never the licence key.
+ * Message is surfaced verbatim to the admin by runAction (lib/action-result.ts). */
+export class MultipleActiveLicensesForFeedGrantError extends Error {
+  constructor(tierName: string, licenses: ActiveLicense[]) {
+    const named = licenses
+      .map((l) => `HH${l.licenseNumber} (expires ${l.expiresAt.toLocaleDateString()})`)
+      .join(", ");
+    super(
+      `This user holds ${licenses.length} active licences -- ${named} -- so ${tierName} can't be granted from here: a feed subscription binds to one licence, and picking one here would tie the grant to a server nobody chose. Approve the client's own request for this tier instead -- it carries the licence they registered the server against.`
+    );
+    this.name = "MultipleActiveLicensesForFeedGrantError";
+  }
+}
+
 export interface FeedTierForAssignment {
   feedTierId: string;
   tierName: string;
@@ -733,14 +761,17 @@ export async function upsertFeedSubscriptionForRequest(
  * feed_subscriptions.license_id is NOT NULL since 0081 step 4 with no default and no trigger,
  * and this path supplied nothing for it -- every admin direct grant of a tier the subscriber
  * didn't already hold died on a raw 23502 that no layer translates. The licence is resolved
- * explicitly here via getActiveLicenseForUser (status = 'active' AND expires_at > now()).
+ * explicitly here via getActiveLicensesForUser (status = 'active' AND expires_at > now()).
  * NOT getLatestIssuedLicenseForUser: that one is latest-issued with no status or expiry filter
- * and would happily pin a grant to a revoked licence. No active licence is a refusal, not a
- * fallback -- see NoActiveLicenseForFeedGrantError above. If a subscriber ever holds two
- * simultaneously-active licences, getActiveLicenseForUser returns the furthest-expiring one;
- * zero users were in that state when 0081 was written and re-verified, and choosing between
- * two live licences is a business decision that belongs with the feed-only plan, not a tiebreak
- * invented here.
+ * and would happily pin a grant to a revoked licence. BOTH non-singular cases are refusals, not
+ * fallbacks -- zero throws NoActiveLicenseForFeedGrantError, more than one throws
+ * MultipleActiveLicensesForFeedGrantError (see both above). The plural resolver is called
+ * precisely so this path can SEE a second licence: getActiveLicenseForUser answers the same
+ * predicate but `limit 1` on `expires_at desc`, so it would hand back the furthest-expiring row
+ * with no indication a choice had been made. It stays as it is -- it is shared with callers that
+ * legitimately want *a* licence -- so the guard lives here, in the write path, not in it.
+ * With exactly one active licence the two resolvers return the same row, so the singular case
+ * is unchanged; the ordering only ever mattered in the case this now refuses.
  *
  * The reactivate lookup below is scoped by license_id as well as feed_tier_id -- the same key
  * the live partial unique index uses since 0081 step 5 (which DROPped the (subscriber, tier)
@@ -753,8 +784,10 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
   const { feedTierId, tierName, regionKey, providerUserId } = await getFeedTierForAssignment(tierKey);
   if (!providerUserId) throw new FeedTierNotAssignedError(tierName, regionKey);
 
-  const license = await getActiveLicenseForUser(subscriberUserId);
-  if (!license) throw new NoActiveLicenseForFeedGrantError(tierName);
+  const licenses = await getActiveLicensesForUser(subscriberUserId);
+  if (licenses.length === 0) throw new NoActiveLicenseForFeedGrantError(tierName);
+  if (licenses.length > 1) throw new MultipleActiveLicensesForFeedGrantError(tierName, licenses);
+  const license = licenses[0];
 
   const existing = await pool.query<{ id: string; provider_user_id: string }>(
     `select id, provider_user_id from feed_subscriptions where license_id = $1 and feed_tier_id = $2`,
