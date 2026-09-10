@@ -24,6 +24,10 @@ export interface BlackTrialCardProps {
   // don't have; that's an open product question with coxwell (marcus, thread
   // leo-black-tiers-coming-soon-pass-2026-09-10). Until it's answered this states the fact and
   // stops, rather than promising a channel that doesn't exist.
+  // The copy deliberately makes no claim about what the portal offers generally: Black IS
+  // requestable here -- as a trial from the "none" state, and as paid access from the "active"
+  // state's "Upgrade to keep" (requestBlackTrialConversion, which enquires to coxwell). Only
+  // THIS reader can't, so the sentence stays scoped to the reader.
   endpoint: string | null;
   credentials: string | null;
   requestAction: Action;
@@ -122,7 +126,7 @@ export function BlackTrialCard({ status, expiresAt, spentAt, endpoint, credentia
       {localStatus === "spent" && (
         <p style={{ color: "var(--hz-ink-2)", fontSize: 13 }}>
           Trial ended{spentAt ? ` · ${new Date(spentAt).toLocaleDateString()}` : ""} · no re-trial.
-          One trial per client, ever, and Black can&apos;t be requested from the portal.
+          One trial per client, ever.
         </p>
       )}
 
