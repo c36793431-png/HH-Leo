@@ -99,12 +99,6 @@ export function PartnerLoginView({ error, redirectTo }: { error?: string; redire
               <div className="pvl-trust">
                 <div className="tc">
                   <div className="tv">
-                    &lt;1<span className="u">µs</span>
-                  </div>
-                  <div className="tl">Median latency</div>
-                </div>
-                <div className="tc">
-                  <div className="tv">
                     3<span className="u"> DCs</span>
                   </div>
                   <div className="tl">LD4·NY4·TY3</div>

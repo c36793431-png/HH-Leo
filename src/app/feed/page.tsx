@@ -211,8 +211,6 @@ export default async function FeedLandingPage() {
                 <span className="fl-tv">26</span>
               </div>
               <div className="fl-pc-foot">
-                <span>gaps</span>
-                <span className="fl-lv">0</span>
                 <span className="fl-measured">
                   <span className="fl-mi">◈</span>Measured by Horizon
                 </span>

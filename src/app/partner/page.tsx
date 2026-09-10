@@ -610,12 +610,6 @@ export default async function PartnerLandingPage({
           <div className="pv-trust-in">
             <div className="pv-tcell">
               <div className="tv">
-                &lt;1<span className="u">µs</span>
-              </div>
-              <div className="tl">Median in-venue latency</div>
-            </div>
-            <div className="pv-tcell">
-              <div className="tv">
                 3<span className="u"> DCs</span>
               </div>
               <div className="tl">LD4 · NY4 · TY3 colocation</div>
