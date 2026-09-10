@@ -1,6 +1,6 @@
 import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
-import type { FeedType } from "./licenses";
+import { getActiveLicenseForUser, type FeedType } from "./licenses";
 import { FEED_REGION_TYPE, FEED_REGIONS, isFeedRegion, regionForFeedType, type FeedRegion } from "./feed-tier-catalogue";
 import { PACKAGES, packageLabelForTierKey, providerShareCentsFor } from "./feed-provider-packages";
 
@@ -27,6 +27,12 @@ export type SubscriptionStatus = "trial" | "active" | "lapsed";
 export interface CreateSubscriptionInput {
   providerUserId: string;
   subscriberUserId: string;
+  /** Required, not optional: feed_subscriptions.license_id is NOT NULL as of migration 0081
+   * step 4, with no column default and no trigger to fill it, so an insert that omits it fails
+   * with a raw 23502 that no layer translates. It is also half of the live business-key index
+   * 0081 step 5 installed -- see upsertFeedSubscriptionForRequest below. Callers must resolve a
+   * real licence and fail loudly if there isn't one; there is no "unknown licence" sentinel. */
+  licenseId: string;
   feedTierId?: string | null;
   providerTierId?: string | null;
   status?: SubscriptionStatus;
@@ -195,7 +201,7 @@ async function assignPseudonymSeq(
  * or a subscription with no pseudonym. Throws if 0071 hasn't landed yet (42P01); there is
  * nowhere to write to pre-migration, unlike the read paths below which degrade instead. */
 export async function createSubscription(input: CreateSubscriptionInput): Promise<string> {
-  const { providerUserId, subscriberUserId, feedTierId = null, providerTierId = null, status = "trial" } = input;
+  const { providerUserId, subscriberUserId, licenseId, feedTierId = null, providerTierId = null, status = "trial" } = input;
   if ((feedTierId == null) === (providerTierId == null)) {
     throw new Error("Exactly one of feedTierId or providerTierId is required");
   }
@@ -205,10 +211,10 @@ export async function createSubscription(input: CreateSubscriptionInput): Promis
     await client.query("begin");
     await assignPseudonymSeq(client, providerUserId, subscriberUserId);
     const result = await client.query<{ id: string }>(
-      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, feed_tier_id, provider_tier_id, status)
-       values ($1, $2, $3, $4, $5)
+      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, license_id, feed_tier_id, provider_tier_id, status)
+       values ($1, $2, $3, $4, $5, $6)
        returning id`,
-      [providerUserId, subscriberUserId, feedTierId, providerTierId, status]
+      [providerUserId, subscriberUserId, licenseId, feedTierId, providerTierId, status]
     );
     await client.query("commit");
     return result.rows[0].id;
@@ -610,6 +616,25 @@ export class DuplicateTierGrantError extends Error {
   }
 }
 
+/** Thrown by assignFeedTierSubscription when the target subscriber holds no active, unexpired
+ * licence. A feed grant is bound to a licence (feed_subscriptions.license_id, NOT NULL since
+ * 0081) because that is the grain a grant has -- one server's access on one licence -- so there
+ * is nothing to bind to here and no honest way to invent one. Deliberately a refusal rather
+ * than a fallback: picking the subscriber's latest-issued or most-recently-expired licence
+ * would pin the grant to a dead or revoked row, which then reads 'lapsed' through
+ * EFFECTIVE_STATUS_SQL's licence gate anyway -- a grant the admin was told succeeded and the
+ * client never receives. Granting a feed tier to a licence-less user IS the feed-only-client
+ * case; that mechanism is not built (it is queued on Fable's feed-only plan, where the
+ * subscription-level clock and the replacement business key get decided together), so the
+ * correct answer today is an error that says why. Message is surfaced verbatim to the admin by
+ * runAction (lib/action-result.ts). */
+export class NoActiveLicenseForFeedGrantError extends Error {
+  constructor(tierName: string) {
+    super(`This user has no active, unexpired licence, so ${tierName} can't be granted -- a feed subscription is bound to a licence. Issue or renew a licence first.`);
+    this.name = "NoActiveLicenseForFeedGrantError";
+  }
+}
+
 export interface FeedTierForAssignment {
   feedTierId: string;
   tierName: string;
@@ -643,29 +668,40 @@ export async function getFeedTierForAssignment(tierKey: string): Promise<FeedTie
  * "primary" vs "member" path. Replaying the same request (retry, double-click, re-approving an
  * already-approved request) reactivates the SAME N rows via their (request_id, feed_tier_id)
  * identity, never inserts new ones. The business key still carries its own partial unique index
- * scoped to live rows (subscriber_user_id, feed_tier_id) WHERE status IN ('trial','active'): if
- * a DIFFERENT request_id collides with an already-live grant for the same tier (including a
- * different member of the same package colliding with an unrelated direct grant), the insert
- * throws a Postgres unique_violation on THAT index, which this rethrows as
+ * scoped to live rows, but it is keyed on (license_id, feed_tier_id) -- migration 0081 step 5
+ * DROPped the (subscriber_user_id, feed_tier_id) index this comment used to name
+ * (feed_subscriptions_subscriber_feed_tier_live_uidx) and replaced it in the same transaction
+ * with feed_subscriptions_license_feed_tier_live_uidx on (license_id, feed_tier_id) WHERE
+ * feed_tier_id IS NOT NULL AND status IN ('trial','active'). Per-licence grain, which is the
+ * grain a grant actually has: the same subscriber legitimately holds the same tier twice under
+ * two different licences (two servers), and that is no longer a collision. If a DIFFERENT
+ * request_id collides with an already-live grant for the same (licence, tier) -- including a
+ * different member of the same package colliding with an unrelated direct grant on that same
+ * licence -- the insert throws a Postgres unique_violation on THAT index, which this rethrows as
  * DuplicateTierGrantError -- the caller's transaction rolls back and the whole approval fails
- * loudly, no partial package grant. Must run inside the SAME transaction as the request's status
- * flip to 'approved' (caller's job) -- feed_tier_requests carries no subscription_id column
+ * loudly, no partial package grant. licenseId is the request's OWN feed_tier_requests.license_id,
+ * passed down by the caller rather than re-derived from the subscriber: it is the licence the
+ * client registered a server against when they asked for this tier, so it is the correct grain
+ * and not merely a convenient one, and it is already on the row (no lookup, nothing to race).
+ * Must run inside the SAME transaction as the request's status flip to 'approved'
+ * (caller's job) -- feed_tier_requests carries no subscription_id column
  * (dropped, migration 0080); the relation is feed_subscriptions.request_id, and "is this request
  * granted" is the request's own status column. */
 export async function upsertFeedSubscriptionForRequest(
   client: PoolClient,
-  args: { requestId: string; providerUserId: string; subscriberUserId: string; feedTierId: string; tierName: string }
+  args: { requestId: string; providerUserId: string; subscriberUserId: string; licenseId: string; feedTierId: string; tierName: string }
 ): Promise<string> {
-  const { requestId, providerUserId, subscriberUserId, feedTierId, tierName } = args;
+  const { requestId, providerUserId, subscriberUserId, licenseId, feedTierId, tierName } = args;
   await assignPseudonymSeq(client, providerUserId, subscriberUserId);
   try {
     const result = await client.query<{ id: string }>(
-      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, feed_tier_id, status, request_id)
-       values ($1, $2, $3, 'active', $4)
+      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, license_id, feed_tier_id, status, request_id)
+       values ($1, $2, $3, $4, 'active', $5)
        on conflict (request_id, feed_tier_id) where request_id is not null and feed_tier_id is not null do update
-         set status = 'active', lapsed_at = null, provider_user_id = excluded.provider_user_id, updated_at = now()
+         set status = 'active', lapsed_at = null, provider_user_id = excluded.provider_user_id,
+             license_id = excluded.license_id, updated_at = now()
        returning id`,
-      [providerUserId, subscriberUserId, feedTierId, requestId]
+      [providerUserId, subscriberUserId, licenseId, feedTierId, requestId]
     );
     return result.rows[0].id;
   } catch (err) {
@@ -687,17 +723,42 @@ export async function upsertFeedSubscriptionForRequest(
  * deactivateFeedTierSubscription the old one -- not this function's job to infer that intent.
  * Status is 'active' (not createSubscription's 'trial' default): this is a direct admin grant,
  * not the request/trial flow. Unlike upsertFeedSubscriptionForRequest above, this still upserts
- * on the business key (subscriber, tier) -- there is no request identity here to upsert on
- * instead, and idempotent re-click-to-reactivate is the desired admin UX, not an error
- * condition. Fable's "never upsert on a business key" targets the approval path specifically,
- * where a retried/duplicated REQUEST must not silently coalesce into an unrelated grant. */
+ * on the business key -- now (licence, tier), per the licence-binding note below -- because
+ * there is no request identity here to upsert on instead, and idempotent re-click-to-reactivate
+ * is the desired admin UX, not an error condition.
+ * Fable's "never upsert on a business key" targets the approval path specifically,
+ * where a retried/duplicated REQUEST must not silently coalesce into an unrelated grant.
+ *
+ * LICENCE BINDING (marcus's ruling, thread leo-feed-subscriptions-license-id-2026-09-10):
+ * feed_subscriptions.license_id is NOT NULL since 0081 step 4 with no default and no trigger,
+ * and this path supplied nothing for it -- every admin direct grant of a tier the subscriber
+ * didn't already hold died on a raw 23502 that no layer translates. The licence is resolved
+ * explicitly here via getActiveLicenseForUser (status = 'active' AND expires_at > now()).
+ * NOT getLatestIssuedLicenseForUser: that one is latest-issued with no status or expiry filter
+ * and would happily pin a grant to a revoked licence. No active licence is a refusal, not a
+ * fallback -- see NoActiveLicenseForFeedGrantError above. If a subscriber ever holds two
+ * simultaneously-active licences, getActiveLicenseForUser returns the furthest-expiring one;
+ * zero users were in that state when 0081 was written and re-verified, and choosing between
+ * two live licences is a business decision that belongs with the feed-only plan, not a tiebreak
+ * invented here.
+ *
+ * The reactivate lookup below is scoped by license_id as well as feed_tier_id -- the same key
+ * the live partial unique index uses since 0081 step 5 (which DROPped the (subscriber, tier)
+ * index). Scoping it on (subscriber, tier) instead would find a row bound to a DIFFERENT,
+ * now-expired licence and flip it to 'active', and EFFECTIVE_STATUS_SQL's licence gate would
+ * still read that row 'lapsed' -- the admin sees success and the client gets nothing. Under the
+ * per-licence index such a row is not a conflict at all, so the correct outcome is a NEW row
+ * bound to the live licence, which is what this now does. */
 export async function assignFeedTierSubscription(subscriberUserId: string, tierKey: string): Promise<void> {
   const { feedTierId, tierName, regionKey, providerUserId } = await getFeedTierForAssignment(tierKey);
   if (!providerUserId) throw new FeedTierNotAssignedError(tierName, regionKey);
 
+  const license = await getActiveLicenseForUser(subscriberUserId);
+  if (!license) throw new NoActiveLicenseForFeedGrantError(tierName);
+
   const existing = await pool.query<{ id: string; provider_user_id: string }>(
-    `select id, provider_user_id from feed_subscriptions where subscriber_user_id = $1 and feed_tier_id = $2`,
-    [subscriberUserId, feedTierId]
+    `select id, provider_user_id from feed_subscriptions where license_id = $1 and feed_tier_id = $2`,
+    [license.id, feedTierId]
   );
 
   if (existing.rowCount) {
@@ -733,7 +794,7 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
   }
 
   try {
-    await createSubscription({ providerUserId, subscriberUserId, feedTierId, status: "active" });
+    await createSubscription({ providerUserId, subscriberUserId, licenseId: license.id, feedTierId, status: "active" });
   } catch (err) {
     if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
     throw err;

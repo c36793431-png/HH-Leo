@@ -251,6 +251,10 @@ export async function approveFeedTierRequest(id: string, actionedBy: string, adm
         requestId: pending.id,
         providerUserId: member.providerUserId!,
         subscriberUserId: pending.userId,
+        // The request's own licence -- the one the client registered a server against when they
+        // asked for this tier. Already on the row, so no lookup and nothing to race, and every
+        // member tier of a package grant binds to the same licence the request named.
+        licenseId: pending.licenseId,
         feedTierId: member.feedTierId,
         tierName: member.tierName,
       });
