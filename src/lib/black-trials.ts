@@ -29,6 +29,18 @@ export class BlackTrialAlreadyPendingError extends Error {
   }
 }
 
+/** An admin action (approve/decline) reached a row that is no longer `requested`. Both writes
+ * are server actions, so an admin POST can carry the id of an `active`/`declined`/`converted`
+ * row even though admin/black-trials/page.tsx only renders the controls for `requested` ones —
+ * this makes the server enforce what the UI already does. Distinct class so a caller can tell a
+ * stale-queue refusal from a genuine failure (marcus, 2026-09-10, m47665). */
+export class BlackTrialNotPendingError extends Error {
+  constructor() {
+    super("This Black trial is no longer awaiting review — reload the queue and check its current state.");
+    this.name = "BlackTrialNotPendingError";
+  }
+}
+
 export interface BlackTrialRow {
   id: string;
   userId: string;
@@ -232,16 +244,24 @@ export interface ApproveArgs {
 /** Trial length is fixed at BLACK_TRIAL_DAYS, not an admin-supplied value — coxwell's "one 3
  * day trial" ruling (2026-09-10) reads as the length being fixed, not a default suggestion.
  * This is also where the one-trial-per-client slot actually burns (status flips to 'active',
- * which getStartedBlackTrialForUser checks for) -- not requestBlackTrial's insert. */
+ * which getStartedBlackTrialForUser checks for) -- not requestBlackTrial's insert.
+ *
+ * `and status = 'requested'` is not redundant with the UI gate: without it, re-approving an
+ * already-`active` row silently pushes expires_at out another BLACK_TRIAL_DAYS and re-sends the
+ * "your trial is live" DM, extending a running trial with no record that it happened. */
 export async function approveBlackTrial(args: ApproveArgs): Promise<BlackTrialRow> {
-  await pool.query(
+  const updated = await pool.query(
     `update black_trials
      set status = 'active', approved_at = now(),
          expires_at = now() + ($2 || ' days')::interval,
          endpoint = $3, credentials = $4, actioned_by = $5
-     where id = $1`,
+     where id = $1 and status = 'requested'`,
     [args.id, BLACK_TRIAL_DAYS, args.endpoint, args.credentials, args.actionedBy]
   );
+  // Raise before loading/notifying: a no-op update must not reach notifyClient below, or the
+  // client gets a "your trial is live" DM off a row this call did not touch.
+  if (!updated.rowCount) throw new BlackTrialNotPendingError();
+
   const row = await getBlackTrial(args.id);
   if (!row) throw new Error("Black trial not found after approval");
 
@@ -255,12 +275,26 @@ export async function approveBlackTrial(args: ApproveArgs): Promise<BlackTrialRo
 
 /** Does not burn the client's trial slot -- getStartedBlackTrialForUser only matches
  * 'active'/'converted', so requestBlackTrial lets this same user request again afterwards
- * (marcus's 2026-09-10 correction). */
+ * (marcus's 2026-09-10 correction).
+ *
+ * That is exactly why `and status = 'requested'` is load-bearing rather than tidy. Declining an
+ * `active` row would un-burn a client who already spent their trial: the row stops matching
+ * getStartedBlackTrialForUser, so requestBlackTrial waves them through for a second one, and
+ * since 0084 landed the partial unique index (requested/active/converted) frees the slot too, so
+ * the insert succeeds. The licence-grain unique that used to block it is gone (marcus applied
+ * 0084 at ~20:10Z 2026-09-10). Reversing a burn is not a feature today -- if it becomes one it
+ * gets built deliberately, with a record that it happened. */
 export async function declineBlackTrial(id: string, actionedBy: string, reason: string | null): Promise<BlackTrialRow> {
-  await pool.query(
-    `update black_trials set status = 'declined', reason = $2, actioned_by = $3 where id = $1`,
+  const updated = await pool.query(
+    `update black_trials set status = 'declined', reason = $2, actioned_by = $3
+     where id = $1 and status = 'requested'`,
     [id, reason, actionedBy]
   );
+  // Raise before loading/notifying. Without this a no-op decline still reloaded the untouched
+  // row and fired "request declined" at a client whose trial is currently live -- a notification
+  // defect on top of the data one (marcus, m47665).
+  if (!updated.rowCount) throw new BlackTrialNotPendingError();
+
   const row = await getBlackTrial(id);
   if (!row) throw new Error("Black trial not found after decline");
 
