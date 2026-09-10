@@ -60,7 +60,9 @@ export function BlackTrialCard({ status, expiresAt, spentAt, endpoint, credentia
         return;
       }
       setLocalStatus("requested");
-      emitToast("Black trial requested — coxwell will whitelist your server.", "success");
+      // Client-facing copy names no individual: who actions the queue is a review internal, and
+      // it goes stale the moment approval is delegated. Same reason the strings below say "we".
+      emitToast("Black trial requested — we'll whitelist your server.", "success");
     });
   }
 
@@ -87,7 +89,7 @@ export function BlackTrialCard({ status, expiresAt, spentAt, endpoint, credentia
         <>
           <p style={{ color: "var(--hz-ink-2)", fontSize: 13, marginBottom: 16 }}>
             Black is the top-ranked feed on our leaderboard. One trial per client — first time
-            only. Request a trial against your registered server — coxwell whitelists your IP
+            only. Request a trial against your registered server — we whitelist your IP
             directly with the vendor, then your connection details land right here.
           </p>
           <button type="button" className="btn primary sm" disabled={pending} onClick={request}>
@@ -98,7 +100,13 @@ export function BlackTrialCard({ status, expiresAt, spentAt, endpoint, credentia
 
       {localStatus === "requested" && (
         <p style={{ color: "var(--hz-ink-2)", fontSize: 13 }}>
-          ⏳ Pending — your Black trial request is with the desk for whitelisting.
+          {/* "the desk" was ambiguous, not just vague: on this product "desk" already means the
+              *client's* firm in coxwell's own framing of this very feature -- "one-per-desk"
+              (m21921b, commit 9bbd5a3) means one per client, and it still reads that way on
+              /admin/black-trials. "with the desk" therefore parses as with *their* desk. Note the
+              collision is genuine rather than one-sided: "desk support" on /community and
+              /partner uses desk to mean us. "us" is unambiguous either way. */}
+          ⏳ Pending — your Black trial request is with us for whitelisting.
         </p>
       )}
 
