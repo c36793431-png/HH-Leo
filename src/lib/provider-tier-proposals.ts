@@ -38,6 +38,16 @@ interface AdminRow {
   created_at: Date;
 }
 
+/** The connection columns carried forward onto provider_tiers at confirm time (0083).
+ * Kept off AdminRow deliberately: every other query in this file selects the terms columns
+ * only, so widening AdminRow would type those rows for fields they never fetch. */
+interface ConnectionRow {
+  protocol: string | null;
+  endpoint_host: string | null;
+  endpoint_port: string | null;
+  compid: string | null;
+}
+
 function mapAdminRow(row: AdminRow): ProposalRoundRow {
   return {
     id: row.id,
@@ -313,10 +323,12 @@ export function calcRetainedCents(clientPriceCents: number, providerSplitPct: nu
  * the reviewed proposal row itself is never mutated beyond its own status/decision
  * fields, so the override never touches the audit trail). Stamps the round confirmed
  * (this is also what arms the trial clock -- provider_tiers.confirmed_at), then mirrors
- * terms onto provider_tiers -- update in place if a row for this (application_id,
- * tier_name) already exists (renegotiation of a live tier), otherwise insert one (first
- * confirmation). Built against marcus's authoritative §5/§6 spec, bus thread
- * provider-terms-negotiation-2026-08-24 (m29333/m29343 reconciled). */
+ * terms and the scalar connection details onto provider_tiers -- update in place if a row
+ * for this (application_id, tier_name) already exists (renegotiation of a live tier),
+ * otherwise insert one (first confirmation). Built against marcus's authoritative §5/§6
+ * spec, bus thread provider-terms-negotiation-2026-08-24 (m29333/m29343 reconciled); the
+ * connection copy-forward is marcus's later split go (m47739/m47740, 2026-09-10) and is
+ * scalars only -- see the comment at the branch for what is held and why. */
 export async function confirmProposalRound(
   proposalId: string,
   adminUserId: string,
@@ -326,10 +338,11 @@ export async function confirmProposalRound(
   try {
     await client.query("begin");
 
-    const proposalResult = await client.query<AdminRow>(
+    const proposalResult = await client.query<AdminRow & ConnectionRow>(
       `select id, application_id, provider_user_id, tier_name, client_price_cents,
               provider_split_pct, trial_length_days, terms_status, declined_note,
-              decided_by, decided_at, created_at
+              decided_by, decided_at, created_at,
+              protocol, endpoint_host, endpoint_port, compid
        from provider_tier_proposals where id = $1 for update`,
       [proposalId]
     );
@@ -356,24 +369,56 @@ export async function confirmProposalRound(
     // now() this statement stamps on confirmed_at. A trial-less round must clear
     // trial_expires_at and set status='live' explicitly -- re-confirming a later round must
     // not silently regress to the column default or leave a stale trial window in place.
+    //
+    // Connection copy-forward (marcus, m47739/m47740, 2026-09-10): the confirmed round's
+    // connection details land on provider_tiers verbatim -- text in, text out, no parsing and
+    // no shape change, source and destination being the same declared type on both sides
+    // (protocol/endpoint_host/endpoint_port/compid are text on 0061 and on 0060+0083 alike).
+    // Null is written as null on BOTH branches by design: a blank proposal field means "not
+    // supplied", never "unchanged", so the update must overwrite a previously-set value with
+    // null rather than coalesce the old one forward, and must never synthesise a default.
+    //
+    // regions/coverage are deliberately NOT carried forward yet -- held by marcus pending his
+    // ruling, not an oversight. Note for whoever picks that up: no split rule is needed on this
+    // path. Both columns are text[] on provider_tier_proposals (0061:25-26) AND on provider_tiers
+    // (0083), so it is a straight same-type copy like these four. The free-text regions/coverage
+    // that need a split live on provider_applications (0059:24-25), which is a different table
+    // and is not read here; marcus has ruled that source is re-keyed by hand, never parsed.
+    //
+    // endpoint_verified (0060) has no proposal counterpart and is left alone on both branches --
+    // confirming terms is not endpoint verification.
     if (existingTier.rows[0]) {
       await client.query(
         `update provider_tiers
          set client_price_cents = $2,
              provider_split_pct = $3,
              trial_length_days = $4,
+             protocol = $5,
+             endpoint_host = $6,
+             endpoint_port = $7,
+             compid = $8,
              confirmed_at = now(),
              status = case when $4::int > 0 then 'trial' else 'live' end,
              trial_expires_at = case when $4::int > 0 then now() + make_interval(days => $4::int) else null end
          where id = $1`,
-        [existingTier.rows[0].id, proposal.client_price_cents, effectiveSplitPct, proposal.trial_length_days]
+        [
+          existingTier.rows[0].id,
+          proposal.client_price_cents,
+          effectiveSplitPct,
+          proposal.trial_length_days,
+          proposal.protocol,
+          proposal.endpoint_host,
+          proposal.endpoint_port,
+          proposal.compid,
+        ]
       );
     } else {
       await client.query(
         `insert into provider_tiers
            (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
-            trial_length_days, confirmed_at, status, trial_expires_at)
-         values ($1, $2, $3, $4, $5, $6, now(),
+            trial_length_days, protocol, endpoint_host, endpoint_port, compid,
+            confirmed_at, status, trial_expires_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(),
                  case when $6::int > 0 then 'trial' else 'live' end,
                  case when $6::int > 0 then now() + make_interval(days => $6::int) else null end)`,
         [
@@ -383,6 +428,10 @@ export async function confirmProposalRound(
           proposal.client_price_cents,
           effectiveSplitPct,
           proposal.trial_length_days,
+          proposal.protocol,
+          proposal.endpoint_host,
+          proposal.endpoint_port,
+          proposal.compid,
         ]
       );
     }
