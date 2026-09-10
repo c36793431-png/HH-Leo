@@ -323,7 +323,7 @@ export default async function PartnerLandingPage({
                   <div className="pv-dt-head">
                     <span className="dd" />
                     <span className="dtt">horizonhft.com / partner</span>
-                    <span className="dtag">PREVIEW</span>
+                    <span className="dtag">EXAMPLE</span>
                   </div>
                   <div className="pv-dt-license">
                     <div className="pv-dt-ring">
