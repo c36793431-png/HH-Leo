@@ -124,7 +124,7 @@ export default async function AdminBlackTrialsPage({ searchParams }: { searchPar
                     <div className="text-xs text-zinc-500">{r.userEmail ?? "—"}</div>
                     {declineHistory && declineHistory.length > 0 && (
                       <div className="mt-1 max-w-[14rem] text-xs text-amber-400">
-                        Previously declined ×{declineHistory.length} · last {formatAbsoluteUtc(declineHistory[0].requestedAt)}
+                        Previously declined ×{declineHistory.length} · last asked {formatAbsoluteUtc(declineHistory[0].requestedAt)}
                         <div className="text-zinc-500">{declineHistory[0].reason ?? "No reason stored"}</div>
                       </div>
                     )}
