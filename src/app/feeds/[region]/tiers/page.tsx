@@ -10,12 +10,10 @@ import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { isScoreRegion } from "@/lib/feed-provider-packages";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 import { TierRequestControl, type TierRequestServerOption } from "@/components/feeds/tier-request-control";
-import { BlackWaitlistControl } from "@/components/feeds/black-waitlist-control";
 import { getAnyServerRegistrationForUser, getServerRegistrationsForUser } from "@/lib/server-registration";
 import { effectiveServerLocation } from "@/lib/server-locations";
 import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
 import { listFeedTierRequests } from "@/lib/feed-tier-requests";
-import { hasJoinedTierWaitlist } from "@/lib/tier-waitlist";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
 import { scoreForTierKey } from "@/lib/feed-comparison-scores";
 import { SectionPills } from "@/components/shared/section-pills";
@@ -90,9 +88,11 @@ const PACKAGE_REQUEST_TIER_KEY: Record<string, string> = {
 const INSTITUTIONAL_TIER_KEYS = new Set(["black", "ld-alpha-85", "ld-ultra"]);
 
 /** Black isn't in feed-tier-catalogue.ts / feed_tiers -- it's a separate paid-only,
- * one-per-desk gate (black-trials.ts, 9bbd5a3) with its own request flow on
- * /account/servers. This card is display-only here; both CTAs hand off to that page
- * rather than duplicating the gated request logic. */
+ * one-per-client gate (black-trials.ts, 9bbd5a3) with its own request flow on
+ * /account/servers. This card is display-only here; its CTA hands off to that page
+ * rather than duplicating the gated request logic. coxwell ruled 2026-09-10 that "Coming
+ * Soon" (the old join-a-waitlist CTA, back when Black wasn't requestable yet) comes off now
+ * that trials are live -- destination is "Request access" -> /account/servers. */
 const BLACK_TIER: FeedTierDetail = {
   regionKey: "london",
   tierKey: "black",
@@ -133,11 +133,10 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
-  const [serverRegistration, userServerRegistrations, existingRequests, blackWaitlisted] = await Promise.all([
+  const [serverRegistration, userServerRegistrations, existingRequests] = await Promise.all([
     getAnyServerRegistrationForUser(session.user.id),
     getServerRegistrationsForUser(session.user.id),
     listFeedTierRequests({ userId: session.user.id }),
-    region === "london" ? hasJoinedTierWaitlist(session.user.id, "london", "black") : Promise.resolve(false),
   ]);
   // Cross-region binding is legitimate (coxwell, leo-cross-region-server-picker-2026-09-04:
   // "yes they can if they wish") -- the request modal picks from every active license the
@@ -257,12 +256,9 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             </div>
             <p className="ftd-desc">{BLACK_TIER.description}</p>
             <div className="ftd-black-ctas">
-              <BlackWaitlistControl
-                region="london"
-                tierKey="black"
-                tierName={BLACK_TIER.name}
-                alreadyJoined={blackWaitlisted}
-              />
+              <Link href="/account/servers" className="btn amber sm ftd-unlock">
+                Request access
+              </Link>
             </div>
           </div>
         )}

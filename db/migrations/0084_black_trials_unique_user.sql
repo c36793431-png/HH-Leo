@@ -2,13 +2,28 @@
 -- applies them; marcus/coxwell run this against prod). Thread leo-black-feed-3day-trial-2026-09-10.
 --
 -- What this does: replaces black_trials' one-per-license uniqueness with one-per-client
--- (user), so a client can never hold more than one Black trial regardless of how many
--- licenses they have. Drops unique(license_id) (0041) and adds unique(user_id) in its place —
--- replacing rather than adding both, since per-user strictly subsumes per-license (a unique
--- user_id already rules out a second license row for that same user).
+-- (user) -- but only across the statuses where a trial actually started or is in flight, not
+-- every row ever inserted. Drops unique(license_id) (0041) and adds a PARTIAL unique index on
+-- user_id, scoped to status in ('requested','active','converted').
 --
--- Why this is a REVERSAL, not a bugfix: 0041's unique(license_id) was a deliberate, sourced
--- design choice — its own header comment and commit 9bbd5a3 (2026-08-16) both attribute the
+-- REVISED 2026-09-10, same day, before this ever reached coxwell's paste queue (thread
+-- leo-black-feed-3day-trial-2026-09-10, marcus m47390-ish): the version first committed here
+-- used a plain `unique (user_id)` table constraint, which encodes "one row ever" -- a declined
+-- request would occupy the slot forever. marcus ruled that out: coxwell's words were "only one
+-- client gets only one 3 day trial" -- the subject is a *trial*, and a declined or abandoned
+-- request never became one. So:
+--   - 'declined'                      -- excluded. Never blocks a future request.
+--   - 'requested' (pending)           -- included. Blocks a second *concurrent* request (don't
+--                                        let someone queue five) but is not a permanent burn --
+--                                        once it resolves to declined it drops out of the index.
+--   - 'active' / 'converted'          -- included. A trial that started or was kept is the
+--                                        permanent burn: "one trial per client, ever".
+-- This lands before coxwell's queue specifically so the cheaper, correct shape ships instead of
+-- the reversed one -- 0084 was held out of the paste queue for exactly this reason.
+--
+-- Why the *first* uniqueness change (license_id -> user_id, independent of the above revision)
+-- is a REVERSAL, not a bugfix: 0041's unique(license_id) was a deliberate, sourced design
+-- choice — its own header comment and commit 9bbd5a3 (2026-08-16) both attribute the
 -- per-license shape to coxwell's own answer on thread m21921b, drawing a deliberate analogy to
 -- server_registrations' existing one-per-license pattern. Today (2026-09-10) coxwell ruled
 -- the opposite: "the client can get it only one time. Doesn't matter what licence they have,
@@ -17,20 +32,28 @@
 -- (m47314/m47321) before this file was written.
 --
 -- Safety evidence (marcus, live Neon MCP read, 2026-09-10T17:13Z): black_trials held 3 rows,
--- 3 distinct user_id, 3 distinct license_id at that time — zero duplicates, so unique(user_id)
--- builds cleanly against data as of that check. If the live row count no longer matches this
--- by the time this is applied, STOP and re-verify rather than running it blind.
+-- 3 distinct user_id, 3 distinct license_id at that time — zero duplicates, so this index
+-- builds cleanly against data as of that check regardless of which statuses those 3 rows carry
+-- (a partial index is strictly less restrictive than the plain unique(user_id) it replaces).
+-- If the live row count no longer matches this by the time this is applied, STOP and
+-- re-verify rather than running it blind.
 --
 -- Accompanying code change required at apply time: src/lib/black-trials.ts's requestBlackTrial
 -- no longer names either constraint directly (it catches Postgres unique-violation (23505)
 -- generically instead of using ON CONFLICT (license_id)), specifically so it keeps working
--- across this migration without a coordinated code deploy. No code change is required in the
--- same deploy as this migration for that reason, but confirm nothing else in the codebase
--- still assumes unique(license_id) before applying.
+-- across this migration without a coordinated code deploy. requestBlackTrial's own pre-checks
+-- (getStartedBlackTrialForUser / getPendingBlackTrialForUser) already implement the same
+-- ('requested','active','converted') scoping as this index in application code, so the index
+-- is a race backstop, not the sole enforcement -- confirm nothing else in the codebase still
+-- assumes unique(license_id) before applying.
 
 alter table black_trials
   drop constraint if exists black_trials_license_id_key,
-  add constraint black_trials_user_id_key unique (user_id);
+  drop constraint if exists black_trials_user_id_key;
+
+create unique index if not exists black_trials_user_started_key
+  on black_trials (user_id)
+  where status in ('requested', 'active', 'converted');
 
 insert into schema_migrations (version, name) values
   ('0084', '0084_black_trials_unique_user.sql')

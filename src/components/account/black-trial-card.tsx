@@ -7,10 +7,9 @@ import { emitToast } from "@/lib/toast-bus";
 type Action = () => Promise<ActionResult>;
 
 export interface BlackTrialCardProps {
-  // "spent" covers every exhausted trial uniformly (declined, naturally expired, or already
-  // used on a different license) -- row existence is permanent, so there's one dead-end state,
-  // not three. See getBlackTrialForUser: this is derived server-side from row existence, never
-  // from a date comparison.
+  // "spent" means a trial that actually started and has since naturally expired -- a burn, per
+  // marcus's 2026-09-10 ruling. A declined request is NOT spent (renders "none" instead, since
+  // it never burned the client's one trial) -- see blackTrialCardProps in account/servers/page.tsx.
   status: "none" | "requested" | "active" | "spent" | "converted";
   expiresAt: string | null; // ISO, only meaningful when status === "active"
   spentAt: string | null; // ISO, only meaningful when status === "spent"

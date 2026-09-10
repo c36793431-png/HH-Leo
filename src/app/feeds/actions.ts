@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createFeedRequest } from "@/lib/feed-requests";
 import { createFeedTierRequest } from "@/lib/feed-tier-requests";
-import { joinTierWaitlist } from "@/lib/tier-waitlist";
 import { feedTierMeta, isFeedRegion } from "@/lib/feed-tier-catalogue";
 import { getActiveLicenseForUser, getActiveLicensesForUser } from "@/lib/licenses";
 import { getServerRegistrationsForUser } from "@/lib/server-registration";
@@ -74,32 +73,6 @@ export async function submitFeedTierRequestAction(
       adminUrl: "https://feed.horizonhft.com/admin/feed-tier-requests",
     });
     revalidatePath("/feeds");
-  });
-}
-
-/** Black isn't in feed-tier-catalogue.ts (see page.tsx BLACK_TIER comment), so this
- * doesn't reuse submitFeedTierRequestAction's feedTierMeta lookup -- validates the one
- * region/tier combo the waitlist supports directly instead
- * (leo-tiers-black-coming-soon-waitlist-2026-08-21). */
-export async function joinBlackWaitlistAction(
-  _prevState: ActionResult | null,
-  formData: FormData
-): Promise<ActionResult> {
-  return runAction("Failed to join waitlist", async () => {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("You must be signed in to join the waitlist");
-
-    const region = (formData.get("region") as string) ?? "";
-    const tierKey = (formData.get("tierKey") as string) ?? "";
-    if (region !== "london" || tierKey !== "black") throw new Error("Invalid tier");
-
-    await joinTierWaitlist({
-      userId: session.user.id,
-      region,
-      tierKey,
-      tierName: "Black",
-    });
-    revalidatePath(`/feeds/${region}/tiers`);
   });
 }
 

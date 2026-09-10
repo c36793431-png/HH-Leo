@@ -75,18 +75,25 @@ function blackTrialCardProps(
   if (userTrial?.status === "requested") {
     return { status: "requested" as const, expiresAt: null, spentAt: null, licenseId: userTrial.licenseId };
   }
-  if (userTrial) {
-    // declined, or an active trial whose expires_at has passed -- both permanent per row
-    // existence (see getBlackTrialForUser), so both render as the same dead-end state.
-    const spentAt = userTrial.expiresAt ?? userTrial.requestedAt;
+  if (userTrial?.status === "active") {
+    // Reaching here means activeNotExpired was false above -- naturally expired. Still a
+    // permanent burn (the trial started), even though the eligibility check in
+    // requestBlackTrial never does this date comparison itself (marcus, 2026-09-10).
     return {
       status: "spent" as const,
       expiresAt: null,
-      spentAt: spentAt ? spentAt.toISOString() : null,
+      spentAt: userTrial.expiresAt ? userTrial.expiresAt.toISOString() : null,
       licenseId: userTrial.licenseId,
     };
   }
-  return { status: "none" as const, expiresAt: null, spentAt: null, licenseId: primaryLicenseId };
+  // declined, or no row at all -- neither burns the trial (marcus's 2026-09-10 correction: a
+  // declined or abandoned request never started one), so both are eligible to request again.
+  return {
+    status: "none" as const,
+    expiresAt: null,
+    spentAt: null,
+    licenseId: userTrial?.licenseId ?? primaryLicenseId,
+  };
 }
 
 export default async function ServersPage() {

@@ -8,12 +8,24 @@ export type BlackTrialStatus = (typeof BLACK_TRIAL_STATUSES)[number];
 /** coxwell's ruling (2026-09-10): one 3-day trial, length fixed, not an admin-chosen value. */
 export const BLACK_TRIAL_DAYS = 3;
 
-/** One trial per client, ever — thrown by requestBlackTrial so callers can show a clean
- * refusal instead of a raw constraint-violation 500. */
+/** One *started* trial per client, ever — thrown by requestBlackTrial so callers can show a
+ * clean refusal instead of a raw constraint-violation 500. marcus's 2026-09-10 correction: this
+ * fires for a trial that actually began (approved or converted), never for a merely-declined
+ * or still-pending request -- see getStartedBlackTrialForUser. */
 export class BlackTrialAlreadyUsedError extends Error {
   constructor() {
     super("You have already used your Black trial.");
     this.name = "BlackTrialAlreadyUsedError";
+  }
+}
+
+/** A `requested` row for this user is still awaiting action -- a concurrency guard (don't let
+ * someone queue five requests), not a permanent burn. Distinct from AlreadyUsedError so the
+ * client copy can say "pending" instead of "used". */
+export class BlackTrialAlreadyPendingError extends Error {
+  constructor() {
+    super("Your Black trial request is already pending review.");
+    this.name = "BlackTrialAlreadyPendingError";
   }
 }
 
@@ -96,12 +108,36 @@ export async function getBlackTrial(id: string): Promise<BlackTrialRow | null> {
   return result.rowCount ? mapRow(result.rows[0]) : null;
 }
 
-/** Row existence for this user_id, across every license they hold — not a date check. A
- * declined or expired row still counts: "used" is permanent, per coxwell's one-per-client
- * ruling (2026-09-10), not "currently active". */
+/** Most recent trial row for this user, of any status -- across every license they hold. This
+ * is a display query for the account/servers card (see blackTrialCardProps), not the
+ * eligibility check: a `declined` row here does NOT mean the user is blocked from requesting
+ * again (see requestBlackTrial / getStartedBlackTrialForUser). */
 export async function getBlackTrialForUser(userId: string): Promise<BlackTrialRow | null> {
   const result = await pool.query<Row>(
     `${SELECT_BASE} where bt.user_id = $1 order by bt.requested_at desc limit 1`,
+    [userId]
+  );
+  return result.rowCount ? mapRow(result.rows[0]) : null;
+}
+
+/** Statuses where a trial actually started. coxwell's "one trial" ruling (2026-09-10) reaches
+ * only trials that happened -- a `declined` request never began one, so it's deliberately
+ * excluded here (marcus's same-day correction to the original row-existence gate). Mirrors the
+ * partial unique index in migration 0084 (minus 'requested', which only guards concurrency). */
+async function getStartedBlackTrialForUser(userId: string): Promise<BlackTrialRow | null> {
+  const result = await pool.query<Row>(
+    `${SELECT_BASE} where bt.user_id = $1 and bt.status in ('active', 'converted')
+     order by bt.requested_at desc limit 1`,
+    [userId]
+  );
+  return result.rowCount ? mapRow(result.rows[0]) : null;
+}
+
+/** A `requested` row blocks a second *concurrent* request -- not a permanent burn, just stops
+ * someone queuing five at once. */
+async function getPendingBlackTrialForUser(userId: string): Promise<BlackTrialRow | null> {
+  const result = await pool.query<Row>(
+    `${SELECT_BASE} where bt.user_id = $1 and bt.status = 'requested' order by bt.requested_at desc limit 1`,
     [userId]
   );
   return result.rowCount ? mapRow(result.rows[0]) : null;
@@ -124,15 +160,22 @@ function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }
 
-/** Gate (paid-only, one-trial-per-client-ever) is enforced by the caller checking for a
- * registered server before calling this, by the pre-check below (row existence for the
- * user_id, not a date comparison — a declined or spent trial still blocks a new one), and by
- * whichever unique constraint is live on black_trials as a race backstop. Deliberately does
- * not name that constraint (no ON CONFLICT target) so this survives the license_id -> user_id
- * migration (0084, not yet applied) without needing a coordinated code deploy. */
+/** Gate (paid-only, one-*started*-trial-per-client) is enforced by the caller checking for a
+ * registered server before calling this, by the two pre-checks below, and by the partial
+ * unique index on black_trials as a race backstop (migration 0084, not yet applied -- scoped
+ * to status in ('requested','active','converted') so a `declined` row never occupies the
+ * slot). marcus's 2026-09-10 correction: a trial burns on approval, not on request -- declined
+ * must never block a future request, and a still-`requested` row only blocks a *second
+ * concurrent* request, not permanently. Deliberately does not name the constraint in the
+ * insert (no ON CONFLICT target), catching Postgres unique-violation (23505) generically
+ * instead, so this keeps working whether the DB still enforces the old unique(license_id) or
+ * 0084 has landed. */
 export async function requestBlackTrial(args: RequestArgs): Promise<BlackTrialRow> {
-  const existing = await getBlackTrialForUser(args.userId);
-  if (existing) throw new BlackTrialAlreadyUsedError();
+  const started = await getStartedBlackTrialForUser(args.userId);
+  if (started) throw new BlackTrialAlreadyUsedError();
+
+  const pending = await getPendingBlackTrialForUser(args.userId);
+  if (pending) throw new BlackTrialAlreadyPendingError();
 
   try {
     const result = await pool.query<{ id: string }>(
@@ -152,7 +195,12 @@ export async function requestBlackTrial(args: RequestArgs): Promise<BlackTrialRo
 
     return row;
   } catch (err) {
-    if (isUniqueViolation(err)) throw new BlackTrialAlreadyUsedError();
+    if (isUniqueViolation(err)) {
+      // Race between the pre-checks above and this insert -- re-resolve which case it is
+      // instead of guessing, since the two errors mean different things to the client.
+      const raced = await getStartedBlackTrialForUser(args.userId);
+      throw raced ? new BlackTrialAlreadyUsedError() : new BlackTrialAlreadyPendingError();
+    }
     throw err;
   }
 }
@@ -170,7 +218,9 @@ export interface ApproveArgs {
 }
 
 /** Trial length is fixed at BLACK_TRIAL_DAYS, not an admin-supplied value — coxwell's "one 3
- * day trial" ruling (2026-09-10) reads as the length being fixed, not a default suggestion. */
+ * day trial" ruling (2026-09-10) reads as the length being fixed, not a default suggestion.
+ * This is also where the one-trial-per-client slot actually burns (status flips to 'active',
+ * which getStartedBlackTrialForUser checks for) -- not requestBlackTrial's insert. */
 export async function approveBlackTrial(args: ApproveArgs): Promise<BlackTrialRow> {
   await pool.query(
     `update black_trials
@@ -191,6 +241,9 @@ export async function approveBlackTrial(args: ApproveArgs): Promise<BlackTrialRo
   return row;
 }
 
+/** Does not burn the client's trial slot -- getStartedBlackTrialForUser only matches
+ * 'active'/'converted', so requestBlackTrial lets this same user request again afterwards
+ * (marcus's 2026-09-10 correction). */
 export async function declineBlackTrial(id: string, actionedBy: string, reason: string | null): Promise<BlackTrialRow> {
   await pool.query(
     `update black_trials set status = 'declined', reason = $2, actioned_by = $3 where id = $1`,
