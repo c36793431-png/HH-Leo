@@ -188,6 +188,14 @@ function keyTail(licenseKey: string): string {
   return licenseKey.length > 4 ? licenseKey.slice(-4) : licenseKey;
 }
 
+/** Bare `@handle` auto-links in Telegram plain text; a `tg://user?id=` deep link covers
+ * users with no username set. Never emits a bare `@` or `@None`. */
+function telegramLine(telegramUsername: string | null, telegramUserId: string | null): string {
+  if (telegramUsername) return `telegram: @${telegramUsername}`;
+  if (telegramUserId) return `telegram: tg://user?id=${telegramUserId}`;
+  return `telegram: none on file`;
+}
+
 export async function notifyTrialIssued(opts: {
   email: string | null;
   licenseKey: string;
@@ -223,10 +231,13 @@ export async function notifyLicenseExpiringSoon(opts: {
   licenseKey: string;
   tier: string;
   expiresAt: Date;
+  telegramUsername?: string | null;
+  telegramUserId?: string | null;
 }): Promise<void> {
   await sendSinkMessage(
     `⏰ license expiring soon\n` +
       `email: ${opts.email ?? "-"}\n` +
+      `${telegramLine(opts.telegramUsername ?? null, opts.telegramUserId ?? null)}\n` +
       `tier: ${opts.tier}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `expires: ${opts.expiresAt.toISOString()}`
@@ -238,10 +249,13 @@ export async function notifyLicenseExpired(opts: {
   licenseKey: string;
   tier: string;
   expiredAt: Date;
+  telegramUsername?: string | null;
+  telegramUserId?: string | null;
 }): Promise<void> {
   await sendSinkMessage(
     `⏱️ license expired\n` +
       `email: ${opts.email ?? "-"}\n` +
+      `${telegramLine(opts.telegramUsername ?? null, opts.telegramUserId ?? null)}\n` +
       `tier: ${opts.tier}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `expired: ${opts.expiredAt.toISOString()}`
