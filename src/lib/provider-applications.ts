@@ -247,6 +247,20 @@ export async function getProviderApplication(id: string): Promise<ProviderApplic
   return result.rowCount ? mapRow(result.rows[0]) : null;
 }
 
+/** Provider self-serve panel entry point (Slice B, bus thread
+ * leo-provider-self-registration-scope-2026-09-10) -- the application(s) a signed-in
+ * feed_provider account can submit tier terms for. Scoped to status = 'approved' only:
+ * a pending or declined application has no live provider_user_id relationship worth
+ * writing proposals against, and admin_manual applications are keyed the same way here
+ * (user_id still gets set on approval) even though their tiers are normally published
+ * straight through register-provider instead. */
+export async function listApprovedApplicationsForProvider(userId: string): Promise<ProviderApplicationRow[]> {
+  const result = await pool.query<Row>(`${SELECT_BASE} where user_id = $1 and status = 'approved' order by applied_at`, [
+    userId,
+  ]);
+  return result.rows.map(mapRow);
+}
+
 export interface ListProviderApplicationsOptions {
   status?: ProviderApplicationStatus;
   search?: string;

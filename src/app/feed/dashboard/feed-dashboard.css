@@ -125,6 +125,20 @@
 .feed-provider-v1 .full { grid-column: 1 / -1; }
 .feed-provider-v1 .foot { margin-top: 30px; text-align: center; font-family: var(--pfp-mono); font-size: 11px; color: var(--pfp-ink-4); }
 .feed-provider-v1 .fp-scrim { display: none; }
+.feed-provider-v1 .mono { font-family: var(--pfp-mono); }
+
+/* forms */
+.feed-provider-v1 .field { display: flex; flex-direction: column; gap: 6px; }
+.feed-provider-v1 .field label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pfp-ink-3); }
+.feed-provider-v1 .field input, .feed-provider-v1 .field select, .feed-provider-v1 .field textarea {
+  background: var(--pfp-bg-1); border: 1px solid var(--pfp-line-soft); border-radius: 9px;
+  color: var(--pfp-ink); font-size: 13px; padding: 10px 12px; font-family: inherit; width: 100%;
+}
+.feed-provider-v1 .field input:focus, .feed-provider-v1 .field select:focus, .feed-provider-v1 .field textarea:focus {
+  outline: none; border-color: var(--pfp-card-line);
+}
+.feed-provider-v1 .field input.mono { font-family: var(--pfp-mono); }
+.feed-provider-v1 .field .hint { font-size: 11px; color: var(--pfp-ink-4); }
 
 /* stat tiles */
 .feed-provider-v1 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 18px; }

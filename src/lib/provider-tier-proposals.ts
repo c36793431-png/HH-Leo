@@ -143,6 +143,119 @@ export async function listProposalRoundsForTierProvider(
   return result.rows.map(mapProviderRow);
 }
 
+/** Provider self-serve panel's "your submitted terms" list -- every round across every
+ * tier for one application, newest first. Same narrow column list as
+ * listProposalRoundsForTierProvider (no declined_note/decided_by): a provider can see
+ * that a round was declined, never why -- that steering stays on Telegram per marcus's
+ * ruling on declineProposalRound above. */
+export async function listProposalsForApplicationProvider(applicationId: string): Promise<ProviderProposalRoundRow[]> {
+  const result = await pool.query<ProviderRow>(
+    `select id, tier_name, client_price_cents, provider_split_pct, trial_length_days,
+            terms_status, created_at
+     from provider_tier_proposals
+     where application_id = $1
+     order by created_at desc`,
+    [applicationId]
+  );
+  return result.rows.map(mapProviderRow);
+}
+
+export class ProviderApplicationMismatchError extends Error {
+  constructor() {
+    super("That application isn't linked to your account.");
+  }
+}
+
+/** Slice B's ownership gate (bus thread leo-provider-self-registration-scope-2026-09-10,
+ * marcus's constraint: "ownership-gated to the caller's own application_id/provider_user_id
+ * via the existing assertOwnsRequestTier pattern") -- same shape as feed-providers.ts's
+ * assertOwnsRequestTier: re-check ownership server-side from the row itself, never trust
+ * the applicationId a client form posts. Also requires 'approved' so a caller can't submit
+ * terms against a pending/declined application by guessing its id. */
+async function assertOwnsApplication(providerUserId: string, applicationId: string): Promise<void> {
+  const result = await pool.query<{ user_id: string | null; status: string }>(
+    `select user_id, status from provider_applications where id = $1`,
+    [applicationId]
+  );
+  const row = result.rows[0];
+  if (!row || row.user_id !== providerUserId || row.status !== "approved") {
+    throw new ProviderApplicationMismatchError();
+  }
+}
+
+export interface SubmitProposalInput {
+  tierName: string;
+  clientPriceCents: number;
+  providerSplitPct: number;
+  trialLengthDays: number;
+  protocol: string | null;
+  endpointHost: string | null;
+  endpointPort: string | null;
+  compid: string | null;
+  regions: string[] | null;
+  coverage: string[] | null;
+}
+
+/** The missing writer: nothing in the codebase has ever inserted into
+ * provider_tier_proposals before this (the table's been read-only since 0061 -- admin's
+ * review card, decline/confirm, and the terms queue all assume rows just appear). This is
+ * Slice B: a provider proposes their own terms, post-approval, from their own panel --
+ * coxwell's 08-28 ruling and 09-10 restatement (see 12388f5/094b678/5c84441). Writes
+ * terms_status = 'proposed' only; confirmProposalRound/declineProposalRound (admin-only)
+ * are the sole path to 'confirmed'/'declined', untouched by this function. One active
+ * 'proposed' round per (application, tier) at a time -- letting a second submission queue
+ * up behind an undecided first would silently orphan it, since the terms queue and
+ * listSiblingProposedTiersAdmin both key off "the latest row", not "the latest undecided
+ * row". */
+export async function submitProposalRound(
+  providerUserId: string,
+  applicationId: string,
+  input: SubmitProposalInput
+): Promise<void> {
+  await assertOwnsApplication(providerUserId, applicationId);
+
+  const tierName = input.tierName.trim();
+  if (!tierName) throw new Error("Tier name is required.");
+  if (!Number.isInteger(input.clientPriceCents) || input.clientPriceCents <= 0) {
+    throw new Error("Enter a valid client price.");
+  }
+  if (!Number.isInteger(input.providerSplitPct) || input.providerSplitPct < 0 || input.providerSplitPct > 100) {
+    throw new Error("Split % must be between 0 and 100.");
+  }
+  if (!Number.isInteger(input.trialLengthDays) || input.trialLengthDays < 0) {
+    throw new Error("Trial length must be zero or more days.");
+  }
+
+  const existing = await pool.query<{ id: string }>(
+    `select id from provider_tier_proposals
+     where application_id = $1 and tier_name = $2 and terms_status = 'proposed'`,
+    [applicationId, tierName]
+  );
+  if (existing.rowCount) throw new Error(`"${tierName}" already has a round awaiting review.`);
+
+  await pool.query(
+    `insert into provider_tier_proposals
+       (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
+        trial_length_days, protocol, endpoint_host, endpoint_port, compid, regions, coverage,
+        terms_status)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'proposed')`,
+    [
+      applicationId,
+      providerUserId,
+      tierName,
+      input.clientPriceCents,
+      input.providerSplitPct,
+      input.trialLengthDays,
+      input.protocol,
+      input.endpointHost,
+      input.endpointPort,
+      input.compid,
+      input.regions,
+      input.coverage,
+    ]
+  );
+}
+
 export interface SiblingProposedTierRow {
   tierName: string;
   clientPriceCents: number;
