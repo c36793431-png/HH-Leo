@@ -125,12 +125,6 @@ export function FeedLoginView({ error, redirectTo }: { error?: string; redirectT
                 <div className="fa-ab-trust">
                   <div className="tc">
                     <div className="tv">
-                      99.99<span className="u">%</span>
-                    </div>
-                    <div className="tl">Feed uptime</div>
-                  </div>
-                  <div className="tc">
-                    <div className="tv">
                       &lt;1<span className="u">µs</span>
                     </div>
                     <div className="tl">Median latency</div>

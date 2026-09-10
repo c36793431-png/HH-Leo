@@ -610,12 +610,6 @@ export default async function PartnerLandingPage({
           <div className="pv-trust-in">
             <div className="pv-tcell">
               <div className="tv">
-                99.99<span className="u">%</span>
-              </div>
-              <div className="tl">Feed uptime, trailing 12mo</div>
-            </div>
-            <div className="pv-tcell">
-              <div className="tv">
                 &lt;1<span className="u">µs</span>
               </div>
               <div className="tl">Median in-venue latency</div>

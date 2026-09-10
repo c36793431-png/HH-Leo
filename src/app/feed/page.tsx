@@ -211,9 +211,6 @@ export default async function FeedLandingPage() {
                 <span className="fl-tv">26</span>
               </div>
               <div className="fl-pc-foot">
-                <span>uptime</span>
-                <span className="fl-lv">99.98%</span>
-                <span>·</span>
                 <span>gaps</span>
                 <span className="fl-lv">0</span>
                 <span className="fl-measured">
@@ -473,12 +470,6 @@ export default async function FeedLandingPage() {
                         248 <small>+19</small>
                       </div>
                       <div className="fl-kl">Active subscribers</div>
-                    </div>
-                    <div className="fl-dt-kpi">
-                      <div className="fl-k">
-                        99.98<small>%</small>
-                      </div>
-                      <div className="fl-kl">Uptime · 30d</div>
                     </div>
                     <div className="fl-dt-kpi">
                       <div className="fl-k">14</div>
