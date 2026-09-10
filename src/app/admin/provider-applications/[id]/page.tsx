@@ -4,6 +4,7 @@ import { getProviderApplication, providerApplicationReferenceId } from "@/lib/pr
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { ProviderApplicationRowActions } from "@/components/admin/provider-application-row-actions";
 import { ReviewChecklist } from "@/components/admin/review-checklist";
+import { ChipList, Field } from "@/components/admin/detail-fields";
 import { approveProviderApplicationAction, declineProviderApplicationAction } from "../actions";
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
@@ -12,31 +13,16 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   declined: "border-red-500/40 bg-red-950/20 text-red-300",
 };
 
-function Field({ label, value, href }: { label: string; value: string | null; href?: string }) {
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className="mt-0.5 text-sm text-zinc-200">
-        {value ? (
-          href ? (
-            <a href={href} target="_blank" rel="noreferrer" className="text-teal-400 hover:underline">
-              {value}
-            </a>
-          ) : (
-            value
-          )
-        ) : (
-          <span className="text-zinc-600">—</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /** Splits a " · "-joined multi-value field (protocol, regions) into chip pills -- these are
  * applicant-supplied free text (normalizeProtocol/normalizeRegions in provider-applications.ts),
  * not a verified taxonomy, so the chip styling is deliberately plain/neutral, not the teal accent
- * used for confirmed data elsewhere on this page. */
+ * used for confirmed data elsewhere on this page.
+ *
+ * The split lives here rather than in ChipList because it is only correct here: rows created
+ * through createProviderApplication are normalized to " · " on the way in, so splitting recovers a
+ * structure this codebase itself wrote. It is NOT safe on the same columns generally --
+ * registerProviderTiers writes protocol/regions to this table raw, unnormalized -- which is why
+ * /admin/providers renders application-grain values as plain text instead of reusing this. */
 function ChipField({ label, value }: { label: string; value: string | null }) {
   const chips = value
     ? value
@@ -44,25 +30,7 @@ function ChipField({ label, value }: { label: string; value: string | null }) {
         .map((s) => s.trim())
         .filter(Boolean)
     : [];
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className="mt-1 flex flex-wrap gap-1.5">
-        {chips.length ? (
-          chips.map((chip) => (
-            <span
-              key={chip}
-              className="rounded-full border border-zinc-700 bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-300"
-            >
-              {chip}
-            </span>
-          ))
-        ) : (
-          <span className="text-sm text-zinc-600">—</span>
-        )}
-      </div>
-    </div>
-  );
+  return <ChipList label={label} chips={chips} />;
 }
 
 function Section({
