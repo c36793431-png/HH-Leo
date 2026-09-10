@@ -20,12 +20,16 @@ export interface BlackTrialCardProps {
   convertAction: Action;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 function countdownLabel(expiresAtIso: string): string {
   const ms = new Date(expiresAtIso).getTime() - Date.now();
   if (ms <= 0) return "Trial expired";
-  if (ms < DAY_MS) return "Ends today";
+  if (ms < DAY_MS) {
+    const hours = Math.floor(ms / HOUR_MS);
+    return hours < 1 ? "Ends in <1h" : `Ends in ${hours}h`;
+  }
   return `${Math.ceil(ms / DAY_MS)} days left`;
 }
 
