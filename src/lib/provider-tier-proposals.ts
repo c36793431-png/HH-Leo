@@ -392,8 +392,17 @@ export async function confirmProposalRound(
     // a blank connection field at renegotiation submit time -- belongs on the submit form and is
     // logged as a separate item, deliberately not built here.
     //
-    // endpoint_verified (0060) has no proposal counterpart and is left alone on both branches --
-    // confirming terms is not endpoint verification.
+    // endpoint_verified (0060) has no proposal counterpart, but it cannot simply be left alone on
+    // the update branch (marcus, 2026-09-10). Verification is a claim about a specific host:port,
+    // not about a row: move the endpoint and the claim is void by definition, and a stale `true`
+    // riding onto an endpoint nobody checked is worse than a blank because it will be believed.
+    // So it is forced false -- but only on an ACTUAL change, keyed in SQL off the pre-update row
+    // rather than in JS, so a no-op re-confirmation cannot destroy a real verification. (In an
+    // UPDATE, every SET right-hand side sees the OLD row, so provider_tiers.endpoint_host here is
+    // the value before this statement, not $6.) `is distinct from` rather than `<>` so a
+    // null-to-value or value-to-null transition counts as a change instead of being swallowed by
+    // three-valued logic. The insert branch needs no clause: a brand-new tier row takes 0060's
+    // `not null default false`, which is already the honest starting claim.
     if (existingTier.rows[0]) {
       await client.query(
         `update provider_tiers
@@ -406,6 +415,12 @@ export async function confirmProposalRound(
              compid = $8,
              regions = $9,
              coverage = $10,
+             endpoint_verified = case
+               when provider_tiers.endpoint_host is distinct from $6::text
+                 or provider_tiers.endpoint_port is distinct from $7::text
+               then false
+               else provider_tiers.endpoint_verified
+             end,
              confirmed_at = now(),
              status = case when $4::int > 0 then 'trial' else 'live' end,
              trial_expires_at = case when $4::int > 0 then now() + make_interval(days => $4::int) else null end
