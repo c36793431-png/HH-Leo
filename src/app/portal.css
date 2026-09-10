@@ -839,6 +839,7 @@
 
 /* ---- FEED COMPARISON SCORES (leaderboard) ---- */
 .portal-shell .fcs { margin-top: 24px; }
+.portal-shell .fcs-measured-on { font-size: 11px; color: var(--hz-ink-3); margin: -8px 0 16px; }
 .portal-shell .fcs-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 18px; }
 .portal-shell .fcs-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--hz-ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
 .portal-shell .fcs-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }

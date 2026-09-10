@@ -211,9 +211,7 @@ export default async function FeedLandingPage() {
                 <span className="fl-tv">26</span>
               </div>
               <div className="fl-pc-foot">
-                <span className="fl-measured">
-                  <span className="fl-mi">◈</span>Measured by Horizon
-                </span>
+                <span className="fl-measured">Example data — illustrative, not a live dashboard</span>
               </div>
             </div>
           </div>
@@ -457,10 +455,7 @@ export default async function FeedLandingPage() {
                   <div className="fl-dt-head">
                     <span className="fl-dd" />
                     <span className="fl-dtt">feed.horizonhft.com / provider</span>
-                    <span className="fl-dtag">
-                      <span className="fl-d" />
-                      ACTIVE PROVIDER
-                    </span>
+                    <span className="fl-dtag">EXAMPLE</span>
                   </div>
                   <div className="fl-dt-kpis">
                     <div className="fl-dt-kpi">

@@ -67,10 +67,6 @@ export default function FeedDocsPage() {
                 <div className="k">Depth</div>
                 <div className="v">up to 10 levels</div>
               </div>
-              <div className="r">
-                <div className="k">Max rate</div>
-                <div className="v">2M msg/s per session</div>
-              </div>
             </div>
           </div>
 
