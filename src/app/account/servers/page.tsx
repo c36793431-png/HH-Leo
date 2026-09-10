@@ -9,7 +9,7 @@ import { ServerRegistrationForm } from "@/components/account/server-registration
 import { ServerRegistrationView } from "@/components/account/server-registration-view";
 import { ServerRegistrationsGrouped, type GroupedServerEntry } from "@/components/account/server-registrations-grouped";
 import { getServerRegistration, getLatestConnectionIp, type ServerRegistration } from "@/lib/server-registration";
-import { getBlackTrialForLicense, type BlackTrialRow } from "@/lib/black-trials";
+import { getBlackTrialForUser } from "@/lib/black-trials";
 import { getPortalConfig } from "@/lib/portal-config";
 import { BlackTrialCard } from "@/components/account/black-trial-card";
 import { saveServerRegistrationAction, requestBlackTrialAction, requestBlackTrialConvertAction } from "./actions";
@@ -17,12 +17,11 @@ import { saveServerRegistrationAction, requestBlackTrialAction, requestBlackTria
 interface ServerCardProps {
   license: LicenseDetail;
   registration: ServerRegistration | null;
-  blackTrial: BlackTrialRow | null;
   verified: boolean;
   showLicenseLabel: boolean;
 }
 
-function ServerCard({ license, registration, blackTrial, verified, showLicenseLabel }: ServerCardProps) {
+function ServerCard({ license, registration, verified, showLicenseLabel }: ServerCardProps) {
   return (
     <div className="grid">
       <div className="card full">
@@ -47,19 +46,47 @@ function ServerCard({ license, registration, blackTrial, verified, showLicenseLa
           <ServerRegistrationForm action={saveServerRegistrationAction.bind(null, license.id)} value={null} />
         )}
       </div>
-
-      {registration && (
-        <BlackTrialCard
-          status={blackTrial?.status ?? "none"}
-          expiresAt={blackTrial?.expiresAt ? blackTrial.expiresAt.toISOString() : null}
-          endpoint={blackTrial?.endpoint ?? null}
-          credentials={blackTrial?.credentials ?? null}
-          requestAction={requestBlackTrialAction.bind(null, license.id)}
-          convertAction={requestBlackTrialConvertAction.bind(null, license.id)}
-        />
-      )}
     </div>
   );
+}
+
+/** Black trial is one-per-client now (coxwell, 2026-09-10), not one-per-license, so it gets a
+ * single card scoped to the user -- not one repeated per license the way it was in the old
+ * (pre-08-31) ungrouped layout. Bound to the first registered license as the FK target; which
+ * license holds the row doesn't matter to the client, only that a registered server exists. */
+function blackTrialCardProps(
+  userTrial: Awaited<ReturnType<typeof getBlackTrialForUser>>,
+  primaryLicenseId: string
+) {
+  const now = Date.now();
+  const activeNotExpired = userTrial?.status === "active" && (!userTrial.expiresAt || userTrial.expiresAt.getTime() > now);
+
+  if (userTrial?.status === "converted") {
+    return { status: "converted" as const, expiresAt: null, spentAt: null, licenseId: userTrial.licenseId };
+  }
+  if (activeNotExpired) {
+    return {
+      status: "active" as const,
+      expiresAt: userTrial!.expiresAt ? userTrial!.expiresAt.toISOString() : null,
+      spentAt: null,
+      licenseId: userTrial!.licenseId,
+    };
+  }
+  if (userTrial?.status === "requested") {
+    return { status: "requested" as const, expiresAt: null, spentAt: null, licenseId: userTrial.licenseId };
+  }
+  if (userTrial) {
+    // declined, or an active trial whose expires_at has passed -- both permanent per row
+    // existence (see getBlackTrialForUser), so both render as the same dead-end state.
+    const spentAt = userTrial.expiresAt ?? userTrial.requestedAt;
+    return {
+      status: "spent" as const,
+      expiresAt: null,
+      spentAt: spentAt ? spentAt.toISOString() : null,
+      licenseId: userTrial.licenseId,
+    };
+  }
+  return { status: "none" as const, expiresAt: null, spentAt: null, licenseId: primaryLicenseId };
 }
 
 export default async function ServersPage() {
@@ -67,10 +94,11 @@ export default async function ServersPage() {
   if (!session?.user?.id) redirect("/login");
   const switchablePanels = getReachablePanels(session.user.roles);
 
-  const [paid, licenses, config] = await Promise.all([
+  const [paid, licenses, config, userTrial] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
     getPortalConfig(),
+    getBlackTrialForUser(session.user.id).catch(() => null),
   ]);
   const isAdmin = isAdminUser(session.user);
   const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, licenses);
@@ -82,10 +110,9 @@ export default async function ServersPage() {
     ? await Promise.all(
         licenses.map(async (license) => {
           const registration = await getServerRegistration(license.id).catch(() => null);
-          const blackTrial = await getBlackTrialForLicense(license.id).catch(() => null);
           const latestIp = registration ? await getLatestConnectionIp(license.id).catch(() => null) : null;
           const verified = !!(registration && latestIp && latestIp === registration.declaredIp);
-          return { license, registration, blackTrial, verified };
+          return { license, registration, verified };
         })
       )
     : [];
@@ -112,6 +139,9 @@ export default async function ServersPage() {
     ? { licenseId: availableCard.license.id, action: saveServerRegistrationAction.bind(null, availableCard.license.id) }
     : null;
 
+  const primaryLicenseId = registeredCards[0]?.license.id ?? null;
+  const trialProps = primaryLicenseId ? blackTrialCardProps(userTrial, primaryLicenseId) : null;
+
   return (
     <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <Link href="/feeds" className="btn ghost sm" style={{ marginBottom: 12, display: "inline-block" }}>
@@ -130,14 +160,25 @@ export default async function ServersPage() {
             </p>
             <ServerRegistrationsGrouped entries={groupedEntries} addTarget={addTarget} />
           </div>
+          {trialProps && (
+            <BlackTrialCard
+              status={trialProps.status}
+              expiresAt={trialProps.expiresAt}
+              spentAt={trialProps.spentAt}
+              requestAccessHref="/feeds/london/tiers"
+              endpoint={userTrial?.endpoint ?? null}
+              credentials={userTrial?.credentials ?? null}
+              requestAction={requestBlackTrialAction.bind(null, trialProps.licenseId)}
+              convertAction={requestBlackTrialConvertAction.bind(null, trialProps.licenseId)}
+            />
+          )}
         </div>
       ) : cards.length > 0 ? (
-        cards.map(({ license, registration, blackTrial, verified }) => (
+        cards.map(({ license, registration, verified }) => (
           <ServerCard
             key={license.id}
             license={license}
             registration={registration}
-            blackTrial={blackTrial}
             verified={verified}
             showLicenseLabel={cards.length > 1}
           />

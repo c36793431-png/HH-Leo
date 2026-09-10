@@ -7,20 +7,30 @@ import { emitToast } from "@/lib/toast-bus";
 type Action = () => Promise<ActionResult>;
 
 export interface BlackTrialCardProps {
-  status: "none" | "requested" | "active" | "declined" | "converted";
+  // "spent" covers every exhausted trial uniformly (declined, naturally expired, or already
+  // used on a different license) -- row existence is permanent, so there's one dead-end state,
+  // not three. See getBlackTrialForUser: this is derived server-side from row existence, never
+  // from a date comparison.
+  status: "none" | "requested" | "active" | "spent" | "converted";
   expiresAt: string | null; // ISO, only meaningful when status === "active"
+  spentAt: string | null; // ISO, only meaningful when status === "spent"
+  requestAccessHref: string; // spent-state CTA -- the existing feed-access request flow, never a checkout
   endpoint: string | null;
   credentials: string | null;
   requestAction: Action;
   convertAction: Action;
 }
 
-function daysLeft(expiresAtIso: string): number {
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function countdownLabel(expiresAtIso: string): string {
   const ms = new Date(expiresAtIso).getTime() - Date.now();
-  return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+  if (ms <= 0) return "Trial expired";
+  if (ms < DAY_MS) return "Ends today";
+  return `${Math.ceil(ms / DAY_MS)} days left`;
 }
 
-export function BlackTrialCard({ status, expiresAt, endpoint, credentials, requestAction, convertAction }: BlackTrialCardProps) {
+export function BlackTrialCard({ status, expiresAt, spentAt, requestAccessHref, endpoint, credentials, requestAction, convertAction }: BlackTrialCardProps) {
   const [pending, startTransition] = useTransition();
   const [localStatus, setLocalStatus] = useState(status);
   const [convertSent, setConvertSent] = useState(false);
@@ -59,12 +69,12 @@ export function BlackTrialCard({ status, expiresAt, endpoint, credentials, reque
       {localStatus === "none" && (
         <>
           <p style={{ color: "var(--hz-ink-2)", fontSize: 13, marginBottom: 16 }}>
-            Black is the top-ranked feed on our leaderboard. Request a trial against your
-            registered server — coxwell whitelists your IP directly with the vendor, then your
-            connection details land right here.
+            Black is the top-ranked feed on our leaderboard. One trial per client — first time
+            only. Request a trial against your registered server — coxwell whitelists your IP
+            directly with the vendor, then your connection details land right here.
           </p>
           <button type="button" className="btn primary sm" disabled={pending} onClick={request}>
-            {pending ? "Requesting…" : "Request Black trial"}
+            {pending ? "Requesting…" : "Start 3-day trial"}
           </button>
         </>
       )}
@@ -87,7 +97,7 @@ export function BlackTrialCard({ status, expiresAt, endpoint, credentials, reque
           </div>
           {expiresAt && (
             <p style={{ color: "var(--hz-amber, #f0a94b)", fontSize: 13, marginBottom: 12 }}>
-              {daysLeft(expiresAt) > 0 ? `${daysLeft(expiresAt)} days left` : "Trial expired"}
+              {countdownLabel(expiresAt)}
             </p>
           )}
           <button type="button" className="btn primary sm" disabled={pending || convertSent} onClick={convert}>
@@ -96,8 +106,17 @@ export function BlackTrialCard({ status, expiresAt, endpoint, credentials, reque
         </>
       )}
 
-      {localStatus === "declined" && (
-        <p style={{ color: "var(--hz-ink-2)", fontSize: 13 }}>Your Black trial request was declined.</p>
+      {localStatus === "spent" && (
+        <>
+          <p style={{ color: "var(--hz-ink-2)", fontSize: 13, marginBottom: 12 }}>
+            Trial ended{spentAt ? ` · ${new Date(spentAt).toLocaleDateString()}` : ""} · no re-trial.
+            One trial per client, ever. Since Black pricing is negotiated directly, request access
+            and coxwell will reach out to arrange it.
+          </p>
+          <a className="btn primary sm" href={requestAccessHref}>
+            Request access
+          </a>
+        </>
       )}
 
       {localStatus === "converted" && (

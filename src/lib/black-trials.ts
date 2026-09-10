@@ -5,6 +5,18 @@ import { sendTelegramMessage } from "./telegram-bot";
 export const BLACK_TRIAL_STATUSES = ["requested", "active", "declined", "converted"] as const;
 export type BlackTrialStatus = (typeof BLACK_TRIAL_STATUSES)[number];
 
+/** coxwell's ruling (2026-09-10): one 3-day trial, length fixed, not an admin-chosen value. */
+export const BLACK_TRIAL_DAYS = 3;
+
+/** One trial per client, ever — thrown by requestBlackTrial so callers can show a clean
+ * refusal instead of a raw constraint-violation 500. */
+export class BlackTrialAlreadyUsedError extends Error {
+  constructor() {
+    super("You have already used your Black trial.");
+    this.name = "BlackTrialAlreadyUsedError";
+  }
+}
+
 export interface BlackTrialRow {
   id: string;
   userId: string;
@@ -84,6 +96,17 @@ export async function getBlackTrial(id: string): Promise<BlackTrialRow | null> {
   return result.rowCount ? mapRow(result.rows[0]) : null;
 }
 
+/** Row existence for this user_id, across every license they hold — not a date check. A
+ * declined or expired row still counts: "used" is permanent, per coxwell's one-per-client
+ * ruling (2026-09-10), not "currently active". */
+export async function getBlackTrialForUser(userId: string): Promise<BlackTrialRow | null> {
+  const result = await pool.query<Row>(
+    `${SELECT_BASE} where bt.user_id = $1 order by bt.requested_at desc limit 1`,
+    [userId]
+  );
+  return result.rowCount ? mapRow(result.rows[0]) : null;
+}
+
 export async function listBlackTrials(status?: BlackTrialStatus): Promise<BlackTrialRow[]> {
   const where = status ? `where bt.status = $1` : "";
   const params = status ? [status] : [];
@@ -97,33 +120,41 @@ interface RequestArgs {
   adminUrl: string;
 }
 
-/** Gate (paid-only, one-per-desk) is enforced by the caller checking for an existing row plus
- * a registered server before calling this, and by the unique(license_id) constraint as a
- * backstop against a race between two concurrent requests. */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
+}
+
+/** Gate (paid-only, one-trial-per-client-ever) is enforced by the caller checking for a
+ * registered server before calling this, by the pre-check below (row existence for the
+ * user_id, not a date comparison — a declined or spent trial still blocks a new one), and by
+ * whichever unique constraint is live on black_trials as a race backstop. Deliberately does
+ * not name that constraint (no ON CONFLICT target) so this survives the license_id -> user_id
+ * migration (0084, not yet applied) without needing a coordinated code deploy. */
 export async function requestBlackTrial(args: RequestArgs): Promise<BlackTrialRow> {
-  const result = await pool.query<{ id: string }>(
-    `insert into black_trials (user_id, license_id) values ($1, $2)
-     on conflict (license_id) do nothing
-     returning id`,
-    [args.userId, args.licenseId]
-  );
-  if (result.rowCount === 0) {
-    const existing = await getBlackTrialForLicense(args.licenseId);
-    if (existing) return existing;
-    throw new Error("Black trial already requested for this license");
+  const existing = await getBlackTrialForUser(args.userId);
+  if (existing) throw new BlackTrialAlreadyUsedError();
+
+  try {
+    const result = await pool.query<{ id: string }>(
+      `insert into black_trials (user_id, license_id) values ($1, $2) returning id`,
+      [args.userId, args.licenseId]
+    );
+    const row = await getBlackTrial(result.rows[0].id);
+    if (!row) throw new Error("failed to load created Black trial request");
+
+    await notifyBlackTrialRequested({
+      email: row.userEmail,
+      licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
+      serverName: row.serverName,
+      serverIp: row.serverIp,
+      adminUrl: args.adminUrl,
+    }).catch(() => {});
+
+    return row;
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new BlackTrialAlreadyUsedError();
+    throw err;
   }
-  const row = await getBlackTrial(result.rows[0].id);
-  if (!row) throw new Error("failed to load created Black trial request");
-
-  await notifyBlackTrialRequested({
-    email: row.userEmail,
-    licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
-    serverName: row.serverName,
-    serverIp: row.serverIp,
-    adminUrl: args.adminUrl,
-  }).catch(() => {});
-
-  return row;
 }
 
 async function notifyClient(row: BlackTrialRow, text: string): Promise<void> {
@@ -136,9 +167,10 @@ export interface ApproveArgs {
   actionedBy: string;
   endpoint: string;
   credentials: string;
-  trialDays: number;
 }
 
+/** Trial length is fixed at BLACK_TRIAL_DAYS, not an admin-supplied value — coxwell's "one 3
+ * day trial" ruling (2026-09-10) reads as the length being fixed, not a default suggestion. */
 export async function approveBlackTrial(args: ApproveArgs): Promise<BlackTrialRow> {
   await pool.query(
     `update black_trials
@@ -146,7 +178,7 @@ export async function approveBlackTrial(args: ApproveArgs): Promise<BlackTrialRo
          expires_at = now() + ($2 || ' days')::interval,
          endpoint = $3, credentials = $4, actioned_by = $5
      where id = $1`,
-    [args.id, args.trialDays, args.endpoint, args.credentials, args.actionedBy]
+    [args.id, BLACK_TRIAL_DAYS, args.endpoint, args.credentials, args.actionedBy]
   );
   const row = await getBlackTrial(args.id);
   if (!row) throw new Error("Black trial not found after approval");
@@ -154,7 +186,7 @@ export async function approveBlackTrial(args: ApproveArgs): Promise<BlackTrialRo
   await notifyClient(
     row,
     `<b>⚫️ Your Black trial is live</b>\nConnection details are on your portal at Account → Servers. ` +
-      `Trial runs ${args.trialDays} days.`
+      `Trial runs ${BLACK_TRIAL_DAYS} days.`
   );
   return row;
 }

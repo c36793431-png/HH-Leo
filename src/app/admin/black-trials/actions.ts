@@ -18,12 +18,10 @@ export async function approveBlackTrialAction(_prevState: ActionResult | null, f
     const id = formData.get("id") as string;
     const endpoint = ((formData.get("endpoint") as string) ?? "").trim();
     const credentials = ((formData.get("credentials") as string) ?? "").trim();
-    const trialDays = Number(formData.get("trialDays") ?? 7);
     if (!endpoint) throw new Error("Endpoint is required");
     if (!credentials) throw new Error("Credentials are required");
-    if (!Number.isFinite(trialDays) || trialDays <= 0) throw new Error("Invalid trial length");
 
-    await approveBlackTrial({ id, actionedBy: adminId, endpoint, credentials, trialDays });
+    await approveBlackTrial({ id, actionedBy: adminId, endpoint, credentials });
     revalidatePath("/admin/black-trials");
   });
 }
