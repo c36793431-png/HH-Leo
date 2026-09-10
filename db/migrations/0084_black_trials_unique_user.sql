@@ -1,5 +1,11 @@
--- *** NOT YET APPLIED *** — handed off per standing policy (Leo writes migrations, never
--- applies them; marcus/coxwell run this against prod). Thread leo-black-feed-3day-trial-2026-09-10.
+-- APPLIED 2026-09-10 ~20:10Z by marcus, as an explicit transaction, after coxwell ruled at
+-- 20:04Z that the SQL pastes were marcus's to run. This header previously read "*** NOT YET
+-- APPLIED ***"; corrected here so it doesn't mislead a future reader, same as 0081's header.
+-- Verified at the objects rather than the ledger (both marcus and leo read independently):
+-- black_trials_user_started_key present as UNIQUE (user_id) WHERE status in
+-- ('requested','active','converted'); black_trials_license_id_key absent from pg_indexes AND
+-- pg_constraint; '0084' present in schema_migrations. Handed off per standing policy (Leo
+-- writes migrations, never applies them). Thread leo-black-feed-3day-trial-2026-09-10.
 --
 -- What this does: replaces black_trials' one-per-license uniqueness with one-per-client
 -- (user) -- but only across the statuses where a trial actually started or is in flight, not
@@ -36,7 +42,11 @@
 -- builds cleanly against data as of that check regardless of which statuses those 3 rows carry
 -- (a partial index is strictly less restrictive than the plain unique(user_id) it replaces).
 -- If the live row count no longer matches this by the time this is applied, STOP and
--- re-verify rather than running it blind.
+-- re-verify rather than running it blind. -- marcus did exactly that: he re-ran the check
+-- immediately before applying rather than trusting the 17:13Z read, and it matched this
+-- header's condition exactly (3 rows, 3 distinct user_id, 3 distinct license_id, all 3 in the
+-- indexed statuses). Recorded because the pre-flight, not the 17:13Z snapshot, is what
+-- actually gated the apply.
 --
 -- Accompanying code change required at apply time: src/lib/black-trials.ts's requestBlackTrial
 -- no longer names either constraint directly (it catches Postgres unique-violation (23505)

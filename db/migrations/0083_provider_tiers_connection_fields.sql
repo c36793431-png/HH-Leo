@@ -1,7 +1,16 @@
--- NOT APPLIED -- do not run against prod. Prepared by leo for coxwell to paste manually.
--- Must be applied before any copy-forward code (e.g. confirmProposalRound carrying
--- protocol/compid/regions/coverage into provider_tiers) is merged -- columns first, code
--- second, confirmed only after coxwell reports the SQL actually ran.
+-- APPLIED 2026-09-10 ~20:10Z by marcus, as an explicit transaction, after coxwell ruled at
+-- 20:04Z that the SQL pastes were marcus's to run. This header previously read "NOT APPLIED --
+-- do not run against prod"; corrected here so it doesn't mislead a future reader, same as
+-- 0081's header. Verified at the objects, not the ledger: provider_tiers now carries
+-- protocol text, compid text, regions ARRAY, coverage ARRAY -- all four nullable, no defaults;
+-- '0083' present in schema_migrations.
+--
+-- The ordering gate this header used to carry -- "must be applied before any copy-forward code
+-- (e.g. confirmProposalRound carrying protocol/compid/regions/coverage into provider_tiers) is
+-- merged, columns first, code second" -- is now SATISFIED, not dropped. The columns exist, so
+-- that copy-forward is no longer blocked on this file (marcus, m47659). It is also not yet
+-- built: confirmProposalRound (src/lib/provider-tier-proposals.ts:320) still mirrors only
+-- price/split/trial onto provider_tiers in both its update and insert branches.
 -- Bus thread leo-provider-self-registration-scope-2026-09-10, marcus's ruling (m47224/m47227):
 -- migration, not a join through provider_tier_proposals, for the admin Connection block on
 -- /admin/providers. Reason: the manual admin/register-provider path (registerProviderTiers,

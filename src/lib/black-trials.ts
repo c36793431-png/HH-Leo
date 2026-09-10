@@ -110,14 +110,15 @@ const SELECT_BASE = `
   left join server_registrations sr on sr.license_id = bt.license_id
 `;
 
-/** Most recent trial row on this license, of any status. The ordering is not cosmetic: 0041's
- * unique(license_id) currently guarantees at most one row, but migration 0084 replaces it with
- * a partial unique index that deliberately lets `declined` rows accumulate alongside a later
- * real trial. Without an explicit order this would take an arbitrary row, so
+/** Most recent trial row on this license, of any status. The ordering is not cosmetic, and as
+ * of 2026-09-10 it is load-bearing rather than anticipatory: 0041's unique(license_id) used to
+ * guarantee at most one row per licence, but migration 0084 (APPLIED ~20:10Z 2026-09-10)
+ * dropped it for a partial unique index that deliberately lets `declined` rows accumulate
+ * alongside a later real trial. Without an explicit order this would take an arbitrary row, so
  * requestBlackTrialConversion below could reject an *active* trial with "Trial isn't active"
- * because it happened to read the client's old decline. Ordering newest-first is a no-op under
- * today's constraint (one row) and correct after 0084 lands -- shipped ahead of the migration
- * on purpose so the paste needs no coordinated code deploy (marcus, 2026-09-10). Mirrors
+ * because it happened to read the client's old decline. Shipped ahead of the migration on
+ * purpose (b5afece) so the paste needed no coordinated code deploy (marcus, 2026-09-10);
+ * multiple rows per licence are now reachable in prod, so this is no longer a no-op. Mirrors
  * getBlackTrialForUser's ordering. */
 export async function getBlackTrialForLicense(licenseId: string): Promise<BlackTrialRow | null> {
   const result = await pool.query<Row>(
@@ -186,9 +187,9 @@ function isUniqueViolation(err: unknown): boolean {
 
 /** Gate (paid-only, one-*started*-trial-per-client) is enforced by the caller checking for a
  * registered server before calling this, by the two pre-checks below, and by the partial
- * unique index on black_trials as a race backstop (migration 0084, not yet applied -- scoped
- * to status in ('requested','active','converted') so a `declined` row never occupies the
- * slot). marcus's 2026-09-10 correction: a trial burns on approval, not on request -- declined
+ * unique index on black_trials as a race backstop (migration 0084, APPLIED ~20:10Z 2026-09-10
+ * by marcus -- scoped to status in ('requested','active','converted') so a `declined` row never
+ * occupies the slot). marcus's 2026-09-10 correction: a trial burns on approval, not on request -- declined
  * must never block a future request, and a still-`requested` row only blocks a *second
  * concurrent* request, not permanently. Deliberately does not name the constraint in the
  * insert (no ON CONFLICT target), catching Postgres unique-violation (23505) generically
