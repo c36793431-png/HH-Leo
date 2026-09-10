@@ -13,7 +13,17 @@ export interface BlackTrialCardProps {
   status: "none" | "requested" | "active" | "spent" | "converted";
   expiresAt: string | null; // ISO, only meaningful when status === "active"
   spentAt: string | null; // ISO, only meaningful when status === "spent"
-  requestAccessHref: string; // spent-state CTA -- the existing feed-access request flow, never a checkout
+  // NOTE: the spent state deliberately has no CTA. It used to carry a "Request access" link to
+  // /feeds/london/tiers, but that page's Black card is display-only (coxwell, 2026-09-10) and
+  // its own CTA links straight back to /account/servers -- so the button performed a two-page
+  // round trip and terminated nowhere. Nor could it have worked: requestBlackTrial gates on
+  // getStartedBlackTrialForUser, which matches status in ('active','converted'), and a spent
+  // row is an `active` row whose expires_at has passed (nothing restatuses a lapse) -- so a
+  // spent client is refused with BlackTrialAlreadyUsedError before any insert. What a burned
+  // client should actually be offered is a paid-access enquiry, which is a different object we
+  // don't have; that's an open product question with coxwell (marcus, thread
+  // leo-black-tiers-coming-soon-pass-2026-09-10). Until it's answered this states the fact and
+  // stops, rather than promising a channel that doesn't exist.
   endpoint: string | null;
   credentials: string | null;
   requestAction: Action;
@@ -33,7 +43,7 @@ function countdownLabel(expiresAtIso: string): string {
   return `${Math.ceil(ms / DAY_MS)} days left`;
 }
 
-export function BlackTrialCard({ status, expiresAt, spentAt, requestAccessHref, endpoint, credentials, requestAction, convertAction }: BlackTrialCardProps) {
+export function BlackTrialCard({ status, expiresAt, spentAt, endpoint, credentials, requestAction, convertAction }: BlackTrialCardProps) {
   const [pending, startTransition] = useTransition();
   const [localStatus, setLocalStatus] = useState(status);
   const [convertSent, setConvertSent] = useState(false);
@@ -110,16 +120,10 @@ export function BlackTrialCard({ status, expiresAt, spentAt, requestAccessHref, 
       )}
 
       {localStatus === "spent" && (
-        <>
-          <p style={{ color: "var(--hz-ink-2)", fontSize: 13, marginBottom: 12 }}>
-            Trial ended{spentAt ? ` · ${new Date(spentAt).toLocaleDateString()}` : ""} · no re-trial.
-            One trial per client, ever. Since Black pricing is negotiated directly, request access
-            and coxwell will reach out to arrange it.
-          </p>
-          <a className="btn primary sm" href={requestAccessHref}>
-            Request access
-          </a>
-        </>
+        <p style={{ color: "var(--hz-ink-2)", fontSize: 13 }}>
+          Trial ended{spentAt ? ` · ${new Date(spentAt).toLocaleDateString()}` : ""} · no re-trial.
+          One trial per client, ever, and Black can&apos;t be requested from the portal.
+        </p>
       )}
 
       {localStatus === "converted" && (

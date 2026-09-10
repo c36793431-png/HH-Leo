@@ -172,7 +172,6 @@ export default async function ServersPage() {
               status={trialProps.status}
               expiresAt={trialProps.expiresAt}
               spentAt={trialProps.spentAt}
-              requestAccessHref="/feeds/london/tiers"
               endpoint={userTrial?.endpoint ?? null}
               credentials={userTrial?.credentials ?? null}
               requestAction={requestBlackTrialAction.bind(null, trialProps.licenseId)}
