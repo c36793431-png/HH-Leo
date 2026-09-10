@@ -76,9 +76,10 @@ export interface ProviderSubscriberRow {
 const REGION_TO_FEED_TYPE_SQL = `case ft.region_key when 'london' then 'london' when 'ny' then 'ny' when 'tokyo' then 'crypto' else null end`;
 
 /** Bus thread feed-approve-request-creates-subscription-item3-2026-09-03 (marcus ruling):
- * a trial-originated subscription (approveFeedTierRequest -> assignFeedTierSubscription, same
- * function the admin picker uses) is written with status='active' like any other grant, so it
- * can't be told apart from a purchased one by s.status alone. Its subscriber also frequently
+ * a trial-originated subscription (approveFeedTierRequest -> upsertFeedSubscriptionForRequest --
+ * a different function from the admin picker's assignFeedTierSubscription, but both write the
+ * same 'active' literal) is written with status='active' like any other grant, so it can't be
+ * told apart from a purchased one by s.status alone. Its subscriber also frequently
  * has no license carrying the region yet -- that's the point of a trial -- so without a
  * carve-out it would immediately read 'lapsed' via the license-exists check below, hiding the
  * one case item 3 exists for. feed_tier_trials is the authority instead: a row here means the
