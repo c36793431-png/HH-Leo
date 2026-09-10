@@ -98,8 +98,20 @@ const SELECT_BASE = `
   left join server_registrations sr on sr.license_id = bt.license_id
 `;
 
+/** Most recent trial row on this license, of any status. The ordering is not cosmetic: 0041's
+ * unique(license_id) currently guarantees at most one row, but migration 0084 replaces it with
+ * a partial unique index that deliberately lets `declined` rows accumulate alongside a later
+ * real trial. Without an explicit order this would take an arbitrary row, so
+ * requestBlackTrialConversion below could reject an *active* trial with "Trial isn't active"
+ * because it happened to read the client's old decline. Ordering newest-first is a no-op under
+ * today's constraint (one row) and correct after 0084 lands -- shipped ahead of the migration
+ * on purpose so the paste needs no coordinated code deploy (marcus, 2026-09-10). Mirrors
+ * getBlackTrialForUser's ordering. */
 export async function getBlackTrialForLicense(licenseId: string): Promise<BlackTrialRow | null> {
-  const result = await pool.query<Row>(`${SELECT_BASE} where bt.license_id = $1`, [licenseId]);
+  const result = await pool.query<Row>(
+    `${SELECT_BASE} where bt.license_id = $1 order by bt.requested_at desc limit 1`,
+    [licenseId]
+  );
   return result.rowCount ? mapRow(result.rows[0]) : null;
 }
 
