@@ -118,6 +118,7 @@ export function PortalSidebar({
   userEmail,
   adminSurface = "portal",
   pendingApplicationsCount = 0,
+  needsTermsReviewCount = 0,
   hasOtherActiveTiers = false,
   switchablePanels = [],
 }: {
@@ -129,6 +130,10 @@ export function PortalSidebar({
   /** Single §6 selector value — both this badge and the dashboard tile read the same
    * getProviderApplicationStats().pendingCount; neither hardcodes or recomputes it. */
   pendingApplicationsCount?: number;
+  /** Same §6 pattern, same source getNeedsTermsReviewCount() the /admin/providers stat
+   * tile and "review now" banner already read — state-derived off terms_status, clears
+   * itself the moment a round is confirmed/declined, no separate seen-flag. */
+  needsTermsReviewCount?: number;
   /** True when the user holds active licenses at more than one tier, so `tier` (the
    * highest of them) is only part of the picture — see computePortalTierFromLicenses. */
   hasOtherActiveTiers?: boolean;
@@ -234,7 +239,12 @@ export function PortalSidebar({
             {(adminSurface === "feed" ? FEED_ADMIN_LINKS : PORTAL_ADMIN_LINKS).map((link) => {
               const Icon = link.icon;
               const soon = "soon" in link && link.soon;
-              const badgeCount = link.href === "/admin/provider-applications" ? pendingApplicationsCount : 0;
+              const badgeCount =
+                link.href === "/admin/provider-applications"
+                  ? pendingApplicationsCount
+                  : link.href === "/admin/providers"
+                    ? needsTermsReviewCount
+                    : 0;
               if (soon) {
                 return (
                   <span key={link.href} className="soon" aria-disabled="true">

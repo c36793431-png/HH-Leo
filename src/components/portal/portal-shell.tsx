@@ -12,6 +12,7 @@ export function PortalShell({
   userEmail,
   adminSurface,
   pendingApplicationsCount,
+  needsTermsReviewCount,
   hasOtherActiveTiers,
   switchablePanels,
   children,
@@ -22,6 +23,7 @@ export function PortalShell({
   userEmail: string;
   adminSurface?: AdminSurface;
   pendingApplicationsCount?: number;
+  needsTermsReviewCount?: number;
   hasOtherActiveTiers?: boolean;
   switchablePanels?: PanelLink[];
   children: ReactNode;
@@ -39,6 +41,7 @@ export function PortalShell({
           userEmail={userEmail}
           adminSurface={adminSurface}
           pendingApplicationsCount={pendingApplicationsCount}
+          needsTermsReviewCount={needsTermsReviewCount}
           hasOtherActiveTiers={hasOtherActiveTiers}
           switchablePanels={switchablePanels}
         />

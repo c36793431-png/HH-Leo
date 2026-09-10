@@ -129,18 +129,28 @@ export interface TermsQueueStats {
   horizonRetainedRunRateCents: number;
 }
 
+/** Single source of truth for "how many tiers need terms review", cross-provider --
+ * latest round per (application_id, tier_name), scoped to terms_status = 'proposed'.
+ * Shared by the stat tile, the "review now" banner, and the sidebar badge (same
+ * §6 pattern as getProviderApplicationStats().pendingCount) so none of them can
+ * drift from the others. */
+export async function getNeedsTermsReviewCount(): Promise<number> {
+  const result = await pool.query<{ count: string }>(
+    `select count(*) as count from (
+       select distinct on (application_id, tier_name) terms_status
+       from provider_tier_proposals
+       order by application_id, tier_name, created_at desc
+     ) latest where terms_status = 'proposed'`
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
 /** Stat strip. Horizon-retained is a contracted run-rate over live provider_tiers
  * (client_price_cents * retained%), not a reconciled-payments figure -- same
  * "contracted, not reconciled" honesty as the dashboard Revenue tile. */
 export async function getTermsQueueStats(): Promise<TermsQueueStats> {
   const [needsReview, live, confirmed, retained] = await Promise.all([
-    pool.query<{ count: string }>(
-      `select count(*) as count from (
-         select distinct on (application_id, tier_name) terms_status
-         from provider_tier_proposals
-         order by application_id, tier_name, created_at desc
-       ) latest where terms_status = 'proposed'`
-    ),
+    getNeedsTermsReviewCount(),
     pool.query<{ count: string }>(`select count(distinct provider_user_id) as count from provider_tiers`),
     pool.query<{ count: string }>(
       `select count(*) as count from provider_tier_proposals
@@ -152,7 +162,7 @@ export async function getTermsQueueStats(): Promise<TermsQueueStats> {
   ]);
 
   return {
-    needsTermsReviewCount: Number(needsReview.rows[0]?.count ?? 0),
+    needsTermsReviewCount: needsReview,
     liveProvidersCount: Number(live.rows[0]?.count ?? 0),
     confirmedThisMonth: Number(confirmed.rows[0]?.count ?? 0),
     horizonRetainedRunRateCents: Math.round(Number(retained.rows[0]?.retained ?? 0)),
