@@ -46,6 +46,8 @@ interface ConnectionRow {
   endpoint_host: string | null;
   endpoint_port: string | null;
   compid: string | null;
+  regions: string[] | null;
+  coverage: string[] | null;
 }
 
 function mapAdminRow(row: AdminRow): ProposalRoundRow {
@@ -327,8 +329,9 @@ export function calcRetainedCents(clientPriceCents: number, providerSplitPct: nu
  * for this (application_id, tier_name) already exists (renegotiation of a live tier),
  * otherwise insert one (first confirmation). Built against marcus's authoritative §5/§6
  * spec, bus thread provider-terms-negotiation-2026-08-24 (m29333/m29343 reconciled); the
- * connection copy-forward is marcus's later split go (m47739/m47740, 2026-09-10) and is
- * scalars only -- see the comment at the branch for what is held and why. */
+ * connection copy-forward is marcus's later go (m47739/m47740, 2026-09-10) and now covers all
+ * six columns -- the four scalars plus the regions/coverage arrays, whose hold he withdrew the
+ * same day. See the comment at the branch for the null and endpoint_verified semantics. */
 export async function confirmProposalRound(
   proposalId: string,
   adminUserId: string,
@@ -342,7 +345,7 @@ export async function confirmProposalRound(
       `select id, application_id, provider_user_id, tier_name, client_price_cents,
               provider_split_pct, trial_length_days, terms_status, declined_note,
               decided_by, decided_at, created_at,
-              protocol, endpoint_host, endpoint_port, compid
+              protocol, endpoint_host, endpoint_port, compid, regions, coverage
        from provider_tier_proposals where id = $1 for update`,
       [proposalId]
     );
@@ -370,20 +373,24 @@ export async function confirmProposalRound(
     // trial_expires_at and set status='live' explicitly -- re-confirming a later round must
     // not silently regress to the column default or leave a stale trial window in place.
     //
-    // Connection copy-forward (marcus, m47739/m47740, 2026-09-10): the confirmed round's
-    // connection details land on provider_tiers verbatim -- text in, text out, no parsing and
-    // no shape change, source and destination being the same declared type on both sides
-    // (protocol/endpoint_host/endpoint_port/compid are text on 0061 and on 0060+0083 alike).
-    // Null is written as null on BOTH branches by design: a blank proposal field means "not
-    // supplied", never "unchanged", so the update must overwrite a previously-set value with
-    // null rather than coalesce the old one forward, and must never synthesise a default.
+    // Connection copy-forward (marcus, m47739/m47740, 2026-09-10; regions/coverage added on his
+    // withdrawal of the hold, 2026-09-10): the confirmed round's connection details land on
+    // provider_tiers verbatim -- no parsing and no shape change, source and destination being the
+    // same declared type on both sides. protocol/endpoint_host/endpoint_port/compid are text on
+    // 0061 and on 0060+0083 alike; regions/coverage are text[] on provider_tier_proposals
+    // (0061:25-26) AND on provider_tiers (0083:56-57), so those two are a straight same-type array
+    // copy, not a delimiter decision. The free-text regions/coverage that WOULD need a split rule
+    // live on provider_applications (0059:24-25) -- a different table, never read on this path.
+    // marcus's no-parse ruling is scoped to that table and does not travel here just because the
+    // column names match.
     //
-    // regions/coverage are deliberately NOT carried forward yet -- held by marcus pending his
-    // ruling, not an oversight. Note for whoever picks that up: no split rule is needed on this
-    // path. Both columns are text[] on provider_tier_proposals (0061:25-26) AND on provider_tiers
-    // (0083), so it is a straight same-type copy like these four. The free-text regions/coverage
-    // that need a split live on provider_applications (0059:24-25), which is a different table
-    // and is not read here; marcus has ruled that source is re-keyed by hand, never parsed.
+    // Null is written as null on all six columns and on BOTH branches by design: a blank proposal
+    // field means "not supplied", never "unchanged", so the update must overwrite a previously-set
+    // value with null rather than coalesce the old one forward, and must never synthesise a
+    // default. coalesce here would make "clear this field" inexpressible and would silently
+    // reinterpret an intentional blank as "keep" (marcus, 2026-09-10). The real guard -- refusing
+    // a blank connection field at renegotiation submit time -- belongs on the submit form and is
+    // logged as a separate item, deliberately not built here.
     //
     // endpoint_verified (0060) has no proposal counterpart and is left alone on both branches --
     // confirming terms is not endpoint verification.
@@ -397,6 +404,8 @@ export async function confirmProposalRound(
              endpoint_host = $6,
              endpoint_port = $7,
              compid = $8,
+             regions = $9,
+             coverage = $10,
              confirmed_at = now(),
              status = case when $4::int > 0 then 'trial' else 'live' end,
              trial_expires_at = case when $4::int > 0 then now() + make_interval(days => $4::int) else null end
@@ -410,15 +419,17 @@ export async function confirmProposalRound(
           proposal.endpoint_host,
           proposal.endpoint_port,
           proposal.compid,
+          proposal.regions,
+          proposal.coverage,
         ]
       );
     } else {
       await client.query(
         `insert into provider_tiers
            (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
-            trial_length_days, protocol, endpoint_host, endpoint_port, compid,
+            trial_length_days, protocol, endpoint_host, endpoint_port, compid, regions, coverage,
             confirmed_at, status, trial_expires_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(),
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(),
                  case when $6::int > 0 then 'trial' else 'live' end,
                  case when $6::int > 0 then now() + make_interval(days => $6::int) else null end)`,
         [
@@ -432,6 +443,8 @@ export async function confirmProposalRound(
           proposal.endpoint_host,
           proposal.endpoint_port,
           proposal.compid,
+          proposal.regions,
+          proposal.coverage,
         ]
       );
     }
