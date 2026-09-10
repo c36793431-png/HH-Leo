@@ -39,6 +39,17 @@ export default async function AdminBlackTrialsPage({ searchParams }: { searchPar
     {} as Record<BlackTrialStatus, number>
   );
 
+  // statsSource is always the unfiltered full history (see above), so this doubles as the
+  // decline-history source with no extra query. Already ordered by requested_at desc, so
+  // declinedByUser.get(id)[0] is the most recent decline for that client.
+  const declinedByUser = new Map<string, typeof statsSource>();
+  for (const r of statsSource) {
+    if (r.status !== "declined") continue;
+    const list = declinedByUser.get(r.userId) ?? [];
+    list.push(r);
+    declinedByUser.set(r.userId, list);
+  }
+
   return (
     <div className="flex flex-1 flex-col">
       <header className="mb-8">
@@ -101,7 +112,9 @@ export default async function AdminBlackTrialsPage({ searchParams }: { searchPar
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
-              {requests.map((r) => (
+              {requests.map((r) => {
+                const declineHistory = r.status === "requested" ? declinedByUser.get(r.userId) : undefined;
+                return (
                 <tr key={r.id}>
                   <td className="py-2 pr-4 text-zinc-400">
                     {formatAbsoluteUtc(r.requestedAt)} <span className="text-zinc-600">({formatRelative(r.requestedAt)})</span>
@@ -109,6 +122,12 @@ export default async function AdminBlackTrialsPage({ searchParams }: { searchPar
                   <td className="py-2 pr-4 text-zinc-200">
                     {r.userName ?? "—"}
                     <div className="text-xs text-zinc-500">{r.userEmail ?? "—"}</div>
+                    {declineHistory && declineHistory.length > 0 && (
+                      <div className="mt-1 max-w-[14rem] text-xs text-amber-400">
+                        Previously declined ×{declineHistory.length} · last {formatAbsoluteUtc(declineHistory[0].requestedAt)}
+                        <div className="text-zinc-500">{declineHistory[0].reason ?? "No reason stored"}</div>
+                      </div>
+                    )}
                   </td>
                   <td className="py-2 pr-4 text-zinc-400">{r.licenseKeyTail ? `…${r.licenseKeyTail}` : "—"}</td>
                   <td className="py-2 pr-4 text-zinc-400">
@@ -132,7 +151,8 @@ export default async function AdminBlackTrialsPage({ searchParams }: { searchPar
                     )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {requests.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-zinc-500">
