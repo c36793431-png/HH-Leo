@@ -25,11 +25,22 @@ function optionLabel(s: TierRequestServerOption): string {
   return `${s.serverName} — ${location} (${s.declaredIp})`;
 }
 
+/** What this client's own existing request for this tier resolves to, as far as the button
+ * slot is concerned. "granted" covers both approved and provisioned: the client has access
+ * either way, and the difference between them is the provider's allowlisting step, which is
+ * not a distinction this control has ever drawn.
+ *
+ * There is deliberately no "declined" member. A rejected request already resolves back to a
+ * usable Request access button, and that is the intended behaviour, not a gap -- turning it
+ * into a dead-end "we said no" state is a product decision, not a bug fix (marcus, ruling (c),
+ * leo-approval-invisible-to-client-2026-09-11). */
+export type TierRequestState = "none" | "pending" | "granted";
+
 interface TierRequestControlProps {
   region: string;
   tierKey: string;
   tierName: string;
-  alreadyRequested: boolean;
+  requestState: TierRequestState;
   servers: TierRequestServerOption[];
   /** False when the client has active license(s) but has never registered a server on any
    * of them. R6 (leo-cross-region-server-picker-2026-09-04) only keeps an unregistered
@@ -57,18 +68,29 @@ export function TierRequestControl({
   region,
   tierKey,
   tierName,
-  alreadyRequested,
+  requestState,
   servers,
   hasAnyRegisteredServer,
   fallbackLicenseTail,
   variant = "primary",
 }: TierRequestControlProps) {
   const [open, setOpen] = useState(false);
-  const [requested, setRequested] = useState(alreadyRequested);
+  const [state, setState] = useState<TierRequestState>(requestState);
   const [isPending, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState<string | null>(() => defaultServerId(servers, region));
 
-  if (requested) {
+  // Approved/provisioned used to fall into the "Requested" branch below, so a client whose
+  // access had already been granted kept reading "Requested" forever with no signal that
+  // anything had happened (marcus, leo-approval-invisible-to-client-2026-09-11).
+  if (state === "granted") {
+    return (
+      <span className="ftd-granted-pill">
+        <span className="dot" /> Approved
+      </span>
+    );
+  }
+
+  if (state === "pending") {
     return (
       <span className="ftd-requested-pill">
         <span className="dot" /> Requested
@@ -93,7 +115,9 @@ export function TierRequestControl({
     startTransition(async () => {
       const result = await submitFeedTierRequestAction(null, formData);
       if (result.ok) {
-        setRequested(true);
+        // A request this client just submitted is pending by definition -- createFeedTierRequest
+        // takes the column default and never writes an actioned status.
+        setState("pending");
         setOpen(false);
       } else {
         emitToast(result.error, "error");

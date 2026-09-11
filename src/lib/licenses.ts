@@ -1338,7 +1338,7 @@ export const FEED_TYPE_META: Record<FeedType, FeedTypeMeta> = {
   crypto: { id: "crypto", name: "Crypto Tokyo Feed", description: "Tokyo · TY3 co-lo — Institutional crypto aggregator, spot & perpetual futures", coloCode: "TY3" },
 };
 
-function isFeedType(value: string): value is FeedType {
+export function isFeedType(value: string): value is FeedType {
   return (FEED_TYPES as string[]).includes(value);
 }
 

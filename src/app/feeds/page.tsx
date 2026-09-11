@@ -5,9 +5,9 @@ import { getReachablePanels } from "@/lib/user-roles";
 import {
   isPaidUser,
   getActiveLicenseDetailsForUser,
-  computeUserActiveFeeds,
   computePortalTierFromLicenses,
 } from "@/lib/licenses";
+import { computeUnlockedFeedTypes } from "@/lib/feed-subscriptions";
 import { getPortalConfig } from "@/lib/portal-config";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
@@ -42,7 +42,10 @@ export default async function FeedsPage() {
     getPortalConfig(),
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
   ]);
-  const activeFeeds = await computeUserActiveFeeds(session.user.id).catch(() => []);
+  // feed_types ∪ live grants — an approved tier request unlocks this card too, not just the
+  // licence checkbox array (marcus, leo-approval-invisible-to-client-2026-09-11). Same reader
+  // backs /dashboard's cards and counter so the two pages can't contradict each other.
+  const activeFeeds = await computeUnlockedFeedTypes(session.user.id).catch(() => []);
   const isAdmin = isAdminUser(session.user);
   // Same aggregation drives the card status below and the sidebar badge (thread
   // multi-license-visibility-2026-08-31, marcus) — a paying client must never see "Trial" on a

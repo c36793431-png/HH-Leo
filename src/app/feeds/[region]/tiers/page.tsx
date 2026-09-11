@@ -9,7 +9,11 @@ import { isFeedRegion, FEED_REGION_TYPE } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { isScoreRegion } from "@/lib/feed-provider-packages";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
-import { TierRequestControl, type TierRequestServerOption } from "@/components/feeds/tier-request-control";
+import {
+  TierRequestControl,
+  type TierRequestServerOption,
+  type TierRequestState,
+} from "@/components/feeds/tier-request-control";
 import { getAnyServerRegistrationForUser, getServerRegistrationsForUser } from "@/lib/server-registration";
 import { effectiveServerLocation } from "@/lib/server-locations";
 import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
@@ -160,9 +164,23 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
       registered: !!r,
     };
   });
-  const requestedTierKeys = new Set(
-    existingRequests.filter((r) => r.region === region && r.status !== "rejected").map((r) => r.tierKey)
-  );
+  // Per-tier request state for this client. The old set collapsed every non-rejected status
+  // into one "Requested" pill, so approved and provisioned rows -- a client who already HAS
+  // the access -- kept rendering as still-waiting (marcus,
+  // leo-approval-invisible-to-client-2026-09-11). Precedence granted > pending: a client can
+  // hold a grant and a later request on the same tier (nothing stops a re-request), and the
+  // access they already have is the truer thing to show. rejected maps to "none" exactly as
+  // before -- it resolves back to a usable Request access button, deliberately.
+  const requestStateByTierKey = new Map<string, TierRequestState>();
+  for (const r of existingRequests) {
+    if (r.region !== region) continue;
+    if (r.status === "approved" || r.status === "provisioned") {
+      requestStateByTierKey.set(r.tierKey, "granted");
+    } else if (r.status === "pending" && requestStateByTierKey.get(r.tierKey) !== "granted") {
+      requestStateByTierKey.set(r.tierKey, "pending");
+    }
+  }
+  const requestStateFor = (tierKey: string): TierRequestState => requestStateByTierKey.get(tierKey) ?? "none";
   // A license key identifies one specific license, not an aggregate — never blend multiple
   // licenses into one tail. Show this region's active license(s); if the client holds two
   // active licenses that both grant this region, show both rather than picking one
@@ -298,7 +316,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                   region={region}
                   tierKey={PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey}
                   tierName={`${label} package`}
-                  alreadyRequested={requestedTierKeys.has(PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey)}
+                  requestState={requestStateFor(PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey)}
                   servers={serverOptions}
                   hasAnyRegisteredServer={hasAnyRegisteredServer}
                   fallbackLicenseTail={licenseTail}
@@ -353,7 +371,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               region={region}
               tierKey={t.tierKey}
               tierName={t.name}
-              alreadyRequested={requestedTierKeys.has(t.tierKey)}
+              requestState={requestStateFor(t.tierKey)}
               servers={serverOptions}
               hasAnyRegisteredServer={hasAnyRegisteredServer}
               fallbackLicenseTail={licenseTail}

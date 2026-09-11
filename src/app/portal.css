@@ -792,10 +792,20 @@
 .portal-shell .ftd-compare { margin-top: 24px; overflow-x: auto; }
 .portal-shell .ftd-compare .ref-table { min-width: 480px; }
 
-.portal-shell .ftd-requested-pill {
+/* Two states of one slot (tier-request-control.tsx) — same pill geometry so "Requested" and
+   "Approved" read as a progression rather than two unrelated widgets; only the accent moves
+   amber -> green. */
+.portal-shell .ftd-requested-pill,
+.portal-shell .ftd-granted-pill {
   display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; align-self: flex-start;
-  background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border: 1px solid var(--hz-amber-line);
+  border: 1px solid transparent;
   border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+}
+.portal-shell .ftd-requested-pill {
+  background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: var(--hz-amber-line);
+}
+.portal-shell .ftd-granted-pill {
+  background: rgba(55, 245, 160, 0.14); color: var(--hz-ok); border-color: rgba(55, 245, 160, 0.5);
 }
 
 .portal-shell .ftd-rank-badge {
@@ -870,8 +880,9 @@
 @media (max-width: 640px) {
   .portal-shell .fcs-row { grid-template-columns: 16px 52px 1fr 40px; gap: 8px; }
 }
-.portal-shell .ftd-requested-pill .dot {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--hz-warn); box-shadow: 0 0 6px var(--hz-warn);
+.portal-shell .ftd-requested-pill .dot,
+.portal-shell .ftd-granted-pill .dot {
+  width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor;
 }
 
 .portal-shell .ftd-server-banner {

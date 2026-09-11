@@ -1,6 +1,12 @@
 import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
-import { getActiveLicensesForUser, type ActiveLicense, type FeedType } from "./licenses";
+import {
+  computeUserActiveFeeds,
+  getActiveLicensesForUser,
+  isFeedType,
+  type ActiveLicense,
+  type FeedType,
+} from "./licenses";
 import { FEED_REGION_TYPE, FEED_REGIONS, isFeedRegion, regionForFeedType, type FeedRegion } from "./feed-tier-catalogue";
 import { PACKAGES, packageLabelForTierKey, providerShareCentsFor } from "./feed-provider-packages";
 
@@ -142,6 +148,57 @@ const SUBSCRIBER_STATUS_SQL = `
     else 'lapsed'
   end
 `;
+
+/** The FeedTypes a client's own live grants cover -- the grant half of computeUnlockedFeedTypes
+ * below, never used on its own as a card gate (marcus, leo-approval-invisible-to-client-2026-09-11).
+ *
+ * "Live" is decided by EFFECTIVE_STATUS_SQL itself rather than by s.status, so this inherits
+ * the exact licence gate every provider-facing surface already applies: when the licence the
+ * grant is bound to expires, the row reads lapsed here too and the card re-locks. A grant must
+ * not be able to unlock a feed forever -- that would make this reader a worse entitlement
+ * source than the feed_types array it supplements.
+ *
+ * Rows whose tier has no FeedType are dropped, not guessed: cme maps to null
+ * (REGION_TO_FEED_TYPE_SQL / FEED_REGION_TYPE) and provider_tier_id rows have no region_key at
+ * all. Neither corresponds to a FEED_CATALOGUE card, so there is nothing here to unlock.
+ *
+ * Degrades to [] pre-0071 (42P01) like every other reader in this file -- a missing table must
+ * never 500 a client's own dashboard. */
+export async function computeGrantedFeedTypes(userId: string): Promise<FeedType[]> {
+  try {
+    const result = await pool.query<{ feed_type: string }>(
+      `select distinct ${REGION_TO_FEED_TYPE_SQL} as feed_type
+       from feed_subscriptions s
+       join feed_tiers ft on ft.id = s.feed_tier_id
+       where s.subscriber_user_id = $1
+         and ${REGION_TO_FEED_TYPE_SQL} is not null
+         and ${EFFECTIVE_STATUS_SQL} <> 'lapsed'`,
+      [userId]
+    );
+    return result.rows.map((r) => r.feed_type).filter(isFeedType);
+  } catch (err) {
+    if (isMissingTable(err)) return [];
+    throw err;
+  }
+}
+
+/** Which feed cards this client has -- one source for /feeds and /dashboard, so the two can
+ * never disagree about the same account (marcus, leo-approval-invisible-to-client-2026-09-11).
+ *
+ * Union, never a swap. licenses.feed_types alone missed every client whose access came from an
+ * approved tier request; grants alone would strand every pre-flow client on feed_types and
+ * permanently lock `futures` (no region in FEED_REGIONS) and `cme` (region with no FeedType),
+ * neither of which has any subscription path in the data model. The union is the only gate
+ * that is correct for both populations.
+ *
+ * Each arm degrades to [] on its own so one failing source can't erase the other's access. */
+export async function computeUnlockedFeedTypes(userId: string): Promise<FeedType[]> {
+  const [fromLicenses, fromGrants] = await Promise.all([
+    computeUserActiveFeeds(userId).catch((): FeedType[] => []),
+    computeGrantedFeedTypes(userId).catch((): FeedType[] => []),
+  ]);
+  return [...new Set([...fromLicenses, ...fromGrants])];
+}
 
 export function pseudonymLabel(seq: number): string {
   return `HH${seq}`;
