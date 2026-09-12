@@ -294,6 +294,23 @@ first") removes it. Alternative, if fable prefers exactness now: marcus lifts th
 one-line optional `trialEndsAt` parameter on `insertFeedTierTrial`, or the admin form clamps a
 trial decision's `endsAt` to the 7-day default (then only paid decisions have a free date).
 
+**(f) Which `feed_tier_requests` UI pages are repointed vs left on the old table (G6).** PROPOSAL:
+ALL repointed in one deploy, NONE left reading the old table. Facts from `git grep` at `0a493be`:
+- The only SQL touching `feed_tier_requests` in `src` is `feed-tier-requests.ts` (:87 `SELECT_BASE`,
+  :109 insert, :164 update, :263 update).
+- Every UI reader goes through that module's `listFeedTierRequests` / `getFeedTierRequest`:
+  `admin/feed-tier-requests/page.tsx` :44-45, `admin/accounts/page.tsx` :25,
+  `feeds/[region]/tiers/page.tsx` :143, `feed-providers.ts` :104 and :125 (behind
+  `/feed/dashboard/users` and the type in `feed/dashboard/page.tsx` :22), telegram webhook :47.
+- `EFFECTIVE_STATUS_SQL` (:108-150) has no reference to the table.
+So repointing the facade (section 5) cuts every page over at once; leaving any page on the old table
+would show it a queue that stops receiving writes at the same deploy. After this slice, grep for
+`feed_tier_requests` in `src` returns 0 SQL lines (section 10 proof), which is how "phase-2 code must
+not depend on `feed_tier_requests` existing" is met. The one remaining schema tie is
+`feed_subscriptions.request_id` (FK to the old table, 0078): the :784 insert stops writing it and the
+`on conflict (request_id, feed_tier_id)` clause at :786 goes; no reader in `src` selects it. It drops
+with the table in the tighten.
+
 ---
 
 ## 5. Queue read (Sources E, I)
@@ -362,6 +379,14 @@ update.
   server grain it needs that licence's server row, else "Register a server first".
   Eligibility (`isTrialEligibleTier`) and one-trial-per-(user, tier) (`feed_tier_trials_user_tier_uidx`,
   0036) are checked BEFORE the transaction opens so the existing errors surface unchanged.
+- Both answers to the v1.48 open item are designed for (marcus part 2: "the schema does not wait
+  on coxwell's line"). The bullet above is answer A (button survives). Answer B (button retired):
+  `startFeedTierTrialAction` is deleted and `components/feeds/trial-cta-control.tsx` (:4, :75, its
+  only caller) loses the start button; the client's only entry is Request Access and the admin
+  marks `decision = 'trial'` in the queue (section 3). `trial-cta-control.tsx` is NOT on the
+  section 1 declared list; if coxwell picks B, kai re-declares it to marcus before opening it.
+  Schema and library (`access-requests.ts`) are identical under A and B; only the action and the
+  CTA component differ.
 - `feed_tier_trials` is NOT retired and `feed-tier-trials.ts` is not edited. Both trial entry
   points still write the table (best-effort, after commit) via the existing `insertFeedTierTrial`,
   whose 7-day clock is independent of the envelope's `ends_at` (gap 4(e)). Its readers (branch (4)
@@ -440,3 +465,20 @@ Rollback of this slice is a code revert; it writes no schema and leaves `feed_ti
 untouched, so the old code path works again immediately (the envelopes written meanwhile are
 picked up by nothing until the re-run, and the tighten's preflight lists any legacy row without an
 envelope, Source N).
+
+---
+
+## 11. Ledger sentences this slice does not satisfy (stated, not derived around)
+
+1. Source J/K "renewal extends `ends_at` in place": no renewal write exists in main today and none
+   is added here (section 3 says so). Needs its own job.
+2. Source B "every `server_registrations` writer writes `user_id`": Leo's `server-registration.ts`
+   :158-185, not kai's. The batch create tolerates `user_id NULL` on the server row via
+   `coalesce(sr.user_id, l.user_id)` until the tighten backfill (section 2 step 2).
+3. Source H "`ends_at` set by the trial length" holds for the envelope and the subscription row, but
+   the `feed_tier_trials` row keeps its own 7-day clock because `feed-tier-trials.ts` is untouched
+   by marcus's rule; drift only when an admin picks a non-default trial date (gap 4(e), three
+   options listed there).
+4. Source G(d) `'provisioned'` -> `feed_allowlist_records` carry is the tighten's, so between this
+   deploy and the tighten the provider sees allowlist records only for grants approved through the
+   new path.
