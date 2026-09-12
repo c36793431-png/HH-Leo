@@ -25,7 +25,8 @@ import { recordHeartbeat, resolveLicenseKey } from "@/lib/client-heartbeats";
  * NO ORACLE: an unknown, expired or revoked key gets the same 204 as a good one. The
  * response must not let an attacker probe key validity, which is exactly what the
  * withheld scaffold's 403-on-inactive did. The only non-204 answers are shape verdicts
- * (malformed JSON, missing lk/hid) and the production HTTPS guard.
+ * (malformed JSON, missing lk/hid), the production HTTPS guard, and the rate-limit 429 —
+ * none of which read the key, so none of them say anything about it.
  *
  * UNAUTHENTICATED, and deliberately so — listen-only means there is nothing to protect on
  * the way out. There is no shared secret and no response signing: response-signing.ts is
@@ -115,10 +116,14 @@ export async function POST(req: NextRequest) {
 
   const ip = clientIp(req);
 
-  // Over the cap: drop the beat and still answer 204. The ceiling exists to bound an
-  // unauthenticated write path, and the client can't act on a 429 anyway (it ignores the
-  // response), so 429 would only be an ops signal — see the report for that tradeoff.
-  if (!(await checkHeartbeatRateLimit(licenseKey, ip))) return noContent();
+  // Over the cap: drop the beat and answer 429 (marcus's ruling, 2026-09-11). The client
+  // ignores the response either way, so the status can't change its behaviour — the point
+  // is that a dropped beat shows up in platform logs instead of hiding behind a 204. It
+  // doesn't reopen the oracle: the limiter counts the supplied string and the IP without
+  // ever looking the key up, so an unknown key throttles exactly like a live one.
+  if (!(await checkHeartbeatRateLimit(licenseKey, ip))) {
+    return NextResponse.json({ error: "rate limited" }, { status: 429 });
+  }
 
   try {
     // Resolve BEFORE recording: license_id is null only when the key genuinely matched
