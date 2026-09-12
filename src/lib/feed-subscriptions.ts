@@ -728,9 +728,17 @@ function monthLabel(year: number, monthIndex: number): string {
  * NEVER SUMMED ACROSS MONTHS (m49083). A client on a one-month term must not read as three months
  * of revenue, so this returns per-month figures and no grand total, and the page renders none. */
 export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): MonthlyHistoryEntry[] {
-  const overlaps = (row: ProviderSubscriberRow, start: Date, end: Date): boolean => {
+  /** HALF-OPEN, [started_at, end) -- marcus m49147. A row whose period ends exactly at the first
+   * instant of month M was not live in M, and a month is likewise [first instant, first instant of
+   * the next month). Both comparisons are strict, so a boundary instant belongs to exactly one
+   * month and a one-month term can never be counted twice.
+   *
+   * The third conjunct is the same rule applied to the row itself: [t, t) is empty, so a period
+   * that starts and ends at the same instant was live for no time and belongs to no month. Without
+   * it a zero-length row would still land in whatever month contained that instant. */
+  const overlaps = (row: ProviderSubscriberRow, start: Date, endExclusive: Date): boolean => {
     const ends = row.lapsedAt ?? row.endsAt ?? now;
-    return row.startedAt <= end && ends >= start;
+    return row.startedAt < endExclusive && ends > start && ends > row.startedAt;
   };
 
   /** A trial licence is never a contracted payment, in any month, so its rows are dropped here
@@ -752,7 +760,7 @@ export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): Month
     month === 11 ? ((year += 1), (month = 0)) : (month += 1)
   ) {
     const start = new Date(Date.UTC(year, month, 1));
-    const end = new Date(Date.UTC(year, month + 1, 1) - 1);
+    const endExclusive = new Date(Date.UTC(year, month + 1, 1));
 
     const rows: MonthlyHistoryClient[] = [];
     let grossCents = 0;
@@ -760,7 +768,7 @@ export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): Month
     let pricedClients = 0;
 
     for (const g of groups) {
-      const members = membersOf(g).filter((r) => overlaps(r, start, end));
+      const members = membersOf(g).filter((r) => overlaps(r, start, endExclusive));
       if (members.length === 0) continue;
 
       const priceCents = members.map((r) => r.priceCents).find((c) => c != null) ?? null;
