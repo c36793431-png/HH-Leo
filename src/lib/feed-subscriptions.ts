@@ -601,6 +601,128 @@ export async function countUnpseudonymedRowsForProvider(providerUserId: string):
   }
 }
 
+/** One provider's slice of the admin-wide subscriber read (m49045: /admin/revenue "shows the same
+ * figures the provider Revenue page shows, summed across ALL providers"). */
+export interface ProviderSubscriberPartition {
+  providerUserId: string;
+  /** Admin-visible provider name. `provider_applications.name` when the provider applied, else the
+   * account's own display name or email, else a short id -- this is an admin-only surface, so real
+   * identity is allowed here. CLIENT identity stays pseudonymous even for admins: the rows below
+   * still carry nothing but HH-labels, because the pseudonym is the only client identifier the
+   * subscriber query selects at all. */
+  providerLabel: string;
+  rows: ProviderSubscriberRow[];
+}
+
+/** THE ADMIN-WIDE READ, partitioned BY PROVIDER and not merged (m49045 + marcus m49168).
+ *
+ * The partitioning is the whole point and it is not presentational. `provider_client_pseudonyms.seq`
+ * is allocated per (provider, subscriber) pair, so "HH1" is only unique WITHIN one provider -- two
+ * providers each have an HH1, and they are different people. `groupAccountSubscriptions` keys its
+ * map on `row.pseudonym` alone, so handing it one flat cross-provider list would weld two unrelated
+ * clients into a single group, take one of their prices for the pair under `resolvedPriceCentsFor`,
+ * and report a client count lower than the truth. Callers must group each partition separately --
+ * which also means every per-provider figure is computed by the exact same functions the provider's
+ * own Revenue page uses, rather than by an admin-only reimplementation.
+ *
+ * Provider names are resolved in a SECOND query rather than joined in. `provider_applications` has
+ * no uniqueness guarantee on `user_id`, so joining it to the subscription rows could fan a single
+ * subscription out into several and inflate the money -- the one failure mode this page exists to
+ * fix. A separate lookup cannot multiply rows.
+ *
+ * Degrades to [] pre-migration (42P01) like every other reader in this file. */
+export async function listSubscribersByProvider(): Promise<ProviderSubscriberPartition[]> {
+  try {
+    const result = await pool.query<{
+      provider_user_id: string;
+      id: string;
+      seq: number;
+      tier_name: string;
+      tier_key: string | null;
+      region_key: string | null;
+      status: SubscriptionStatus;
+      started_at: Date;
+      declared_ip: string | null;
+      price_cents: number | null;
+      license_tier: string | null;
+      raw_status: SubscriptionStatus;
+      lapsed_at: Date | null;
+      ends_at: Date | null;
+      license_expires_at: Date | null;
+    }>(
+      /* Identical column list, joins and ORDER BY to listSubscribersForProvider -- only the
+       * provider predicate is dropped and provider_user_id added. Any divergence here would mean
+       * admin and provider surfaces disagreeing about the same subscription. */
+      `select s.provider_user_id, s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name,
+              ft.tier_key, ft.region_key, ${EFFECTIVE_STATUS_SQL} as status, s.started_at,
+              sr.declared_ip, s.price_cents, l.tier as license_tier, s.status as raw_status,
+              s.lapsed_at, s.ends_at, l.expires_at as license_expires_at
+       from feed_subscriptions s
+       join provider_client_pseudonyms p
+         on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
+       left join feed_tiers ft on ft.id = s.feed_tier_id
+       left join provider_tiers pt on pt.id = s.provider_tier_id
+       left join server_registrations sr on sr.license_id = s.license_id
+       left join licenses l on l.id = s.license_id
+       order by s.provider_user_id, p.seq, s.started_at, s.id`
+    );
+
+    const byProvider = new Map<string, ProviderSubscriberRow[]>();
+    for (const row of result.rows) {
+      const list = byProvider.get(row.provider_user_id) ?? [];
+      list.push({
+        subscriptionId: row.id,
+        pseudonym: pseudonymLabel(row.seq),
+        tierName: row.tier_name,
+        tierKey: row.tier_key,
+        regionKey: row.region_key,
+        status: statusForLicenseTier(row.status, row.license_tier),
+        rawStatus: row.raw_status,
+        startedAt: row.started_at,
+        lapsedAt: row.lapsed_at,
+        endsAt: row.ends_at,
+        licenseExpiresAt: row.license_expires_at,
+        licenseTier: row.license_tier,
+        serverIp: row.declared_ip,
+        priceCents: row.price_cents,
+      });
+      byProvider.set(row.provider_user_id, list);
+    }
+
+    const labels = await providerLabelsFor([...byProvider.keys()]);
+    return [...byProvider.entries()]
+      .map(([providerUserId, rows]) => ({
+        providerUserId,
+        providerLabel: labels.get(providerUserId) ?? `Provider ${providerUserId.slice(0, 8)}`,
+        rows,
+      }))
+      .sort((a, b) => a.providerLabel.localeCompare(b.providerLabel));
+  } catch (err) {
+    if (isMissingTable(err)) return [];
+    throw err;
+  }
+}
+
+/** Provider id -> admin-visible name, one row per provider BY CONSTRUCTION. `min(pa.name)` with a
+ * `group by` rather than a plain select, because nothing stops a user holding two provider
+ * applications; picking one deterministically is honest, while returning two rows would tempt the
+ * caller back into a fan-out. Missing ids are simply absent from the map -- the caller labels them. */
+async function providerLabelsFor(providerUserIds: string[]): Promise<Map<string, string>> {
+  if (providerUserIds.length === 0) return new Map();
+  const result = await pool.query<{ user_id: string; label: string | null }>(
+    `select u.id as user_id,
+            coalesce(min(pa.name), min(u.display_name), min(u.email)) as label
+     from users u
+     left join provider_applications pa on pa.user_id = u.id
+     where u.id = any($1::uuid[])
+     group by u.id`,
+    [providerUserIds]
+  );
+  const map = new Map<string, string>();
+  for (const row of result.rows) if (row.label) map.set(row.user_id, row.label);
+  return map;
+}
+
 export type AccountRowGroup =
   | { kind: "package"; pseudonym: string; label: string; status: ProviderSubscriberRow["status"]; members: ProviderSubscriberRow[] }
   | { kind: "single"; row: ProviderSubscriberRow };
