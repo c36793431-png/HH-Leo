@@ -1,8 +1,18 @@
--- *** NOT YET APPLIED -- do not run against prod. ***
--- Handed to marcus per standing policy (Leo writes migrations, never applies them). marcus
--- runs this in production on coxwell's go, and the /v1/hb route must NOT merge before it is
--- applied: the route's only write target is this table, and the portal auto-deploys from main.
+-- *** APPLIED IN PRODUCTION 2026-09-12 17:46:51Z -- do not re-run. ***
+-- Applied by marcus via Neon MCP on coxwell's go (17:41Z), per standing policy: Leo writes
+-- migrations, marcus applies them. Verified post-apply from information_schema/pg_indexes --
+-- 16 columns, pkey + the unique (license_key, hwid) + the two indexes below, 0 rows.
+-- Reversal is db/migrations/0085_rollback.sql (destructive once beats have landed; see it).
 -- Bus thread leo-v1-hb-listen-only-build-2026-09-11.
+--
+-- WHO WRITES THIS TABLE: /api/cron/flush-heartbeats, NOT /v1/hb. The original merge order
+-- here ("the /v1/hb route must NOT merge before this is applied: the route's only write
+-- target is this table") stopped being true at ea7fc95, which took Postgres off the beat
+-- path -- /v1/hb now buffers into Upstash and returns 204 without touching the DB, and the
+-- */30 cron drains the buffer and does the upsert. With this applied the point is moot, but
+-- the sequencing it described is not the one that was shipped: a merge ahead of the apply
+-- would not have broken the customer-facing endpoint, only made the sweep catch 42P01 and
+-- re-queue until the table existed.
 --
 -- What this is for: /v1/hb, the desktop client's heartbeat. Every shipped build v2.0.2-v2.0.5
 -- POSTs it (one POST per open trading tab, 45s warm-up then every 180s) and the portal has
@@ -13,7 +23,7 @@
 -- parse in v2.0.6 independently. Nothing this table feeds changes trading behaviour.
 --
 -- GRAIN: one row per (license_key, hwid), NOT one row per beat. At 20 beats/hr/tab a per-beat
--- log is unbounded growth for no extra signal, so the route upserts on that pair, bumping
+-- log is unbounded growth for no extra signal, so the flush upserts on that pair, bumping
 -- last_seen and beat_count and overwriting the telemetry columns with the latest beat's values.
 -- No separate raw per-beat log table is created -- deliberately skipped, not forgotten.
 --
@@ -21,13 +31,13 @@
 -- overwritten unconditionally by each beat, including with NULL when that beat did not carry the
 -- field. They are read as "what this (key, hwid) reported at last_seen", so a value coalesced
 -- forward from an older beat would be a false statement about that timestamp. IP history is not
--- lost by this -- connection_ips (0031) keeps the change log, and the route feeds it.
+-- lost by this -- connection_ips (0031) keeps the change log, and the flush feeds it.
 --
--- raw jsonb holds the latest beat's whole body (capped, see the route). It is bounded by the
--- upsert grain -- one body per key/hwid, not per beat. Kept because no beat has ever reached a
--- server: the field shapes below are FOC12's reading of TradingTabInstance.cs, not observed
--- traffic, so if d1/d2/d3 or sp arrive in a shape the typed columns can't hold, raw is what
--- makes that recoverable instead of silently null.
+-- raw jsonb holds the latest beat's whole body (capped in /v1/hb, before it buffers). It is
+-- bounded by the upsert grain -- one body per key/hwid, not per beat. Kept because no beat has
+-- ever reached a server: the field shapes below are FOC12's reading of TradingTabInstance.cs,
+-- not observed traffic, so if d1/d2/d3 or sp arrive in a shape the typed columns can't hold,
+-- raw is what makes that recoverable instead of silently null.
 --
 -- NO FOREIGN KEY on license_id/user_id, by design (marcus's explicit ask). An unknown or
 -- deleted license key must still record -- a beat from a key that resolves to nothing is the
@@ -52,7 +62,8 @@ create table if not exists client_heartbeats (
   -- key/hwid/version in the withheld f8d1dcd docstring, which is stale.
   license_key text not null,
   hwid text not null,
-  -- Resolved at beat time from licenses.license_key. NULL = key matched nothing. No FK: see above.
+  -- Resolved at FLUSH time from licenses.license_key, not at beat time (ea7fc95): the beat
+  -- only buffers. NULL = key matched nothing. No FK: see above.
   license_id uuid,
   user_id uuid,
   client_version text,
