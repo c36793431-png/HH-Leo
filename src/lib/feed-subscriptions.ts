@@ -879,11 +879,14 @@ function isoDate(d: Date): string {
  * is the one a provider would recognise; taking members[0] would let whichever tier happens to
  * sort first speak for the group, which is the members[0] class of bug this file has already been
  * burned by twice. Only members sharing the group's own status are eligible, so a stray live row
- * can't explain a lapsed group. */
-export function statusReasonForGroup(group: AccountRowGroup): string | null {
+ * can't explain a lapsed group.
+ *
+ * This walk is now shared: `statusReasonForGroup` takes the sentence and `statusEndedAtForGroup`
+ * takes the instant it was formatted from. Behaviour of the sentence is unchanged by that split. */
+function statusEndFor(group: AccountRowGroup): { text: string; at: Date | null } | null {
   const status = statusForGroup(group);
   if (status === "active") return null;
-  if (status === "trial") return "Trial";
+  if (status === "trial") return { text: "Trial", at: null };
 
   const rows = group.kind === "package" ? group.members.filter((m) => m.status === status) : [group.row];
   let best: { text: string; at: Date | null } | null = null;
@@ -894,7 +897,25 @@ export function statusReasonForGroup(group: AccountRowGroup): string | null {
     const candidate = { text: at ? `${label} ${isoDate(at)}` : label, at };
     if (best == null || (candidate.at != null && (best.at == null || candidate.at > best.at))) best = candidate;
   }
-  return best?.text ?? null;
+  return best;
+}
+
+export function statusReasonForGroup(group: AccountRowGroup): string | null {
+  return statusEndFor(group)?.text ?? null;
+}
+
+/** The DATE behind that reason, for the Subscribers page's Lapsed section ordering (m49058 item 1
+ * via m49224). Split out of statusReasonForGroup rather than re-derived beside it: the section is
+ * sorted by the very date each row prints, so a second walk over the same members -- with its own
+ * idea of which member speaks for the group, or of whether an explicit lapse reads lapsed_at or a
+ * licence expiry -- could order rows in a sequence their own visible dates contradict. One walk,
+ * one answer; this returns exactly the instant `statusReasonForGroup` formatted.
+ *
+ * Null for a paying group (no reason at all) and for a LIVE trial, whose reason is the bare word
+ * "Trial" with deliberately no date (m49101): that trial has not ended, so there is no end instant
+ * to sort on, and callers must place such a group by something else rather than treat null as old. */
+export function statusEndedAtForGroup(group: AccountRowGroup): Date | null {
+  return statusEndFor(group)?.at ?? null;
 }
 
 /** The LAST price a non-paying group carried, for the Lapsed filter's price cell (m49070: "their

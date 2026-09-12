@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
@@ -8,6 +9,7 @@ import {
   resolvedPriceCentsFor,
   lastPriceCentsFor,
   statusReasonForGroup,
+  statusEndedAtForGroup,
   startedAtForGroup,
   statusForGroup,
   sumProviderShareCents,
@@ -79,6 +81,69 @@ function rowsOf(group: AccountRowGroup): ProviderSubscriberRow[] {
   return group.kind === "package" ? group.members : [group.row];
 }
 
+function pseudonymOf(group: AccountRowGroup): string {
+  return group.kind === "package" ? group.pseudonym : group.row.pseudonym;
+}
+
+/** Counts for a set of groups, in the page's two units at once: FEEDS (rows) and CLIENTS (distinct
+ * pseudonyms). One helper so the filter buttons and the section heads below cannot drift apart. */
+function countsOf(groups: AccountRowGroup[]): { feeds: number; clients: number } {
+  return {
+    feeds: groups.reduce((n, g) => n + rowsOf(g).length, 0),
+    clients: new Set(groups.map(pseudonymOf)).size,
+  };
+}
+
+/** The noun each status is called on this page -- 'active' is spelled "paying" everywhere a human
+ * reads it (the header cap, the buttons, the by-location line), and a section head must not be the
+ * one place that reverts to the column value. */
+const STATUS_WORD: Record<ProviderSubscriberRow["status"], string> = {
+  active: "paying",
+  trial: "trial",
+  lapsed: "lapsed",
+};
+
+/** coxwell 21:49Z via marcus m49058, looking at this page: "how can the lapsed, active be organised
+ * better, now we have just 2 clients which is not the case, was more" -- the roster ran the live and
+ * the finished clients together in one undifferentiated list, so a provider scanning it had to read
+ * every status badge to find out who is still with them. Two sections, each with its own counts.
+ *
+ * A LIVE TRIAL SITS UNDER ACTIVE. m49058 names two sections, and a trial client is a current client
+ * -- they are on the feed today. The row keeps its own 'trial' badge and its "Trial" sub-line, and
+ * the section head spells the split ("3 paying clients - 9 feeds; 2 trial clients - 6 feeds") rather
+ * than letting one "5 active clients" imply five paying ones. Money is untouched by any of this:
+ * the footer and the header cap are paying-only under every filter, as ruled (m49107). */
+const SECTIONS = [
+  { key: "active", label: "Active", statuses: ["active", "trial"] as ProviderSubscriberRow["status"][] },
+  { key: "lapsed", label: "Lapsed", statuses: ["lapsed"] as ProviderSubscriberRow["status"][] },
+] as const;
+
+/** Within Active, newest grant first (m49058: "sort by started_at desc"), which puts a client who
+ * arrived this week at the top where a provider looks for them.
+ *
+ * Within Lapsed the equivalent is most-recently-ended first, ordered by statusEndedAtForGroup --
+ * the very date each of those rows prints in its sub-line, so the order can never contradict the
+ * dates on screen. A lapsed group with NO date (nothing recorded an end anywhere) sorts last rather
+ * than first: an unknown end is not a recent one. Both orders tie-break on the pseudonym so the
+ * sequence is total and a reload cannot reshuffle two rows that share a date. */
+function orderGroups(sectionKey: (typeof SECTIONS)[number]["key"], groups: AccountRowGroup[]): AccountRowGroup[] {
+  const dateFor = (g: AccountRowGroup): number | null => {
+    if (sectionKey === "active") return startedAtForGroup(g).getTime();
+    const ended = statusEndedAtForGroup(g);
+    return ended == null ? null : ended.getTime();
+  };
+  return [...groups].sort((a, b) => {
+    const da = dateFor(a);
+    const db = dateFor(b);
+    if (da !== db) {
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return db - da;
+    }
+    return pseudonymOf(a).localeCompare(pseudonymOf(b));
+  });
+}
+
 /** The grey line under a non-paying client's status badge: why they stopped (the SAME
  * statusReasonForGroup the Revenue page prints -- one wording, one place) and what they were last
  * on. The price sits here as text rather than in the "Your 50%*" column, because that column is a
@@ -89,6 +154,64 @@ function reasonLine(group: AccountRowGroup): string | null {
   if (reason == null) return null;
   const last = lastPriceCentsFor(group);
   return isUnpriced(last) ? reason : `${reason} · last ${money(last)}`;
+}
+
+/** A section head's counts, per status inside that section and spelling both nouns, exactly like the
+ * by-location line (and for the same reason -- a bare number here could be read as either unit). A
+ * status with nothing in it under the current filter prints nothing at all rather than "0 trial". */
+function sectionCountLabel(statuses: readonly ProviderSubscriberRow["status"][], groups: AccountRowGroup[]): string {
+  return statuses
+    .map((status) => {
+      const inStatus = groups.filter((g) => statusForGroup(g) === status);
+      if (inStatus.length === 0) return null;
+      const c = countsOf(inStatus);
+      return locationCountLabel(c.feeds, c.clients, STATUS_WORD[status]);
+    })
+    .filter(Boolean)
+    .join("; ");
+}
+
+/** One row-shape for a group, hoisted out of the table body when the body grew sections: the
+ * package and single shapes are unchanged, and rendering them from one place is what stops a
+ * section from quietly acquiring a different row than the one the unsectioned list showed. */
+function groupRow(group: AccountRowGroup) {
+  if (group.kind === "package") {
+    return (
+      <AccountPackageRows
+        key={`${group.pseudonym}-${group.label}`}
+        pseudonym={group.pseudonym}
+        label={group.label}
+        status={group.status}
+        reason={reasonLine(group)}
+        share={providerShareFor(group.status, resolvedPriceCentsFor(group))}
+        serverIp={group.members[0].serverIp ?? null}
+        sinceISO={startedAtForGroup(group).toISOString().slice(0, 10)}
+        members={group.members.map((m) => ({
+          subscriptionId: m.subscriptionId,
+          tierName: m.tierName,
+          status: m.status,
+          startedAtISO: m.startedAt.toISOString().slice(0, 10),
+        }))}
+      />
+    );
+  }
+  return (
+    <tr key={group.row.subscriptionId}>
+      <td>
+        <b className="mono">{group.row.pseudonym}</b>
+      </td>
+      <td>{group.row.tierName}</td>
+      <td>
+        <span className={`tb ${group.row.status}`}>
+          {STATUS_ICON[group.row.status] ?? "•"} {group.row.status}
+        </span>
+        {reasonLine(group) && <div className="sub muted">{reasonLine(group)}</div>}
+      </td>
+      <td className="r share">{providerShareFor(group.row.status, resolvedPriceCentsFor(group))}</td>
+      <td className="mono">{group.row.serverIp ?? ""}</td>
+      <td className="r mono">{group.row.startedAt.toISOString().slice(0, 10)}</td>
+    </tr>
+  );
 }
 
 /** Bus thread provider-feed-subscriber-linkage-2026-08-29, item 3. Pseudonym-only view --
@@ -109,13 +232,8 @@ export default async function FeedSubscribersPage({ searchParams }: { searchPara
   /** Counts are per group status, not per row status, so the number on a button is exactly how
    * many rows that button reveals. They are also computed over ALL groups, never the filtered set:
    * a filter must not be able to change the size of the thing it filters. */
-  const countsFor = (status: ProviderSubscriberRow["status"]) => {
-    const groups = accountGroups.filter((g) => statusForGroup(g) === status);
-    return {
-      feeds: groups.reduce((n, g) => n + rowsOf(g).length, 0),
-      clients: new Set(groups.map((g) => (g.kind === "package" ? g.pseudonym : g.row.pseudonym))).size,
-    };
-  };
+  const countsFor = (status: ProviderSubscriberRow["status"]) =>
+    countsOf(accountGroups.filter((g) => statusForGroup(g) === status));
   const counts = { paying: countsFor("active"), trial: countsFor("trial"), lapsed: countsFor("lapsed") };
   /** Every button counts CLIENTS, the unit coxwell's header already spoke in ("2 PAYING CLIENTS").
    * A client in two statuses (HH1 pays for one package and trials another) is counted under each,
@@ -126,6 +244,20 @@ export default async function FeedSubscribersPage({ searchParams }: { searchPara
     filter === "all" ? accountGroups : accountGroups.filter((g) => statusForGroup(g) === FILTER_STATUS[filter]);
   const visibleRows = visibleGroups.flatMap(rowsOf);
   const visibleClientCount = new Set(visibleRows.map((s) => s.pseudonym)).size;
+
+  /** Sections are cut from the VISIBLE groups, so they describe what is on screen under the current
+   * filter and nothing else -- the same rule the "By location" line follows. The heads only appear
+   * when there is actually more than one section to tell apart: under Paying or Lapsed the button
+   * above already names the one status present, and a lone "Lapsed" bar over a lapsed-only table
+   * would be a label with nothing to distinguish. */
+  const sections = SECTIONS.map((def) => ({
+    ...def,
+    groups: orderGroups(
+      def.key,
+      visibleGroups.filter((g) => def.statuses.includes(statusForGroup(g)))
+    ),
+  })).filter((s) => s.groups.length > 0);
+  const showSectionHeads = sections.length > 1;
 
   /** Job A2 (marcus/coxwell, bus thread leo-provider-subscribers-page-2026-09-06): "LD Base =
    * $30/mo and NY Base = $30/mo, flat 50/50" -- foots the same providerShareCentsFor()/-For()
@@ -284,44 +416,19 @@ export default async function FeedSubscribersPage({ searchParams }: { searchPara
                     * Notional list-price split — there is no payout ledger or per-subscriber billing yet.
                   </td>
                 </tr>
-                {visibleGroups.map((g) =>
-                  g.kind === "package" ? (
-                    <AccountPackageRows
-                      key={`${g.pseudonym}-${g.label}`}
-                      pseudonym={g.pseudonym}
-                      label={g.label}
-                      status={g.status}
-                      reason={reasonLine(g)}
-                      share={providerShareFor(g.status, resolvedPriceCentsFor(g))}
-                      serverIp={g.members[0].serverIp ?? null}
-                      sinceISO={startedAtForGroup(g).toISOString().slice(0, 10)}
-                      members={g.members.map((m) => ({
-                        subscriptionId: m.subscriptionId,
-                        tierName: m.tierName,
-                        status: m.status,
-                        startedAtISO: m.startedAt.toISOString().slice(0, 10),
-                      }))}
-                    />
-                  ) : (
-                    <tr key={g.row.subscriptionId}>
-                      <td>
-                        <b className="mono">{g.row.pseudonym}</b>
-                      </td>
-                      <td>{g.row.tierName}</td>
-                      <td>
-                        <span className={`tb ${g.row.status}`}>
-                          {STATUS_ICON[g.row.status] ?? "•"} {g.row.status}
-                        </span>
-                        {reasonLine(g) && <div className="sub muted">{reasonLine(g)}</div>}
-                      </td>
-                      <td className="r share">
-                        {providerShareFor(g.row.status, resolvedPriceCentsFor(g))}
-                      </td>
-                      <td className="mono">{g.row.serverIp ?? ""}</td>
-                      <td className="r mono">{g.row.startedAt.toISOString().slice(0, 10)}</td>
-                    </tr>
-                  )
-                )}
+                {sections.map((section) => (
+                  <Fragment key={section.key}>
+                    {showSectionHeads && (
+                      <tr className="section-row">
+                        <td colSpan={6}>
+                          <b>{section.label}</b>
+                          <span className="n">{sectionCountLabel(section.statuses, section.groups)}</span>
+                        </td>
+                      </tr>
+                    )}
+                    {section.groups.map((g) => groupRow(g))}
+                  </Fragment>
+                ))}
                 <tr className="total-row">
                   <td colSpan={3} className="r">
                     <b>Total</b>

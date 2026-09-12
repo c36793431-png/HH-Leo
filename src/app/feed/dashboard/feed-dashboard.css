@@ -217,6 +217,12 @@
 .feed-provider-v1 .tbl td .sub.muted { color: var(--pfp-grey); }
 .feed-provider-v1 .scope-note .muted { color: var(--pfp-grey); }
 .feed-provider-v1 .tbl td .last-price { font-family: var(--pfp-mono); color: var(--pfp-grey); font-style: italic; }
+/* Subscribers' Active / Lapsed section heads (m49058 via m49224): a band inside the table, styled
+   off the header row rather than as a data row so it never reads as a client. The counts sit in the
+   quiet colour to its right -- the label is what a provider scans for. */
+.feed-provider-v1 .tbl .section-row td { background: var(--pfp-panel-2); border-bottom: 1px solid var(--pfp-line-soft); padding: 9px 14px; }
+.feed-provider-v1 .tbl .section-row td b { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pfp-ink); }
+.feed-provider-v1 .tbl .section-row td .n { font-size: 11px; color: var(--pfp-ink-hi); margin-left: 10px; }
 .feed-provider-v1 .tbl .total-row td { border-top: 1px solid var(--pfp-line-soft); padding-top: 14px; }
 .feed-provider-v1 .tbl .total-row b { color: var(--pfp-ink); }
 .feed-provider-v1 .acct-disclosure { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
