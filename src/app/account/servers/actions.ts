@@ -11,12 +11,15 @@ import { requestBlackTrial, requestBlackTrialConversion } from "@/lib/black-tria
 /** Validates the caller-supplied licenseId against the signed-in user's own active licenses —
  * every action below takes an explicit licenseId (bound server-side in the page, one per
  * rendered card) instead of inferring "the" license, since a user can hold several. */
-async function requireLicenseId(licenseId: string): Promise<{ licenseId: string; email: string | null }> {
+async function requireLicenseId(licenseId: string): Promise<{ licenseId: string; userId: string; email: string | null }> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not signed in");
   const licenses = await getActiveLicensesForUser(session.user.id);
   if (!licenses.some((l) => l.id === licenseId)) throw new Error("License not found on this account");
-  return { licenseId, email: session.user.email ?? null };
+  // userId is returned, not re-derived from the licence, because this check has already
+  // established they are the same person: getActiveLicensesForUser filters on
+  // licenses.user_id. server_registrations.user_id (0086) is written from it.
+  return { licenseId, userId: session.user.id, email: session.user.email ?? null };
 }
 
 export async function saveServerRegistrationAction(
@@ -25,7 +28,7 @@ export async function saveServerRegistrationAction(
   formData: FormData
 ): Promise<ActionResult> {
   return runAction("Failed to save server registration", async () => {
-    const { licenseId: validLicenseId, email } = await requireLicenseId(licenseId);
+    const { licenseId: validLicenseId, userId, email } = await requireLicenseId(licenseId);
 
     const serverName = ((formData.get("serverName") as string) ?? "").trim();
     const vpsProvider = ((formData.get("vpsProvider") as string) ?? "").trim();
@@ -41,6 +44,7 @@ export async function saveServerRegistrationAction(
 
     await saveServerRegistration(
       validLicenseId,
+      userId,
       { serverName, vpsProvider, vpsProviderOther, location, declaredIp },
       `https://portal.horizonhft.com/admin/connections/${validLicenseId}`,
       email
