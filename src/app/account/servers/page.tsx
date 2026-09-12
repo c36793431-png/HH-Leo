@@ -165,7 +165,7 @@ export default async function ServersPage() {
               Tell us where your Horizon client runs. Servers are grouped by location — expand a
               location to view or edit each machine.
             </p>
-            <ServerRegistrationsGrouped entries={groupedEntries} addTarget={addTarget} />
+            <ServerRegistrationsGrouped entries={groupedEntries} addTarget={addTarget} upgradeUrl={config.telegramChannelUrl} />
           </div>
           {trialProps && (
             <BlackTrialCard
