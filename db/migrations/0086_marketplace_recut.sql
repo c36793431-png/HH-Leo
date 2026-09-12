@@ -1,0 +1,509 @@
+-- NOT APPLIED
+-- 0086_marketplace_recut.sql -- phase 1 of 4 of the marketplace recut. Written by kai on
+-- branch kai/marketplace-recut-migration-2026-09-12, thread kai-marketplace-feed-product-2026-09-12
+-- (build spec m48548, survey m48546). Design: provisioning ledger v1.47/v1.48, SHAs 304c41a and
+-- cc7f38b; coxwell decisions 2026-09-10 and 2026-09-12 (request-based marketplace, no checkout,
+-- manual billing). Marcus applies this in prod after ledger review and coxwell approval; kai does
+-- not touch prod. Companion rollback: db/migrations/0086_rollback.sql (not run automatically).
+--
+-- Migration number 0086: 0085 is client_heartbeats on Leo's branch (not in origin/main as of
+-- 2026-09-12); this file does not collide with it.
+--
+-- WHAT THIS DOES, IN ORDER
+--   0. Preflights (DO blocks, read-only, raise = whole transaction aborts):
+--      A. every server_registrations row resolves to a licence with a non-null user_id
+--      B. every feed_subscriptions row resolves, via its licence, to exactly one
+--         server_registrations row (0031 unique(license_id) makes "at most one" structural)
+--      C. every feed_tier_requests row resolves the same way, and its tier_key resolves to
+--         >= 1 feed_tiers row (directly, or via the two package literals expanded inline)
+--      D. no live (server, tier) duplicate would violate the new business-key index
+--   1. server_registrations: add user_id (backfilled from licenses.user_id); license_id nullable.
+--   2. access_requests envelope + feed_tier_request_details + software_request_details.
+--   3. Copy feed_tier_requests -> envelope + detail. Package literals expand to N envelopes
+--      sharing one batch_id. Idempotent (deterministic ids, upsert on id) so it can be re-run
+--      at the phase 2 cutover to pick up rows the old code wrote in between.
+--   4. feed_subscriptions: add server_registration_id (backfilled via licence -> server row),
+--      add ends_at (backfilled from the bound licence's expires_at, GATED: zero live rows with
+--      ends_at NULL), license_id nullable, new live business-key index on
+--      (server_registration_id, feed_tier_id) created ALONGSIDE the 0081 one, drop any
+--      composite FK to licenses(id, user_id) if one exists.
+--   5. feed_allowlist_records -- the allowlist of record (what IP the provider was told, when).
+--   6. schema_migrations row.
+--
+-- DEPLOY ORDER -- READ BEFORE APPLYING. Three live write paths do not know the new columns:
+--     src/lib/server-registration.ts:158-185   insert ... on conflict (license_id)   (no user_id)
+--     src/lib/feed-subscriptions.ts:272         insert into feed_subscriptions        (no server_registration_id)
+--     src/lib/feed-subscriptions.ts:784         insert into feed_subscriptions        (no server_registration_id)
+--   Because of that, this file reaches the ledger's target schema in TWO steps, the same
+--   two-migrations-code-in-between order Fable set for 0079 -> code -> 0080:
+--     (i)   this file: additive. New columns are backfilled to zero nulls and GATED, but the
+--           NOT NULL is not yet declared; the new live index sits beside the 0081 one; the 0031
+--           unique(license_id) CONSTRAINT is kept, not swapped for a partial index.
+--     (ii)  code: phase 2 (kai, lib/access-requests.ts + approval path) and Leo's /account/servers
+--           follow-up write user_id and server_registration_id on every insert.
+--     (iii) tighten migration (number assigned by marcus after Leo's 0085 lands), applied once
+--           (ii) is live. Statement list, so the target is on record here:
+--             alter table server_registrations alter column user_id set not null;
+--             alter table feed_subscriptions alter column server_registration_id set not null;
+--             drop index feed_subscriptions_license_feed_tier_live_uidx;
+--             alter table server_registrations drop constraint server_registrations_license_id_key;
+--             create unique index server_registrations_license_id_uidx on server_registrations
+--               (license_id) where license_id is not null;
+--             -- and, once phase 2 has cut every reader over: drop table feed_tier_requests.
+--   Declaring NOT NULL in THIS file would make the three inserts above fail with
+--   not_null_violation from the moment of apply until (ii) deploys (server registration form,
+--   admin direct grant, request approval). Swapping the unique constraint for a partial index in
+--   this file would make server-registration.ts:161/176 fail with "no unique or exclusion
+--   constraint matching the ON CONFLICT specification" for the same window -- a partial unique
+--   index is only inferred by ON CONFLICT when the statement repeats its WHERE clause. On the
+--   semantics: a plain UNIQUE on a nullable column already permits any number of NULL
+--   license_id rows (NULLS DISTINCT is the Postgres default), so the kept constraint IS
+--   "unique where license_id is not null"; the swap in (iii) is cosmetic and can be dropped if
+--   Fable prefers. If Fable/coxwell would rather accept the outage window and apply the target
+--   shape in one file, the four statements are listed under (iii) and can be moved into
+--   section 4/1 verbatim; kai's recommendation is the two-step.
+--
+-- READ-ONLY, NOT LOCKED: feed_tier_requests stays writable at the DB level. The live request
+-- form (feed-tier-requests.ts:109) and admin decision path (:164, :263) still write it until
+-- phase 2 cuts over; a DB-level lock (trigger/REVOKE) would break both. "Read-only" is a code
+-- rule from phase 2 onward: no NEW code writes it. Section 3 is re-runnable for exactly this
+-- reason -- run it once more inside the phase 2 cutover, then the tighten migration drops it.
+--
+-- feed_tiers.provider_user_id is NOT the truth for provider ownership today (ledger section
+-- 3.0, phase 2 routing item): it is nullable, on delete set null (0058), and the package
+-- literals (ld-retail-package, ny-retail-package) have no feed_tiers row at all. Nothing in this
+-- file reads it for routing. Provider ownership routing lands in phase 2.
+--
+-- ADDITIONS BEYOND THE SPEC'S COLUMN LIST, each flagged for Fable to strike or keep:
+--   a. access_requests.legacy_feed_tier_request_id uuid (no FK, indexed): which
+--      feed_tier_requests row an envelope was copied from. Needed so phase 2 can repoint
+--      feed_subscriptions.request_id (FK to feed_tier_requests, 0078) row-by-row before the old
+--      table is dropped. No FK on purpose so the later drop table needs no cascade.
+--   b. access_requests.reason text: feed_tier_requests.reason is the ADMIN's decision reason
+--      (written at feed-tier-requests.ts:164 alongside the status flip). Dropping it on copy
+--      would lose the only stored reason for every past rejection.
+--   c. software_request_details.product_id is text, not a FK: there is no software product
+--      table in 0001-0084 and no product notion in src/ (grep product_id/productId: 0 hits).
+--      Per Q7 a software product is a licence tier, so the value space is licenses.tier's
+--      vocabulary ('trial','paid','team','deal', 0013) until a product table exists.
+--   d. access_requests.status vocabulary is ('pending','approved','rejected'). The old
+--      'provisioned' (0034) maps to 'approved' on copy; provisioning state now lives in
+--      feed_allowlist_records, not the request status. Preflight C reports how many rows this
+--      touches (notice, not abort).
+--   e. feed_allowlist_records.ip is text, matching server_registrations.declared_ip (0031),
+--      since equality against that column is the read that matters. inet would validate the
+--      literal; say so and it is a one-word change.
+--
+-- WHAT THIS DOES NOT DO (phase 2+ or Fable's call):
+--   - No cross-table check that an envelope of product_kind X has exactly one detail row of
+--     kind X. Postgres cannot express it declaratively; phase 2 writes envelope + detail in one
+--     transaction and the read side joins by kind.
+--   - No DB-level uniqueness on pending (server, tier) requests: the envelope status and the
+--     detail key live in different tables. "Collision with a live (server, tier) fails the
+--     whole insert loudly" is enforced by phase 2 code against
+--     feed_subscriptions_server_feed_tier_live_uidx inside the batch transaction.
+--   - No feed_subscriptions.access_request_id. Phase 2 approval needs the grant identity
+--     (request, tier) on the new envelope; today request_id points at feed_tier_requests. Open
+--     question Q9 in kai's phase 1 report -- not added here without a ruling.
+--   - server_registrations.license_id keeps `on delete cascade` (0031). Under key-on-the-server
+--     a deleted licence arguably should `set null` instead; not changed without a ruling.
+--   - ends_at is copied for lapsed rows too (harmless: records the licence expiry the row was
+--     last gated by). Liveness = status + ends_at > now() is phase 2's read-side change; the
+--     gate here is NULL-ness on live rows, not futurity -- a live row whose licence has
+--     already expired gets a past ends_at, which is the truthful value.
+--
+-- Expected result per statement is in the section comments. Every DO block either raises or
+-- emits a `notice` line with its counts -- marcus, paste those lines into the thread.
+
+begin;
+
+-- ---------------------------------------------------------------------------------------
+-- 0. PREFLIGHTS
+-- ---------------------------------------------------------------------------------------
+
+-- A. server_registrations -> licence -> user_id must resolve for every row (licenses.user_id
+--    is nullable, on delete set null, 0001). Needed for section 1's backfill.
+do $$
+declare
+  total integer;
+  unresolved integer;
+begin
+  select count(*) into total from server_registrations;
+  select count(*) into unresolved
+  from server_registrations sr
+  left join licenses l on l.id = sr.license_id
+  where l.user_id is null;
+  if unresolved != 0 then
+    raise exception
+      'preflight A: % of % server_registrations rows have no resolvable licence owner', unresolved, total;
+  end if;
+  raise notice 'preflight A ok: server_registrations total=% unresolved=0', total;
+end $$;
+
+-- B. feed_subscriptions -> licence -> server_registrations row must resolve for every row.
+--    At most one is structural today (0031 unique(license_id)); this checks at least one.
+do $$
+declare
+  total integer;
+  unresolved integer;
+begin
+  select count(*) into total from feed_subscriptions;
+  select count(*) into unresolved
+  from feed_subscriptions fs
+  left join server_registrations sr on sr.license_id = fs.license_id
+  where sr.id is null;
+  if unresolved != 0 then
+    raise exception
+      'preflight B: % of % feed_subscriptions rows have no server_registrations row for their licence', unresolved, total;
+  end if;
+  raise notice 'preflight B ok: feed_subscriptions total=% unresolved=0', total;
+end $$;
+
+-- C. feed_tier_requests: every row resolves to a server row, and every tier_key resolves to
+--    >= 1 feed_tiers row (directly, or via the package literals -- same expansion as
+--    PACKAGE_TIER_KEYS in src/lib/feed-tier-catalogue.ts, repeated here as SQL because a
+--    migration cannot import TypeScript; if that map changes, this block must change too).
+do $$
+declare
+  total integer;
+  no_server integer;
+  no_tier integer;
+  provisioned integer;
+begin
+  select count(*) into total from feed_tier_requests;
+
+  select count(*) into no_server
+  from feed_tier_requests ftr
+  left join server_registrations sr on sr.license_id = ftr.license_id
+  where sr.id is null;
+
+  select count(*) into no_tier
+  from feed_tier_requests ftr
+  where not exists (
+    select 1 from feed_tiers ft
+    where ft.tier_key = ftr.tier_key
+       or (ftr.tier_key = 'ld-retail-package' and ft.tier_key in ('ld-beta-56', 'ld-gamma-19', 'ld-delta-18'))
+       or (ftr.tier_key = 'ny-retail-package' and ft.tier_key in ('ny-fast', 'ny-normal'))
+  );
+
+  select count(*) into provisioned from feed_tier_requests where status = 'provisioned';
+
+  if no_server != 0 or no_tier != 0 then
+    raise exception
+      'preflight C: feed_tier_requests total=% without server row=% with unresolvable tier_key=%',
+      total, no_server, no_tier;
+  end if;
+  raise notice 'preflight C ok: feed_tier_requests total=% no_server=0 no_tier=0 provisioned_to_map=%',
+    total, provisioned;
+end $$;
+
+-- D. The new live business key (server_registration_id, feed_tier_id) must have no duplicate
+--    groups. Computed through the licence -> server mapping section 4 will write.
+do $$
+declare
+  dup_groups integer;
+begin
+  select count(*) into dup_groups
+  from (
+    select sr.id as server_registration_id, fs.feed_tier_id
+    from feed_subscriptions fs
+    join server_registrations sr on sr.license_id = fs.license_id
+    where fs.feed_tier_id is not null and fs.status in ('trial', 'active')
+    group by sr.id, fs.feed_tier_id
+    having count(*) > 1
+  ) d;
+  if dup_groups != 0 then
+    raise exception 'preflight D: % live (server, tier) duplicate groups', dup_groups;
+  end if;
+  raise notice 'preflight D ok: live (server, tier) duplicate groups=0';
+end $$;
+
+-- ---------------------------------------------------------------------------------------
+-- 1. server_registrations: key on the server, not the licence
+-- ---------------------------------------------------------------------------------------
+
+-- Expected: ALTER TABLE x2, UPDATE <total from preflight A>, notice, CREATE INDEX.
+alter table server_registrations
+  add column if not exists user_id uuid references users(id) on delete cascade;
+
+-- updated_at deliberately untouched: it is shown as "last edited" in the admin panel and the
+-- client did not edit anything.
+update server_registrations sr
+set user_id = l.user_id
+from licenses l
+where l.id = sr.license_id
+  and sr.user_id is null;
+
+do $$
+declare
+  unresolved integer;
+begin
+  select count(*) into unresolved from server_registrations where user_id is null;
+  if unresolved != 0 then
+    raise exception 'section 1: user_id backfill left % row(s) null', unresolved;
+  end if;
+  raise notice 'section 1 ok: server_registrations.user_id null rows=0';
+end $$;
+
+-- NOT NULL deferred to the tighten migration (see DEPLOY ORDER). unique(license_id) kept.
+alter table server_registrations
+  alter column license_id drop not null;
+
+create index if not exists server_registrations_user_idx
+  on server_registrations (user_id);
+
+-- ---------------------------------------------------------------------------------------
+-- 2. access_requests envelope + one detail table per product kind
+-- ---------------------------------------------------------------------------------------
+
+-- Expected: CREATE TABLE x3, CREATE INDEX x5.
+create table if not exists access_requests (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  product_kind text not null check (product_kind in ('feed_tier', 'software')),
+  -- Grouping key only: the N rows one "Request Access" click produced. No batch status.
+  batch_id uuid not null,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  decision text check (decision in ('trial', 'paid')),
+  ends_at timestamptz,
+  invoice_ref text,
+  reason text,
+  decided_by uuid references users(id),
+  decided_at timestamptz,
+  legacy_feed_tier_request_id uuid,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists access_requests_user_idx
+  on access_requests (user_id, created_at desc);
+create index if not exists access_requests_status_idx
+  on access_requests (status, created_at desc);
+create index if not exists access_requests_batch_idx
+  on access_requests (batch_id);
+create index if not exists access_requests_legacy_idx
+  on access_requests (legacy_feed_tier_request_id)
+  where legacy_feed_tier_request_id is not null;
+
+create table if not exists feed_tier_request_details (
+  request_id uuid primary key references access_requests(id) on delete cascade,
+  server_registration_id uuid not null references server_registrations(id),
+  feed_tier_id uuid not null references feed_tiers(id)
+);
+
+create index if not exists feed_tier_request_details_server_tier_idx
+  on feed_tier_request_details (server_registration_id, feed_tier_id);
+
+create table if not exists software_request_details (
+  request_id uuid primary key references access_requests(id) on delete cascade,
+  product_id text not null
+);
+
+-- ---------------------------------------------------------------------------------------
+-- 3. Copy feed_tier_requests -> envelope + detail (re-runnable at phase 2 cutover)
+-- ---------------------------------------------------------------------------------------
+
+-- Envelope id is deterministic: md5(legacy request id || tier id) cast to uuid, so a re-run
+-- upserts the same rows. batch_id = the legacy request id (one legacy request = one batch;
+-- a package request becomes N envelopes sharing it). Status/decision fields are refreshed on
+-- conflict because the old table is the source of truth until cutover. Old column map:
+--   status 'provisioned' -> 'approved'; actioned_by -> decided_by; actioned_at -> decided_at;
+--   reason -> reason; decision/ends_at/invoice_ref NULL (the old flow had no trial|paid step).
+-- Two plain INSERTs off one temp table, not a data-modifying CTE: sub-statements in WITH share
+-- one snapshot, so the detail rows' FK to envelopes inserted in the same statement is not
+-- guaranteed to resolve on first run. Temp table is on commit drop.
+-- Expected: SELECT <N> (temp), INSERT <N> (envelopes), INSERT <N> (details), notice.
+create temp table tmp_0086_expanded on commit drop as
+select
+  ftr.id as legacy_id,
+  md5(ftr.id::text || ':' || ft.id::text)::uuid as envelope_id,
+  ftr.user_id,
+  ftr.status,
+  ftr.reason,
+  ftr.actioned_by,
+  ftr.actioned_at,
+  ftr.created_at,
+  ftr.license_id,
+  ft.id as feed_tier_id
+from feed_tier_requests ftr
+join feed_tiers ft
+  on ft.tier_key = ftr.tier_key
+  or (ftr.tier_key = 'ld-retail-package' and ft.tier_key in ('ld-beta-56', 'ld-gamma-19', 'ld-delta-18'))
+  or (ftr.tier_key = 'ny-retail-package' and ft.tier_key in ('ny-fast', 'ny-normal'));
+
+insert into access_requests
+  (id, user_id, product_kind, batch_id, status, decision, ends_at, invoice_ref, reason,
+   decided_by, decided_at, legacy_feed_tier_request_id, created_at)
+select
+  e.envelope_id,
+  e.user_id,
+  'feed_tier',
+  e.legacy_id,
+  case e.status when 'provisioned' then 'approved' else e.status end,
+  null,
+  null,
+  null,
+  e.reason,
+  e.actioned_by,
+  e.actioned_at,
+  e.legacy_id,
+  e.created_at
+from tmp_0086_expanded e
+on conflict (id) do update set
+  status = excluded.status,
+  reason = excluded.reason,
+  decided_by = excluded.decided_by,
+  decided_at = excluded.decided_at;
+
+insert into feed_tier_request_details (request_id, server_registration_id, feed_tier_id)
+select
+  e.envelope_id,
+  sr.id,
+  e.feed_tier_id
+from tmp_0086_expanded e
+join server_registrations sr on sr.license_id = e.license_id
+on conflict (request_id) do nothing;
+
+do $$
+declare
+  legacy_rows integer;
+  envelopes integer;
+  details integer;
+begin
+  select count(*) into legacy_rows from feed_tier_requests;
+  select count(*) into envelopes from access_requests where legacy_feed_tier_request_id is not null;
+  select count(*) into details
+  from feed_tier_request_details d
+  join access_requests a on a.id = d.request_id
+  where a.legacy_feed_tier_request_id is not null;
+  if envelopes != details then
+    raise exception 'section 3: envelope/detail mismatch envelopes=% details=%', envelopes, details;
+  end if;
+  if envelopes < legacy_rows then
+    raise exception 'section 3: fewer envelopes (%) than legacy rows (%)', envelopes, legacy_rows;
+  end if;
+  raise notice 'section 3 ok: legacy_rows=% envelopes=% details=%', legacy_rows, envelopes, details;
+end $$;
+
+-- ---------------------------------------------------------------------------------------
+-- 4. feed_subscriptions: server-keyed, licence-agnostic clock
+-- ---------------------------------------------------------------------------------------
+
+-- Expected: ALTER TABLE x3, UPDATE x2 (<total from preflight B> each), notice x2,
+-- CREATE INDEX, DO (drops a composite FK only if one exists; none is defined in 0001-0084).
+alter table feed_subscriptions
+  add column if not exists server_registration_id uuid references server_registrations(id);
+
+alter table feed_subscriptions
+  add column if not exists ends_at timestamptz;
+
+update feed_subscriptions fs
+set server_registration_id = sr.id, updated_at = now()
+from server_registrations sr
+where sr.license_id = fs.license_id
+  and fs.server_registration_id is null;
+
+do $$
+declare
+  unresolved integer;
+begin
+  select count(*) into unresolved from feed_subscriptions where server_registration_id is null;
+  if unresolved != 0 then
+    raise exception 'section 4: server_registration_id backfill left % row(s) null', unresolved;
+  end if;
+  raise notice 'section 4 ok: feed_subscriptions.server_registration_id null rows=0';
+end $$;
+
+-- ends_at := the bound licence's expires_at (coxwell may overwrite with invoice dates later).
+update feed_subscriptions fs
+set ends_at = l.expires_at, updated_at = now()
+from licenses l
+where l.id = fs.license_id
+  and fs.ends_at is null;
+
+-- GATE (spec, m48548): must read 0 after the backfill or the migration fails.
+do $$
+declare
+  live_null integer;
+  live_past integer;
+begin
+  select count(*) into live_null
+  from feed_subscriptions
+  where status in ('trial', 'active') and ends_at is null;
+  if live_null != 0 then
+    raise exception 'section 4 gate: % live feed_subscriptions rows with ends_at NULL (expected 0)', live_null;
+  end if;
+  select count(*) into live_past
+  from feed_subscriptions
+  where status in ('trial', 'active') and ends_at <= now();
+  raise notice 'section 4 gate ok: live rows with ends_at NULL=0; live rows with ends_at already past=% (informational)', live_past;
+end $$;
+
+-- NOT NULL on server_registration_id deferred to the tighten migration (see DEPLOY ORDER).
+alter table feed_subscriptions
+  alter column license_id drop not null;
+
+-- New live business key, created alongside feed_subscriptions_license_feed_tier_live_uidx
+-- (0081 step 5). Cannot conflict: preflight D. The 0081 index is dropped in the tighten step.
+create unique index if not exists feed_subscriptions_server_feed_tier_live_uidx
+  on feed_subscriptions (server_registration_id, feed_tier_id)
+  where feed_tier_id is not null and status in ('trial', 'active');
+
+-- Composite FK feed_subscriptions -> licenses(id, user_id): none exists in migrations
+-- 0001-0084 (only the single-column license_id FK from 0081). Dropped here only if one was
+-- added out-of-band; the notice says which case applied.
+do $$
+declare
+  fk record;
+  dropped integer := 0;
+begin
+  for fk in
+    select c.conname
+    from pg_constraint c
+    where c.conrelid = 'feed_subscriptions'::regclass
+      and c.confrelid = 'licenses'::regclass
+      and c.contype = 'f'
+      and array_length(c.conkey, 1) > 1
+  loop
+    execute format('alter table feed_subscriptions drop constraint %I', fk.conname);
+    dropped := dropped + 1;
+    raise notice 'section 4: dropped composite FK %', fk.conname;
+  end loop;
+  raise notice 'section 4: composite FKs to licenses dropped=%', dropped;
+end $$;
+
+-- ---------------------------------------------------------------------------------------
+-- 5. feed_allowlist_records: what IP the provider was told to allow, and when
+-- ---------------------------------------------------------------------------------------
+
+-- Written on approval (phase 2). revoked_at NULL = the provider has not been told to remove it.
+-- Expected: CREATE TABLE, CREATE INDEX.
+create table if not exists feed_allowlist_records (
+  server_registration_id uuid not null references server_registrations(id),
+  feed_tier_id uuid not null references feed_tiers(id),
+  ip text not null,
+  told_at timestamptz not null default now(),
+  revoked_at timestamptz,
+  primary key (server_registration_id, feed_tier_id, told_at)
+);
+
+create index if not exists feed_allowlist_records_open_idx
+  on feed_allowlist_records (server_registration_id, feed_tier_id)
+  where revoked_at is null;
+
+-- ---------------------------------------------------------------------------------------
+-- 6. Post-migration read for manual review, then the ledger row
+-- ---------------------------------------------------------------------------------------
+
+select
+  (select count(*) from server_registrations where user_id is null) as sr_user_id_null,
+  (select count(*) from feed_subscriptions where server_registration_id is null) as fs_server_null,
+  (select count(*) from feed_subscriptions where status in ('trial', 'active') and ends_at is null) as fs_live_ends_at_null,
+  (select count(*) from access_requests) as access_requests_rows,
+  (select count(*) from feed_tier_request_details) as feed_tier_detail_rows,
+  (select count(*) from feed_tier_requests) as legacy_request_rows;
+
+insert into schema_migrations (version, name) values
+  ('0086', '0086_marketplace_recut.sql')
+on conflict (version) do nothing;
+
+commit;
