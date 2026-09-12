@@ -324,18 +324,18 @@ export async function pseudonymForSubscriber(
  *
  * The ORDER BY is TOTAL (seq, then started_at, then id) as of 2026-09-12, not just `p.seq`:
  * within one account every row shares a seq, so under `order by p.seq` alone their relative
- * order was unspecified -- and groupAccountSubscriptions takes a package group's status from
+ * order was unspecified -- and groupAccountSubscriptions then took a package group's status from
  * `members[0]`, so an account holding one lapsed and three active tiers of the same package
  * could read either way. Evidence it was genuinely unpinned rather than incidentally stable:
  * HH1's LD Base rendered its members Beta-first under the old clause and Delta-first (true
  * earliest grant) under this one. I did not catch the *count* flipping, so treat "it flipped in
  * prod" as unproven -- the query simply never guaranteed otherwise.
  *
- * This makes the row set stable; it does NOT decide whether such a group *should* read lapsed
- * (it now reads the earliest grant's status, which for coxwell's own HH20 is a 09-03 lapsed
- * ld-beta-56 row, so his three 09-11 active London tiers stay invisible on Revenue). That
- * semantic question moves money on three surfaces and is with marcus/coxwell -- bus thread
- * leo-provider-revenue-ny-base-2026-09-12. See statusForGroup below. */
+ * This makes the row set stable; it never decided whether such a group *should* read lapsed.
+ * That semantic question (it hid coxwell's own HH20's three 09-11 active London tiers behind a
+ * 09-03 lapsed ld-beta-56 row) was ruled by marcus in m49051 and no longer depends on this
+ * ORDER BY at all -- see statusForPackageMembers below. The order still fixes which member
+ * speaks for a group's price, server IP and member list, so it stays. */
 export async function listSubscribersForProvider(providerUserId: string): Promise<ProviderSubscriberRow[]> {
   try {
     const result = await pool.query<{
@@ -382,6 +382,27 @@ export type AccountRowGroup =
   | { kind: "package"; pseudonym: string; label: string; status: ProviderSubscriberRow["status"]; members: ProviderSubscriberRow[] }
   | { kind: "single"; row: ProviderSubscriberRow };
 
+/** A package group's status. Ruled by marcus, m49051 (2026-09-12, bus thread
+ * leo-provider-revenue-ny-base-2026-09-12), replacing the former `members[0].status`: a group
+ * reads ACTIVE if ANY member is effective-active, and LAPSED only when EVERY member is lapsed.
+ * His reason: price is written and resolved per package (setFeedSubscriptionPriceForPackage /
+ * resolvedPriceCentsFor), so a package holding a live paid tier is live money, and letting one
+ * dead tier speak for the whole group under-reports on three surfaces at once. It hid coxwell's
+ * own HH20 LD Base -- three tiers live since 09-11 -- behind one lapsed 09-03 ld-beta-56 row.
+ * Decided here, inside the grouping, so Revenue, Subscribers and Overview move together once
+ * rather than each applying its own predicate.
+ *
+ * The third outcome is explicit, not a fallthrough: members that are neither any-active nor
+ * all-lapsed (a trial-covered tier beside a lapsed one) read "trial", never "active" -- a trial
+ * earns no payout (providerShareCentsFor returns null for it) and this rule must not promote one
+ * into a paying client. No such group exists in the live data today (35 active / 2 lapsed rows,
+ * zero status='trial'), so this branch is written from the type, not from an observed row. */
+function statusForPackageMembers(members: ProviderSubscriberRow[]): ProviderSubscriberRow["status"] {
+  if (members.some((m) => m.status === "active")) return "active";
+  if (members.every((m) => m.status === "lapsed")) return "lapsed";
+  return "trial";
+}
+
 /** Mirrors groupTiers' package/single split (feed-provider-packages.ts) but scoped per
  * account instead of per provider -- Revenue groups every tier a provider sells, this groups
  * one client's own granted tiers, so a client holding all of LD Base's three tiers reads as
@@ -404,7 +425,7 @@ export function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): Accoun
       const members = accountRows.filter((r) => r.tierKey && pkg.tierKeys.includes(r.tierKey));
       if (members.length === 0) continue;
       members.forEach((m) => used.add(m.subscriptionId));
-      groups.push({ kind: "package", pseudonym, label: pkg.label, status: members[0].status, members });
+      groups.push({ kind: "package", pseudonym, label: pkg.label, status: statusForPackageMembers(members), members });
     }
     for (const row of accountRows) {
       if (!used.has(row.subscriptionId)) groups.push({ kind: "single", row });
@@ -417,13 +438,10 @@ export function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): Accoun
  * leo-provider-revenue-ny-base-2026-09-12) when the Revenue page grew a second view and a
  * region filter and would otherwise have inlined this ternary a fourth and fifth time.
  * Behaviour is unchanged from the copies it replaces in sumProviderShareCents /
- * sumMonthlyGrossCents. NOTE, not fixed here because it moves money and needs a ruling: for a
- * package the status is `members[0].status`, so a mixed group (one lapsed tier, three active)
- * reads entirely by whichever row sorts first -- now deterministically the earliest grant, see
- * listSubscribersForProvider's ORDER BY above. "Earliest grant wins" is a stable rule, not a
- * justified one: it currently hides coxwell's own three active London tiers behind one lapsed
- * 09-03 row. Whether a mixed group should read active (any live member), lapsed, or split into
- * per-tier rows is marcus/coxwell's call -- reported with the m49019 answer. */
+ * sumMonthlyGrossCents. The mixed-group question this used to flag as unresolved is now ruled
+ * (marcus m49051) and answered by statusForPackageMembers above, which this just reads: a
+ * package is active if any member is, lapsed only if all are. Nothing here re-derives a status
+ * from member rows, so a caller cannot apply a different predicate to the same group. */
 export function statusForGroup(group: AccountRowGroup): ProviderSubscriberRow["status"] {
   return group.kind === "package" ? group.status : group.row.status;
 }
