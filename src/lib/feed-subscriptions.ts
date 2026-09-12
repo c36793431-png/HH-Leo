@@ -311,6 +311,29 @@ export async function pseudonymForSubscriber(
   }
 }
 
+/** Trial vs paid, ON TOP of EFFECTIVE_STATUS_SQL -- marcus m49078 item 2 (2026-09-12): HH1, HH2,
+ * HH12 and HH19 all hold licences.tier = 'trial' at price_cents 0, yet every provider surface
+ * listed them under "paying subscribers only", contradicting its own scope note. A trial-originated
+ * grant is written with status = 'active' like any purchased one (see the feed_tier_trials note on
+ * EFFECTIVE_STATUS_SQL), so s.status alone cannot tell them apart; the bound licence's tier can.
+ *
+ * Deliberately NOT a fourth branch inside EFFECTIVE_STATUS_SQL: m49078 rules that the
+ * entitlement/licence-expiry branch is coxwell's (21:55Z) and must not be touched, so this only
+ * re-labels a row the CASE already decided is live. A 'lapsed' verdict always survives -- both the
+ * explicit admin lapse (the one-way ratchet) and the licence-expiry branch.
+ *
+ * That last point is STRICTER than m49078's literal wording ("and s.status is not 'lapsed'"), and
+ * it is a visible difference on live data, not a hypothetical: HH15 and HH18 sit on trial licences
+ * that have already EXPIRED (2026-09-06 / 2026-09-09), so s.status is 'active' while the effective
+ * status is 'lapsed'. Read literally they would flip lapsed -> trial and lose their expiry date;
+ * that would be the licence-expiry branch being overridden from outside, which is the one thing
+ * m49078 forbids. They stay lapsed and read "Licence expired {date}". Flagged to marcus; flipping
+ * to the literal reading is changing `effective === "lapsed"` to a raw-status test here. */
+export function statusForLicenseTier(effective: SubscriptionStatus, licenseTier: string | null): SubscriptionStatus {
+  if (effective === "lapsed") return "lapsed";
+  return licenseTier === "trial" ? "trial" : effective;
+}
+
 /** Provider-facing subscriber list -- pseudonyms only. Never select subscriber_user_id,
  * email, or display_name here; leaking any of those into a provider-visible response
  * defeats the entire point of the pseudonym table. Degrades to an empty list pre-migration
@@ -322,6 +345,12 @@ export async function pseudonymForSubscriber(
  * only -- no captured_ip fallback, no mismatch/verification state; that stays admin-only
  * per the 2026-08-29 ruling. Null when the client has no server registered at all, which is
  * the true state for most of the London backfill rows, not a bug to paper over.
+ *
+ * licenses is joined on s.license_id purely to read l.tier for statusForLicenseTier above (trial
+ * vs paid, m49078 item 2). It joins on the licences PRIMARY KEY, so like server_registrations it
+ * can never fan a subscription row out into several. The entitlement question still belongs to
+ * EFFECTIVE_STATUS_SQL's own `exists` sub-select, which is untouched -- this join adds a label,
+ * not a second liveness test, and the two must not be merged.
  *
  * The ORDER BY is TOTAL (seq, then started_at, then id) as of 2026-09-12, not just `p.seq`:
  * within one account every row shares a seq, so under `order by p.seq` alone their relative
@@ -349,15 +378,18 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       started_at: Date;
       declared_ip: string | null;
       price_cents: number | null;
+      license_tier: string | null;
     }>(
       `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, ft.tier_key, ft.region_key,
-              ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip, s.price_cents
+              ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip, s.price_cents,
+              l.tier as license_tier
        from feed_subscriptions s
        join provider_client_pseudonyms p
          on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
        left join feed_tiers ft on ft.id = s.feed_tier_id
        left join provider_tiers pt on pt.id = s.provider_tier_id
        left join server_registrations sr on sr.license_id = s.license_id
+       left join licenses l on l.id = s.license_id
        where s.provider_user_id = $1
        order by p.seq, s.started_at, s.id`,
       [providerUserId]
@@ -368,7 +400,7 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       tierName: row.tier_name,
       tierKey: row.tier_key,
       regionKey: row.region_key,
-      status: row.status,
+      status: statusForLicenseTier(row.status, row.license_tier),
       startedAt: row.started_at,
       serverIp: row.declared_ip,
       priceCents: row.price_cents,
@@ -485,12 +517,31 @@ export function startedAtForGroup(group: AccountRowGroup): Date {
  *
  * A stored 0 resolves as 0 here, unchanged by C3 (m49063). The surfaces spell a 0 "unpriced"
  * (isUnpriced) but this stays the literal stored value: skipping 0 members in the find() below
- * would let a sibling's price speak for a row that does not carry it, which moves money. */
+ * would let a sibling's price speak for a row that does not carry it, which moves money.
+ *
+ * EFFECTIVE-ACTIVE MEMBERS ONLY, ruled by marcus 2026-09-12 (m49078 item 1, restated m49088 as
+ * option (a)). The "every member is written the same price together" invariant above holds only
+ * while a group's members are all live: the moment ENDED history and live rows share one
+ * (client, package) group, the first non-null price can come from a dead row. That is exactly
+ * what happened tonight -- coxwell's own three $30 LD Base rows from his expired paid licence
+ * were backfilled beside his live, never-priced team-licence rows, and HH20 rendered $30 / $15,
+ * pushing London's total to $90 / $45 off money that is not being paid. A lapsed row is history,
+ * not a rate card: a group whose only priced members are lapsed resolves to null and every
+ * surface spells it "unpriced". Applied to `single` groups too, so one rule covers both shapes.
+ *
+ * This is why the Lapsed filter must NOT read its price column from here -- a lapsed group's
+ * last known price is a separate question from what it is being charged now, and it needs its
+ * own accessor rather than a relaxed version of this one. */
 export function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
   if (group.kind === "package") {
-    return group.members.map((m) => m.priceCents).find((c) => c != null) ?? null;
+    return (
+      group.members
+        .filter((m) => m.status === "active")
+        .map((m) => m.priceCents)
+        .find((c) => c != null) ?? null
+    );
   }
-  return group.row.priceCents ?? null;
+  return group.row.status === "active" ? group.row.priceCents ?? null : null;
 }
 
 /** The one place that walks account groups and adds up the provider's 50% share, bus thread
