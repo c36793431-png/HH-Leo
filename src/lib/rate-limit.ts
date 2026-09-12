@@ -1,6 +1,7 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
+let redisClient: Redis | null = null;
 let keyLimiter: Ratelimit | null = null;
 let ipLimiter: Ratelimit | null = null;
 // Heartbeat is high-frequency by design (the client beats on a timer), so it gets its
@@ -41,6 +42,7 @@ function init(): {
   if (!url || !token) return null; // Not configured (e.g. local dev) — callers fail open.
 
   const redis = new Redis({ url, token });
+  redisClient = redis;
   keyLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(60, "1 h"), prefix: "rl:license-key" });
   ipLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(600, "1 h"), prefix: "rl:license-ip" });
   // Sized off the real cadence: one open trading tab beats every 180s = 20/hr, and the
@@ -68,6 +70,18 @@ function init(): {
     prefix: "rl:hft-alert-ip",
   });
   return { keyLimiter, ipLimiter, hbKeyLimiter, hbIpLimiter, hftAlertKeyMinuteLimiter, hftAlertKeyHourLimiter, hftAlertIpLimiter };
+}
+
+/**
+ * The one Upstash client this process owns — the same instance the limiters above use.
+ * Exported so the /v1/hb beat buffer (src/lib/heartbeat-buffer.ts) can reuse it rather than
+ * constructing a second connection to the same database (marcus's ruling, 2026-09-11).
+ * Returns null when Upstash isn't configured, exactly like init(); every caller must treat
+ * that as "no Redis" and degrade, never throw.
+ */
+export function getRedis(): Redis | null {
+  init();
+  return redisClient;
 }
 
 /** Per-license-key + per-source-IP counters for /api/verify-license. In-memory counters don't work across serverless invocations, hence Upstash. */

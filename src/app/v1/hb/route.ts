@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkHeartbeatRateLimit } from "@/lib/rate-limit";
 import { httpsViolation, clientIp } from "@/lib/client-endpoints";
-import { captureConnectionIp } from "@/lib/server-registration";
-import { recordHeartbeat, resolveLicenseKey } from "@/lib/client-heartbeats";
+import { bufferBeat } from "@/lib/heartbeat-buffer";
 
 /**
  * /v1/hb — desktop-client heartbeat. LISTEN-ONLY.
@@ -34,8 +33,18 @@ import { recordHeartbeat, resolveLicenseKey } from "@/lib/client-heartbeats";
  * the response entirely (never checks status, swallows all errors), so no status code we
  * pick here can change its behaviour.
  *
- * Writes go to client_heartbeats (migration 0085), upserted one row per
- * (license_key, hwid) — see that file's header for the grain and null semantics.
+ * NO POSTGRES ON A BEAT (marcus's redesign ruling, 2026-09-11). A beat buffers into Upstash
+ * and returns; /api/cron/flush-heartbeats drains the buffer every 30 minutes and does the
+ * client_heartbeats upsert (migration 0085), the licence-key resolution and the connection-IP
+ * capture. Neon autosuspends, and at the real cadence (~560 beats/hr, ~3 queries each) a beat
+ * that touched the DB would hold the compute awake permanently — the endpoint's whole compute
+ * allowance, spent on telemetry nothing reads in real time. The 429 caps below are unchanged;
+ * they now bound Redis rather than Postgres.
+ *
+ * Writes still land in client_heartbeats (migration 0085), upserted one row per
+ * (license_key, hwid) — see that file's header for the grain and null semantics. The 30-minute
+ * delay is invisible in the row: last_seen and beat_count come from the buffered beats, not
+ * from when the sweep happened to run.
  */
 
 // lk/hid are opaque client-supplied identifiers; cap them so a hostile caller can't use
@@ -125,51 +134,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "rate limited" }, { status: 429 });
   }
 
-  try {
-    // Resolve BEFORE recording: license_id is null only when the key genuinely matched
-    // nothing (0085's header), so a failed lookup must not be written as a null — it
-    // would be a false statement about the key. If this throws, the beat isn't recorded.
-    const resolved = await resolveLicenseKey(licenseKey);
-
-    await recordHeartbeat({
-      licenseKey,
-      hwid,
-      licenseId: resolved?.licenseId ?? null,
-      userId: resolved?.userId ?? null,
-      clientVersion: optionalString(body.v, MAX_VERSION_LENGTH),
-      d1: optionalBool(body.d1),
-      d2: optionalBool(body.d2),
-      d3: optionalBool(body.d3),
-      sp: optionalJson(body.sp, MAX_SP_BYTES),
-      exeHash: optionalString(body.eh, MAX_HASH_LENGTH),
-      // clientIp() returns the literal "unknown" with no x-forwarded-for; store NULL
-      // rather than that sentinel, so "we don't know" doesn't read as an address.
-      ip: ip === "unknown" ? null : ip,
-      raw: optionalJson(body, MAX_RAW_BYTES),
-    });
-
-    // FOC12's ask, coxwell approved with the bundle: beats feed the IP-tracking table too,
-    // the same hookup /v1/validate has. Only possible for a resolved key — connection_ips
-    // .license_id is NOT NULL with an FK (0031). captureConnectionIp dedupes against the
-    // latest row, so a beat on an unchanged IP is one cheap select and writes nothing.
-    //
-    // Awaited, unlike /v1/validate's fire-and-forget: un-awaited work after the response
-    // isn't guaranteed to run on serverless, and a silently-skipped hookup is the failure
-    // mode we're trying to close. The client is on a 180s timer and never reads the
-    // response, so the added latency costs nothing.
-    if (resolved) {
-      await captureConnectionIp(
-        resolved.licenseId,
-        ip,
-        "heartbeat",
-        `https://portal.horizonhft.com/admin/connections/${resolved.licenseId}`
-      );
-    }
-  } catch (err) {
-    // Listen-only: there is nothing to tell the client, and a 500 would only add noise to
-    // a caller that discards it. Log so the failure is visible in platform logs.
-    console.error("/v1/hb: failed to record heartbeat", err);
-  }
+  // Buffer and return. resolveLicenseKey moved to the flush: it is a Postgres read, and it
+  // has to run against the licences table as it stands when the row is written anyway.
+  //
+  // bufferBeat never throws. A dropped beat (Redis down, or Upstash simply not configured in
+  // dev) still answers 204 — listen-only means there is nothing to tell the client, and a 500
+  // would only add noise to a caller that discards it. There is deliberately NO Postgres
+  // fallback: falling back to the DB under Redis failure is precisely the compute this
+  // redesign removes, and it would fire hardest exactly when the platform is already unwell.
+  await bufferBeat({
+    licenseKey,
+    hwid,
+    clientVersion: optionalString(body.v, MAX_VERSION_LENGTH),
+    d1: optionalBool(body.d1),
+    d2: optionalBool(body.d2),
+    d3: optionalBool(body.d3),
+    sp: optionalJson(body.sp, MAX_SP_BYTES),
+    exeHash: optionalString(body.eh, MAX_HASH_LENGTH),
+    // clientIp() returns the literal "unknown" with no x-forwarded-for; store NULL rather
+    // than that sentinel, so "we don't know" doesn't read as an address.
+    ip: ip === "unknown" ? null : ip,
+    raw: optionalJson(body, MAX_RAW_BYTES),
+  });
 
   return noContent();
 }
