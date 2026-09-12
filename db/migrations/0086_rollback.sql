@@ -38,6 +38,11 @@ alter table feed_subscriptions
 alter table feed_subscriptions
   drop column if exists server_registration_id;
 
+-- 3. access_request_id references access_requests, so it goes before that table drops.
+--    request_id (0078) was never touched by 0086 and is left alone.
+alter table feed_subscriptions
+  drop column if exists access_request_id;
+
 -- 3 + 2. requests (detail tables first, they reference the envelope)
 drop table if exists software_request_details;
 drop table if exists feed_tier_request_details;

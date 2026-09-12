@@ -20,15 +20,21 @@
 --   1. server_registrations: add user_id (backfilled from licenses.user_id); license_id nullable.
 --   2. access_requests envelope + feed_tier_request_details + software_request_details.
 --   3. Copy feed_tier_requests -> envelope + detail. Package literals expand to N envelopes
---      sharing one batch_id. Idempotent (deterministic ids, upsert on id) so it can be re-run
---      at the phase 2 cutover to pick up rows the old code wrote in between.
+--      sharing one batch_id. Idempotent (deterministic ids, upsert on id, and the upsert never
+--      overwrites an envelope already decided through the new code) so it can be re-run at the
+--      phase 2 cutover to pick up rows the old code wrote in between. Then
+--      feed_subscriptions.access_request_id (nullable FK to access_requests) is added and
+--      backfilled from request_id at tier grain, GATED: zero unmapped where request_id is set.
 --   4. feed_subscriptions: add server_registration_id (backfilled via licence -> server row),
---      add ends_at (backfilled from the bound licence's expires_at, GATED: zero live rows with
---      ends_at NULL), license_id nullable, new live business-key index on
---      (server_registration_id, feed_tier_id) created ALONGSIDE the 0081 one, drop any
---      composite FK to licenses(id, user_id) if one exists.
+--      add ends_at (non-trial rows from the bound licence's expires_at; trial rows from the
+--      trial's own feed_tier_trials.trial_ends_at, else left NULL and named in section 6;
+--      GATED: zero active rows with ends_at NULL), license_id nullable, new live business-key
+--      index on (server_registration_id, feed_tier_id) created ALONGSIDE the 0081 one, drop
+--      any composite FK to licenses(id, user_id) if one exists.
 --   5. feed_allowlist_records -- the allowlist of record (what IP the provider was told, when).
---   6. schema_migrations row.
+--   6. Named listing (one notice line per row) of every live row whose ends_at is already
+--      past and every trial row left with ends_at NULL, the summary counts, then the
+--      schema_migrations row.
 --
 -- DEPLOY ORDER -- READ BEFORE APPLYING. Three live write paths do not know the new columns:
 --     src/lib/server-registration.ts:158-185   insert ... on conflict (license_id)   (no user_id)
@@ -42,26 +48,23 @@
 --     (ii)  code: phase 2 (kai, lib/access-requests.ts + approval path) and Leo's /account/servers
 --           follow-up write user_id and server_registration_id on every insert.
 --     (iii) tighten migration (number assigned by marcus after Leo's 0085 lands), applied once
---           (ii) is live. Statement list, so the target is on record here:
+--           (ii) is live. Target statements, so the end state is on record here:
 --             alter table server_registrations alter column user_id set not null;
 --             alter table feed_subscriptions alter column server_registration_id set not null;
 --             drop index feed_subscriptions_license_feed_tier_live_uidx;
---             alter table server_registrations drop constraint server_registrations_license_id_key;
---             create unique index server_registrations_license_id_uidx on server_registrations
---               (license_id) where license_id is not null;
---             -- and, once phase 2 has cut every reader over: drop table feed_tier_requests.
---   Declaring NOT NULL in THIS file would make the three inserts above fail with
---   not_null_violation from the moment of apply until (ii) deploys (server registration form,
---   admin direct grant, request approval). Swapping the unique constraint for a partial index in
---   this file would make server-registration.ts:161/176 fail with "no unique or exclusion
---   constraint matching the ON CONFLICT specification" for the same window -- a partial unique
---   index is only inferred by ON CONFLICT when the statement repeats its WHERE clause. On the
---   semantics: a plain UNIQUE on a nullable column already permits any number of NULL
---   license_id rows (NULLS DISTINCT is the Postgres default), so the kept constraint IS
---   "unique where license_id is not null"; the swap in (iii) is cosmetic and can be dropped if
---   Fable prefers. If Fable/coxwell would rather accept the outage window and apply the target
---   shape in one file, the four statements are listed under (iii) and can be moved into
---   section 4/1 verbatim; kai's recommendation is the two-step.
+--             -- and, once phase 2 has cut every reader over: drop table feed_tier_requests
+--             -- (feed_subscriptions.request_id drops with it, not here).
+--           This list is NOT the file the tighten gets written from. The tighten file will:
+--           re-run the section 1 and section 4 backfills and their gates (rows the old code
+--           wrote between apply and (ii) have NULL user_id / server_registration_id), re-run
+--           preflight D over the completed mapping, and only then SET NOT NULL and drop the
+--           0081 index. The 0031 unique(license_id) constraint is kept as-is: a plain UNIQUE on
+--           a nullable column already permits any number of NULL license_id rows (NULLS
+--           DISTINCT is the Postgres default), so no partial-index swap is needed (ledger
+--           v1.49). Declaring NOT NULL in THIS file would make the three inserts above fail
+--           with not_null_violation from the moment of apply until (ii) deploys (server
+--           registration form, admin direct grant, request approval). Two-step accepted, ledger
+--           v1.49.
 --
 -- READ-ONLY, NOT LOCKED: feed_tier_requests stays writable at the DB level. The live request
 -- form (feed-tier-requests.ts:109) and admin decision path (:164, :263) still write it until
@@ -102,15 +105,16 @@
 --     detail key live in different tables. "Collision with a live (server, tier) fails the
 --     whole insert loudly" is enforced by phase 2 code against
 --     feed_subscriptions_server_feed_tier_live_uidx inside the batch transaction.
---   - No feed_subscriptions.access_request_id. Phase 2 approval needs the grant identity
---     (request, tier) on the new envelope; today request_id points at feed_tier_requests. Open
---     question Q9 in kai's phase 1 report -- not added here without a ruling.
+--   - feed_subscriptions.request_id (FK to feed_tier_requests, 0078) is NOT dropped or
+--     repointed here; it goes with the old table in the tighten. access_request_id (Q9, ruled
+--     v1.49: add now, additive) sits beside it -- see section 3.
 --   - server_registrations.license_id keeps `on delete cascade` (0031). Under key-on-the-server
 --     a deleted licence arguably should `set null` instead; not changed without a ruling.
 --   - ends_at is copied for lapsed rows too (harmless: records the licence expiry the row was
 --     last gated by). Liveness = status + ends_at > now() is phase 2's read-side change; the
---     gate here is NULL-ness on live rows, not futurity -- a live row whose licence has
---     already expired gets a past ends_at, which is the truthful value.
+--     gate here is NULL-ness on active rows, not futurity -- a live row whose licence (or
+--     trial) has already expired gets a past ends_at, which is the truthful value, and
+--     section 6 names every such row so coxwell sees them before the flip.
 --
 -- Expected result per statement is in the section comments. Every DO block either raises or
 -- emits a `notice` line with its counts -- marcus, paste those lines into the thread.
@@ -161,8 +165,12 @@ end $$;
 
 -- C. feed_tier_requests: every row resolves to a server row, and every tier_key resolves to
 --    >= 1 feed_tiers row (directly, or via the package literals -- same expansion as
---    PACKAGE_TIER_KEYS in src/lib/feed-tier-catalogue.ts, repeated here as SQL because a
---    migration cannot import TypeScript; if that map changes, this block must change too).
+--    PACKAGE_TIER_KEYS at src/lib/feed-tier-catalogue.ts:58-61, repeated here as SQL because
+--    a migration cannot import TypeScript; if that map changes, this block AND section 3's
+--    join must change too). Source as of branch head:
+--      "ld-retail-package": ["ld-beta-56", "ld-gamma-19", "ld-delta-18"]
+--      "ny-retail-package": ["ny-fast", "ny-normal"]
+--    The NY set was never on the provisioning ledger; it is taken from that source line only.
 do $$
 declare
   total integer;
@@ -305,7 +313,11 @@ create table if not exists software_request_details (
 -- Envelope id is deterministic: md5(legacy request id || tier id) cast to uuid, so a re-run
 -- upserts the same rows. batch_id = the legacy request id (one legacy request = one batch;
 -- a package request becomes N envelopes sharing it). Status/decision fields are refreshed on
--- conflict because the old table is the source of truth until cutover. Old column map:
+-- conflict because the old table is the source of truth until cutover -- EXCEPT for an
+-- envelope the NEW code has already decided (decided_at set through phase 2): the DO UPDATE
+-- is guarded with WHERE access_requests.decided_at IS NULL so the cutover re-run cannot reset
+-- a new-path decision back to the old table's pending. Free on first run (table is empty).
+-- Old column map:
 --   status 'provisioned' -> 'approved'; actioned_by -> decided_by; actioned_at -> decided_at;
 --   reason -> reason; decision/ends_at/invoice_ref NULL (the old flow had no trial|paid step).
 -- Two plain INSERTs off one temp table, not a data-modifying CTE: sub-statements in WITH share
@@ -352,7 +364,8 @@ on conflict (id) do update set
   status = excluded.status,
   reason = excluded.reason,
   decided_by = excluded.decided_by,
-  decided_at = excluded.decided_at;
+  decided_at = excluded.decided_at
+where access_requests.decided_at is null;
 
 insert into feed_tier_request_details (request_id, server_registration_id, feed_tier_id)
 select
@@ -384,12 +397,49 @@ begin
   raise notice 'section 3 ok: legacy_rows=% envelopes=% details=%', legacy_rows, envelopes, details;
 end $$;
 
+-- feed_subscriptions.access_request_id (Q9, ruled v1.49): the grant identity on the new
+-- envelope, at tier grain. Nullable now; phase 2 writes it on every approval. Backfilled where
+-- request_id is set with the same deterministic envelope id as above,
+-- md5(request_id || ':' || feed_tier_id)::uuid, joined to access_requests so a row whose
+-- (request, tier) pair produced no envelope stays NULL and trips the gate instead of the FK.
+-- request_id itself is not dropped here; it goes with feed_tier_requests in the tighten.
+-- Expected: ALTER TABLE, UPDATE <rows with request_id set>, notice.
+alter table feed_subscriptions
+  add column if not exists access_request_id uuid references access_requests(id);
+
+update feed_subscriptions fs
+set access_request_id = a.id
+from access_requests a
+where fs.request_id is not null
+  and fs.feed_tier_id is not null
+  and a.id = md5(fs.request_id::text || ':' || fs.feed_tier_id::text)::uuid
+  and fs.access_request_id is null;
+
+-- GATE: zero unmapped where request_id is not null.
+do $$
+declare
+  with_request integer;
+  unmapped integer;
+begin
+  select count(*) into with_request from feed_subscriptions where request_id is not null;
+  select count(*) into unmapped
+  from feed_subscriptions
+  where request_id is not null and access_request_id is null;
+  if unmapped != 0 then
+    raise exception
+      'section 3 gate: % of % feed_subscriptions rows with request_id have no access_request_id', unmapped, with_request;
+  end if;
+  raise notice 'section 3 gate ok: feed_subscriptions with request_id=% unmapped=0', with_request;
+end $$;
+
 -- ---------------------------------------------------------------------------------------
 -- 4. feed_subscriptions: server-keyed, licence-agnostic clock
 -- ---------------------------------------------------------------------------------------
 
--- Expected: ALTER TABLE x3, UPDATE x2 (<total from preflight B> each), notice x2,
--- CREATE INDEX, DO (drops a composite FK only if one exists; none is defined in 0001-0084).
+-- Expected: ALTER TABLE x3, UPDATE x3 (server_registration_id: <total from preflight B>;
+-- ends_at non-trial: <active+lapsed count>; ends_at trial: <trial rows with a trial row>,
+-- 0 on prod as of 2026-09-12 01:07Z where status counts are active=35 lapsed=2 trial=0),
+-- notice x2, CREATE INDEX, DO (drops a composite FK only if one exists; none in 0001-0084).
 alter table feed_subscriptions
   add column if not exists server_registration_id uuid references server_registrations(id);
 
@@ -413,29 +463,48 @@ begin
   raise notice 'section 4 ok: feed_subscriptions.server_registration_id null rows=0';
 end $$;
 
--- ends_at := the bound licence's expires_at (coxwell may overwrite with invoice dates later).
+-- ends_at for NON-trial rows := the bound licence's expires_at (coxwell may overwrite with
+-- invoice dates later). Scoped to status <> 'trial' (v1.49 strike 3b): a trial row's clock is
+-- the trial's own end, not the licence's -- seeding it from the licence would give an expired
+-- trial on a live licence a future ends_at and pass it live after the flip.
 update feed_subscriptions fs
 set ends_at = l.expires_at, updated_at = now()
 from licenses l
 where l.id = fs.license_id
+  and fs.status <> 'trial'
   and fs.ends_at is null;
 
--- GATE (spec, m48548): must read 0 after the backfill or the migration fails.
+-- ends_at for trial rows := feed_tier_trials.trial_ends_at (0036), joined the same way
+-- EFFECTIVE_STATUS_SQL's trial branch does (feed-subscriptions.ts:118-124: subscriber_user_id
+-- + the tier's tier_key; 0036 unique(user_id, tier_key) makes the match at most one). A trial
+-- row with no feed_tier_trials row stays NULL and is NAMED in section 6, not aborted on.
+-- Prod has trial=0 rows as of 2026-09-12 01:07Z; the scoping is written regardless.
+update feed_subscriptions fs
+set ends_at = ftt.trial_ends_at, updated_at = now()
+from feed_tiers ft
+join feed_tier_trials ftt on ftt.tier_key = ft.tier_key
+where ft.id = fs.feed_tier_id
+  and ftt.user_id = fs.subscriber_user_id
+  and fs.status = 'trial'
+  and fs.ends_at is null;
+
+-- GATE (spec, m48548, scoped per 3b): zero ACTIVE rows with ends_at NULL or the migration
+-- fails. Trial rows left NULL are counted here and listed by name in section 6.
 do $$
 declare
-  live_null integer;
-  live_past integer;
+  active_null integer;
+  trial_null integer;
 begin
-  select count(*) into live_null
+  select count(*) into active_null
   from feed_subscriptions
-  where status in ('trial', 'active') and ends_at is null;
-  if live_null != 0 then
-    raise exception 'section 4 gate: % live feed_subscriptions rows with ends_at NULL (expected 0)', live_null;
+  where status = 'active' and ends_at is null;
+  if active_null != 0 then
+    raise exception 'section 4 gate: % active feed_subscriptions rows with ends_at NULL (expected 0)', active_null;
   end if;
-  select count(*) into live_past
+  select count(*) into trial_null
   from feed_subscriptions
-  where status in ('trial', 'active') and ends_at <= now();
-  raise notice 'section 4 gate ok: live rows with ends_at NULL=0; live rows with ends_at already past=% (informational)', live_past;
+  where status = 'trial' and ends_at is null;
+  raise notice 'section 4 gate ok: active rows with ends_at NULL=0; trial rows left with ends_at NULL=% (named in section 6)', trial_null;
 end $$;
 
 -- NOT NULL on server_registration_id deferred to the tighten migration (see DEPLOY ORDER).
@@ -491,13 +560,59 @@ create index if not exists feed_allowlist_records_open_idx
   where revoked_at is null;
 
 -- ---------------------------------------------------------------------------------------
--- 6. Post-migration read for manual review, then the ledger row
+-- 6. Named listing for coxwell, post-migration counts, then the ledger row
 -- ---------------------------------------------------------------------------------------
+
+-- Every live row (status trial|active) whose seeded ends_at is already in the past, one
+-- notice line each: id, subscriber, tier, status, ends_at. These are the rows phase 2's
+-- read-side flip (liveness = status + ends_at > now()) will start reading as lapsed. coxwell
+-- must see the names before the flip (v1.47 (b), v1.49 strike 3a); a count is not a name.
+-- Then every trial row left with ends_at NULL (no feed_tier_trials row matched), same shape.
+-- marcus: paste every '0086 past ends_at:' and '0086 trial ends_at NULL:' line into the thread.
+do $$
+declare
+  r record;
+  past_rows integer := 0;
+  null_trial_rows integer := 0;
+begin
+  for r in
+    select fs.id, coalesce(u.email, u.display_name, u.id::text) as subscriber,
+           ft.tier_key, fs.status, fs.ends_at
+    from feed_subscriptions fs
+    join users u on u.id = fs.subscriber_user_id
+    left join feed_tiers ft on ft.id = fs.feed_tier_id
+    where fs.status in ('trial', 'active') and fs.ends_at <= now()
+    order by fs.ends_at, fs.id
+  loop
+    past_rows := past_rows + 1;
+    raise notice '0086 past ends_at: id=% subscriber=% tier=% status=% ends_at=%',
+      r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status, r.ends_at;
+  end loop;
+  raise notice '0086 past ends_at: % live row(s) listed above', past_rows;
+
+  for r in
+    select fs.id, coalesce(u.email, u.display_name, u.id::text) as subscriber,
+           ft.tier_key, fs.status
+    from feed_subscriptions fs
+    join users u on u.id = fs.subscriber_user_id
+    left join feed_tiers ft on ft.id = fs.feed_tier_id
+    where fs.status = 'trial' and fs.ends_at is null
+    order by fs.id
+  loop
+    null_trial_rows := null_trial_rows + 1;
+    raise notice '0086 trial ends_at NULL: id=% subscriber=% tier=% status=% (no feed_tier_trials row)',
+      r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status;
+  end loop;
+  raise notice '0086 trial ends_at NULL: % trial row(s) listed above', null_trial_rows;
+end $$;
 
 select
   (select count(*) from server_registrations where user_id is null) as sr_user_id_null,
   (select count(*) from feed_subscriptions where server_registration_id is null) as fs_server_null,
-  (select count(*) from feed_subscriptions where status in ('trial', 'active') and ends_at is null) as fs_live_ends_at_null,
+  (select count(*) from feed_subscriptions where status = 'active' and ends_at is null) as fs_active_ends_at_null,
+  (select count(*) from feed_subscriptions where status = 'trial' and ends_at is null) as fs_trial_ends_at_null,
+  (select count(*) from feed_subscriptions where status in ('trial', 'active') and ends_at <= now()) as fs_live_ends_at_past,
+  (select count(*) from feed_subscriptions where request_id is not null and access_request_id is null) as fs_request_unmapped,
   (select count(*) from access_requests) as access_requests_rows,
   (select count(*) from feed_tier_request_details) as feed_tier_detail_rows,
   (select count(*) from feed_tier_requests) as legacy_request_rows;
