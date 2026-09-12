@@ -3,9 +3,13 @@
 Author: kai. Branch: `kai/phase2-access-requests-2026-09-12`, off origin/main `0a493be` (the merge
 of 0086, applied to prod 2026-09-12 17:30Z). Reviewer: fable. Owner: marcus. Product owner: coxwell.
 
-Status: SPEC ONLY. No application code is written until fable PASSes this document. Every ruling
-cited as "Source X" is quoted verbatim in `docs/specs/0086-phase2-ledger-extract.md` (banked from
-bus m48760..m48763). Anything below that is not a Source citation is a PROPOSAL and is marked so.
+Status: PASS-WITH-STRIKES (fable, bus m48856..m48859, ledger v1.57). The five strikes S1..S5 and
+the non-strike amendments (P2 comment + section 9 line, P7 per-surface split pending C2, P8
+"self-serve" rendering) are folded in below and marked "RULED". Code on sections 2, 3, 4(a), 5, 6,
+7 proceeds; files 8 and 9 (provider panel, Telegram) wait on coxwell's C2. Every ruling cited as
+"Source X" is quoted verbatim in `docs/specs/0086-phase2-ledger-extract.md` (banked from bus
+m48760..m48763). Anything below that is not a Source citation is a PROPOSAL and is marked so; a
+PROPOSAL fable ruled on carries her verdict in brackets.
 
 Conventions: line anchors are at origin/main `0a493be`. "The primitive" means Source D's
 transaction shape: `SELECT ... FOR UPDATE` on the `server_registrations` row, then the pending
@@ -97,13 +101,18 @@ Transaction, in order, on one `PoolClient`:
    row the old direct-grant code wrote between 0086 apply and this deploy has
    `server_registration_id NULL` and would be invisible to the first check. Drops with the tighten.
    A hit throws `DuplicateTierGrantError` (existing class, `feed-subscriptions.ts:670`).
+   [RULED P2 accept; bookkeeping amendment: the second check carries a code comment naming the
+   tighten file as its removal point, and section 9 gains one line so the tighten's author sees it.]
 5. Inside-batch dedupe: identical `(serverRegistrationId, feedTierId)` pairs in one batch collapse
    to one item before insert (package + member overlap, Source F says Q22(c) is non-gating; this is
    the smallest safe handling).
-6. Software item validation (Source G(c)): `productId` must be one of `licenses.tier`'s vocabulary
-   (`'trial'|'paid'|'team'|'deal'`, 0013) per 0086 header note (c). Otherwise throw; nothing
-   written. NOTE: no UI surface submits a software item in this slice; the library accepts it so
-   the approval handler in section 3 has a defined input.
+6. Software items [RULED S3]: a `kind = 'software'` item is REFUSED in this slice with the named
+   error `SoftwareRequestsNotShippedError` ("software requests ship with the software UI"); nothing
+   written. The `kind` dispatch skeleton stays so the software slice adds a handler, not a
+   restructure. Next slice (not this one): the Source G(c) vocabulary check (`productId` in
+   `licenses.tier`'s `'trial'|'paid'|'team'|'deal'`, 0013, 0086 header note (c)) and the
+   `software_request_details` insert move here when the software UI ships. No UI surface submits
+   a software item today, so there is no client-visible change (C8).
 7. `batchId = crypto.randomUUID()` once per call (`batch_id NOT NULL`, Source F). For each item:
    `insert into access_requests (user_id, product_kind, batch_id) values ($1, $2, $3) returning id`
    then `insert into feed_tier_request_details (request_id, server_registration_id, feed_tier_id)`
@@ -133,13 +142,16 @@ input = {
   requestId: string,          // ONE envelope; approval is per line, never per batch (Source F)
   decidedBy: string,          // users.id
   decision: 'trial' | 'paid',
-  endsAt: Date,
+  endsAt: Date | null,        // paid: required, > now(); trial: IGNORED, derived server-side (S4)
   invoiceRef: string | null   // required non-empty when paid, must be null when trial (Source J/K)
 }
 ```
 
-Input validation before opening a transaction: `endsAt > now()`; `paid` requires `invoiceRef`;
-`trial` forbids it.
+[RULED S4] For `decision = 'trial'` the library derives `endsAt = now() + TRIAL_DURATION_DAYS`
+(`feed-tier-trials.ts:7`, 7 days) at approval time and ignores any submitted date; the free date
+exists for `paid` only. Input validation before opening a transaction: `paid` requires `endsAt >
+now()` and a non-empty `invoiceRef`; `trial` forbids `invoiceRef`. A trial length other than the
+constant is a later slice with the `feed_tier_trials` retire (C4 notice).
 
 Transaction, in order, on one `PoolClient`:
 
@@ -173,23 +185,25 @@ Transaction, in order, on one `PoolClient`:
       stays NULL (drops with the old table). A 23505 on
       `feed_subscriptions_server_feed_tier_live_uidx` (or on the 0081 index while it exists) is
       rethrown as `DuplicateTierGrantError` and rolls back the whole transaction (Source L).
-      PROPOSAL, flagged: `status = 'active'` for both decisions, matching today's approval writer
-      (:785 writes the `'active'` literal for trial-originated rows, comment :84-97). The trial-ness
-      lives on the envelope's `decision` and the row's `ends_at`; writing `'trial'` instead would
-      move provider Subscriber counts, which is a read-side change this slice does not make.
+      PROPOSAL [RULED P4 accept]: `status = 'active'` for both decisions, matching today's approval
+      writer (:785 writes the `'active'` literal for trial-originated rows, comment :84-97); the read
+      side is frozen for (ii) (v1.49 closing sentence). Correction from the ruling, recorded for the
+      retire slice: the Subscribers tab reads `feed_tier_trials` only (v1.37), so `'trial'` on the
+      row would not move that tab; it would move the Accounts page if it groups by status. Trial-ness
+      on new rows is the envelope's `decision` plus `access_request_id`, not the row status, and the
+      retire slice keys on that.
    e. INSERT `feed_allowlist_records` per (server, tier), shape in section 4(a).
 
-   **software handler** (v1.48(1): "writes a licenses row, no server task"):
-   ```
-   insert into licenses (user_id, license_key, status, expires_at, notes, feed_types, tier)
-   values ($envelope.user_id, $generatedKey, 'active', $endsAt, 'access_request ' || $envelope.id,
-           '{}', $product_id)
-   ```
-   Same column list as `licenses.ts:225`, on the SAME client so "no partial success" holds; key
-   generation reuses `generateLicenseKey` with the retry loop `licenses.ts:221`. No server row, no
-   subscription, no allowlist record. The activation/payment side effects `licenses.ts:232-243`
-   are NOT fired from here in this slice (flagged: nothing reaches this handler from a route yet,
-   see section 2 item 6; wiring notifications is the slice that adds the software UI).
+   **software handler** [RULED S3]: in this slice the dispatch refuses `product_kind = 'software'`
+   with the same named error as section 2 item 6 (`SoftwareRequestsNotShippedError`, "software
+   requests ship with the software UI"); nothing written, transaction rolled back. The dispatch
+   skeleton stays. Next slice note, kept here so the shape is not lost (v1.48(1): "writes a licenses
+   row, no server task"): the handler will insert
+   `licenses (user_id, license_key, status, expires_at, notes, feed_types, tier)` with the same
+   column list as `licenses.ts:225`, on the SAME client, key from `generateLicenseKey` with the
+   retry loop `licenses.ts:221`, no server row, no subscription, no allowlist record, and it must
+   decide what to do with the activation side effects `licenses.ts:232-243`. None of that ships
+   until a route reaches it and a test-plan step exercises it.
 
 4. Envelope update:
    `update access_requests set status = 'approved', decision = $2, ends_at = $3, invoice_ref = $4,
@@ -210,19 +224,29 @@ main today and none is added. Stated so the spec is not read as covering it.
 Kai's approval path"). `assignFeedTierSubscription(subscriberUserId, tierKey)` keeps its signature
 (caller `admin/users/actions.ts:152`) and becomes:
 1. Resolve the single active licence as today (:845-848, both refusal errors unchanged).
+   [RULED S2(ii)] `licenses.expires_at IS NULL` refuses before the transaction opens with the named
+   error `LicenseHasNoExpiryError` ("licence has no expiry; grant through the request queue with a
+   date"). Fact from the checkout: `licenses.expires_at` is `timestamptz not null` (0001:57) and the
+   resolver already filters `expires_at > now()`, so the guard is unreachable today; it is kept as
+   ruled so the flip's preflight (zero live rows with `ends_at NULL`) never depends on that
+   constraint staying. coxwell can override on the list (C6).
 2. `select id, declared_ip from server_registrations where license_id = $1` (own query, same
-   reason as section 2); none -> PROPOSAL new `NoServerForFeedGrantError` ("HH<n>
+   reason as section 2); none -> PROPOSAL [RULED P5 accept] new `NoServerForFeedGrantError` ("HH<n>
    has no registered server, so <tier> can't be granted: a grant is keyed on the server"). Same
    reason as section 2's flag: the grain is the server row.
 3. One transaction: FOR UPDATE on that server row; reactivate lookup keyed on
    `(server_registration_id, feed_tier_id)` (was `(license_id, feed_tier_id)` :851); if a row
-   exists, the existing reactivate branches (:855-885) run unchanged apart from the key; else
-   `createSubscription` inside the same client with `serverRegistrationId` and `endsAt`.
-   PROPOSAL, flagged: direct grant `ends_at = license.expires_at`, the rule 0086 section 4 used to
-   seed non-trial rows, so no live row is created with `ends_at NULL` (the flip's preflight,
+   exists, the existing reactivate branches (:855-885) run with the new key AND [RULED S2(i)] both
+   set `ends_at = licence expires_at` (with `updated_at = now()`) and write the section 4(a)
+   allowlist record, same as the insert branch, so a reactivated grant never carries a stale past
+   `ends_at` into the flip; else `createSubscription` inside the same client with
+   `serverRegistrationId` and `endsAt`.
+   PROPOSAL [RULED P5 accept]: direct grant `ends_at = license.expires_at`, the rule 0086 section 4
+   used to seed non-trial rows, so no live row is created with `ends_at NULL` (the flip's preflight,
    Source J read-side paragraph, needs zero such rows). No envelope row is written for a direct
    grant (`access_request_id NULL`); the ledger only mandates an envelope for trials (Source H).
-4. Allowlist record per section 4(a), same as approval.
+4. Allowlist record per section 4(a), same as approval, on both the insert and reactivate
+   branches.
 `createSubscription` (:261, single caller :888) gains required `serverRegistrationId` and
 `endsAt` in `CreateSubscriptionInput` and writes both columns at :272. The `providerTierId` branch
 (provider-defined tiers, no `feed_tier_id`) keeps working; the live index does not apply to it.
@@ -233,13 +257,13 @@ Kai's approval path"). `assignFeedTierSubscription(subscriberUserId, tierKey)` k
 
 **(a) Allowlist-record write on approval.** Table shape is fixed by 0086:690-701:
 `(server_registration_id, feed_tier_id, ip text, told_at default now(), revoked_at, pk (server,
-tier, told_at))`. PROPOSAL:
+tier, told_at))`. PROPOSAL [RULED P6 accept with S1]:
 ```
 insert into feed_allowlist_records (server_registration_id, feed_tier_id, ip, told_at)
 select $sr.id, $tier, $sr.declared_ip, now()
 where not exists (select 1 from feed_allowlist_records
                   where server_registration_id = $sr.id and feed_tier_id = $tier
-                    and revoked_at is null)
+                    and ip = $sr.declared_ip and revoked_at is null)
 ```
 - `ip = declared_ip` at approval time (Source G(e): the read that matters is equality against
   that column).
@@ -248,9 +272,11 @@ where not exists (select 1 from feed_allowlist_records
   `sr.declared_ip`). No message is sent to the provider by this slice.
 - `told_by`: optional per Source I, column does not exist, no migration in this job. If fable wants
   it, it goes in the tighten file and this insert gains `told_by = decided_by`.
-- The `not exists` guard: an open record for the same (server, tier) is reused, not duplicated
-  (e.g. a lapsed-and-re-approved grant where the provider was never told to revoke). Flagged: the
-  alternative is always-insert and let the PK's `told_at` distinguish them.
+- The `not exists` guard [RULED S1]: keyed on (server, tier, ip) open, not (server, tier) open. An
+  open record with the SAME ip is reused, not duplicated (a lapsed-and-re-approved grant where the
+  provider was never told to revoke). An open record with a DIFFERENT ip is left as is (the vendor
+  was not told to revoke it) and a new row is inserted, so a re-approval after the client changed
+  `declared_ip` records the new IP; the PK's `told_at` permits both rows.
 - `revoked_at` is NEVER written by this slice.
 
 **(b) Provider-task shape.** "Stateful cancel-on-reactivate" is marcus's Q2 wording, not ledger
@@ -265,34 +291,42 @@ actions and Telegram callback, re-pointed:
 - Admin queue approve/reject: `admin/feed-tier-requests/actions.ts:15,27` -> `approveAccessRequest`
   / `rejectAccessRequest`; approve form gains `decision`, `endsAt`, `invoiceRef`.
 - Provider approve (`feed-providers.ts:133`) and Telegram approve (`webhook/route.ts:48`) have no
-  decision input. PROPOSAL, marked coxwell product: both approve as `decision = 'trial'`,
-  `ends_at = now() + TRIAL_DURATION_DAYS` (`feed-tier-trials.ts:7`, 7 days), ONLY when the tier is
-  trial-eligible; otherwise the action fails with "Paid approval needs an end date and invoice ref:
-  use the admin queue". A provider cannot supply `invoice_ref` (billing is Horizon's, manual,
-  Source K). Alternative if coxwell prefers: disable approve on both surfaces, keep reject.
+  decision input. PROPOSAL [RULED P7 amend, split by surface, coxwell's word C2]:
+  - Telegram card (coxwell's own button): approve as `decision = 'trial'`, `ends_at = now() +
+    TRIAL_DURATION_DAYS` (`feed-tier-trials.ts:7`, 7 days), ONLY when the tier is trial-eligible;
+    otherwise the callback fails with "Paid approval needs an end date and invoice ref: use the
+    admin queue". Accepted by fable as Source K as written (the admin deciding trial with the
+    default length).
+  - Provider panel (the vendor): PLACEHOLDER pending C2. Fable's recommendation to coxwell: provider
+    approve disabled, provider reject stays. Alternative: provider approve = trial-only, same as
+    Telegram. Whichever coxwell says, the difference is confined to files 8 and 9.
+  - Until C2 is relayed, files 8 and 9 are not opened. So that they compile unchanged, the facade's
+    `approveFeedTierRequest(id, actionedBy, adminUrl)` keeps its signature and, when called without
+    a decision, applies the trial-only rule above (the Telegram rule); file 8 is re-pointed to
+    whichever provider rule C2 picks, file 9 gains the legacy-id lookup below.
+  A provider cannot supply `invoice_ref` (billing is Horizon's, manual, Source K).
 - Telegram callback ids: a pending Telegram card sent before deploy carries a LEGACY
   `feed_tier_requests.id`. `getFeedTierRequest(id)` (facade) looks up `access_requests.id = $1 or
   legacy_feed_tier_request_id = $1`; if the legacy id maps to N envelopes (a package), the Telegram
   approve refuses ("open the queue") because one button cannot make N per-line decisions.
 - Queue and lists: the facade in section 5.
 
-**(d) How `ends_at` is entered at approval.** Marked coxwell product (Source N). PROPOSAL for the
-admin approve form (`feed-tier-request-row-actions.tsx`): radio `decision` trial|paid; date input
-`endsAt`, prefilled `today + TRIAL_DURATION_DAYS` when trial, empty when paid; text `invoiceRef`,
-shown and required only when paid. The server action validates the same way as section 3. The
-invoice date itself is not stored; `ends_at` is what the invoice bought (Source J "set by the
-invoice together with `invoice_ref`").
+**(d) How `ends_at` is entered at approval.** Marked coxwell product (Source N). PROPOSAL [RULED
+accept as default, coxwell's to reshape (C5), with S4 applied] for the admin approve form
+(`feed-tier-request-row-actions.tsx`): radio `decision` trial|paid; date input `endsAt` and text
+`invoiceRef` shown and required ONLY when paid; a trial decision shows no date (the form states
+"7 days from approval"). The server action validates the same way as section 3. The invoice date
+itself is not stored; `ends_at` is what the invoice bought (Source J "set by the invoice together
+with `invoice_ref`").
 
-**(e) Trial-row clock vs envelope `ends_at`.** `feed-tier-trials.ts` is not edited in this slice
-(section 1), so `insertFeedTierTrial` keeps computing `trial_ends_at = now() + 7 days`
-(`feed-tier-trials.ts:7,130`). When an admin approves a trial with the default end date the two
-clocks agree to the second; when the admin picks another date, the envelope and subscription say
-one thing and the `feed_tier_trials` row (read by `EFFECTIVE_STATUS_SQL` branch (4) and the
-expire-trials cron) says 7 days. PROPOSAL: accept the drift in this slice and document it; the
-retire slice (Source H: "each live trial's end is carried onto its `feed_subscriptions.ends_at`
-first") removes it. Alternative, if fable prefers exactness now: marcus lifts the no-touch for a
-one-line optional `trialEndsAt` parameter on `insertFeedTierTrial`, or the admin form clamps a
-trial decision's `endsAt` to the 7-day default (then only paid decisions have a free date).
+**(e) Trial-row clock vs envelope `ends_at`.** [RULED S4, drift proposal withdrawn]
+`feed-tier-trials.ts` is not edited in this slice (section 1), so `insertFeedTierTrial` keeps
+computing `trial_ends_at = now() + 7 days` (`feed-tier-trials.ts:7,130`). Ruling: for `decision =
+'trial'` the library derives `endsAt = now() + TRIAL_DURATION_DAYS` at approval time and ignores
+any submitted date; the free date exists for paid only. So the envelope, the subscription row and
+the `feed_tier_trials` row agree to within the after-commit gap (the trials insert runs after
+commit, section 3), `feed-tier-trials.ts` stays untouched, and marcus's no-touch does not need
+lifting. A trial length other than the constant is a later slice with the retire (C4 notice).
 
 **(f) Which `feed_tier_requests` UI pages are repointed vs left on the old table (G6).** PROPOSAL:
 ALL repointed in one deploy, NONE left reading the old table. Facts from `git grep` at `0a493be`:
@@ -336,8 +370,11 @@ left join software_request_details s on s.request_id = a.id
 ```
 No join to `feed_tier_requests`, no join to `feed_subscriptions`, no status derived from anything
 but `a.status`. `decision` is typed `'trial' | 'paid' | null` and NULL is rendered as "-" (Source
-I: copied approved envelopes carry `decision NULL`; the queue must tolerate). Ordered
-`created_at desc, batch_id, tier_key` so a batch's lines sit together.
+I: copied approved envelopes carry `decision NULL` with a `decided_by`; the queue must tolerate).
+[RULED P8] A self-serve trial (section 7) carries `decision = 'trial'` with `decided_by NULL` and
+is rendered "self-serve", not "-"; the two NULL shapes are distinct and the queue tells them
+apart by which column is NULL. Ordered `created_at desc, batch_id, tier_key` so a batch's lines
+sit together.
 
 Facade (file 2): `listFeedTierRequests`, `getFeedTierRequest`, `FeedTierRequestRow` keep their
 names and shape, backed by the query above, so `admin/feed-tier-requests/page.tsx:44-45`,
@@ -345,8 +382,13 @@ names and shape, backed by the query above, so `admin/feed-tier-requests/page.ts
 no edit. Shape deltas: `id` is the envelope id; `tierKey` is the member tier (a legacy package
 request shows as N rows, matching what 0086 section 3 copied); `status` loses `'provisioned'`
 (`FEED_TIER_REQUEST_STATUSES` :17 becomes three values; page.tsx :12-17 and :38 follow); new
-optional fields `decision`, `endsAt`, `invoiceRef`, `batchId`. `serverRegistered` is always true
-for new rows (detail requires a server) and derived as today for copied rows.
+optional fields `decision`, `endsAt`, `invoiceRef`, `batchId`, `decidedBy`. `serverRegistered` is
+always true for new rows (detail requires a server) and derived as today for copied rows.
+Collision found while coding, for marcus: `src/app/feeds/[region]/tiers/page.tsx:177` compares
+`r.status === "provisioned"`, which no longer type-checks once the union is three values. That
+file is not declared. Until marcus rules on the one-token edit there, `FeedTierRequestStatus`
+keeps `"provisioned"` as a type-only legacy member (no row carries it after 0086, the array does
+not list it), so tsc stays clean without opening the undeclared file.
 
 ---
 
@@ -367,7 +409,8 @@ update.
 - Every trial is an `access_requests` row with `decision = 'trial'` (Source H). Admin-side that is
   section 3 with `decision = 'trial'`.
 - Self-serve button (`startFeedTierTrialAction`, `feeds/actions.ts:87-116`): whether it survives
-  is the v1.48 open item (Source N), unruled. PROPOSAL: keep it, and make it write Source H's form:
+  is the v1.48 open item (Source N), now coxwell notice C7. PROPOSAL [RULED P8 accept; build
+  answer A unless marcus says C7 flipped]: keep it, and make it write Source H's form:
   `createAccessRequestBatch` for the one tier, then, in the SAME transaction, the section 3 feed
   handler with `decision = 'trial'`, `endsAt = now() + TRIAL_DURATION_DAYS`, `invoiceRef = null`,
   `decided_by = NULL` (column is nullable, 0086:396; there is no admin; flagged), `decided_at =
@@ -379,6 +422,11 @@ update.
   server grain it needs that licence's server row, else "Register a server first".
   Eligibility (`isTrialEligibleTier`) and one-trial-per-(user, tier) (`feed_tier_trials_user_tier_uidx`,
   0036) are checked BEFORE the transaction opens so the existing errors surface unchanged.
+  Mover to name (S5(a)): today `startFeedTierTrial` (`feed-tier-trials.ts:156-173`) writes
+  `feed_tier_trials` only and no `feed_subscriptions` row (kai's read of the checkout confirms
+  fable's v1.37/Q21(b) claim), so it appears on the Subscribers tab and nowhere else; under this
+  section it also writes a `feed_subscriptions` row, which the provider's Accounts page reads.
+  Intended under Source H; the test plan expects it as a new visible row (section 10 prod step 9).
 - Both answers to the v1.48 open item are designed for (marcus part 2: "the schema does not wait
   on coxwell's line"). The bullet above is answer A (button survives). Answer B (button retired):
   `startFeedTierTrialAction` is deleted and `components/feeds/trial-cta-control.tsx` (:4, :75, its
@@ -415,6 +463,12 @@ is not this job. This spec only guarantees the inputs it relies on: new code nev
 decision so the section 3 `WHERE access_requests.decided_at IS NULL` guard (0086:488) protects
 new-path decisions on the re-run.
 
+For the tighten's author (P2 bookkeeping): the second live check in section 2 step 4 and section 3
+step 3(d), against the 0081 `(license_id, feed_tier_id)` key, exists only for rows the old
+direct-grant code wrote between 0086 apply (2026-09-12 17:30Z) and this deploy. The tighten that
+drops `feed_subscriptions_license_feed_tier_live_uidx` also deletes that check; the code comment
+at the check names this section.
+
 ---
 
 ## 10. Test plan
@@ -429,6 +483,10 @@ No non-prod database exists. Two layers.
   names `server_registration_id`; `grep -n "EFFECTIVE_STATUS_SQL = " src/lib/feed-subscriptions.ts`
   shows the block unchanged against `0a493be` (`git diff 0a493be -- src/lib/feed-subscriptions.ts`
   has no hunk inside :108-150).
+- Window-rule grep proof (S5(c)): `grep -n "license_id" src/lib/feed-subscriptions.ts
+  src/lib/access-requests.ts` shows no writer setting `license_id` to NULL (no `license_id = null`
+  and no insert omitting it), and every `insert into feed_subscriptions` in `src` names
+  `license_id` alongside `server_registration_id`.
 - Pure-function checks kai can run with `npx tsx` if marcus allows it (node is refused on this
   box today): input validation of `approveAccessRequest` (paid without invoice, trial with
   invoice, `endsAt` in the past) and inside-batch dedupe. Otherwise these are reviewed, not run.
@@ -452,14 +510,31 @@ No non-prod database exists. Two layers.
 5. Admin rejects another line with a reason: envelope `rejected`, `reason` stored, no subscription
    row for it.
 6. Admin direct grant on a user with one licence and a server: new `feed_subscriptions` row has
-   `server_registration_id` and `ends_at = licence expires_at`, `access_request_id NULL`.
-7. Post-deploy invariants, both must be 0:
+   `server_registration_id` and `ends_at = licence expires_at`, `access_request_id NULL`, and one
+   open allowlist row for (server, tier, declared_ip). If the grant reactivates a lapsed row
+   instead, read that row by id: `ends_at = licence expires_at`, `updated_at > '<deploy ts>'`, and
+   the allowlist row exists (S2(i)).
+7. Post-deploy invariants, both must be 0 (`feed_subscriptions.updated_at` exists, 0071:55, so the
+   second query also catches a reactivation, S2):
    `select count(*) from feed_subscriptions where server_registration_id is null and created_at >
    '<deploy ts>'`; `select count(*) from feed_subscriptions where status in ('trial','active') and
-   ends_at is null and created_at > '<deploy ts>'`.
-8. Read-side no-mover proof: before and after deploy, `select id, <EFFECTIVE_STATUS_SQL> from
-   feed_subscriptions ...` (the same read marcus used for the 0086 dry-runs) returns identical
-   rows for every row that existed before deploy.
+   ends_at is null and (created_at > '<deploy ts>' or updated_at > '<deploy ts>')`.
+8. Read-side no-mover proof, two listings (S5(b)): (i) before and after deploy, `select id,
+   <EFFECTIVE_STATUS_SQL> from feed_subscriptions ...` (the same read marcus used for the 0086
+   dry-runs) returns identical rows for every row that existed before deploy; (ii) a second listing
+   of rows created or updated since deploy with their computed status, so the new rows from steps
+   2-6 and 9 are named movers, not surprises.
+9. Self-serve trial (S5(a)): a test account with a registered server starts a trial on a
+   trial-eligible tier. Envelope reads `approved / trial / decided_by NULL / decided_at set`; one
+   `feed_subscriptions` row with all four columns (`server_registration_id`, `license_id`,
+   `access_request_id`, `ends_at`) non-null; one open allowlist row; one `feed_tier_trials` row;
+   the queue renders the decider as "self-serve"; the tier appears on the provider's Accounts page
+   (EXPECTED new row, section 7 mover).
+10. Telegram approve on a pending card sent before deploy (legacy id path, 4(c)) (S5(d)): marcus
+   states at deploy whether any pending `feedreq` card exists; if one does, approving it from the
+   card resolves the legacy id to its envelope and lands as a trial (or refuses with "use the admin
+   queue" for a paid-only tier, or "open the queue" for a package); if none exists, the step reads
+   "no pending card at deploy" and the path is covered by the id lookup alone. Waits on C2 (file 9).
 
 Rollback of this slice is a code revert; it writes no schema and leaves `feed_tier_requests`
 untouched, so the old code path works again immediately (the envelopes written meanwhile are
@@ -475,10 +550,10 @@ envelope, Source N).
 2. Source B "every `server_registrations` writer writes `user_id`": Leo's `server-registration.ts`
    :158-185, not kai's. The batch create tolerates `user_id NULL` on the server row via
    `coalesce(sr.user_id, l.user_id)` until the tighten backfill (section 2 step 2).
-3. Source H "`ends_at` set by the trial length" holds for the envelope and the subscription row, but
-   the `feed_tier_trials` row keeps its own 7-day clock because `feed-tier-trials.ts` is untouched
-   by marcus's rule; drift only when an admin picks a non-default trial date (gap 4(e), three
-   options listed there).
+3. Source H "`ends_at` set by the trial length" holds for the envelope, the subscription row and
+   the `feed_tier_trials` row alike under S4 (trial `ends_at` is always derived from the constant);
+   the only residual gap is the after-commit gap between the transaction's `now()` and the
+   best-effort trials insert, seconds at most, removed by the retire slice.
 4. Source G(d) `'provisioned'` -> `feed_allowlist_records` carry is the tighten's, so between this
    deploy and the tighten the provider sees allowlist records only for grants approved through the
    new path.
