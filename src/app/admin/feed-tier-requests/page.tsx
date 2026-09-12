@@ -2,19 +2,37 @@ import Link from "next/link";
 import {
   listFeedTierRequests,
   FEED_TIER_REQUEST_STATUSES,
-  type FeedTierRequestStatus,
+  type FeedTierRequestRow,
 } from "@/lib/feed-tier-requests";
 import { listTierWaitlist } from "@/lib/tier-waitlist";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { FeedTierRequestRowActions } from "@/components/admin/feed-tier-request-row-actions";
 import { approveFeedTierRequestAction, rejectFeedTierRequestAction } from "./actions";
 
+/** Status vocabulary is pending | approved | rejected since 0086 (Source G(d)); the
+ * 'provisioned' filter, stat and style are gone with it. */
+type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number];
+
 const STATUS_STYLES: Record<FeedTierRequestStatus, string> = {
   pending: "border-amber-500/40 bg-amber-500/15 text-amber-300",
   approved: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
   rejected: "border-red-500/40 bg-red-500/15 text-red-300",
-  provisioned: "border-cyan-500/40 bg-cyan-500/15 text-cyan-300",
 };
+
+function statusStyle(status: FeedTierRequestRow["status"]): string {
+  // "provisioned" is a type-only legacy member of the row type (see feed-tier-requests.ts);
+  // no row carries it after 0086, so this branch never renders.
+  return status === "provisioned" ? "" : STATUS_STYLES[status];
+}
+
+/** Decision cell (spec section 5, Source I + fable P8): copied envelopes carry decision NULL
+ * and render "-"; a self-serve trial carries decision 'trial' with no decider and renders
+ * "self-serve"; an admin decision shows trial | paid with the end date and invoice ref. */
+function decisionLabel(r: FeedTierRequestRow): string {
+  if (!r.decision) return "—";
+  if (r.decision === "trial" && r.decidedBy === null) return "self-serve";
+  return r.decision;
+}
 
 interface RawSearchParams {
   status?: string;
@@ -184,6 +202,7 @@ export default async function AdminFeedTierRequestsPage({
                 <th className="pb-2 pr-4">Region / tier</th>
                 <th className="pb-2 pr-4">Server</th>
                 <th className="pb-2 pr-4">Status</th>
+                <th className="pb-2 pr-4">Decision</th>
                 <th className="pb-2">Actions</th>
               </tr>
             </thead>
@@ -208,11 +227,16 @@ export default async function AdminFeedTierRequestsPage({
                   </td>
                   <td className="py-2 pr-4">
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${STATUS_STYLES[r.status]}`}
+                      className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${statusStyle(r.status)}`}
                     >
                       {r.status.toUpperCase()}
                     </span>
                     {r.reason && <div className="mt-1 max-w-[12rem] text-xs text-zinc-500">{r.reason}</div>}
+                  </td>
+                  <td className="py-2 pr-4 text-zinc-300">
+                    {decisionLabel(r)}
+                    {r.endsAt && <div className="text-xs text-zinc-500">ends {formatAbsoluteUtc(r.endsAt)}</div>}
+                    {r.invoiceRef && <div className="text-xs text-zinc-500">inv {r.invoiceRef}</div>}
                   </td>
                   <td className="py-2">
                     {r.status === "pending" ? (
@@ -229,7 +253,7 @@ export default async function AdminFeedTierRequestsPage({
               ))}
               {requests.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-zinc-500">
+                  <td colSpan={8} className="py-8 text-center text-zinc-500">
                     No feed tier requests yet.
                   </td>
                 </tr>
