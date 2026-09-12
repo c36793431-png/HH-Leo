@@ -17,6 +17,7 @@ export function PackageRevenueRow({
   memberTierNames,
   subscriberCount,
   pricedNote,
+  notPayingNote,
   monthlyLabel,
   shareLabel,
 }: {
@@ -25,6 +26,10 @@ export function PackageRevenueRow({
   subscriberCount: number;
   /** "1 of 6 priced", or null when every paying client on this line carries a price. */
   pricedNote: string | null;
+  /** "6 lapsed · 4 trial — not counted", under the Lapsed/All filter only (m49070: non-paying
+   * clients "contribute NOTHING to totals in any mode"). Null under Paying, and null when this
+   * package has no non-paying clients, so the default view is unchanged. */
+  notPayingNote: string | null;
   monthlyLabel: string;
   shareLabel: string;
 }) {
@@ -42,6 +47,7 @@ export function PackageRevenueRow({
           ) : (
             <b>{label}</b>
           )}
+          {notPayingNote && <div className="sub muted">{notPayingNote}</div>}
         </td>
         <td className="r mono">{subscriberCount}</td>
         <td className="r mono">

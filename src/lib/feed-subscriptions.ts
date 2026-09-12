@@ -50,8 +50,22 @@ export interface ProviderSubscriberRow {
   tierName: string;
   tierKey: string | null;
   regionKey: string | null;
+  /** The EFFECTIVE status a surface renders -- EFFECTIVE_STATUS_SQL's verdict, then relabelled
+   * trial by statusForLicenseTier. Not the stored column; see rawStatus. */
   status: SubscriptionStatus;
+  /** The literal `feed_subscriptions.status` column, carried alongside the effective one purely
+   * so the lapse REASON can tell the two ways a row dies apart (m49070/m49081): an explicit admin
+   * lapse ("Ended {date}", the one-way ratchet, always has lapsed_at) versus a row the licence
+   * gate killed while its own column still reads 'active' ("Licence expired {date}"). Nothing may
+   * gate money or status on this -- that is `status`'s job, and mixing the two is exactly the bug
+   * class EFFECTIVE_STATUS_SQL exists to prevent. */
+  rawStatus: SubscriptionStatus;
   startedAt: Date;
+  /** When an explicit lapse was recorded, and the licence's own expiry -- the two dates the
+   * reason text prints. Both null on a live row. */
+  lapsedAt: Date | null;
+  endsAt: Date | null;
+  licenseExpiresAt: Date | null;
   serverIp: string | null;
   /** This client's own negotiated price (Job C, bus thread
    * leo-provider-subscribers-page-2026-09-06) -- null means no price has ever been negotiated
@@ -379,10 +393,15 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       declared_ip: string | null;
       price_cents: number | null;
       license_tier: string | null;
+      raw_status: SubscriptionStatus;
+      lapsed_at: Date | null;
+      ends_at: Date | null;
+      license_expires_at: Date | null;
     }>(
       `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, ft.tier_key, ft.region_key,
               ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip, s.price_cents,
-              l.tier as license_tier
+              l.tier as license_tier, s.status as raw_status, s.lapsed_at, s.ends_at,
+              l.expires_at as license_expires_at
        from feed_subscriptions s
        join provider_client_pseudonyms p
          on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
@@ -401,7 +420,11 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       tierKey: row.tier_key,
       regionKey: row.region_key,
       status: statusForLicenseTier(row.status, row.license_tier),
+      rawStatus: row.raw_status,
       startedAt: row.started_at,
+      lapsedAt: row.lapsed_at,
+      endsAt: row.ends_at,
+      licenseExpiresAt: row.license_expires_at,
       serverIp: row.declared_ip,
       priceCents: row.price_cents,
     }));
@@ -542,6 +565,68 @@ export function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
     );
   }
   return group.row.status === "active" ? group.row.priceCents ?? null : null;
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** WHY a group isn't paying, for the Paying | Lapsed | All filter (coxwell via marcus m49070,
+ * pulled onto the Revenue thread by m49081; the Subscribers page reuses THIS function rather than
+ * spelling the same three sentences a second time). Null for a paying group -- a live client needs
+ * no explanation, and a null here is what a caller keys "is this row greyed" off.
+ *
+ * Three outcomes, and the distinction between the first two is the whole point of carrying
+ * rawStatus: "Ended {date}" is a decision somebody recorded (an explicit admin lapse, always with
+ * a lapsed_at), while "Licence expired {date}" is a row nobody touched whose licence simply ran
+ * out underneath it -- the provider can act on the second (chase a renewal) and cannot on the
+ * first. Collapsing them into one "lapsed" would hide that. "Trial" carries no date because the
+ * trial has NOT ended: the client is live, just not paying, and printing an end date beside them
+ * would read as a lapse.
+ *
+ * A package group's reason comes from the member that stopped LAST (max date, nulls first, then
+ * the pinned member order for ties). A group dies when its final member does, so the latest date
+ * is the one a provider would recognise; taking members[0] would let whichever tier happens to
+ * sort first speak for the group, which is the members[0] class of bug this file has already been
+ * burned by twice. Only members sharing the group's own status are eligible, so a stray live row
+ * can't explain a lapsed group. */
+export function statusReasonForGroup(group: AccountRowGroup): string | null {
+  const status = statusForGroup(group);
+  if (status === "active") return null;
+  if (status === "trial") return "Trial";
+
+  const rows = group.kind === "package" ? group.members.filter((m) => m.status === status) : [group.row];
+  let best: { text: string; at: Date | null } | null = null;
+  for (const row of rows) {
+    const explicit = row.rawStatus === "lapsed";
+    const at = (explicit ? row.lapsedAt ?? row.endsAt : row.licenseExpiresAt ?? row.endsAt) ?? null;
+    const label = explicit ? "Ended" : "Licence expired";
+    const candidate = { text: at ? `${label} ${isoDate(at)}` : label, at };
+    if (best == null || (candidate.at != null && (best.at == null || candidate.at > best.at))) best = candidate;
+  }
+  return best?.text ?? null;
+}
+
+/** The LAST price a non-paying group carried, for the Lapsed filter's price cell (m49070: "their
+ * LAST price shown as text not money"). Deliberately a separate accessor from
+ * resolvedPriceCentsFor rather than a flag on it: that function answers "what is this client
+ * being charged", which for a group with no live priced member is nothing at all, and relaxing it
+ * to answer this question too is precisely the defect ruling (a) fixed. Callers must render this
+ * as text and must never add it to a total -- a lapsed client's old price is history, not revenue.
+ *
+ * Reads the most RECENTLY started member that carries a price (started_at desc, subscriptionId as
+ * the tie-break so the walk is totally ordered), which is the last price actually written for this
+ * client-package. Null, and "unpriced" on screen, when no member ever had one. */
+export function lastPriceCentsFor(group: AccountRowGroup): number | null {
+  if (group.kind === "single") return group.row.priceCents ?? null;
+  return (
+    [...group.members]
+      .sort((a, b) =>
+        b.startedAt.getTime() - a.startedAt.getTime() || a.subscriptionId.localeCompare(b.subscriptionId)
+      )
+      .map((m) => m.priceCents)
+      .find((c) => c != null) ?? null
+  );
 }
 
 /** The one place that walks account groups and adds up the provider's 50% share, bus thread
