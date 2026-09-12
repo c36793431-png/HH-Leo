@@ -1,4 +1,4 @@
--- NOT APPLIED
+-- APPLIED IN PRODUCTION 2026-09-12 17:30Z (Neon, one transaction; coxwell approval); see merge 0a493be
 -- 0086_marketplace_recut.sql -- phase 1 of 4 of the marketplace recut. Written by kai on
 -- branch kai/marketplace-recut-migration-2026-09-12, thread kai-marketplace-feed-product-2026-09-12
 -- (build spec m48548, survey m48546). Design: provisioning ledger v1.47/v1.48, SHAs 304c41a and

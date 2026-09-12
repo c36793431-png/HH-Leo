@@ -8,7 +8,7 @@ import {
   type FeedType,
 } from "./licenses";
 import { FEED_REGION_TYPE, FEED_REGIONS, isFeedRegion, regionForFeedType, type FeedRegion } from "./feed-tier-catalogue";
-import { PACKAGES, packageLabelForTierKey, providerShareCentsFor } from "./feed-provider-packages";
+import { PACKAGES, packageLabelForTierKey, providerShareCentsFor, isUnpriced } from "./feed-provider-packages";
 
 /** Bus thread provider-feed-subscriber-linkage-2026-08-29 (marcus, overnight block 2,
  * migration 0071). Joins a portal account to a provider's package and masks the
@@ -62,14 +62,34 @@ export interface ProviderSubscriberRow {
   tierName: string;
   tierKey: string | null;
   regionKey: string | null;
+  /** The EFFECTIVE status a surface renders -- EFFECTIVE_STATUS_SQL's verdict, then relabelled
+   * trial by statusForLicenseTier. Not the stored column; see rawStatus. */
   status: SubscriptionStatus;
+  /** The literal `feed_subscriptions.status` column, carried alongside the effective one purely
+   * so the lapse REASON can tell the two ways a row dies apart (m49070/m49081): an explicit admin
+   * lapse ("Ended {date}", the one-way ratchet, always has lapsed_at) versus a row the licence
+   * gate killed while its own column still reads 'active' ("Licence expired {date}"). Nothing may
+   * gate money or status on this -- that is `status`'s job, and mixing the two is exactly the bug
+   * class EFFECTIVE_STATUS_SQL exists to prevent. */
+  rawStatus: SubscriptionStatus;
   startedAt: Date;
+  /** When an explicit lapse was recorded, and the licence's own expiry -- the two dates the
+   * reason text prints. Both null on a live row. */
+  lapsedAt: Date | null;
+  endsAt: Date | null;
+  licenseExpiresAt: Date | null;
+  /** `licenses.tier` of the bound licence. Two jobs, both label-only: statusForLicenseTier reads
+   * it to call a live grant trial rather than paying (m49078 item 2), and the reason text reads it
+   * to say "Trial ended {date}" instead of "Licence expired {date}" when what ran out was a trial
+   * (m49101). Never an entitlement test -- that is EFFECTIVE_STATUS_SQL's, and only its. */
+  licenseTier: string | null;
   serverIp: string | null;
   /** This client's own negotiated price (Job C, bus thread
    * leo-provider-subscribers-page-2026-09-06) -- null means no price has ever been negotiated
    * for this client. Per marcus's m46504 ruling there is no fallback to any package/tier
    * default: a caller must render and total null as unset, never substitute a list price and
-   * never read it as $0. See providerShareCentsFor/-For in feed-provider-packages.ts. */
+   * never read it as $0. A stored 0 is the same unknown, not a free client -- see isUnpriced
+   * and providerShareCentsFor/-For in feed-provider-packages.ts. */
   priceCents: number | null;
 }
 
@@ -146,10 +166,21 @@ const EFFECTIVE_STATUS_SQL = `
  * happens to also exist for the same tier -- that grant doesn't depend on the trial. Used
  * only by getActiveSubscriberCountForProvider below; listSubscribersForProvider still uses
  * EFFECTIVE_STATUS_SQL since its own status column (including "trial") is out of scope for
- * this naming pass. */
+ * this naming pass.
+ *
+ * The trial-LICENCE branch (marcus m49097 item 4, 2026-09-12) is the same rule
+ * statusForLicenseTier applies on the page, moved here so the Overview headcount and the money
+ * cannot disagree about who is a paying client: after m49078 item 2 the Subscribers page labelled
+ * HH1/HH2/HH12/HH19 trial while this tile still counted them as subscribers. It sits after the
+ * explicit-lapse branch and before every entitlement branch, so a lapse still wins and no
+ * licence-expiry logic is touched -- it only renames a row this CASE was going to call live. */
 const SUBSCRIBER_STATUS_SQL = `
   case
     when s.status = 'lapsed' then 'lapsed'
+    when exists (
+      select 1 from licenses lt
+      where lt.id = s.license_id and lt.tier = 'trial'
+    ) then 'trial'
     when ft.region_key is null then s.status
     when ${REGION_TO_FEED_TYPE_SQL} is null then s.status
     when exists (
@@ -427,6 +458,29 @@ export async function pseudonymForSubscriber(
   }
 }
 
+/** Trial vs paid, ON TOP of EFFECTIVE_STATUS_SQL -- marcus m49078 item 2 (2026-09-12): HH1, HH2,
+ * HH12 and HH19 all hold licences.tier = 'trial' at price_cents 0, yet every provider surface
+ * listed them under "paying subscribers only", contradicting its own scope note. A trial-originated
+ * grant is written with status = 'active' like any purchased one (see the feed_tier_trials note on
+ * EFFECTIVE_STATUS_SQL), so s.status alone cannot tell them apart; the bound licence's tier can.
+ *
+ * Deliberately NOT a fourth branch inside EFFECTIVE_STATUS_SQL: m49078 rules that the
+ * entitlement/licence-expiry branch is coxwell's (21:55Z) and must not be touched, so this only
+ * re-labels a row the CASE already decided is live. A 'lapsed' verdict always survives -- both the
+ * explicit admin lapse (the one-way ratchet) and the licence-expiry branch.
+ *
+ * That last point is STRICTER than m49078's literal wording ("and s.status is not 'lapsed'"), and
+ * it is a visible difference on live data, not a hypothetical: HH15 and HH18 sit on trial licences
+ * that have already EXPIRED (2026-09-06 / 2026-09-09), so s.status is 'active' while the effective
+ * status is 'lapsed'. Read literally they would flip lapsed -> trial and lose their expiry date;
+ * that would be the licence-expiry branch being overridden from outside, which is the one thing
+ * m49078 forbids. They stay lapsed and read "Licence expired {date}". Flagged to marcus; flipping
+ * to the literal reading is changing `effective === "lapsed"` to a raw-status test here. */
+export function statusForLicenseTier(effective: SubscriptionStatus, licenseTier: string | null): SubscriptionStatus {
+  if (effective === "lapsed") return "lapsed";
+  return licenseTier === "trial" ? "trial" : effective;
+}
+
 /** Provider-facing subscriber list -- pseudonyms only. Never select subscriber_user_id,
  * email, or display_name here; leaking any of those into a provider-visible response
  * defeats the entire point of the pseudonym table. Degrades to an empty list pre-migration
@@ -437,7 +491,28 @@ export async function pseudonymForSubscriber(
  * "provider needs to see the IP ... he allowlists that IP on his own box"). Registered IP
  * only -- no captured_ip fallback, no mismatch/verification state; that stays admin-only
  * per the 2026-08-29 ruling. Null when the client has no server registered at all, which is
- * the true state for most of the London backfill rows, not a bug to paper over. */
+ * the true state for most of the London backfill rows, not a bug to paper over.
+ *
+ * licenses is joined on s.license_id purely to read l.tier for statusForLicenseTier above (trial
+ * vs paid, m49078 item 2). It joins on the licences PRIMARY KEY, so like server_registrations it
+ * can never fan a subscription row out into several. The entitlement question still belongs to
+ * EFFECTIVE_STATUS_SQL's own `exists` sub-select, which is untouched -- this join adds a label,
+ * not a second liveness test, and the two must not be merged.
+ *
+ * The ORDER BY is TOTAL (seq, then started_at, then id) as of 2026-09-12, not just `p.seq`:
+ * within one account every row shares a seq, so under `order by p.seq` alone their relative
+ * order was unspecified -- and groupAccountSubscriptions then took a package group's status from
+ * `members[0]`, so an account holding one lapsed and three active tiers of the same package
+ * could read either way. Evidence it was genuinely unpinned rather than incidentally stable:
+ * HH1's LD Base rendered its members Beta-first under the old clause and Delta-first (true
+ * earliest grant) under this one. I did not catch the *count* flipping, so treat "it flipped in
+ * prod" as unproven -- the query simply never guaranteed otherwise.
+ *
+ * This makes the row set stable; it never decided whether such a group *should* read lapsed.
+ * That semantic question (it hid coxwell's own HH20's three 09-11 active London tiers behind a
+ * 09-03 lapsed ld-beta-56 row) was ruled by marcus in m49051 and no longer depends on this
+ * ORDER BY at all -- see statusForPackageMembers below. The order still fixes which member
+ * speaks for a group's price, server IP and member list, so it stays. */
 export async function listSubscribersForProvider(providerUserId: string): Promise<ProviderSubscriberRow[]> {
   try {
     const result = await pool.query<{
@@ -450,17 +525,25 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       started_at: Date;
       declared_ip: string | null;
       price_cents: number | null;
+      license_tier: string | null;
+      raw_status: SubscriptionStatus;
+      lapsed_at: Date | null;
+      ends_at: Date | null;
+      license_expires_at: Date | null;
     }>(
       `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, ft.tier_key, ft.region_key,
-              ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip, s.price_cents
+              ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip, s.price_cents,
+              l.tier as license_tier, s.status as raw_status, s.lapsed_at, s.ends_at,
+              l.expires_at as license_expires_at
        from feed_subscriptions s
        join provider_client_pseudonyms p
          on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
        left join feed_tiers ft on ft.id = s.feed_tier_id
        left join provider_tiers pt on pt.id = s.provider_tier_id
        left join server_registrations sr on sr.license_id = s.license_id
+       left join licenses l on l.id = s.license_id
        where s.provider_user_id = $1
-       order by p.seq`,
+       order by p.seq, s.started_at, s.id`,
       [providerUserId]
     );
     return result.rows.map((row) => ({
@@ -469,8 +552,13 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       tierName: row.tier_name,
       tierKey: row.tier_key,
       regionKey: row.region_key,
-      status: row.status,
+      status: statusForLicenseTier(row.status, row.license_tier),
+      rawStatus: row.raw_status,
       startedAt: row.started_at,
+      lapsedAt: row.lapsed_at,
+      endsAt: row.ends_at,
+      licenseExpiresAt: row.license_expires_at,
+      licenseTier: row.license_tier,
       serverIp: row.declared_ip,
       priceCents: row.price_cents,
     }));
@@ -480,9 +568,63 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
   }
 }
 
+/** How many of this provider's subscription rows listSubscribersForProvider cannot show, because
+ * their subscriber has no `provider_client_pseudonyms` row (marcus m49127: "YES, ship it").
+ *
+ * That join is an INNER join and it is the only one in the query, so a subscriber without a
+ * pseudonym is dropped with no error and no placeholder -- invisible on every provider surface and
+ * in every total. It happened once for real: Wwwsss (f56eb4a8) had three live LD Base rows from a
+ * hand-written INSERT on 2026-09-12 and appeared nowhere, and the absence was indistinguishable
+ * from "this client does not exist". Every APP write path assigns a pseudonym in the same
+ * transaction as the insert (assignPseudonymSeq), so this can only be non-zero after a direct SQL
+ * write -- which makes it exactly the thing a human needs told, rather than a state to design for.
+ *
+ * READ-ONLY and deliberately so: it counts, it never assigns. Assignment stays on the write path
+ * where it is transactional; a read that silently created identity rows would be a page load with
+ * a side effect, and two concurrent loads could race for the same seq. */
+export async function countUnpseudonymedRowsForProvider(providerUserId: string): Promise<number> {
+  try {
+    const result = await pool.query<{ count: string }>(
+      `select count(*) as count
+       from feed_subscriptions s
+       where s.provider_user_id = $1
+         and not exists (
+           select 1 from provider_client_pseudonyms p
+           where p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
+         )`,
+      [providerUserId]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  } catch (err) {
+    if (isMissingTable(err)) return 0;
+    throw err;
+  }
+}
+
 export type AccountRowGroup =
   | { kind: "package"; pseudonym: string; label: string; status: ProviderSubscriberRow["status"]; members: ProviderSubscriberRow[] }
   | { kind: "single"; row: ProviderSubscriberRow };
+
+/** A package group's status. Ruled by marcus, m49051 (2026-09-12, bus thread
+ * leo-provider-revenue-ny-base-2026-09-12), replacing the former `members[0].status`: a group
+ * reads ACTIVE if ANY member is effective-active, and LAPSED only when EVERY member is lapsed.
+ * His reason: price is written and resolved per package (setFeedSubscriptionPriceForPackage /
+ * resolvedPriceCentsFor), so a package holding a live paid tier is live money, and letting one
+ * dead tier speak for the whole group under-reports on three surfaces at once. It hid coxwell's
+ * own HH20 LD Base -- three tiers live since 09-11 -- behind one lapsed 09-03 ld-beta-56 row.
+ * Decided here, inside the grouping, so Revenue, Subscribers and Overview move together once
+ * rather than each applying its own predicate.
+ *
+ * The third outcome is explicit, not a fallthrough: members that are neither any-active nor
+ * all-lapsed (a trial-covered tier beside a lapsed one) read "trial", never "active" -- a trial
+ * earns no payout (providerShareCentsFor returns null for it) and this rule must not promote one
+ * into a paying client. No such group exists in the live data today (35 active / 2 lapsed rows,
+ * zero status='trial'), so this branch is written from the type, not from an observed row. */
+function statusForPackageMembers(members: ProviderSubscriberRow[]): ProviderSubscriberRow["status"] {
+  if (members.some((m) => m.status === "active")) return "active";
+  if (members.every((m) => m.status === "lapsed")) return "lapsed";
+  return "trial";
+}
 
 /** Mirrors groupTiers' package/single split (feed-provider-packages.ts) but scoped per
  * account instead of per provider -- Revenue groups every tier a provider sells, this groups
@@ -506,7 +648,7 @@ export function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): Accoun
       const members = accountRows.filter((r) => r.tierKey && pkg.tierKeys.includes(r.tierKey));
       if (members.length === 0) continue;
       members.forEach((m) => used.add(m.subscriptionId));
-      groups.push({ kind: "package", pseudonym, label: pkg.label, status: members[0].status, members });
+      groups.push({ kind: "package", pseudonym, label: pkg.label, status: statusForPackageMembers(members), members });
     }
     for (const row of accountRows) {
       if (!used.has(row.subscriptionId)) groups.push({ kind: "single", row });
@@ -515,21 +657,279 @@ export function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): Accoun
   return groups;
 }
 
+/** The one read of a group's status, extracted 2026-09-12 (bus thread
+ * leo-provider-revenue-ny-base-2026-09-12) when the Revenue page grew a second view and a
+ * region filter and would otherwise have inlined this ternary a fourth and fifth time.
+ * Behaviour is unchanged from the copies it replaces in sumProviderShareCents /
+ * sumMonthlyGrossCents. The mixed-group question this used to flag as unresolved is now ruled
+ * (marcus m49051) and answered by statusForPackageMembers above, which this just reads: a
+ * package is active if any member is, lapsed only if all are. Nothing here re-derives a status
+ * from member rows, so a caller cannot apply a different predicate to the same group. */
+export function statusForGroup(group: AccountRowGroup): ProviderSubscriberRow["status"] {
+  return group.kind === "package" ? group.status : group.row.status;
+}
+
+/** The region a group belongs to, for the Revenue page's region switch (coxwell 2026-09-12
+ * 21:18Z via marcus m49032: "ability to change between region"). Reads feed_tiers.region_key as
+ * carried on the row -- the same column the Subscribers page's "By location" note and
+ * EFFECTIVE_STATUS_SQL's licence gate key on -- never re-derived from a tier name or a PACKAGES
+ * label. Null means no region is recorded for this grant (a provider_tiers row: ft.region_key
+ * is null for third-party self-serve tiers), which is a real absence, not a default to London;
+ * such a group is visible under "All" and under no single-region filter. A PACKAGES entry is
+ * region-local by construction, so the first member carrying a region speaks for the group. */
+export function regionKeyForGroup(group: AccountRowGroup): string | null {
+  if (group.kind === "package") {
+    return group.members.map((m) => m.regionKey).find((r) => r != null) ?? null;
+  }
+  return group.row.regionKey ?? null;
+}
+
+/** A group's start date: the earliest `started_at` among its rows, since a package group has no
+ * started_at of its own (bus thread leo-provider-panel-package-labels-2026-09-04, marcus
+ * follow-up B). Hoisted out of the Subscribers page 2026-09-12 so the Revenue page's Clients
+ * view shows the identical date for the identical group instead of a second reduce.
+ * This is a GRANT date, not purchase history -- see m47007; label it as such wherever it lands. */
+export function startedAtForGroup(group: AccountRowGroup): Date {
+  if (group.kind === "single") return group.row.startedAt;
+  return group.members.reduce((earliest, m) => (m.startedAt < earliest ? m.startedAt : earliest), group.members[0].startedAt);
+}
+
 /** Job C (bus thread leo-provider-subscribers-page-2026-09-06, coxwell-authorised): the price
  * a payout reads is THIS client's own negotiated feed_subscriptions.price_cents, never a
  * catalogue/package-wide constant -- a partner on a different number must produce a different
  * line. Per marcus's m46504 ruling, there is NO fallback to any package/tier default list
  * price -- a group with no override anywhere resolves to null (unset), which providerShareFor
- * renders as "Not set" and providerShareCentsFor counts as zero, never as the catalogue's
+ * renders as "unpriced" and providerShareCentsFor counts as zero, never as the catalogue's
  * $30. For a package, every member row is written the same price together
  * (setFeedSubscriptionPriceForPackage) so any one member's non-null value speaks for the whole
  * group; this does not sum or average across members, and does not read feed_tiers/ProviderTierRow
- * catalogue prices directly -- that was the members[0]-off-the-catalogue bug this job fixed. */
+ * catalogue prices directly -- that was the members[0]-off-the-catalogue bug this job fixed.
+ *
+ * A stored 0 resolves as 0 here, unchanged by C3 (m49063). The surfaces spell a 0 "unpriced"
+ * (isUnpriced) but this stays the literal stored value: skipping 0 members in the find() below
+ * would let a sibling's price speak for a row that does not carry it, which moves money.
+ *
+ * EFFECTIVE-ACTIVE MEMBERS ONLY, ruled by marcus 2026-09-12 (m49078 item 1, restated m49088 as
+ * option (a)). The "every member is written the same price together" invariant above holds only
+ * while a group's members are all live: the moment ENDED history and live rows share one
+ * (client, package) group, the first non-null price can come from a dead row. That is exactly
+ * what happened tonight -- coxwell's own three $30 LD Base rows from his expired paid licence
+ * were backfilled beside his live, never-priced team-licence rows, and HH20 rendered $30 / $15,
+ * pushing London's total to $90 / $45 off money that is not being paid. A lapsed row is history,
+ * not a rate card: a group whose only priced members are lapsed resolves to null and every
+ * surface spells it "unpriced". Applied to `single` groups too, so one rule covers both shapes.
+ *
+ * This is why the Lapsed filter must NOT read its price column from here -- a lapsed group's
+ * last known price is a separate question from what it is being charged now, and it needs its
+ * own accessor rather than a relaxed version of this one. */
 export function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
   if (group.kind === "package") {
-    return group.members.map((m) => m.priceCents).find((c) => c != null) ?? null;
+    return (
+      group.members
+        .filter((m) => m.status === "active")
+        .map((m) => m.priceCents)
+        .find((c) => c != null) ?? null
+    );
   }
-  return group.row.priceCents ?? null;
+  return group.row.status === "active" ? group.row.priceCents ?? null : null;
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** WHY a group isn't paying, for the Paying | Lapsed | All filter (coxwell via marcus m49070,
+ * pulled onto the Revenue thread by m49081; the Subscribers page reuses THIS function rather than
+ * spelling the same three sentences a second time). Null for a paying group -- a live client needs
+ * no explanation, and a null here is what a caller keys "is this row greyed" off.
+ *
+ * Four outcomes (m49101 fixes the wording): "Ended {date}" is a decision somebody recorded (an
+ * explicit admin lapse, always with a lapsed_at), while "Licence expired {date}" is a row nobody
+ * touched whose licence simply ran out underneath it -- the provider can act on the second (chase
+ * a renewal) and cannot on the first, so collapsing them into one "lapsed" would hide that. When
+ * the thing that ran out was a TRIAL licence it reads "Trial ended {date}", because "Licence
+ * expired" invites a renewal conversation about a client who was never paying. Plain "Trial"
+ * carries no date: that trial has NOT ended, the client is live and simply isn't paying, and a
+ * date beside them would read as a lapse.
+ *
+ * A package group's reason comes from the member that stopped LAST (max date, nulls first, then
+ * the pinned member order for ties). A group dies when its final member does, so the latest date
+ * is the one a provider would recognise; taking members[0] would let whichever tier happens to
+ * sort first speak for the group, which is the members[0] class of bug this file has already been
+ * burned by twice. Only members sharing the group's own status are eligible, so a stray live row
+ * can't explain a lapsed group. */
+export function statusReasonForGroup(group: AccountRowGroup): string | null {
+  const status = statusForGroup(group);
+  if (status === "active") return null;
+  if (status === "trial") return "Trial";
+
+  const rows = group.kind === "package" ? group.members.filter((m) => m.status === status) : [group.row];
+  let best: { text: string; at: Date | null } | null = null;
+  for (const row of rows) {
+    const explicit = row.rawStatus === "lapsed";
+    const at = (explicit ? row.lapsedAt ?? row.endsAt : row.licenseExpiresAt ?? row.endsAt) ?? null;
+    const label = explicit ? "Ended" : row.licenseTier === "trial" ? "Trial ended" : "Licence expired";
+    const candidate = { text: at ? `${label} ${isoDate(at)}` : label, at };
+    if (best == null || (candidate.at != null && (best.at == null || candidate.at > best.at))) best = candidate;
+  }
+  return best?.text ?? null;
+}
+
+/** The LAST price a non-paying group carried, for the Lapsed filter's price cell (m49070: "their
+ * LAST price shown as text not money"). Deliberately a separate accessor from
+ * resolvedPriceCentsFor rather than a flag on it: that function answers "what is this client
+ * being charged", which for a group with no live priced member is nothing at all, and relaxing it
+ * to answer this question too is precisely the defect ruling (a) fixed. Callers must render this
+ * as text and must never add it to a total -- a lapsed client's old price is history, not revenue.
+ *
+ * Reads the most RECENTLY started member that carries a price (started_at desc, subscriptionId as
+ * the tie-break so the walk is totally ordered), which is the last price actually written for this
+ * client-package. Null, and "unpriced" on screen, when no member ever had one. */
+export function lastPriceCentsFor(group: AccountRowGroup): number | null {
+  if (group.kind === "single") return group.row.priceCents ?? null;
+  return (
+    [...group.members]
+      .sort((a, b) =>
+        b.startedAt.getTime() - a.startedAt.getTime() || a.subscriptionId.localeCompare(b.subscriptionId)
+      )
+      .map((m) => m.priceCents)
+      .find((c) => c != null) ?? null
+  );
+}
+
+export interface MonthlyHistoryClient {
+  key: string;
+  client: string;
+  label: string;
+  regionKey: string | null;
+  priceCents: number | null;
+  fromISO: string;
+  toISO: string;
+  /** True when no end date exists on the rows at all -- `toISO` is then "now", a date nobody
+   * agreed to, so the UI must print "ongoing" rather than pass it off as a contracted end. */
+  open: boolean;
+}
+
+export interface MonthlyHistoryEntry {
+  monthKey: string;
+  label: string;
+  clients: number;
+  pricedClients: number;
+  grossCents: number;
+  shareCents: number;
+  rows: MonthlyHistoryClient[];
+}
+
+function monthLabel(year: number, monthIndex: number): string {
+  return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][monthIndex]} ${year}`;
+}
+
+/** Revenue's History view, coxwell 22:08Z via marcus m49083 ("yes but we need history also") --
+ * the 09-09 "combined purchases" ask (m47007) resurfacing, built once here.
+ *
+ * CONTRACTED PERIODS, NOT PAYMENTS. There is no ledger and nothing has ever been charged, so this
+ * derives entirely from the periods already on feed_subscriptions -- no new table, no invented
+ * transaction. A group counts in month M when any of its member rows was live at any point in M:
+ * `started_at <= end of M AND coalesce(lapsed_at, ends_at, now) >= start of M`, exactly m49083's
+ * test. `now` is a parameter, not read here, so a month boundary can be reasoned about.
+ *
+ * PRICE COMES FROM THE ROWS THAT WERE LIVE IN THAT MONTH, which is why this does not call
+ * resolvedPriceCentsFor: that function answers "what is this client being charged now" and (since
+ * ruling (a), m49088) deliberately ignores lapsed members -- every historical month would price at
+ * nothing. Here the overlapping members are the live ones for that month, so their own price is
+ * the right one, and a member priced 0/NULL stays unpriced rather than becoming a $0 client.
+ *
+ * The 50% is providerShareCentsFor with an explicit "active": in the month being described the row
+ * WAS live, so the same shared calc applies -- there is no second halving anywhere in this file.
+ *
+ * NEVER SUMMED ACROSS MONTHS (m49083). A client on a one-month term must not read as three months
+ * of revenue, so this returns per-month figures and no grand total, and the page renders none. */
+export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): MonthlyHistoryEntry[] {
+  /** HALF-OPEN, [started_at, end) -- marcus m49147. A row whose period ends exactly at the first
+   * instant of month M was not live in M, and a month is likewise [first instant, first instant of
+   * the next month). Both comparisons are strict, so a boundary instant belongs to exactly one
+   * month and a one-month term can never be counted twice.
+   *
+   * The third conjunct is the same rule applied to the row itself: [t, t) is empty, so a period
+   * that starts and ends at the same instant was live for no time and belongs to no month. Without
+   * it a zero-length row would still land in whatever month contained that instant. */
+  const overlaps = (row: ProviderSubscriberRow, start: Date, endExclusive: Date): boolean => {
+    const ends = row.lapsedAt ?? row.endsAt ?? now;
+    return row.startedAt < endExclusive && ends > start && ends > row.startedAt;
+  };
+
+  /** A trial licence is never a contracted payment, in any month, so its rows are dropped here
+   * per ROW rather than by the group's current status (m49083: "trials excluded"). Row grain
+   * matters: a client who trialled and then bought has both kinds of row, and only the trial ones
+   * should vanish. This is also what keeps HH15/HH18 -- expired trial licences, correctly lapsed
+   * on the live views -- out of a column headed "Paying clients", where they never belonged. */
+  const membersOf = (g: AccountRowGroup): ProviderSubscriberRow[] =>
+    (g.kind === "package" ? g.members : [g.row]).filter((r) => r.licenseTier !== "trial");
+
+  const starts = groups.flatMap(membersOf).map((r) => r.startedAt);
+  if (starts.length === 0) return [];
+  const earliest = starts.reduce((a, b) => (b < a ? b : a));
+
+  const entries: MonthlyHistoryEntry[] = [];
+  for (
+    let year = earliest.getUTCFullYear(), month = earliest.getUTCMonth();
+    year < now.getUTCFullYear() || (year === now.getUTCFullYear() && month <= now.getUTCMonth());
+    month === 11 ? ((year += 1), (month = 0)) : (month += 1)
+  ) {
+    const start = new Date(Date.UTC(year, month, 1));
+    const endExclusive = new Date(Date.UTC(year, month + 1, 1));
+
+    const rows: MonthlyHistoryClient[] = [];
+    let grossCents = 0;
+    let shareCents = 0;
+    let pricedClients = 0;
+
+    for (const g of groups) {
+      const members = membersOf(g).filter((r) => overlaps(r, start, endExclusive));
+      if (members.length === 0) continue;
+
+      const priceCents = members.map((r) => r.priceCents).find((c) => c != null) ?? null;
+      /** The period must describe the rows the PRICE came from, not the union of everything that
+       * happened to be live. coxwell's own group is why: in September his three $30 rows (ended
+       * 09-01) and his unpriced live team rows both overlap, and a "2026-08-01 → 2026-09-20" beside
+       * "$30" would be one period welded out of two different agreements. Same failure ruling (a)
+       * fixed on the live views, in its historical form. */
+      const priceSource = priceCents == null ? members : members.filter((r) => r.priceCents === priceCents);
+      const from = priceSource.reduce((a, r) => (r.startedAt < a ? r.startedAt : a), priceSource[0].startedAt);
+      const ends = priceSource.map((r) => r.lapsedAt ?? r.endsAt).filter((d): d is Date => d != null);
+      /** "ongoing" is reserved for a row with NO end date at all. A period that simply runs past
+       * this month still has an agreed end, and printing that date is more honest than implying
+       * the client is open-ended. */
+      const to = ends.length === priceSource.length ? ends.reduce((a, d) => (d > a ? d : a)) : null;
+
+      rows.push({
+        key: g.kind === "package" ? `${g.pseudonym}-${g.label}` : g.row.subscriptionId,
+        client: g.kind === "package" ? g.pseudonym : g.row.pseudonym,
+        label: g.kind === "package" ? g.label : g.row.tierName,
+        regionKey: regionKeyForGroup(g),
+        priceCents,
+        fromISO: isoDate(from),
+        toISO: isoDate(to ?? now),
+        open: to == null,
+      });
+
+      grossCents += priceCents ?? 0;
+      shareCents += providerShareCentsFor("active", priceCents) ?? 0;
+      if (!isUnpriced(priceCents)) pricedClients += 1;
+    }
+
+    entries.push({
+      monthKey: `${year}-${String(month + 1).padStart(2, "0")}`,
+      label: monthLabel(year, month),
+      clients: rows.length,
+      pricedClients,
+      grossCents,
+      shareCents,
+      rows,
+    });
+  }
+
+  return entries.reverse();
 }
 
 /** The one place that walks account groups and adds up the provider's 50% share, bus thread
@@ -542,8 +942,7 @@ export function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
  * with another. */
 export function sumProviderShareCents(groups: AccountRowGroup[]): number {
   return groups.reduce((sum, g) => {
-    const status = g.kind === "package" ? g.status : g.row.status;
-    const cents = providerShareCentsFor(status, resolvedPriceCentsFor(g));
+    const cents = providerShareCentsFor(statusForGroup(g), resolvedPriceCentsFor(g));
     return sum + (cents ?? 0);
   }, 0);
 }
@@ -557,10 +956,28 @@ export function sumProviderShareCents(groups: AccountRowGroup[]): number {
  * price contributes zero, distinguishable from a real $0. */
 export function sumMonthlyGrossCents(groups: AccountRowGroup[]): number {
   return groups.reduce((sum, g) => {
-    const status = g.kind === "package" ? g.status : g.row.status;
-    if (status !== "active") return sum;
+    if (statusForGroup(g) !== "active") return sum;
     return sum + (resolvedPriceCentsFor(g) ?? 0);
   }, 0);
+}
+
+/** How many of the paying groups behind a money total actually carry a price (marcus C3,
+ * m49063): "a package line whose priced members are fewer than its subscribers shows the
+ * priced count beside the money, e.g. '6 subscribers, 1 priced, $30', so nobody divides $30 by
+ * 6". Walks the SAME groups and the same active predicate as sumProviderShareCents /
+ * sumMonthlyGrossCents above, so the count beside a figure can never describe a different row
+ * set than the figure does. `priced` is also what tells a $0 total from an unknown one:
+ * priced === 0 means no row behind the total has a price at all, and moneyOrUnpriced then
+ * prints "unpriced" rather than "$0". */
+export function pricedGroupCounts(groups: AccountRowGroup[]): { priced: number; subscribers: number } {
+  let priced = 0;
+  let subscribers = 0;
+  for (const g of groups) {
+    if (statusForGroup(g) !== "active") continue;
+    subscribers += 1;
+    if (!isUnpriced(resolvedPriceCentsFor(g))) priced += 1;
+  }
+  return { priced, subscribers };
 }
 
 /** Fetch-and-sum wrapper around sumProviderShareCents for callers (Overview) that don't
@@ -575,14 +992,20 @@ export async function getProviderMonthlyShareCents(providerUserId: string): Prom
 /** Overview panel's "Subscribers" stat -- distinct subscribers with a live, non-trial grant,
  * where a Horizon-catalogue row counts only if its region is still license-entitled (see
  * SUBSCRIBER_STATUS_SQL above) as well as not explicitly lapsed and not merely trial-covered.
- * Degrades to 0 pre-migration, same rule as every other counter this panel renders. */
+ * Degrades to 0 pre-migration, same rule as every other counter this panel renders.
+ *
+ * Tests `= 'active'` rather than `!= 'lapsed'` since m49097 item 4: SUBSCRIBER_STATUS_SQL can now
+ * answer 'trial' (a grant on a trial LICENCE), and a headcount that counted anything not-lapsed
+ * would keep calling those clients subscribers while the money on Subscribers/Revenue calls them
+ * trial. There is no third live value for this to exclude by accident -- 'active' and 'trial' are
+ * the only non-lapsed outcomes. */
 export async function getActiveSubscriberCountForProvider(providerUserId: string): Promise<number> {
   try {
     const result = await pool.query<{ count: string }>(
       `select count(distinct s.subscriber_user_id) as count
        from feed_subscriptions s
        left join feed_tiers ft on ft.id = s.feed_tier_id
-       where s.provider_user_id = $1 and (${SUBSCRIBER_STATUS_SQL}) != 'lapsed'`,
+       where s.provider_user_id = $1 and (${SUBSCRIBER_STATUS_SQL}) = 'active'`,
       [providerUserId]
     );
     return Number(result.rows[0]?.count ?? 0);

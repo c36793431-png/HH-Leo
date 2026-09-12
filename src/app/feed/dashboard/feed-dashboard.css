@@ -122,6 +122,11 @@
 .feed-provider-v1 .card .chead h3 { font-family: var(--pfp-disp); font-weight: 700; font-size: 19px; letter-spacing: 0.02em; }
 .feed-provider-v1 .card .chead .cap { font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pfp-ink-hi); margin-left: auto; }
 .feed-provider-v1 .card .chead .ic { width: 20px; height: 20px; color: var(--pfp-cyan); text-align: center; }
+/* Right-hand control cluster in a card header (Revenue's view + region switches, 2026-09-12).
+   Wraps rather than overflowing on narrow panels; .chead itself stays nowrap for every other card. */
+.feed-provider-v1 .card .chead .chead-tools { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.feed-provider-v1 .card .chead .seg { padding: 3px; border-radius: 9px; }
+.feed-provider-v1 .card .chead .seg a { padding: 6px 11px; font-size: 12px; }
 .feed-provider-v1 .full { grid-column: 1 / -1; }
 .feed-provider-v1 .foot { margin-top: 30px; text-align: center; font-family: var(--pfp-mono); font-size: 11px; color: var(--pfp-ink-4); }
 .feed-provider-v1 .fp-scrim { display: none; }
@@ -201,6 +206,17 @@
 .feed-provider-v1 .tbl td b { color: var(--pfp-ink); font-weight: 600; }
 .feed-provider-v1 .tbl td .mono { font-family: var(--pfp-mono); color: var(--pfp-ink); }
 .feed-provider-v1 .tbl .share { color: var(--pfp-cyan); font-family: var(--pfp-mono); font-weight: 600; }
+/* Member tiers under a package name in Revenue's Clients view -- detail, never the row's subject. */
+.feed-provider-v1 .tbl td .sub { font-size: 11px; color: var(--pfp-ink-hi); margin-top: 3px; }
+/* Revenue's Paying | Lapsed | All filter (m49070): a client who is no longer paying is greyed
+   right down, and their last price is deliberately NOT in the money colour -- it is history, not
+   revenue, and must not read as a figure that belongs in the totals below it. */
+.feed-provider-v1 .tbl tr.not-paying td,
+.feed-provider-v1 .tbl tr.not-paying td b,
+.feed-provider-v1 .tbl tr.not-paying td .mono { color: var(--pfp-grey); }
+.feed-provider-v1 .tbl td .sub.muted { color: var(--pfp-grey); }
+.feed-provider-v1 .scope-note .muted { color: var(--pfp-grey); }
+.feed-provider-v1 .tbl td .last-price { font-family: var(--pfp-mono); color: var(--pfp-grey); font-style: italic; }
 .feed-provider-v1 .tbl .total-row td { border-top: 1px solid var(--pfp-line-soft); padding-top: 14px; }
 .feed-provider-v1 .tbl .total-row b { color: var(--pfp-ink); }
 .feed-provider-v1 .acct-disclosure { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }

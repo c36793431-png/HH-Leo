@@ -60,7 +60,11 @@ export default async function AdminConnectionDetailPage({
         <div className="mt-4">
           <ActionButton
             action={setMultipleIpsOkAction}
-            hiddenFields={{ licenseId, value: registration?.multipleIpsOk ? "false" : "true" }}
+            hiddenFields={{
+              registrationId: registration?.id ?? "",
+              licenseId,
+              value: registration?.multipleIpsOk ? "false" : "true",
+            }}
             label={registration?.multipleIpsOk ? "Disable multi-IP OK" : "Mark multi-IP OK (silence mismatch alerts)"}
             successMessage="Flag updated"
           />

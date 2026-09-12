@@ -12,7 +12,12 @@ import { getServerRegistration, getLatestConnectionIp, type ServerRegistration }
 import { getBlackTrialForUser } from "@/lib/black-trials";
 import { getPortalConfig } from "@/lib/portal-config";
 import { BlackTrialCard } from "@/components/account/black-trial-card";
-import { saveServerRegistrationAction, requestBlackTrialAction, requestBlackTrialConvertAction } from "./actions";
+import {
+  saveServerRegistrationAction,
+  updateServerRegistrationAction,
+  requestBlackTrialAction,
+  requestBlackTrialConvertAction,
+} from "./actions";
 
 interface ServerCardProps {
   license: LicenseDetail;
@@ -41,7 +46,7 @@ function ServerCard({ license, registration, verified, showLicenseLabel }: Serve
           {!registration && " You can edit this any time."}
         </p>
         {registration ? (
-          <ServerRegistrationView registration={registration} action={saveServerRegistrationAction.bind(null, license.id)} />
+          <ServerRegistrationView registration={registration} action={updateServerRegistrationAction.bind(null, registration.id)} />
         ) : (
           <ServerRegistrationForm action={saveServerRegistrationAction.bind(null, license.id)} value={null} />
         )}
@@ -134,11 +139,12 @@ export default async function ServersPage() {
 
   const groupedEntries: GroupedServerEntry[] = grouped
     ? registeredCards.map(({ license, registration, verified }) => ({
+        registrationId: (registration as ServerRegistration).id,
         licenseId: license.id,
         licenseKey: license.licenseKey,
         registration: registration as ServerRegistration,
         verified,
-        action: saveServerRegistrationAction.bind(null, license.id),
+        action: updateServerRegistrationAction.bind(null, (registration as ServerRegistration).id),
       }))
     : [];
   const availableCard = grouped ? cards.find((c) => !c.registration) : undefined;
@@ -165,7 +171,7 @@ export default async function ServersPage() {
               Tell us where your Horizon client runs. Servers are grouped by location — expand a
               location to view or edit each machine.
             </p>
-            <ServerRegistrationsGrouped entries={groupedEntries} addTarget={addTarget} />
+            <ServerRegistrationsGrouped entries={groupedEntries} addTarget={addTarget} upgradeUrl={config.telegramChannelUrl} />
           </div>
           {trialProps && (
             <BlackTrialCard
