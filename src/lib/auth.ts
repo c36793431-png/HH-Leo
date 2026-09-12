@@ -164,32 +164,88 @@ async function sendWelcomeDm(telegramUserId: number, displayName: string) {
   }
 }
 
-// Upper bound on how long a sign-in waits for the free-signup Telegram alert. Long enough
-// for a normal Telegram round-trip, short enough that a stalled sink never holds the login.
-const NOTIFY_FREE_SIGNUP_TIMEOUT_MS = 4000;
+// Upper bound on how long a sign-in waits for one Telegram sink alert. Long enough for a
+// normal Telegram round-trip, short enough that a stalled sink never holds the login.
+const NOTIFY_TIMEOUT_MS = 4000;
 
-/** Awaited, bounded wrapper around notifyFreeSignup (bus thread
- * kai-auth-callback-hardening-2026-09-11). The alert used to be fired un-awaited
+/** Awaited, bounded wrapper around a telemetry-sink alert (bus thread
+ * kai-auth-callback-hardening-2026-09-11). Alerts used to be fired un-awaited
  * (`.catch(() => {})`), so on Vercel the invocation could end before the fetch resolved
- * and a real 2026-09-11 signup produced no alert. Awaiting it keeps the invocation alive;
+ * and a real 2026-09-11 signup produced no alert. Awaiting keeps the invocation alive;
  * the Promise.race timeout keeps a hung sink from stalling sign-in past 4s. Never throws:
  * failure and timeout both land in one searchable log line. No waitUntil because
  * @vercel/functions is not a dependency. */
-async function notifyFreeSignupBounded(opts: Parameters<typeof notifyFreeSignup>[0]): Promise<void> {
+async function notifyBounded(label: string, ctx: Record<string, unknown>, alert: Promise<void>): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`timed out after ${NOTIFY_FREE_SIGNUP_TIMEOUT_MS}ms`)),
-      NOTIFY_FREE_SIGNUP_TIMEOUT_MS
-    );
+    timer = setTimeout(() => reject(new Error(`timed out after ${NOTIFY_TIMEOUT_MS}ms`)), NOTIFY_TIMEOUT_MS);
   });
   try {
-    await Promise.race([notifyFreeSignup(opts), timeout]);
+    await Promise.race([alert, timeout]);
   } catch (err) {
-    console.error("notifyFreeSignup failed", { source: opts.source, email: opts.email }, err);
+    console.error(`[auth-events] ${label} failed`, ctx, err);
   } finally {
     clearTimeout(timer);
   }
+}
+
+function notifyFreeSignupBounded(opts: Parameters<typeof notifyFreeSignup>[0]): Promise<void> {
+  return notifyBounded("notifyFreeSignup", { source: opts.source, email: opts.email }, notifyFreeSignup(opts));
+}
+
+/** Runs one login side effect inside an Auth.js event. @auth/core awaits events inline
+ * (events.createUser at lib/actions/callback/handle-login.js:77, events.signIn at
+ * lib/actions/callback/index.js:214 and :276), so an exception thrown from an event fails
+ * an otherwise-complete login. Every step is therefore caught here and logged under one
+ * greppable prefix; nothing is swallowed silently and nothing propagates. */
+async function authEventStep(step: string, ctx: Record<string, unknown>, fn: () => Promise<unknown>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`[auth-events] ${step} failed`, ctx, err);
+  }
+}
+
+/** Adapter-created users come only from the Resend magic-link provider (id "resend",
+ * @auth/core/providers/resend.js:5). events.createUser carries no `account`, so the
+ * provider name for that first signin_events row is fixed here. */
+const EMAIL_PROVIDER_ID = "resend";
+
+/** The three FK-bearing per-login writes (bus thread kai-auth-first-login-writes-2026-09-12).
+ * They used to live in the signIn CALLBACK, which on a first magic-link login runs with a
+ * phantom user id (lib/actions/callback/index.js:156-167) before the adapter has inserted
+ * the users row (handle-login.js:76), so all three tripped their users(id) FK and were
+ * swallowed: 17/17 adapter-created users had no first-login signin_events or
+ * first_login_alerts row. They now run only from events, where the row is committed. Each
+ * step is isolated so one failure does not stop the others. */
+async function recordLoginWrites(args: { userId: string; email: string | null; provider: string }): Promise<void> {
+  const { userId, email, provider } = args;
+  const ctx = { userId, email, provider };
+
+  // Claim any licence pre-provisioned by email. Idempotent: the UPDATE only touches rows
+  // whose user_id is still null, so re-running it on every login is a no-op after the first.
+  if (email) {
+    await authEventStep("claimPendingLicense", ctx, () => claimPendingLicense({ userId, email }));
+  }
+
+  await authEventStep("recordSigninEvent", ctx, () => recordSigninEvent(userId, provider));
+
+  // Atomic first-login claim: only the caller whose INSERT actually lands (rowCount 1)
+  // fires the alert, so two concurrent logins for the same brand-new user (e.g. a resend
+  // link clicked twice) cannot both win a count()-based race and double-send.
+  await authEventStep("firstLoginAlert", ctx, async () => {
+    const claimed = await pool.query(
+      "insert into first_login_alerts (user_id) values ($1) on conflict do nothing",
+      [userId]
+    );
+    if (claimed.rowCount === 1) {
+      await notifyBounded(
+        "notifyFirstLogin",
+        ctx,
+        notifyFirstLogin({ email, loggedInAt: new Date(), source: provider })
+      );
+    }
+  });
 }
 
 // Shares one session across portal.horizonhft.com and partner.horizonhft.com (bus thread
@@ -379,55 +435,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return session;
     },
-    async signIn({ user, account }) {
-      // Email-provider first-time signups: claim any pre-provisioned license by email.
-      if (user?.email) {
-        try {
-          await claimPendingLicense({ userId: user.id!, email: user.email });
-        } catch (err) {
-          // Sign-in must succeed even if the claim fails. On a first magic-link login the
-          // adapter has not inserted the users row yet, so a matching pre-provisioned
-          // licence trips the licenses.user_id FK; the claim is retried on the next login.
-          console.error("claimPendingLicense failed", { userId: user.id, email: user.email }, err);
-        }
-      }
-      if (user?.id) {
-        await recordSigninEvent(user.id, account?.provider ?? "unknown").catch((err) => {
-          // Signin must succeed even if the history log write fails.
-          console.error("recordSigninEvent failed", err);
-        });
-
-        // Atomic claim: only the caller whose INSERT actually lands (rowCount 1)
-        // gets to fire the alert, so two concurrent signIns for the same
-        // brand-new user (e.g. a resend link clicked twice) can't both win a
-        // count()-based race and double-send.
-        const claimed = await pool
-          .query("insert into first_login_alerts (user_id) values ($1) on conflict do nothing", [user.id])
-          .catch((err) => {
-            console.error("first_login_alerts claim failed", err);
-            return null;
-          });
-
-        if (claimed && claimed.rowCount === 1) {
-          notifyFirstLogin({
-            email: user.email ?? null,
-            loggedInAt: new Date(),
-            source: account?.provider,
-          }).catch(() => {});
-        }
-      }
-      return true;
-    },
+    // No signIn callback: there is no allow/deny logic, and the per-login DB writes that
+    // used to live here were moved to `events` below (see recordLoginWrites) because on a
+    // first magic-link login this callback runs before the users row exists.
   },
+  // Event order at the installed @auth/core 0.41.2 (next-auth 5.0.0-beta.31):
+  //   first magic-link login : adapter.createUser -> events.createUser (handle-login.js:76-77)
+  //                            -> callbacks.jwt -> events.signIn({ isNewUser: true }) (callback/index.js:214)
+  //   returning magic-link   : adapter.updateUser -> events.updateUser (handle-login.js:68-72)
+  //                            -> callbacks.jwt -> events.signIn({ isNewUser: false })
+  //   telegram (credentials) : authorize() -> callbacks.jwt -> events.signIn({ user, account }) (index.js:276)
+  // Both events fire on a first magic-link login, so events.signIn skips the writes when
+  // isNewUser is true: events.createUser already made them on the same request.
   events: {
     async createUser({ user }) {
       // Adapter-managed creation covers the Email/Resend path; the Telegram
       // path bypasses the adapter and is notified inline in `authorize` above.
+      const ctx = { userId: user.id, email: user.email };
       if (user.id) {
-        await getOrCreateReferralCode(user.id);
-        await attributeReferralFromCookie(user.id).catch((err) => {
-          console.error("attributeReferralFromCookie failed (email)", err);
-        });
+        const userId = user.id;
+        await authEventStep("getOrCreateReferralCode", ctx, () => getOrCreateReferralCode(userId));
+        await authEventStep("attributeReferralFromCookie", ctx, () => attributeReferralFromCookie(userId));
       }
 
       // The Resend magic-link only creates this row when the link is clicked,
@@ -436,14 +464,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       let name = user.name ?? null;
       let telegramHandle: string | null = null;
       if (user.email) {
-        const pending = await pool
-          .query(`delete from pending_signups where email = $1 returning name, telegram_handle`, [user.email])
-          .catch((err) => {
-            console.error("pending_signups lookup failed", err);
-            return null;
-          });
-        const row = pending?.rows[0];
-        if (row) {
+        const email = user.email;
+        await authEventStep("pendingSignupMerge", ctx, async () => {
+          const pending = await pool.query(
+            `delete from pending_signups where email = $1 returning name, telegram_handle`,
+            [email]
+          );
+          const row = pending.rows[0];
+          if (!row) return;
           name = row.name ?? name;
           telegramHandle = row.telegram_handle ?? null;
           if (user.id && (row.name || row.telegram_handle)) {
@@ -452,7 +480,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               [row.name ?? null, row.telegram_handle ?? null, user.id]
             );
           }
-        }
+        });
       }
 
       await notifyFreeSignupBounded({
@@ -461,6 +489,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         telegramHandle,
         joinedAt: new Date(),
         source: "email",
+      });
+
+      // First-login writes for adapter-created users. adapter.createUser has returned by
+      // the time this event runs, so the users row is committed and the FKs hold.
+      if (user.id) {
+        await recordLoginWrites({ userId: user.id, email: user.email ?? null, provider: EMAIL_PROVIDER_ID });
+      }
+    },
+    async signIn({ user, account, isNewUser }) {
+      // Double-write guard: on a first magic-link login events.createUser already recorded
+      // this login on the same request (see event-order note above). Telegram logins pass
+      // no isNewUser (index.js:276) and always land here; their users row was inserted
+      // in `authorize` before this event, so the FKs hold.
+      if (isNewUser) return;
+      if (!user.id) return;
+      await recordLoginWrites({
+        userId: user.id,
+        email: user.email ?? null,
+        provider: account?.provider ?? "unknown",
       });
     },
   },
