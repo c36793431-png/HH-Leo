@@ -647,6 +647,133 @@ export function lastPriceCentsFor(group: AccountRowGroup): number | null {
   );
 }
 
+export interface MonthlyHistoryClient {
+  key: string;
+  client: string;
+  label: string;
+  regionKey: string | null;
+  priceCents: number | null;
+  fromISO: string;
+  toISO: string;
+  /** True when no end date exists on the rows at all -- `toISO` is then "now", a date nobody
+   * agreed to, so the UI must print "ongoing" rather than pass it off as a contracted end. */
+  open: boolean;
+}
+
+export interface MonthlyHistoryEntry {
+  monthKey: string;
+  label: string;
+  clients: number;
+  pricedClients: number;
+  grossCents: number;
+  shareCents: number;
+  rows: MonthlyHistoryClient[];
+}
+
+function monthLabel(year: number, monthIndex: number): string {
+  return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][monthIndex]} ${year}`;
+}
+
+/** Revenue's History view, coxwell 22:08Z via marcus m49083 ("yes but we need history also") --
+ * the 09-09 "combined purchases" ask (m47007) resurfacing, built once here.
+ *
+ * CONTRACTED PERIODS, NOT PAYMENTS. There is no ledger and nothing has ever been charged, so this
+ * derives entirely from the periods already on feed_subscriptions -- no new table, no invented
+ * transaction. A group counts in month M when any of its member rows was live at any point in M:
+ * `started_at <= end of M AND coalesce(lapsed_at, ends_at, now) >= start of M`, exactly m49083's
+ * test. `now` is a parameter, not read here, so a month boundary can be reasoned about.
+ *
+ * PRICE COMES FROM THE ROWS THAT WERE LIVE IN THAT MONTH, which is why this does not call
+ * resolvedPriceCentsFor: that function answers "what is this client being charged now" and (since
+ * ruling (a), m49088) deliberately ignores lapsed members -- every historical month would price at
+ * nothing. Here the overlapping members are the live ones for that month, so their own price is
+ * the right one, and a member priced 0/NULL stays unpriced rather than becoming a $0 client.
+ *
+ * The 50% is providerShareCentsFor with an explicit "active": in the month being described the row
+ * WAS live, so the same shared calc applies -- there is no second halving anywhere in this file.
+ *
+ * NEVER SUMMED ACROSS MONTHS (m49083). A client on a one-month term must not read as three months
+ * of revenue, so this returns per-month figures and no grand total, and the page renders none. */
+export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): MonthlyHistoryEntry[] {
+  const overlaps = (row: ProviderSubscriberRow, start: Date, end: Date): boolean => {
+    const ends = row.lapsedAt ?? row.endsAt ?? now;
+    return row.startedAt <= end && ends >= start;
+  };
+
+  /** A trial licence is never a contracted payment, in any month, so its rows are dropped here
+   * per ROW rather than by the group's current status (m49083: "trials excluded"). Row grain
+   * matters: a client who trialled and then bought has both kinds of row, and only the trial ones
+   * should vanish. This is also what keeps HH15/HH18 -- expired trial licences, correctly lapsed
+   * on the live views -- out of a column headed "Paying clients", where they never belonged. */
+  const membersOf = (g: AccountRowGroup): ProviderSubscriberRow[] =>
+    (g.kind === "package" ? g.members : [g.row]).filter((r) => r.licenseTier !== "trial");
+
+  const starts = groups.flatMap(membersOf).map((r) => r.startedAt);
+  if (starts.length === 0) return [];
+  const earliest = starts.reduce((a, b) => (b < a ? b : a));
+
+  const entries: MonthlyHistoryEntry[] = [];
+  for (
+    let year = earliest.getUTCFullYear(), month = earliest.getUTCMonth();
+    year < now.getUTCFullYear() || (year === now.getUTCFullYear() && month <= now.getUTCMonth());
+    month === 11 ? ((year += 1), (month = 0)) : (month += 1)
+  ) {
+    const start = new Date(Date.UTC(year, month, 1));
+    const end = new Date(Date.UTC(year, month + 1, 1) - 1);
+
+    const rows: MonthlyHistoryClient[] = [];
+    let grossCents = 0;
+    let shareCents = 0;
+    let pricedClients = 0;
+
+    for (const g of groups) {
+      const members = membersOf(g).filter((r) => overlaps(r, start, end));
+      if (members.length === 0) continue;
+
+      const priceCents = members.map((r) => r.priceCents).find((c) => c != null) ?? null;
+      /** The period must describe the rows the PRICE came from, not the union of everything that
+       * happened to be live. coxwell's own group is why: in September his three $30 rows (ended
+       * 09-01) and his unpriced live team rows both overlap, and a "2026-08-01 → 2026-09-20" beside
+       * "$30" would be one period welded out of two different agreements. Same failure ruling (a)
+       * fixed on the live views, in its historical form. */
+      const priceSource = priceCents == null ? members : members.filter((r) => r.priceCents === priceCents);
+      const from = priceSource.reduce((a, r) => (r.startedAt < a ? r.startedAt : a), priceSource[0].startedAt);
+      const ends = priceSource.map((r) => r.lapsedAt ?? r.endsAt).filter((d): d is Date => d != null);
+      /** "ongoing" is reserved for a row with NO end date at all. A period that simply runs past
+       * this month still has an agreed end, and printing that date is more honest than implying
+       * the client is open-ended. */
+      const to = ends.length === priceSource.length ? ends.reduce((a, d) => (d > a ? d : a)) : null;
+
+      rows.push({
+        key: g.kind === "package" ? `${g.pseudonym}-${g.label}` : g.row.subscriptionId,
+        client: g.kind === "package" ? g.pseudonym : g.row.pseudonym,
+        label: g.kind === "package" ? g.label : g.row.tierName,
+        regionKey: regionKeyForGroup(g),
+        priceCents,
+        fromISO: isoDate(from),
+        toISO: isoDate(to ?? now),
+        open: to == null,
+      });
+
+      grossCents += priceCents ?? 0;
+      shareCents += providerShareCentsFor("active", priceCents) ?? 0;
+      if (!isUnpriced(priceCents)) pricedClients += 1;
+    }
+
+    entries.push({
+      monthKey: `${year}-${String(month + 1).padStart(2, "0")}`,
+      label: monthLabel(year, month),
+      clients: rows.length,
+      pricedClients,
+      grossCents,
+      shareCents,
+      rows,
+    });
+  }
+
+  return entries.reverse();
+}
+
 /** The one place that walks account groups and adds up the provider's 50% share, bus thread
  * leo-provider-subscribers-page-2026-09-06 (marcus, m46511/m46518: "is the summation also one
  * implementation, or does Subscribers' footer run its own reduce ... agreement at zero is not

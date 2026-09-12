@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
 import { PackageRevenueRow } from "@/components/feed/package-revenue-rows";
+import { MonthRevenueRow } from "@/components/feed/month-revenue-rows";
 import {
   listSubscribersForProvider,
   groupAccountSubscriptions,
@@ -11,6 +12,7 @@ import {
   regionKeyForGroup,
   startedAtForGroup,
   statusForGroup,
+  buildMonthlyHistory,
   sumProviderShareCents,
   sumMonthlyGrossCents,
   pricedGroupCounts,
@@ -195,7 +197,7 @@ function buildClientRevenueRows(accountGroups: AccountRowGroup[]): ClientRevenue
   return rows;
 }
 
-type ViewKey = "summary" | "clients";
+type ViewKey = "summary" | "clients" | "history";
 type RegionFilter = FeedRegion | "all";
 /** coxwell 22:00Z via marcus m49070/m49081: "we had some 7 paying clients for LD base and none for
  * NY, how to show them in this list?". Paying is today's behaviour and stays the default -- a
@@ -236,7 +238,7 @@ function lapsedNote(lapsed: number): string | null {
 
 export default async function FeedRevenuePage({ searchParams }: { searchParams: Promise<RawSearchParams> }) {
   const sp = await searchParams;
-  const view: ViewKey = sp.view === "clients" ? "clients" : "summary";
+  const view: ViewKey = sp.view === "clients" ? "clients" : sp.view === "history" ? "history" : "summary";
   const status: StatusFilter = sp.status && isStatusFilter(sp.status) ? sp.status : "paying";
 
   const session = await auth();
@@ -269,6 +271,11 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
   );
   const clientRows = buildClientRevenueRows(visibleGroups);
   const lapsedGroupCount = groups.filter((g) => statusForGroup(g) !== "active").length;
+  /** History walks the region's groups whatever the status filter says: a month is a fact about
+   * periods, and hiding lapsed clients would empty out exactly the months the view exists to show.
+   * The status control is hidden on this view for the same reason. */
+  const history = view === "history" ? buildMonthlyHistory(groups, new Date()) : [];
+  const historyHasClients = history.some((m) => m.clients > 0);
   /** Per marcus's m46511/m46518/m46522 rulings (same summation everywhere): both totals below
    * are the identical functions Subscribers' footer and the Overview card call, on the same
    * groups this page already grouped -- never a second reduce over the by-package or per-client
@@ -316,7 +323,7 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
         <div className="card full">
           <div className="chead">
             <span className="ic">◈</span>
-            <h3>{view === "clients" ? "Clients" : "By package"}</h3>
+            <h3>{view === "clients" ? "Clients" : view === "history" ? "History (contracted)" : "By package"}</h3>
             <div className="chead-tools">
               <div className="seg">
                 <Link href={hrefFor("summary", region, status)} className={view === "summary" ? "on" : ""}>
@@ -324,6 +331,11 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
                 </Link>
                 <Link href={hrefFor("clients", region, status)} className={view === "clients" ? "on" : ""}>
                   Clients
+                </Link>
+                {/* m49083 names the tab, not just the heading: "History (contracted)". The word is
+                    the honesty line in miniature -- these are agreed periods, not money received. */}
+                <Link href={hrefFor("history", region, status)} className={view === "history" ? "on" : ""}>
+                  History (contracted)
                 </Link>
               </div>
               {regionTabs.length > 1 && (
@@ -335,13 +347,15 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
                   ))}
                 </div>
               )}
-              <div className="seg">
-                {statusTabs.map((t) => (
-                  <Link key={t.key} href={hrefFor(view, region, t.key)} className={status === t.key ? "on" : ""}>
-                    {t.label}
-                  </Link>
-                ))}
-              </div>
+              {view !== "history" && (
+                <div className="seg">
+                  {statusTabs.map((t) => (
+                    <Link key={t.key} href={hrefFor(view, region, t.key)} className={status === t.key ? "on" : ""}>
+                      {t.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -350,20 +364,82 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
               the paying ones', so a reader who switches to Lapsed and sees the same $30 knows why. */}
           <div className="scope-note">
             <span className="i">◈</span>
-            <span>
-              {region === "all" ? "All regions" : FEED_REGION_LABELS[region]} ·{" "}
-              {status === "paying"
-                ? "paying subscribers only"
-                : status === "lapsed"
-                  ? "lapsed clients only"
-                  : "all clients, paying or not"}
-              {status !== "paying" && lapsedClause ? ` (${lapsedClause})` : ""} — every figure on this page counts
-              paying clients only; a lapsed client adds nothing to any total in any view. Clients on a trial licence
-              are not shown here at all — see Subscribers.
-            </span>
+            {view === "history" ? (
+              <span>
+                {region === "all" ? "All regions" : FEED_REGION_LABELS[region]} · <b>contracted periods</b>, not
+                payments received — there is no payout ledger, so a month shows what was agreed and live in it, from
+                each client&apos;s own price. Months are never added together: a client on a one-month term is one
+                month of revenue, not three. Software licence fees are not feed revenue and do not appear here, and
+                clients on a trial licence are excluded.
+              </span>
+            ) : (
+              <span>
+                {region === "all" ? "All regions" : FEED_REGION_LABELS[region]} ·{" "}
+                {status === "paying"
+                  ? "paying subscribers only"
+                  : status === "lapsed"
+                    ? "lapsed clients only"
+                    : "all clients, paying or not"}
+                {status !== "paying" && lapsedClause ? ` (${lapsedClause})` : ""} — every figure on this page counts
+                paying clients only; a lapsed client adds nothing to any total in any view. Clients on a trial licence
+                are not shown here at all — see Subscribers.
+              </span>
+            )}
           </div>
 
-          {view === "clients" ? (
+          {view === "history" ? (
+            !historyHasClients ? (
+              <div className="empty">
+                <div className="eic">◈</div>
+                <b>Nothing contracted here yet</b>
+                <p>
+                  {region === "all"
+                    ? "A month appears here once a client held a paid subscription during it."
+                    : `No client has held a paid subscription in ${FEED_REGION_LABELS[region]} in any month.`}
+                </p>
+              </div>
+            ) : (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th className="r">Paying clients</th>
+                    <th className="r">Monthly gross</th>
+                    <th className="r">Your 50%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="note-row">
+                    <td colSpan={4} className="r">
+                      Newest month first. A client counts in a month if their subscription was live at any point in
+                      it; the figures are that month&apos;s alone and are deliberately not totalled down the page.
+                    </td>
+                  </tr>
+                  {history.map((m) => (
+                    <MonthRevenueRow
+                      key={m.monthKey}
+                      label={m.label}
+                      clientCount={m.clients}
+                      pricedNote={pricedNote(m.pricedClients, m.clients)}
+                      grossLabel={m.clients === 0 ? "—" : moneyOrUnpriced(m.grossCents, m.pricedClients)}
+                      shareLabel={m.clients === 0 ? "—" : moneyOrUnpriced(m.shareCents, m.pricedClients)}
+                      clients={m.rows.map((r) => ({
+                        key: r.key,
+                        client: r.client,
+                        label: r.label,
+                        regionLabel:
+                          r.regionKey && isFeedRegion(r.regionKey) ? FEED_REGION_LABELS[r.regionKey] : "—",
+                        priceLabel: priceCell(r.priceCents),
+                        fromISO: r.fromISO,
+                        toISO: r.toISO,
+                        open: r.open,
+                      }))}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : view === "clients" ? (
             clientRows.length === 0 ? (
               <div className="empty">
                 <div className="eic">◈</div>
