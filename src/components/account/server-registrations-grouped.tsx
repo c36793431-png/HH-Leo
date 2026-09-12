@@ -15,6 +15,10 @@ import { ServerRegistrationForm } from "./server-registration-form";
 type BoundAction = (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 
 export interface GroupedServerEntry {
+  /** Row identity for this list: which row is open for editing, and the React key. Was
+   * licenseId, which stops identifying a server once license_id is nullable -- two
+   * licence-less servers would share a key and collapse. */
+  registrationId: string;
   licenseId: string;
   licenseKey: string;
   registration: ServerRegistration;
@@ -65,7 +69,7 @@ function mostRecentGroup(entries: GroupedServerEntry[]): GroupKey | null {
 
 export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl }: ServerRegistrationsGroupedProps) {
   const [openGroup, setOpenGroup] = useState<GroupKey | null>(() => mostRecentGroup(entries));
-  const [editingLicenseId, setEditingLicenseId] = useState<string | null>(null);
+  const [editingServerId, setEditingServerId] = useState<string | null>(null);
   const [addingInGroup, setAddingInGroup] = useState<GroupKey | null>(null);
 
   const byGroup = new Map<GroupKey, GroupedServerEntry[]>();
@@ -146,18 +150,18 @@ export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl }: S
             {isOpen && (
               <div className="srv-grows">
                 {groupEntries.map((entry) => {
-                  const isEditing = editingLicenseId === entry.licenseId;
+                  const isEditing = editingServerId === entry.registrationId;
                   if (isEditing) {
                     return (
-                      <div className="srv-detail" key={entry.licenseId}>
+                      <div className="srv-detail" key={entry.registrationId}>
                         <div className="srv-dtop">
                           <span className="srv-dn">{entry.registration.serverName}</span>
                         </div>
                         <ServerRegistrationForm
                           action={entry.action}
                           value={entry.registration}
-                          onSaved={() => setEditingLicenseId(null)}
-                          onCancel={() => setEditingLicenseId(null)}
+                          onSaved={() => setEditingServerId(null)}
+                          onCancel={() => setEditingServerId(null)}
                         />
                       </div>
                     );
@@ -166,8 +170,8 @@ export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl }: S
                     <button
                       type="button"
                       className="srv-srow"
-                      key={entry.licenseId}
-                      onClick={() => setEditingLicenseId(entry.licenseId)}
+                      key={entry.registrationId}
+                      onClick={() => setEditingServerId(entry.registrationId)}
                     >
                       <span className="srv-ic">🖥</span>
                       <span className="srv-sname">{entry.registration.serverName}</span>
