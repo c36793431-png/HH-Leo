@@ -5,13 +5,13 @@ import {
   listSubscribersForProvider,
   groupAccountSubscriptions,
   resolvedPriceCentsFor,
+  startedAtForGroup,
   sumProviderShareCents,
-  type ProviderSubscriberRow,
 } from "@/lib/feed-subscriptions";
 import { providerShareFor } from "@/lib/feed-provider-packages";
+import { FEED_REGION_LABELS, isFeedRegion } from "@/lib/feed-tier-catalogue";
 
 const STATUS_ICON: Record<string, string> = { trial: "🧪", active: "✓", lapsed: "✗" };
-const REGION_LABELS: Record<string, string> = { london: "London", ny: "New York", cme: "CME", tokyo: "Tokyo" };
 const OTHER_LOCATION = "Other";
 
 function money(cents: number): string {
@@ -38,13 +38,6 @@ function countLabel(feeds: number, clients: number, word: string): string {
  * single location can land on exactly 1 feed. */
 function locationCountLabel(feeds: number, clients: number, word: string): string {
   return `${clients} ${word} client${clients === 1 ? "" : "s"} · ${feeds} feed${feeds === 1 ? "" : "s"}`;
-}
-
-/** Bus thread leo-provider-panel-package-labels-2026-09-04 (marcus, follow-up B): a package
- * group's header has no `started_at` of its own -- it's an aggregate of its members' rows --
- * so this reports the earliest member's date as the account's start with this package. */
-function earliestStartedAt(members: ProviderSubscriberRow[]): Date {
-  return members.reduce((earliest, m) => (m.startedAt < earliest ? m.startedAt : earliest), members[0].startedAt);
 }
 
 /** Bus thread provider-feed-subscriber-linkage-2026-08-29, item 3. Pseudonym-only view --
@@ -80,7 +73,7 @@ export default async function FeedSubscribersPage() {
     { paying: number; trial: number; lapsed: number; payingClients: Set<string>; trialClients: Set<string>; lapsedClients: Set<string> }
   >();
   for (const s of subscribers) {
-    const location = (s.regionKey && REGION_LABELS[s.regionKey]) || OTHER_LOCATION;
+    const location = (s.regionKey && isFeedRegion(s.regionKey) && FEED_REGION_LABELS[s.regionKey]) || OTHER_LOCATION;
     const counts =
       byLocation.get(location) ??
       { paying: 0, trial: 0, lapsed: 0, payingClients: new Set<string>(), trialClients: new Set<string>(), lapsedClients: new Set<string>() };
@@ -175,7 +168,7 @@ export default async function FeedSubscribersPage() {
                       status={g.status}
                       share={providerShareFor(g.status, resolvedPriceCentsFor(g))}
                       serverIp={g.members[0].serverIp ?? null}
-                      sinceISO={earliestStartedAt(g.members).toISOString().slice(0, 10)}
+                      sinceISO={startedAtForGroup(g).toISOString().slice(0, 10)}
                       members={g.members.map((m) => ({
                         subscriptionId: m.subscriptionId,
                         tierName: m.tierName,
