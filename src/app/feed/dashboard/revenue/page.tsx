@@ -13,6 +13,7 @@ import {
   startedAtForGroup,
   statusForGroup,
   buildMonthlyHistory,
+  countUnpseudonymedRowsForProvider,
   sumProviderShareCents,
   sumMonthlyGrossCents,
   pricedGroupCounts,
@@ -242,8 +243,10 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
   const status: StatusFilter = sp.status && isStatusFilter(sp.status) ? sp.status : "paying";
 
   const session = await auth();
-  const subscribers = await listSubscribersForProvider(session!.user!.id!);
+  const providerId = session!.user!.id!;
+  const subscribers = await listSubscribersForProvider(providerId);
   const allGroups = groupAccountSubscriptions(subscribers);
+  const hiddenRowCount = await countUnpseudonymedRowsForProvider(providerId);
 
   /** m49032 item 3 asks for "All · London · NY ... add CME only if a row for it can exist
    * today", so the tabs are derived from the provider's own rows rather than hardcoded: a
@@ -386,6 +389,19 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
               </span>
             )}
           </div>
+
+          {/* m49127: if a subscription row can't be shown because its client has no pseudonym,
+              say so rather than letting the page quietly describe a smaller business than exists.
+              Zero is the normal state and renders nothing. */}
+          {hiddenRowCount > 0 && (
+            <div className="scope-note">
+              <span className="i">◈</span>
+              <span className="muted">
+                {hiddenRowCount} subscription row{hiddenRowCount === 1 ? " is" : "s are"} not shown (no client
+                pseudonym).
+              </span>
+            </div>
+          )}
 
           {view === "history" ? (
             !historyHasClients ? (

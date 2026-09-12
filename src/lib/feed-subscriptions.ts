@@ -451,6 +451,39 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
   }
 }
 
+/** How many of this provider's subscription rows listSubscribersForProvider cannot show, because
+ * their subscriber has no `provider_client_pseudonyms` row (marcus m49127: "YES, ship it").
+ *
+ * That join is an INNER join and it is the only one in the query, so a subscriber without a
+ * pseudonym is dropped with no error and no placeholder -- invisible on every provider surface and
+ * in every total. It happened once for real: Wwwsss (f56eb4a8) had three live LD Base rows from a
+ * hand-written INSERT on 2026-09-12 and appeared nowhere, and the absence was indistinguishable
+ * from "this client does not exist". Every APP write path assigns a pseudonym in the same
+ * transaction as the insert (assignPseudonymSeq), so this can only be non-zero after a direct SQL
+ * write -- which makes it exactly the thing a human needs told, rather than a state to design for.
+ *
+ * READ-ONLY and deliberately so: it counts, it never assigns. Assignment stays on the write path
+ * where it is transactional; a read that silently created identity rows would be a page load with
+ * a side effect, and two concurrent loads could race for the same seq. */
+export async function countUnpseudonymedRowsForProvider(providerUserId: string): Promise<number> {
+  try {
+    const result = await pool.query<{ count: string }>(
+      `select count(*) as count
+       from feed_subscriptions s
+       where s.provider_user_id = $1
+         and not exists (
+           select 1 from provider_client_pseudonyms p
+           where p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
+         )`,
+      [providerUserId]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  } catch (err) {
+    if (isMissingTable(err)) return 0;
+    throw err;
+  }
+}
+
 export type AccountRowGroup =
   | { kind: "package"; pseudonym: string; label: string; status: ProviderSubscriberRow["status"]; members: ProviderSubscriberRow[] }
   | { kind: "single"; row: ProviderSubscriberRow };

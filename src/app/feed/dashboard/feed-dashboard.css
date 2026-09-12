@@ -215,6 +215,7 @@
 .feed-provider-v1 .tbl tr.not-paying td b,
 .feed-provider-v1 .tbl tr.not-paying td .mono { color: var(--pfp-grey); }
 .feed-provider-v1 .tbl td .sub.muted { color: var(--pfp-grey); }
+.feed-provider-v1 .scope-note .muted { color: var(--pfp-grey); }
 .feed-provider-v1 .tbl td .last-price { font-family: var(--pfp-mono); color: var(--pfp-grey); font-style: italic; }
 .feed-provider-v1 .tbl .total-row td { border-top: 1px solid var(--pfp-line-soft); padding-top: 14px; }
 .feed-provider-v1 .tbl .total-row b { color: var(--pfp-ink); }

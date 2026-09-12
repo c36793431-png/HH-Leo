@@ -12,6 +12,7 @@ import {
   statusForGroup,
   sumProviderShareCents,
   pricedGroupCounts,
+  countUnpseudonymedRowsForProvider,
   type AccountRowGroup,
   type ProviderSubscriberRow,
 } from "@/lib/feed-subscriptions";
@@ -103,6 +104,7 @@ export default async function FeedSubscribersPage({ searchParams }: { searchPara
 
   const subscribers = await listSubscribersForProvider(providerId);
   const accountGroups = groupAccountSubscriptions(subscribers);
+  const hiddenRowCount = await countUnpseudonymedRowsForProvider(providerId);
 
   /** Counts are per group status, not per row status, so the number on a button is exactly how
    * many rows that button reveals. They are also computed over ALL groups, never the filtered set:
@@ -231,6 +233,18 @@ export default async function FeedSubscribersPage({ searchParams }: { searchPara
                     return `${location}: ${parts.join("; ")}`;
                   })
                   .join("   |   ")}
+              </span>
+            </div>
+          )}
+
+          {/* m49127, same line as Revenue's: a row this page cannot show is said out loud, not
+              silently dropped. Normal state is zero and renders nothing. */}
+          {hiddenRowCount > 0 && (
+            <div className="scope-note">
+              <span className="i">◈</span>
+              <span className="muted">
+                {hiddenRowCount} subscription row{hiddenRowCount === 1 ? " is" : "s are"} not shown (no client
+                pseudonym).
               </span>
             </div>
           )}
