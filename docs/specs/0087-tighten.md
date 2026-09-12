@@ -212,10 +212,13 @@ writers set all three columns; 0086 spec section 10 step 7 is the post-deploy in
 **5. NULL-server disposition, then the CHECK (header 80-86).** Listing, one notice per row, of
 every `feed_subscriptions` row with `server_registration_id is null`: `id, subscriber, tier,
 status, ends_at, computed = (ends_at > now())`. Then:
-- BLOCK: `count(*) where server_registration_id is null and status in ('trial','active') and
-  ends_at > now()` must be 0, else abort, named. These are the Q25 no-server clients whose
-  licence is still live; the ledger says they block "until resolved" (the client registers a
-  server and the row is re-keyed by the step-4 backfill on a re-run, or coxwell's word).
+- WARN + list (ruled marcus m49194 23:26Z, section 12 R1; was BLOCK in v1 of this document):
+  `count(*) where server_registration_id is null and status in ('trial','active') and ends_at >
+  now()` is noticed with every row named; it does NOT abort. These rows are 0081-cohort backfills
+  bound to a licence before server binding existed; under coxwell's 18:07Z Arm B ruling
+  (servers register without a licence, licence allocated to a server later) "subscription bound
+  to a licence, no server yet" is a legitimate post-tighten state. No lapse, no synthetic server
+  row. Column stays nullable. Prod read 23:24Z: 6 such rows (section 12 R1).
 - LAPSE the dead ones inside the transaction:
   ```
   update feed_subscriptions
@@ -230,6 +233,14 @@ status, ends_at, computed = (ends_at > now())`. Then:
 - `alter table feed_subscriptions add constraint feed_subscriptions_server_or_lapsed_chk check
   (status = 'lapsed' or server_registration_id is not null);` -- the header's exact statement.
   Postgres validates it against every row at ADD, so it is its own gate.
+  **CONFLICT, UNRESOLVED (section 12 R1, flagged to marcus, not picked by me):** with the WARN
+  ruling above, the 6 live no-server rows keep `status = 'active'` and `server_registration_id
+  NULL`, and this ADD CONSTRAINT fails on them; the file aborts here whatever the preflight says.
+  Either the CHECK leaves the tighten (header line 92-93 target statement changes) or it is added
+  `not valid` (new rows only) or the rows are disposed. Also affected: the scope-note reason (b)
+  in section 2 (CHECK before the 0081 index drop so no live row is under no unique index) and
+  step 6's "after step 5 no live row has NULL server". Marcus or fable rules; this document
+  changes nothing else until then.
 
 **6. Preflight D re-run, then drop the 0081 index (header 77, 95-97).** Duplicate groups on
 `(server_registration_id, feed_tier_id)` among live rows (0086:327-344) must be 0 (structurally
@@ -266,7 +277,8 @@ reader this spec missed; after step 8 the 0078 FK is gone and 0086 created none)
 have passed. Then `drop table feed_tier_requests;` (its two 0034 indexes go with it). Nothing else
 references it: `git grep` in `src` = 13 comment lines (line one, companion grep).
 
-**10. Summary SELECT and the ledger row.** One row: `sr_user_id_null` (0), `fs_no_server_live` (0),
+**10. Summary SELECT and the ledger row.** One row: `sr_user_id_null` (0), `fs_no_server_live`
+(6 expected per section 12 R1; a notice, not a gate),
 `fs_no_server_lapsed_now` (step 5's UPDATE count), `fs_request_id_column_present` (false, from
 `information_schema.columns`), `ftr_table_present` (false, from `to_regclass`),
 `allowlist_carried` (section 5 count), `allowlist_open_total`, `access_requests_rows`,
@@ -501,8 +513,8 @@ no-server live rows) is known BEFORE the dry-run, not discovered by it.
 1. Dry-run: the file with `rollback;` in place of `commit;`. Every notice line pasted. Expected:
    step 1 UPDATE 0; step 2 INSERT 0 / 0 unless the window wrote requests (then N, named); step 2
    gate `unmapped=0`; step 3 lists 31cd1813 (status decides: `rejected` = continue, `pending` =
-   abort here); step 4 UPDATE 0/0/0; step 5 block count 0 and lapse count = the dead no-server
-   rows (named); CHECK added; preflight D 0; step 7 FK name found; step 8 `request_id` rows with
+   abort here); step 4 UPDATE 0/0/0; step 5 warn count 6 (named, section 12 R1) and lapse count
+   = the dead no-server rows (named); CHECK added (BLOCKED by the R1 conflict until ruled); preflight D 0; step 7 FK name found; step 8 `request_id` rows with
    a value = the 0086 apply's `with_request` count, unmapped 0; step 9 carry enumerated = the
    `provisioned_to_map` count expanded by package membership, inserted = that minus same-IP
    overlaps with new-path records, misses 0; drop guard 0; summary row.
@@ -573,7 +585,7 @@ select count(*) from feed_subscriptions where request_id is not null;           
 select count(*) from feed_subscriptions where request_id is not null and access_request_id is null;  -- must be 0
 select count(*) from server_registrations where user_id is null;                    -- must be 0
 select count(*) from feed_subscriptions where server_registration_id is null;       -- fs_no_server (0086 named 6?)
-select count(*) from feed_subscriptions where server_registration_id is null and status in ('trial','active') and ends_at > now();   -- step-5 BLOCK count
+select count(*) from feed_subscriptions where server_registration_id is null and status in ('trial','active') and ends_at > now();   -- step-5 WARN count (RUN 23:24Z: 6, section 12 R1)
 select count(*) from feed_subscriptions where server_registration_id is null and status in ('trial','active') and ends_at <= now();  -- step-5 lapse count
 select count(*) from feed_allowlist_records;                                        -- new-path records so far
 select conname, confdeltype from pg_constraint where conrelid = 'server_registrations'::regclass and contype = 'f';
@@ -584,5 +596,31 @@ plus the two listings: section 3 step 3 (no-envelope rows) and section 5 (the ca
 "6?" is my recollection of Q25's no-server London clients from the 0086 spec, not a read; the
 count is whatever the SELECT says.
 
-Nothing in this document has been run against prod. No file other than this one exists on the
-branch.
+Nothing in this document has been run against prod by kai. No file other than this one exists on
+the branch.
+
+---
+
+## 12. Rulings ledger (rulings received after v1, with the read each cites)
+
+**R1 -- step 5 live no-server rows: WARN + list, not BLOCK.** Ruled by marcus, m49194, 23:26Z,
+thread kai-tighten-0087-2026-09-12. Cited read (marcus, prod, SELECT only, 23:24Z; relayed, not my
+read):
+- Subscriber A: LD Base x3 tiers (19cb2c39 / 21842a66 / a8538ab6), status active, $30, 09-04 to
+  09-19, licence 176ca960 PAID expires 09-19, rows 82147257 / 4a0a7fb8 / 00f9e32c.
+- Subscriber B: LD Base x3 same tiers, status active, $0, 09-04 to 09-25, licence 6865647f TRIAL
+  expires 09-25, rows a453d4c0 / 2e7ad400 / 1161625a.
+- `server_registrations` for either user or either licence: 0 rows.
+Reasoning as ruled: subscriber A is the only paying feed client; lapsing to satisfy a preflight
+destroys revenue to fit a schema. Coxwell's 18:07Z Arm B ruling (servers register freely without
+a licence, licence allocated to a server later) makes "subscription bound to a licence, no server
+yet" a legitimate post-tighten state. Both are 0081-cohort backfills from before server binding.
+Disposition: step 5 preflight = WARN + list; `server_registration_id` stays nullable; no lapse;
+no synthetic server row. Fable's Q1-Q7 pass overrides if it says otherwise; a conflict goes to
+marcus, not picked by kai.
+Open consequence (flagged to marcus in the same reply, unresolved): the header's CHECK
+`server_or_lapsed` (section 3 step 5, last bullet) cannot be added while these 6 rows are
+`active` with NULL server. See the CONFLICT note there.
+
+**Item 2 (31cd1813)**: separate SQL file from kai, lands before 0087, not folded in. In front of
+coxwell as of 23:19Z; open. **Item 1 (carry, Q4)**: wait for fable.
