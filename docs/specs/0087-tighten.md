@@ -624,3 +624,19 @@ Open consequence (flagged to marcus in the same reply, unresolved): the header's
 
 **Item 2 (31cd1813)**: separate SQL file from kai, lands before 0087, not folded in. In front of
 coxwell as of 23:19Z; open. **Item 1 (carry, Q4)**: wait for fable.
+
+**R2 -- migration number is 0088, not 0087.** Ruled by marcus, m49203_mtz0i4xj, 23:24Z, same
+thread. Leo's feed_tiers connection-fields migration took 0087 on branch
+`leo/feeds-connection-fields-2026-09-12` at 6b70486 (my read of that commit's tree:
+`db/migrations/0087_feed_tiers_connection_fields.sql` inserts `schema_migrations` version
+'0087' at :46; `db/migrations/0087_rollback.sql` deletes '0087' at :28). Not on origin/main as
+of 09f8352; it applies before the tighten, so the order holds. Consequences for this spec, applied
+when v2 is written (no other action now):
+- Section 3 file is `db/migrations/0088_tighten.sql`; section 4 file is
+  `db/migrations/0088_rollback.sql`; section 1 table rows 2 and 3 rename accordingly.
+- Step 0 preflight becomes: `schema_migrations` has '0086' AND '0087', does not have '0088'.
+- Ledger insert becomes `('0088', '0088_tighten.sql')`; rollback deletes '0088'; section 9
+  step 5 expects '0088' in `schema_migrations`.
+- Branch `kai/tighten-0087-2026-09-12`, thread `kai-tighten-0087-2026-09-12` and this file's
+  name stay as they are. Prose references to "0087" in sections 3-9 read as the tighten
+  migration, i.e. 0088, until v2 rewrites them.
