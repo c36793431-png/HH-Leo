@@ -43,8 +43,15 @@ function init(): {
   const redis = new Redis({ url, token });
   keyLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(60, "1 h"), prefix: "rl:license-key" });
   ipLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(600, "1 h"), prefix: "rl:license-ip" });
-  hbKeyLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(120, "1 h"), prefix: "rl:hb-key" });
-  hbIpLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(1200, "1 h"), prefix: "rl:hb-ip" });
+  // Sized off the real cadence: one open trading tab beats every 180s = 20/hr, and the
+  // client opens one timer PER TAB on the same license key. The old 120/hr ceiling was set
+  // before that was known and bites at 7 tabs — and because /v1/hb answers 204 either way,
+  // a customer would lose telemetry with nothing anywhere saying so. 600/hr = 30 tabs.
+  hbKeyLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(600, "1 h"), prefix: "rl:hb-key" });
+  // Per-IP has to clear per-key by a real multiple or it becomes the binding cap and
+  // re-creates the same silent drop for anyone behind one address — a NAT'd trading desk
+  // or a VPS host is several keys on one IP. 3600/hr = six saturated keys.
+  hbIpLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(3600, "1 h"), prefix: "rl:hb-ip" });
   hftAlertKeyMinuteLimiter = new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(20, "1 m"),
