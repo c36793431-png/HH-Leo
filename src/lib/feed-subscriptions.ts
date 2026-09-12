@@ -8,7 +8,7 @@ import {
   type FeedType,
 } from "./licenses";
 import { FEED_REGION_TYPE, FEED_REGIONS, isFeedRegion, regionForFeedType, type FeedRegion } from "./feed-tier-catalogue";
-import { PACKAGES, packageLabelForTierKey, providerShareCentsFor } from "./feed-provider-packages";
+import { PACKAGES, packageLabelForTierKey, providerShareCentsFor, isUnpriced } from "./feed-provider-packages";
 
 /** Bus thread provider-feed-subscriber-linkage-2026-08-29 (marcus, overnight block 2,
  * migration 0071). Joins a portal account to a provider's package and masks the
@@ -57,7 +57,8 @@ export interface ProviderSubscriberRow {
    * leo-provider-subscribers-page-2026-09-06) -- null means no price has ever been negotiated
    * for this client. Per marcus's m46504 ruling there is no fallback to any package/tier
    * default: a caller must render and total null as unset, never substitute a list price and
-   * never read it as $0. See providerShareCentsFor/-For in feed-provider-packages.ts. */
+   * never read it as $0. A stored 0 is the same unknown, not a free client -- see isUnpriced
+   * and providerShareCentsFor/-For in feed-provider-packages.ts. */
   priceCents: number | null;
 }
 
@@ -476,11 +477,15 @@ export function startedAtForGroup(group: AccountRowGroup): Date {
  * catalogue/package-wide constant -- a partner on a different number must produce a different
  * line. Per marcus's m46504 ruling, there is NO fallback to any package/tier default list
  * price -- a group with no override anywhere resolves to null (unset), which providerShareFor
- * renders as "Not set" and providerShareCentsFor counts as zero, never as the catalogue's
+ * renders as "unpriced" and providerShareCentsFor counts as zero, never as the catalogue's
  * $30. For a package, every member row is written the same price together
  * (setFeedSubscriptionPriceForPackage) so any one member's non-null value speaks for the whole
  * group; this does not sum or average across members, and does not read feed_tiers/ProviderTierRow
- * catalogue prices directly -- that was the members[0]-off-the-catalogue bug this job fixed. */
+ * catalogue prices directly -- that was the members[0]-off-the-catalogue bug this job fixed.
+ *
+ * A stored 0 resolves as 0 here, unchanged by C3 (m49063). The surfaces spell a 0 "unpriced"
+ * (isUnpriced) but this stays the literal stored value: skipping 0 members in the find() below
+ * would let a sibling's price speak for a row that does not carry it, which moves money. */
 export function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
   if (group.kind === "package") {
     return group.members.map((m) => m.priceCents).find((c) => c != null) ?? null;
@@ -515,6 +520,25 @@ export function sumMonthlyGrossCents(groups: AccountRowGroup[]): number {
     if (statusForGroup(g) !== "active") return sum;
     return sum + (resolvedPriceCentsFor(g) ?? 0);
   }, 0);
+}
+
+/** How many of the paying groups behind a money total actually carry a price (marcus C3,
+ * m49063): "a package line whose priced members are fewer than its subscribers shows the
+ * priced count beside the money, e.g. '6 subscribers, 1 priced, $30', so nobody divides $30 by
+ * 6". Walks the SAME groups and the same active predicate as sumProviderShareCents /
+ * sumMonthlyGrossCents above, so the count beside a figure can never describe a different row
+ * set than the figure does. `priced` is also what tells a $0 total from an unknown one:
+ * priced === 0 means no row behind the total has a price at all, and moneyOrUnpriced then
+ * prints "unpriced" rather than "$0". */
+export function pricedGroupCounts(groups: AccountRowGroup[]): { priced: number; subscribers: number } {
+  let priced = 0;
+  let subscribers = 0;
+  for (const g of groups) {
+    if (statusForGroup(g) !== "active") continue;
+    subscribers += 1;
+    if (!isUnpriced(resolvedPriceCentsFor(g))) priced += 1;
+  }
+  return { priced, subscribers };
 }
 
 /** Fetch-and-sum wrapper around sumProviderShareCents for callers (Overview) that don't

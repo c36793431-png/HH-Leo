@@ -7,8 +7,9 @@ import {
   resolvedPriceCentsFor,
   startedAtForGroup,
   sumProviderShareCents,
+  pricedGroupCounts,
 } from "@/lib/feed-subscriptions";
-import { providerShareFor } from "@/lib/feed-provider-packages";
+import { providerShareFor, moneyOrUnpriced, UNPRICED_LABEL } from "@/lib/feed-provider-packages";
 import { FEED_REGION_LABELS, isFeedRegion } from "@/lib/feed-tier-catalogue";
 
 const STATUS_ICON: Record<string, string> = { trial: "🧪", active: "✓", lapsed: "✗" };
@@ -67,6 +68,17 @@ export default async function FeedSubscribersPage() {
    * Overview card and Revenue's Total row call the identical function, so a lapsed row, a null
    * price, or a second region can't make this footer disagree with either of them. */
   const totalShareCents = sumProviderShareCents(accountGroups);
+  /** C3 (marcus m49063): every row cell here now spells an unknown price "unpriced" (null or a
+   * recut 0, via providerShareFor), so the footer must not be the one surface that still prints
+   * "$0" for a column of them. priced === 0 means nothing behind this total has a price at all;
+   * priced < subscribers means the figure covers fewer rows than the table above it shows.
+   *
+   * The count qualifier goes on the FOOTER only, not in the header cap: its unit is the paying
+   * row (one client-package line, so HH1's LD Base and NY Base count twice), which is neither of
+   * the two units the cap already packs into one sentence ("N paying clients · M feeds"). Same
+   * reason locationCountLabel above spells both nouns -- a bare "2 of 7" in that string could be
+   * read against either. Under the table, the rows it counts are on screen. */
+  const shareCounts = pricedGroupCounts(accountGroups);
 
   const byLocation = new Map<
     string,
@@ -107,7 +119,8 @@ export default async function FeedSubscribersPage() {
             <span className="ic">◎</span>
             <h3>Subscribers</h3>
             <span className="cap">
-              {countLabel(payingCount, payingClientCount, "paying")} · {money(totalShareCents)}/mo ·{" "}
+              {countLabel(payingCount, payingClientCount, "paying")} ·{" "}
+              {shareCounts.priced === 0 ? UNPRICED_LABEL : `${money(totalShareCents)}/mo`} ·{" "}
               {countLabel(trialCount, trialClientCount, "trial")}
               {lapsedCount > 0 ? ` · ${countLabel(lapsedCount, lapsedClientCount, "lapsed")}` : ""}
             </span>
@@ -200,7 +213,12 @@ export default async function FeedSubscribersPage() {
                     <b>Total</b>
                   </td>
                   <td className="r share">
-                    <b>{money(totalShareCents)}</b>
+                    <b>{moneyOrUnpriced(totalShareCents, shareCounts.priced)}</b>
+                    {shareCounts.priced < shareCounts.subscribers && (
+                      <div className="sub">
+                        {shareCounts.priced} of {shareCounts.subscribers} paying rows priced
+                      </div>
+                    )}
                   </td>
                   <td colSpan={2} />
                 </tr>

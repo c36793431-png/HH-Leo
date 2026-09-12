@@ -11,9 +11,10 @@ import {
   statusForGroup,
   sumProviderShareCents,
   sumMonthlyGrossCents,
+  pricedGroupCounts,
   type AccountRowGroup,
 } from "@/lib/feed-subscriptions";
-import { providerShareCentsFor } from "@/lib/feed-provider-packages";
+import { providerShareCentsFor, isUnpriced, moneyOrUnpriced, UNPRICED_LABEL } from "@/lib/feed-provider-packages";
 import { FEED_REGIONS, FEED_REGION_LABELS, isFeedRegion, type FeedRegion } from "@/lib/feed-tier-catalogue";
 
 function money(cents: number): string {
@@ -22,14 +23,22 @@ function money(cents: number): string {
 
 /** coxwell 2026-09-12 21:18Z (marcus m49032): "Rows priced at 0 render the price as 'unpriced',
  * not '$0', so coxwell can see which London clients still carry no price". Both an absent price
- * (null -- never negotiated, what providerShareFor calls "Not set") and a stored 0 read as
- * unpriced here: nothing has ever been charged on this platform, so a 0 in price_cents is a
- * row the recut left unset, not a client who genuinely pays nothing. This collapses a
- * distinction the Subscribers page keeps (m46504) and it is deliberate on THIS view only --
- * the totals below still add a 0 as 0, so the column and the footer cannot disagree. */
-const UNPRICED = "unpriced";
+ * (null -- never negotiated) and a stored 0 read as unpriced: nothing has ever been charged on
+ * this platform, so a 0 in price_cents is a row the recut left unset, not a client who genuinely
+ * pays nothing. Shipped on the Clients view first; marcus's C3 ruling (m49063) then extended it
+ * to every provider surface, so the predicate now lives in feed-provider-packages.ts (isUnpriced)
+ * and this page just renders it. The totals below still add a 0 as 0 -- only an all-unpriced
+ * total changes shape (moneyOrUnpriced), so a column and its footer cannot disagree. */
 function priceCell(cents: number | null): string {
-  return cents == null || cents === 0 ? UNPRICED : money(cents);
+  return isUnpriced(cents) ? UNPRICED_LABEL : money(cents);
+}
+
+/** The qualifier that goes beside a summed money figure when the clients behind it are not all
+ * priced (marcus C3, m49063: "'6 subscribers, 1 priced, $30', so nobody divides $30 by 6").
+ * Null when every paying client on the line has a price -- the common case stays a bare figure,
+ * and the qualifier only appears where the division would actually mislead. */
+function pricedNote(priced: number, subscribers: number): string | null {
+  return priced < subscribers ? `${priced} of ${subscribers} priced` : null;
 }
 
 interface PackageRevenueGroup {
@@ -37,6 +46,9 @@ interface PackageRevenueGroup {
   label: string;
   memberTierNames: string[];
   subscriberCount: number;
+  /** Of `subscriberCount`, how many carry a real price. Below it, "Monthly"/"Your 50%" describe
+   * fewer clients than the Subscribers column counts, and the row says so (m49063). */
+  pricedCount: number;
   monthlyCents: number;
   shareCents: number;
 }
@@ -49,7 +61,14 @@ interface PackageRevenueGroup {
  * (resolvedPriceCentsFor/providerShareCentsFor -- the same functions Subscribers and the
  * Overview card call) summed across that package's paying clients, never the catalogue's $30
  * list price times a headcount. Only `status === "active"` groups count -- trial/lapsed
- * clients generate no revenue, same predicate as every other payout figure on this panel. */
+ * clients generate no revenue, same predicate as every other payout figure on this panel.
+ *
+ * C3 (marcus m49063) carries "unpriced" through this aggregation rather than leaving it at the
+ * cell: a package line sums real prices over clients that may not all have one, so the group
+ * also counts how many did. LD Base today is 6 paying clients but 1 priced, and "$30" against
+ * "6" invites the reader to divide -- the row prints "1 of 6 priced" instead. A package where
+ * NOTHING is priced carries monthlyCents 0, which is an unknown total, not a nil one, and
+ * renders "unpriced" on both money columns. */
 function buildPackageRevenueGroups(accountGroups: AccountRowGroup[]): PackageRevenueGroup[] {
   const byKey = new Map<string, PackageRevenueGroup>();
 
@@ -63,9 +82,12 @@ function buildPackageRevenueGroups(accountGroups: AccountRowGroup[]): PackageRev
     const key = g.kind === "package" ? g.label : g.row.tierKey ?? g.row.tierName;
     const memberNames = g.kind === "package" ? g.members.map((m) => m.tierName) : [];
 
+    const priced = isUnpriced(priceCents) ? 0 : 1;
+
     const existing = byKey.get(key);
     if (existing) {
       existing.subscriberCount += 1;
+      existing.pricedCount += priced;
       existing.monthlyCents += monthlyCents;
       existing.shareCents += shareCents;
       for (const name of memberNames) {
@@ -77,6 +99,7 @@ function buildPackageRevenueGroups(accountGroups: AccountRowGroup[]): PackageRev
         label: g.kind === "package" ? g.label : g.row.tierName,
         memberTierNames: memberNames,
         subscriberCount: 1,
+        pricedCount: priced,
         monthlyCents,
         shareCents,
       });
@@ -183,6 +206,9 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
    * is all regions, so the two agree exactly when this page is on All. */
   const totalMonthlyCents = sumMonthlyGrossCents(groups);
   const totalShareCents = sumProviderShareCents(groups);
+  /** C3 (m49063): the same count qualifier the package rows carry, for the footer. Both views
+   * foot the identical group set, so one call serves both tables. */
+  const totalCounts = pricedGroupCounts(groups);
 
   const regionTabs: { key: RegionFilter; label: string }[] = [
     { key: "all", label: "All" },
@@ -284,7 +310,7 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
                       </td>
                       <td>{r.regionLabel}</td>
                       <td className="r mono">{priceCell(r.priceCents)}</td>
-                      <td className="r share">{r.priceCents == null || r.priceCents === 0 ? "—" : money(r.shareCents ?? 0)}</td>
+                      <td className="r share">{r.shareCents == null ? UNPRICED_LABEL : money(r.shareCents)}</td>
                       <td className="r mono">{r.sinceISO}</td>
                     </tr>
                   ))}
@@ -293,10 +319,13 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
                       <b>Total</b>
                     </td>
                     <td className="r mono">
-                      <b>{money(totalMonthlyCents)}</b>
+                      <b>{moneyOrUnpriced(totalMonthlyCents, totalCounts.priced)}</b>
+                      {pricedNote(totalCounts.priced, totalCounts.subscribers) && (
+                        <div className="sub">{pricedNote(totalCounts.priced, totalCounts.subscribers)}</div>
+                      )}
                     </td>
                     <td className="r share">
-                      <b>{money(totalShareCents)}</b>
+                      <b>{moneyOrUnpriced(totalShareCents, totalCounts.priced)}</b>
                     </td>
                     <td />
                   </tr>
@@ -326,8 +355,9 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
                     label={g.label}
                     memberTierNames={g.memberTierNames}
                     subscriberCount={g.subscriberCount}
-                    monthlyCents={g.monthlyCents}
-                    shareCents={g.shareCents}
+                    pricedNote={pricedNote(g.pricedCount, g.subscriberCount)}
+                    monthlyLabel={moneyOrUnpriced(g.monthlyCents, g.pricedCount)}
+                    shareLabel={moneyOrUnpriced(g.shareCents, g.pricedCount)}
                   />
                 ))}
                 <tr className="total-row">
@@ -336,10 +366,13 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
                   </td>
                   <td className="r" />
                   <td className="r mono">
-                    <b>{money(totalMonthlyCents)}</b>
+                    <b>{moneyOrUnpriced(totalMonthlyCents, totalCounts.priced)}</b>
+                    {pricedNote(totalCounts.priced, totalCounts.subscribers) && (
+                      <div className="sub">{pricedNote(totalCounts.priced, totalCounts.subscribers)}</div>
+                    )}
                   </td>
                   <td className="r share">
-                    <b>{money(totalShareCents)}</b>
+                    <b>{moneyOrUnpriced(totalShareCents, totalCounts.priced)}</b>
                   </td>
                 </tr>
               </tbody>
