@@ -45,8 +45,9 @@ async function flushOne(beat: DrainedBeat): Promise<{ written: boolean; ipCaptur
   });
 
   // Only the counter is cleared, and only after the row is safely written. The rest of the
-  // hash stays so the next beat still diffs against it.
-  await clearBeatCount(beat.licenseKey, beat.hwid);
+  // hash stays so the next beat still diffs against it. Exactly the beats this run wrote are
+  // subtracted, so a beat that landed after drainDirty() read the hash keeps its increment.
+  await clearBeatCount(beat.licenseKey, beat.hwid, beat.beats);
 
   // FOC12's ask, coxwell approved with the bundle: beats feed the IP-tracking table too, the
   // same hookup /v1/validate has. Only possible for a resolved key — connection_ips.license_id

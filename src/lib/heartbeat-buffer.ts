@@ -23,7 +23,7 @@ import { getRedis } from "./rate-limit";
  * The flush reads identity from the fields and never parses the member.
  *
  * NULL SENTINEL: every telemetry field is written on every beat, with "" meaning "this beat did
- * not carry the field". Necessary because the hash SURVIVES a flush (only `beats` is removed),
+ * not carry the field". Necessary because the hash SURVIVES a flush (only `beats` is decremented),
  * so a field left unwritten would carry an older beat's value forward — and 0085's contract is
  * "what this (key, hwid) reported at last_seen", not "last known value". "" is unambiguous here:
  * the route's optionalString/optionalJson already map empty input to null, so "" is never a
@@ -246,19 +246,23 @@ export async function drainDirty(limit: number): Promise<DrainedBeat[]> {
 }
 
 /**
- * Clear the counter for a key that was written to Postgres, keeping the rest of the hash so
+ * Subtract exactly the beats that were written to Postgres, keeping the rest of the hash so
  * the next beat still diffs against it.
  *
- * marcus ruled "DEL the `beats` field only". Known bounded imprecision, flagged rather than
- * silently changed: a beat landing between drainDirty()'s HGETALL and this HDEL is counted
- * into `beats`, then removed with it, so beat_count can undercount by the beats in that
- * millisecond-wide window. The member is re-SADDed by that same beat, so nothing else is
- * lost — only the count. `HINCRBY beats -<n>` would close it exactly; marcus's call.
+ * WHY HINCRBY AND NOT HDEL (marcus's ruling, superseding "DEL the `beats` field only" — the
+ * intent was "clear the count"): a beat landing between drainDirty()'s HGETALL and this call
+ * increments `beats` after the flush has already read it. HDEL would remove that beat's
+ * increment along with the flushed ones, so beat_count would undercount by whatever arrived in
+ * that window. Subtracting the exact number flushed leaves the newcomer's increment in place,
+ * and that beat has already re-SADDed its member, so the next run picks it up and counts it.
+ * Same single command, no window.
+ *
+ * `flushed` is the `beats` value the flush actually wrote; 0 means there is nothing to subtract.
  */
-export async function clearBeatCount(licenseKey: string, hwid: string): Promise<void> {
+export async function clearBeatCount(licenseKey: string, hwid: string, flushed: number): Promise<void> {
   const redis = getRedis();
-  if (!redis) return;
-  await redis.hdel(heartbeatHashKey(licenseKey, hwid), "beats");
+  if (!redis || flushed <= 0) return;
+  await redis.hincrby(heartbeatHashKey(licenseKey, hwid), "beats", -flushed);
 }
 
 /** Put members back on the dirty set after a failed flush, so the next run retries them. */
