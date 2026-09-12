@@ -247,8 +247,9 @@ interface ConnectionRow {
 
 /** Dedupes against the most recent capture for this license — every desktop-client call
  * hitting this on an unchanged IP would otherwise flood connection_ips for no signal. A
- * row only lands when the IP actually changed, which is also exactly the trigger point
- * for the mismatch/country-change alerts below. Fire-and-forget from route handlers. */
+ * row only lands when the IP actually changed, which is also the trigger point for the
+ * mismatch/country-change alerts below — with one extra guard on the mismatch alert for
+ * source "heartbeat", see inline. Fire-and-forget from route handlers. */
 export async function captureConnectionIp(
   licenseId: string,
   ip: string,
@@ -263,6 +264,32 @@ export async function captureConnectionIp(
   );
   const previous = last.rows[0] ?? null;
   if (previous && previous.ip === ip) return; // unchanged, nothing to log or alert on
+
+  // /v1/hb beats every 180s per open tab, so a client on a flapping address (mobile,
+  // residential DHCP, rotating VPS egress) hops A->B->A->B all day and would re-fire the
+  // mismatch alert on every hop. Window that ALERT at one per (license, ip) per 24h, for
+  // source "heartbeat" only — the /v1/validate path is one-shot and is left untouched.
+  // The connection_ips row below is still written on every change, so the capture log and
+  // the admin history keep full fidelity; only the notification is suppressed.
+  //
+  // The window is read off connection_ips itself rather than a new alert-log table
+  // (marcus's ruling: cheapest form, and 0085 is already queued for coxwell). That makes
+  // it a proxy — it suppresses when this pair was last SEEN by a heartbeat inside 24h, not
+  // when it was last ALERTED on. The two diverge only if the earlier sighting couldn't
+  // alert (no registration, multiple_ips_ok set, or no declared IP at the time), in which
+  // case a first alert can be delayed by up to 24h. Read BEFORE the insert below, so this
+  // beat's own row can't suppress this beat's own alert.
+  let mismatchAlertWindowed = false;
+  if (source === "heartbeat") {
+    const recent = await pool.query<{ one: number }>(
+      `select 1 as one from connection_ips
+        where license_id = $1 and ip = $2 and source = 'heartbeat'
+          and captured_at > now() - interval '24 hours'
+        limit 1`,
+      [licenseId, ip]
+    );
+    mismatchAlertWindowed = recent.rows.length > 0;
+  }
 
   await pool.query(
     `insert into connection_ips (license_id, ip, source) values ($1, $2, $3)`,
@@ -282,7 +309,7 @@ export async function captureConnectionIp(
   const feeds = feedLabels(owner.rows[0]?.feed_types);
   if (!registration || registration.multipleIpsOk) return;
 
-  if (registration.declaredIp && registration.declaredIp !== ip) {
+  if (registration.declaredIp && registration.declaredIp !== ip && !mismatchAlertWindowed) {
     await notifyIpMismatch({
       email: ownerEmail,
       serverName: registration.serverName,

@@ -1,6 +1,7 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
+let redisClient: Redis | null = null;
 let keyLimiter: Ratelimit | null = null;
 let ipLimiter: Ratelimit | null = null;
 // Heartbeat is high-frequency by design (the client beats on a timer), so it gets its
@@ -41,10 +42,18 @@ function init(): {
   if (!url || !token) return null; // Not configured (e.g. local dev) — callers fail open.
 
   const redis = new Redis({ url, token });
+  redisClient = redis;
   keyLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(60, "1 h"), prefix: "rl:license-key" });
   ipLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(600, "1 h"), prefix: "rl:license-ip" });
-  hbKeyLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(120, "1 h"), prefix: "rl:hb-key" });
-  hbIpLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(1200, "1 h"), prefix: "rl:hb-ip" });
+  // Sized off the real cadence: one open trading tab beats every 180s = 20/hr, and the
+  // client opens one timer PER TAB on the same license key. The old 120/hr ceiling was set
+  // before that was known and bites at 7 tabs — and because /v1/hb answers 204 either way,
+  // a customer would lose telemetry with nothing anywhere saying so. 600/hr = 30 tabs.
+  hbKeyLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(600, "1 h"), prefix: "rl:hb-key" });
+  // Per-IP has to clear per-key by a real multiple or it becomes the binding cap and
+  // re-creates the same silent drop for anyone behind one address — a NAT'd trading desk
+  // or a VPS host is several keys on one IP. 3600/hr = six saturated keys.
+  hbIpLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(3600, "1 h"), prefix: "rl:hb-ip" });
   hftAlertKeyMinuteLimiter = new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(20, "1 m"),
@@ -61,6 +70,18 @@ function init(): {
     prefix: "rl:hft-alert-ip",
   });
   return { keyLimiter, ipLimiter, hbKeyLimiter, hbIpLimiter, hftAlertKeyMinuteLimiter, hftAlertKeyHourLimiter, hftAlertIpLimiter };
+}
+
+/**
+ * The one Upstash client this process owns — the same instance the limiters above use.
+ * Exported so the /v1/hb beat buffer (src/lib/heartbeat-buffer.ts) can reuse it rather than
+ * constructing a second connection to the same database (marcus's ruling, 2026-09-11).
+ * Returns null when Upstash isn't configured, exactly like init(); every caller must treat
+ * that as "no Redis" and degrade, never throw.
+ */
+export function getRedis(): Redis | null {
+  init();
+  return redisClient;
 }
 
 /** Per-license-key + per-source-IP counters for /api/verify-license. In-memory counters don't work across serverless invocations, hence Upstash. */
