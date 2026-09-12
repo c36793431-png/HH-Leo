@@ -164,6 +164,34 @@ async function sendWelcomeDm(telegramUserId: number, displayName: string) {
   }
 }
 
+// Upper bound on how long a sign-in waits for the free-signup Telegram alert. Long enough
+// for a normal Telegram round-trip, short enough that a stalled sink never holds the login.
+const NOTIFY_FREE_SIGNUP_TIMEOUT_MS = 4000;
+
+/** Awaited, bounded wrapper around notifyFreeSignup (bus thread
+ * kai-auth-callback-hardening-2026-09-11). The alert used to be fired un-awaited
+ * (`.catch(() => {})`), so on Vercel the invocation could end before the fetch resolved
+ * and a real 2026-09-11 signup produced no alert. Awaiting it keeps the invocation alive;
+ * the Promise.race timeout keeps a hung sink from stalling sign-in past 4s. Never throws:
+ * failure and timeout both land in one searchable log line. No waitUntil because
+ * @vercel/functions is not a dependency. */
+async function notifyFreeSignupBounded(opts: Parameters<typeof notifyFreeSignup>[0]): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`timed out after ${NOTIFY_FREE_SIGNUP_TIMEOUT_MS}ms`)),
+      NOTIFY_FREE_SIGNUP_TIMEOUT_MS
+    );
+  });
+  try {
+    await Promise.race([notifyFreeSignup(opts), timeout]);
+  } catch (err) {
+    console.error("notifyFreeSignup failed", { source: opts.source, email: opts.email }, err);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Shares one session across portal.horizonhft.com and partner.horizonhft.com (bus thread
 // leo-partner-subdomain-auth-model-2026-08-21). Unset in dev so cookies still work against
 // localhost, which can't carry a ".horizonhft.com"-scoped cookie.
@@ -256,13 +284,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             console.error("attributeReferralFromCookie failed (telegram)", err);
           });
           await sendWelcomeDm(payload.id, user.display_name);
-          notifyFreeSignup({
+          await notifyFreeSignupBounded({
             email: user.email,
             name: user.display_name,
             telegramHandle: user.telegram_username,
             joinedAt: new Date(),
             source: "telegram",
-          }).catch(() => {});
+          });
         } else if (payload.photo_url && payload.photo_url !== user.image) {
           const updated = await pool.query(
             `update users set image = $1, updated_at = now() where id = $2 returning image`,
@@ -354,7 +382,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async signIn({ user, account }) {
       // Email-provider first-time signups: claim any pre-provisioned license by email.
       if (user?.email) {
-        await claimPendingLicense({ userId: user.id!, email: user.email });
+        try {
+          await claimPendingLicense({ userId: user.id!, email: user.email });
+        } catch (err) {
+          // Sign-in must succeed even if the claim fails. On a first magic-link login the
+          // adapter has not inserted the users row yet, so a matching pre-provisioned
+          // licence trips the licenses.user_id FK; the claim is retried on the next login.
+          console.error("claimPendingLicense failed", { userId: user.id, email: user.email }, err);
+        }
       }
       if (user?.id) {
         await recordSigninEvent(user.id, account?.provider ?? "unknown").catch((err) => {
@@ -420,13 +455,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
       }
 
-      notifyFreeSignup({
+      await notifyFreeSignupBounded({
         email: user.email ?? null,
         name,
         telegramHandle,
         joinedAt: new Date(),
         source: "email",
-      }).catch(() => {});
+      });
     },
   },
   pages: {
