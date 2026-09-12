@@ -899,6 +899,14 @@ export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): Month
       if (members.length === 0) continue;
 
       const priceCents = members.map((r) => r.priceCents).find((c) => c != null) ?? null;
+      /** UNPRICED IS NOT A CONTRACT IN A MONTH (marcus m49171). This tab is headed contracted
+       * revenue, so a group with no price does not belong to any month here -- unlike the live
+       * Paying view, where an unpriced live row stays VISIBLE by standing ruling. The group is
+       * dropped whole, not merely left out of the count: a month reading "4 clients" above a
+       * disclosure list of five would be the paired-metric split this page exists to avoid, and
+       * `pricedClients` consequently always equals `clients`, so the "n of m priced" sub-line
+       * stops appearing on History. */
+      if (isUnpriced(priceCents)) continue;
       /** The period must describe the rows the PRICE came from, not the union of everything that
        * happened to be live. coxwell's own group is why: in September his three $30 rows (ended
        * 09-01) and his unpriced live team rows both overlap, and a "2026-08-01 → 2026-09-20" beside
