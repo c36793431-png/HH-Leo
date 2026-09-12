@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
 import { AccountPackageRows } from "@/components/feed/account-package-rows";
@@ -5,11 +6,16 @@ import {
   listSubscribersForProvider,
   groupAccountSubscriptions,
   resolvedPriceCentsFor,
+  lastPriceCentsFor,
+  statusReasonForGroup,
   startedAtForGroup,
+  statusForGroup,
   sumProviderShareCents,
   pricedGroupCounts,
+  type AccountRowGroup,
+  type ProviderSubscriberRow,
 } from "@/lib/feed-subscriptions";
-import { providerShareFor, moneyOrUnpriced, UNPRICED_LABEL } from "@/lib/feed-provider-packages";
+import { providerShareFor, isUnpriced, moneyOrUnpriced, UNPRICED_LABEL } from "@/lib/feed-provider-packages";
 import { FEED_REGION_LABELS, isFeedRegion } from "@/lib/feed-tier-catalogue";
 
 const STATUS_ICON: Record<string, string> = { trial: "🧪", active: "✓", lapsed: "✗" };
@@ -41,22 +47,83 @@ function locationCountLabel(feeds: number, clients: number, word: string): strin
   return `${clients} ${word} client${clients === 1 ? "" : "s"} · ${feeds} feed${feeds === 1 ? "" : "s"}`;
 }
 
+/** coxwell 22:20Z via marcus m49101, looking at this page's header ("2 PAYING CLIENTS · 6 FEEDS ·
+ * $15/MO · 4 TRIAL CLIENTS · 12 FEEDS · 8 LAPSED CLIENTS · 25 FEEDS"): "also need buttons to
+ * navigate via these". So the header counts ARE the filter -- the same three numbers, now
+ * clickable, plus All. Default is All because this page is the roster, not the money (Revenue
+ * defaults to Paying for the opposite reason). Search-param driven so a filtered roster is a
+ * link somebody can send. */
+type SubscriberFilter = "all" | "paying" | "trial" | "lapsed";
+
+const FILTER_STATUS: Record<Exclude<SubscriberFilter, "all">, ProviderSubscriberRow["status"]> = {
+  paying: "active",
+  trial: "trial",
+  lapsed: "lapsed",
+};
+
+function isSubscriberFilter(v: string): v is SubscriberFilter {
+  return v === "all" || v === "paying" || v === "trial" || v === "lapsed";
+}
+
+function hrefFor(filter: SubscriberFilter): string {
+  return filter === "all" ? "/feed/dashboard/subscribers" : `/feed/dashboard/subscribers?status=${filter}`;
+}
+
+/** The rows behind a group, for the counts and the "By location" line -- both of which are per
+ * FEED, while the table and the filter are per (client, package) group. Going through the group
+ * rather than filtering the flat row list is what keeps the two units consistent under a filter:
+ * a group's status is the ruled one (statusForPackageMembers), so a package whose members disagree
+ * is counted under the one status its row on screen actually shows. */
+function rowsOf(group: AccountRowGroup): ProviderSubscriberRow[] {
+  return group.kind === "package" ? group.members : [group.row];
+}
+
+/** The grey line under a non-paying client's status badge: why they stopped (the SAME
+ * statusReasonForGroup the Revenue page prints -- one wording, one place) and what they were last
+ * on. The price sits here as text rather than in the "Your 50%*" column, because that column is a
+ * payout share: a lapsed client's old gross price is neither a share nor money owed, and putting
+ * it there would put a number nobody is paying into the one column a provider reads as income. */
+function reasonLine(group: AccountRowGroup): string | null {
+  const reason = statusReasonForGroup(group);
+  if (reason == null) return null;
+  const last = lastPriceCentsFor(group);
+  return isUnpriced(last) ? reason : `${reason} · last ${money(last)}`;
+}
+
 /** Bus thread provider-feed-subscriber-linkage-2026-08-29, item 3. Pseudonym-only view --
  * see feed-subscriptions.ts's listSubscribersForProvider() for why no email/name/user_id
  * ever reaches this template. Reads real rows once migration 0071 is applied; the query
  * degrades to an empty list before that, so this page just shows the empty state today. */
-export default async function FeedSubscribersPage() {
+export default async function FeedSubscribersPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  const sp = await searchParams;
+  const filter: SubscriberFilter = sp.status && isSubscriberFilter(sp.status) ? sp.status : "all";
+
   const session = await auth();
   const providerId = session!.user!.id!;
 
   const subscribers = await listSubscribersForProvider(providerId);
   const accountGroups = groupAccountSubscriptions(subscribers);
-  const payingCount = subscribers.filter((s) => s.status === "active").length;
-  const trialCount = subscribers.filter((s) => s.status === "trial").length;
-  const lapsedCount = subscribers.filter((s) => s.status === "lapsed").length;
-  const payingClientCount = new Set(subscribers.filter((s) => s.status === "active").map((s) => s.pseudonym)).size;
-  const trialClientCount = new Set(subscribers.filter((s) => s.status === "trial").map((s) => s.pseudonym)).size;
-  const lapsedClientCount = new Set(subscribers.filter((s) => s.status === "lapsed").map((s) => s.pseudonym)).size;
+
+  /** Counts are per group status, not per row status, so the number on a button is exactly how
+   * many rows that button reveals. They are also computed over ALL groups, never the filtered set:
+   * a filter must not be able to change the size of the thing it filters. */
+  const countsFor = (status: ProviderSubscriberRow["status"]) => {
+    const groups = accountGroups.filter((g) => statusForGroup(g) === status);
+    return {
+      feeds: groups.reduce((n, g) => n + rowsOf(g).length, 0),
+      clients: new Set(groups.map((g) => (g.kind === "package" ? g.pseudonym : g.row.pseudonym))).size,
+    };
+  };
+  const counts = { paying: countsFor("active"), trial: countsFor("trial"), lapsed: countsFor("lapsed") };
+  /** Every button counts CLIENTS, the unit coxwell's header already spoke in ("2 PAYING CLIENTS").
+   * A client in two statuses (HH1 pays for one package and trials another) is counted under each,
+   * so these three do not have to add up to All -- the by-location line under the table spells
+   * both units for exactly this reason. */
+  const allClientCount = new Set(subscribers.map((s) => s.pseudonym)).size;
+  const visibleGroups =
+    filter === "all" ? accountGroups : accountGroups.filter((g) => statusForGroup(g) === FILTER_STATUS[filter]);
+  const visibleRows = visibleGroups.flatMap(rowsOf);
+  const visibleClientCount = new Set(visibleRows.map((s) => s.pseudonym)).size;
 
   /** Job A2 (marcus/coxwell, bus thread leo-provider-subscribers-page-2026-09-06): "LD Base =
    * $30/mo and NY Base = $30/mo, flat 50/50" -- foots the same providerShareCentsFor()/-For()
@@ -80,11 +147,13 @@ export default async function FeedSubscribersPage() {
    * read against either. Under the table, the rows it counts are on screen. */
   const shareCounts = pricedGroupCounts(accountGroups);
 
+  /** "the location line filters with it" (m49101): this walks the VISIBLE rows, so switching to
+   * Lapsed leaves a by-location line that describes the lapsed rows on screen and nothing else. */
   const byLocation = new Map<
     string,
     { paying: number; trial: number; lapsed: number; payingClients: Set<string>; trialClients: Set<string>; lapsedClients: Set<string> }
   >();
-  for (const s of subscribers) {
+  for (const s of visibleRows) {
     const location = (s.regionKey && isFeedRegion(s.regionKey) && FEED_REGION_LABELS[s.regionKey]) || OTHER_LOCATION;
     const counts =
       byLocation.get(location) ??
@@ -118,12 +187,33 @@ export default async function FeedSubscribersPage() {
           <div className="chead">
             <span className="ic">◎</span>
             <h3>Subscribers</h3>
+            {/* The cap still carries the FEED count coxwell was reading in the header ("· 6
+                FEEDS"), now describing whatever the filter shows; only the per-status client
+                numbers moved onto the buttons. The money is paying-only under every filter -- the
+                same sumProviderShareCents the footer and Revenue call -- so filtering the roster
+                never moves it. */}
             <span className="cap">
-              {countLabel(payingCount, payingClientCount, "paying")} ·{" "}
-              {shareCounts.priced === 0 ? UNPRICED_LABEL : `${money(totalShareCents)}/mo`} ·{" "}
-              {countLabel(trialCount, trialClientCount, "trial")}
-              {lapsedCount > 0 ? ` · ${countLabel(lapsedCount, lapsedClientCount, "lapsed")}` : ""}
+              {filter === "all"
+                ? `${allClientCount} client${allClientCount === 1 ? "" : "s"} · ${subscribers.length} feeds`
+                : countLabel(visibleRows.length, visibleClientCount, filter)}{" "}
+              · {shareCounts.priced === 0 ? UNPRICED_LABEL : `${money(totalShareCents)}/mo`}
             </span>
+            <div className="chead-tools">
+              <div className="seg">
+                <Link href={hrefFor("all")} className={filter === "all" ? "on" : ""}>
+                  All<span className="n">{allClientCount}</span>
+                </Link>
+                <Link href={hrefFor("paying")} className={filter === "paying" ? "on" : ""}>
+                  Paying<span className="n">{counts.paying.clients}</span>
+                </Link>
+                <Link href={hrefFor("trial")} className={filter === "trial" ? "on" : ""}>
+                  Trial<span className="n">{counts.trial.clients}</span>
+                </Link>
+                <Link href={hrefFor("lapsed")} className={filter === "lapsed" ? "on" : ""}>
+                  Lapsed<span className="n">{counts.lapsed.clients}</span>
+                </Link>
+              </div>
+            </div>
           </div>
 
           {subscribers.length > 0 && (
@@ -154,6 +244,14 @@ export default async function FeedSubscribersPage() {
                 surfaces a subscriber&apos;s name or email to providers.
               </p>
             </div>
+          ) : visibleGroups.length === 0 ? (
+            <div className="empty">
+              <div className="eic">◎</div>
+              <b>No {filter} clients</b>
+              <p>
+                Every one of your {allClientCount} clients is under another filter — switch back to All above.
+              </p>
+            </div>
           ) : (
             <table className="tbl">
               <thead>
@@ -172,13 +270,14 @@ export default async function FeedSubscribersPage() {
                     * Notional list-price split — there is no payout ledger or per-subscriber billing yet.
                   </td>
                 </tr>
-                {accountGroups.map((g) =>
+                {visibleGroups.map((g) =>
                   g.kind === "package" ? (
                     <AccountPackageRows
                       key={`${g.pseudonym}-${g.label}`}
                       pseudonym={g.pseudonym}
                       label={g.label}
                       status={g.status}
+                      reason={reasonLine(g)}
                       share={providerShareFor(g.status, resolvedPriceCentsFor(g))}
                       serverIp={g.members[0].serverIp ?? null}
                       sinceISO={startedAtForGroup(g).toISOString().slice(0, 10)}
@@ -199,6 +298,7 @@ export default async function FeedSubscribersPage() {
                         <span className={`tb ${g.row.status}`}>
                           {STATUS_ICON[g.row.status] ?? "•"} {g.row.status}
                         </span>
+                        {reasonLine(g) && <div className="sub muted">{reasonLine(g)}</div>}
                       </td>
                       <td className="r share">
                         {providerShareFor(g.row.status, resolvedPriceCentsFor(g))}
@@ -211,6 +311,7 @@ export default async function FeedSubscribersPage() {
                 <tr className="total-row">
                   <td colSpan={3} className="r">
                     <b>Total</b>
+                    <div className="sub">paying clients only</div>
                   </td>
                   <td className="r share">
                     <b>{moneyOrUnpriced(totalShareCents, shareCounts.priced)}</b>

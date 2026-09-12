@@ -21,6 +21,7 @@ export function AccountPackageRows({
   pseudonym,
   label,
   status,
+  reason,
   share,
   serverIp,
   sinceISO,
@@ -29,6 +30,9 @@ export function AccountPackageRows({
   pseudonym: string;
   label: string;
   status: "trial" | "active" | "lapsed";
+  /** Why this client isn't paying, plus their last price -- null for a paying client, which is
+   * what keeps the default roster looking exactly as it did (m49101). */
+  reason: string | null;
   share: string | null;
   serverIp: string | null;
   sinceISO: string;
@@ -52,6 +56,7 @@ export function AccountPackageRows({
           <span className={`tb ${status}`}>
             {STATUS_ICON[status] ?? "•"} {status}
           </span>
+          {reason && <div className="sub muted">{reason}</div>}
         </td>
         <td className="r share">{share}</td>
         <td className="mono">{serverIp ?? ""}</td>

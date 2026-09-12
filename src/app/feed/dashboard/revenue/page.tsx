@@ -62,11 +62,11 @@ interface PackageRevenueGroup {
   pricedCount: number;
   monthlyCents: number;
   shareCents: number;
-  /** Clients on this package who are NOT paying, counted but never priced (m49070). They exist so
-   * the Lapsed/All filter can show a package at all when nobody on it is paying, and so a package
-   * that lost five clients doesn't look identical to one that never had them. */
+  /** Clients on this package who have lapsed: counted, never priced (m49070). They exist so the
+   * Lapsed/All filter can show a package at all when nobody on it is paying, and so a package that
+   * lost five clients doesn't look identical to one that never had them. No trial counterpart --
+   * trials are not on this page (m49101). */
   lapsedCount: number;
-  trialCount: number;
 }
 
 /** Job E, bus thread leo-provider-subscribers-page-2026-09-06 (marcus/coxwell): Revenue used
@@ -91,7 +91,7 @@ interface PackageRevenueGroup {
  * reach monthlyCents/shareCents/pricedCount -- non-paying clients are counted separately and
  * priced nowhere, so the by-package figures always describe exactly the same clients as the Total
  * row and as the Clients view. What the filter changes is which LINES are listed, and whether the
- * lapsed/trial counts are spelled out beside them. */
+ * lapsed count is spelled out beside them. */
 function buildPackageRevenueGroups(accountGroups: AccountRowGroup[]): PackageRevenueGroup[] {
   const byKey = new Map<string, PackageRevenueGroup>();
 
@@ -113,8 +113,7 @@ function buildPackageRevenueGroups(accountGroups: AccountRowGroup[]): PackageRev
       existing.pricedCount += priced;
       existing.monthlyCents += monthlyCents;
       existing.shareCents += shareCents;
-      existing.lapsedCount += status === "lapsed" ? 1 : 0;
-      existing.trialCount += status === "trial" ? 1 : 0;
+      existing.lapsedCount += paying ? 0 : 1;
       for (const name of memberNames) {
         if (!existing.memberTierNames.includes(name)) existing.memberTierNames.push(name);
       }
@@ -127,8 +126,7 @@ function buildPackageRevenueGroups(accountGroups: AccountRowGroup[]): PackageRev
         pricedCount: priced,
         monthlyCents,
         shareCents,
-        lapsedCount: status === "lapsed" ? 1 : 0,
-        trialCount: status === "trial" ? 1 : 0,
+        lapsedCount: paying ? 0 : 1,
       });
     }
   }
@@ -201,10 +199,14 @@ type ViewKey = "summary" | "clients";
 type RegionFilter = FeedRegion | "all";
 /** coxwell 22:00Z via marcus m49070/m49081: "we had some 7 paying clients for LD base and none for
  * NY, how to show them in this list?". Paying is today's behaviour and stays the default -- a
- * revenue page opens on money that is live. "Lapsed" holds everyone who is NOT paying, trials
- * included (m49078 item 2 sends trial groups here with reason "Trial"), because the question being
- * answered is "where did my other clients go", and a client on a free trial and a client whose
- * licence expired are both answers to it. The reason text on each row is what keeps them apart. */
+ * revenue page opens on money that is live.
+ *
+ * A LIVE TRIAL CLIENT IS NOT ON THIS PAGE AT ALL, in any of the three positions (marcus m49101:
+ * "Trial rows never appear on Revenue"). This is a money surface; a client who has never been
+ * asked for money is a roster question, and the Subscribers page's own Trial filter is where they
+ * answer it. "Lapsed" here therefore means lapsed, not "everything that isn't paying", and "All"
+ * means paying + lapsed. An EXPIRED trial licence is a different thing and does show: that client
+ * stopped, the row reads "Trial ended {date}", and hiding it would lose a real departure. */
 type StatusFilter = "paying" | "lapsed" | "all";
 
 interface RawSearchParams {
@@ -226,11 +228,10 @@ function isStatusFilter(v: string): v is StatusFilter {
   return v === "paying" || v === "lapsed" || v === "all";
 }
 
-/** "6 lapsed · 4 trial", or null when there are none -- the sub-line under a package label and the
- * clause in the scope note. Zero parts are dropped rather than printed as "0 trial". */
-function notPayingNote(lapsed: number, trial: number): string | null {
-  const parts = [lapsed > 0 ? `${lapsed} lapsed` : null, trial > 0 ? `${trial} trial` : null].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : null;
+/** "6 lapsed", or null when there are none -- the sub-line under a package label and the clause in
+ * the scope note. */
+function lapsedNote(lapsed: number): string | null {
+  return lapsed > 0 ? `${lapsed} lapsed` : null;
 }
 
 export default async function FeedRevenuePage({ searchParams }: { searchParams: Promise<RawSearchParams> }) {
@@ -247,9 +248,13 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
    * region appears once this provider has a group in it, in the catalogue's own order. That
    * satisfies the CME carve-out without a second region list to keep in sync, and never offers
    * a tab that would render empty. */
-  const presentRegions = FEED_REGIONS.filter((r) => allGroups.some((g) => regionKeyForGroup(g) === r));
+  /** Live trial clients are dropped here, once, before anything counts or renders (m49101) --
+   * including out of `presentRegions`, so a region that holds nothing but trials never grows a tab
+   * on a money page. Expired trial licences are lapsed, not trial, and survive this. */
+  const revenueGroups = allGroups.filter((g) => statusForGroup(g) !== "trial");
+  const presentRegions = FEED_REGIONS.filter((r) => revenueGroups.some((g) => regionKeyForGroup(g) === r));
   const region: RegionFilter = sp.region && isFeedRegion(sp.region) && presentRegions.includes(sp.region) ? sp.region : "all";
-  const groups = region === "all" ? allGroups : allGroups.filter((g) => regionKeyForGroup(g) === region);
+  const groups = region === "all" ? revenueGroups : revenueGroups.filter((g) => regionKeyForGroup(g) === region);
 
   /** The status filter selects ROWS, never figures. Both tables below are built from
    * `visibleGroups`, but every money number on the page -- the package lines' Monthly/Your 50% and
@@ -260,13 +265,10 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
   const visibleGroups =
     status === "all" ? groups : groups.filter((g) => (statusForGroup(g) === "active") === (status === "paying"));
   const packageGroups = buildPackageRevenueGroups(visibleGroups).filter((p) =>
-    status === "paying" ? p.subscriberCount > 0 : status === "lapsed" ? p.lapsedCount + p.trialCount > 0 : true
+    status === "paying" ? p.subscriberCount > 0 : status === "lapsed" ? p.lapsedCount > 0 : true
   );
   const clientRows = buildClientRevenueRows(visibleGroups);
-  const notPayingCounts = {
-    lapsed: groups.filter((g) => statusForGroup(g) === "lapsed").length,
-    trial: groups.filter((g) => statusForGroup(g) === "trial").length,
-  };
+  const lapsedGroupCount = groups.filter((g) => statusForGroup(g) !== "active").length;
   /** Per marcus's m46511/m46518/m46522 rulings (same summation everywhere): both totals below
    * are the identical functions Subscribers' footer and the Overview card call, on the same
    * groups this page already grouped -- never a second reduce over the by-package or per-client
@@ -288,7 +290,7 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
     { key: "lapsed", label: "Lapsed" },
     { key: "all", label: "All" },
   ];
-  const notPayingClause = notPayingNote(notPayingCounts.lapsed, notPayingCounts.trial);
+  const lapsedClause = lapsedNote(lapsedGroupCount);
 
   return (
     <>
@@ -353,10 +355,11 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
               {status === "paying"
                 ? "paying subscribers only"
                 : status === "lapsed"
-                  ? "lapsed and trial clients only"
+                  ? "lapsed clients only"
                   : "all clients, paying or not"}
-              {status !== "paying" && notPayingClause ? ` (${notPayingClause})` : ""} — every figure on this page
-              counts paying clients only; a lapsed or trial client adds nothing to any total in any view.
+              {status !== "paying" && lapsedClause ? ` (${lapsedClause})` : ""} — every figure on this page counts
+              paying clients only; a lapsed client adds nothing to any total in any view. Clients on a trial licence
+              are not shown here at all — see Subscribers.
             </span>
           </div>
 
@@ -371,7 +374,7 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
                       ? "A client appears once they hold an active, paid subscription to one of your tiers."
                       : `No client holds an active subscription in ${FEED_REGION_LABELS[region]}.`
                     : status === "lapsed"
-                      ? "No client here has lapsed or is on a trial licence."
+                      ? "No client here has lapsed."
                       : "No client holds a subscription to one of your tiers here."}
                 </p>
               </div>
@@ -472,7 +475,7 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
                     memberTierNames={g.memberTierNames}
                     subscriberCount={g.subscriberCount}
                     pricedNote={pricedNote(g.pricedCount, g.subscriberCount)}
-                    notPayingNote={status === "paying" ? null : notPayingNote(g.lapsedCount, g.trialCount)}
+                    notPayingNote={status === "paying" ? null : lapsedNote(g.lapsedCount)}
                     /* A package with nobody paying on it has no unknown price to report -- it has
                        no price at all, so the money cells read "—" rather than "unpriced", which
                        would imply a client whose figure is merely missing. */

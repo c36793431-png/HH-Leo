@@ -66,6 +66,11 @@ export interface ProviderSubscriberRow {
   lapsedAt: Date | null;
   endsAt: Date | null;
   licenseExpiresAt: Date | null;
+  /** `licenses.tier` of the bound licence. Two jobs, both label-only: statusForLicenseTier reads
+   * it to call a live grant trial rather than paying (m49078 item 2), and the reason text reads it
+   * to say "Trial ended {date}" instead of "Licence expired {date}" when what ran out was a trial
+   * (m49101). Never an entitlement test -- that is EFFECTIVE_STATUS_SQL's, and only its. */
+  licenseTier: string | null;
   serverIp: string | null;
   /** This client's own negotiated price (Job C, bus thread
    * leo-provider-subscribers-page-2026-09-06) -- null means no price has ever been negotiated
@@ -149,10 +154,21 @@ const EFFECTIVE_STATUS_SQL = `
  * happens to also exist for the same tier -- that grant doesn't depend on the trial. Used
  * only by getActiveSubscriberCountForProvider below; listSubscribersForProvider still uses
  * EFFECTIVE_STATUS_SQL since its own status column (including "trial") is out of scope for
- * this naming pass. */
+ * this naming pass.
+ *
+ * The trial-LICENCE branch (marcus m49097 item 4, 2026-09-12) is the same rule
+ * statusForLicenseTier applies on the page, moved here so the Overview headcount and the money
+ * cannot disagree about who is a paying client: after m49078 item 2 the Subscribers page labelled
+ * HH1/HH2/HH12/HH19 trial while this tile still counted them as subscribers. It sits after the
+ * explicit-lapse branch and before every entitlement branch, so a lapse still wins and no
+ * licence-expiry logic is touched -- it only renames a row this CASE was going to call live. */
 const SUBSCRIBER_STATUS_SQL = `
   case
     when s.status = 'lapsed' then 'lapsed'
+    when exists (
+      select 1 from licenses lt
+      where lt.id = s.license_id and lt.tier = 'trial'
+    ) then 'trial'
     when ft.region_key is null then s.status
     when ${REGION_TO_FEED_TYPE_SQL} is null then s.status
     when exists (
@@ -425,6 +441,7 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       lapsedAt: row.lapsed_at,
       endsAt: row.ends_at,
       licenseExpiresAt: row.license_expires_at,
+      licenseTier: row.license_tier,
       serverIp: row.declared_ip,
       priceCents: row.price_cents,
     }));
@@ -576,13 +593,14 @@ function isoDate(d: Date): string {
  * spelling the same three sentences a second time). Null for a paying group -- a live client needs
  * no explanation, and a null here is what a caller keys "is this row greyed" off.
  *
- * Three outcomes, and the distinction between the first two is the whole point of carrying
- * rawStatus: "Ended {date}" is a decision somebody recorded (an explicit admin lapse, always with
- * a lapsed_at), while "Licence expired {date}" is a row nobody touched whose licence simply ran
- * out underneath it -- the provider can act on the second (chase a renewal) and cannot on the
- * first. Collapsing them into one "lapsed" would hide that. "Trial" carries no date because the
- * trial has NOT ended: the client is live, just not paying, and printing an end date beside them
- * would read as a lapse.
+ * Four outcomes (m49101 fixes the wording): "Ended {date}" is a decision somebody recorded (an
+ * explicit admin lapse, always with a lapsed_at), while "Licence expired {date}" is a row nobody
+ * touched whose licence simply ran out underneath it -- the provider can act on the second (chase
+ * a renewal) and cannot on the first, so collapsing them into one "lapsed" would hide that. When
+ * the thing that ran out was a TRIAL licence it reads "Trial ended {date}", because "Licence
+ * expired" invites a renewal conversation about a client who was never paying. Plain "Trial"
+ * carries no date: that trial has NOT ended, the client is live and simply isn't paying, and a
+ * date beside them would read as a lapse.
  *
  * A package group's reason comes from the member that stopped LAST (max date, nulls first, then
  * the pinned member order for ties). A group dies when its final member does, so the latest date
@@ -600,7 +618,7 @@ export function statusReasonForGroup(group: AccountRowGroup): string | null {
   for (const row of rows) {
     const explicit = row.rawStatus === "lapsed";
     const at = (explicit ? row.lapsedAt ?? row.endsAt : row.licenseExpiresAt ?? row.endsAt) ?? null;
-    const label = explicit ? "Ended" : "Licence expired";
+    const label = explicit ? "Ended" : row.licenseTier === "trial" ? "Trial ended" : "Licence expired";
     const candidate = { text: at ? `${label} ${isoDate(at)}` : label, at };
     if (best == null || (candidate.at != null && (best.at == null || candidate.at > best.at))) best = candidate;
   }
@@ -689,14 +707,20 @@ export async function getProviderMonthlyShareCents(providerUserId: string): Prom
 /** Overview panel's "Subscribers" stat -- distinct subscribers with a live, non-trial grant,
  * where a Horizon-catalogue row counts only if its region is still license-entitled (see
  * SUBSCRIBER_STATUS_SQL above) as well as not explicitly lapsed and not merely trial-covered.
- * Degrades to 0 pre-migration, same rule as every other counter this panel renders. */
+ * Degrades to 0 pre-migration, same rule as every other counter this panel renders.
+ *
+ * Tests `= 'active'` rather than `!= 'lapsed'` since m49097 item 4: SUBSCRIBER_STATUS_SQL can now
+ * answer 'trial' (a grant on a trial LICENCE), and a headcount that counted anything not-lapsed
+ * would keep calling those clients subscribers while the money on Subscribers/Revenue calls them
+ * trial. There is no third live value for this to exclude by accident -- 'active' and 'trial' are
+ * the only non-lapsed outcomes. */
 export async function getActiveSubscriberCountForProvider(providerUserId: string): Promise<number> {
   try {
     const result = await pool.query<{ count: string }>(
       `select count(distinct s.subscriber_user_id) as count
        from feed_subscriptions s
        left join feed_tiers ft on ft.id = s.feed_tier_id
-       where s.provider_user_id = $1 and (${SUBSCRIBER_STATUS_SQL}) != 'lapsed'`,
+       where s.provider_user_id = $1 and (${SUBSCRIBER_STATUS_SQL}) = 'active'`,
       [providerUserId]
     );
     return Number(result.rows[0]?.count ?? 0);
