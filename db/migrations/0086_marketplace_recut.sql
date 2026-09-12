@@ -18,17 +18,29 @@
 --         server, request_id NULL): counted here, left with server_registration_id NULL in
 --         section 4, named in section 6. "At most one" server row per licence is structural
 --         (0031 unique(license_id)); this checks the licence exists and counts the no-server set.
---      C. every feed_tier_requests row resolves the same way, and its tier_key resolves to
---         >= 1 feed_tiers row (directly, or via the two package literals expanded inline)
+--      C. every feed_tier_requests row resolves to a server row, OR matches the ledger v1.54
+--         skip predicate, which is written ONCE, in the temp table tmp_0086_skipped_requests
+--         created immediately before C (inside the transaction): no server row AND status in
+--         ('pending', 'rejected') AND, if pending, the bound licence's expires_at <= now() AND
+--         zero feed_subscriptions rows cite the request by request_id. Skipped rows are named
+--         in C and again in section 6, get no envelope in section 3, and are counted in the
+--         summary (ftr_skipped); the same temp table feeds all four readers. Any other
+--         no-server request row ABORTS C, named (id, requester, tier_key, status, created_at,
+--         licence expires_at). Every tier_key must resolve to >= 1 feed_tiers row (directly,
+--         or via the two package literals expanded inline); that abort is strict and covers
+--         skipped rows too.
 --      D. no live (server, tier) duplicate would violate the new business-key index
 --   1. server_registrations: add user_id (backfilled from licenses.user_id); license_id nullable.
 --   2. access_requests envelope + feed_tier_request_details + software_request_details.
---   3. Copy feed_tier_requests -> envelope + detail. Package literals expand to N envelopes
+--   3. Copy feed_tier_requests -> envelope + detail, EXCLUDING the rows in
+--      tmp_0086_skipped_requests (ledger v1.54). Package literals expand to N envelopes
 --      sharing one batch_id. Idempotent (deterministic ids, upsert on id, and the upsert never
 --      overwrites an envelope already decided through the new code) so it can be re-run at the
---      phase 2 cutover to pick up rows the old code wrote in between. Then
---      feed_subscriptions.access_request_id (nullable FK to access_requests) is added and
---      backfilled from request_id at tier grain, GATED: zero unmapped where request_id is set.
+--      phase 2 cutover to pick up rows the old code wrote in between. GATED: legacy rows with
+--      >= 1 envelope = legacy_rows - skipped (skipped recomputed in-transaction from the temp
+--      table), and envelopes = details. Then feed_subscriptions.access_request_id (nullable FK
+--      to access_requests) is added and backfilled from request_id at tier grain, GATED: zero
+--      unmapped where request_id is set.
 --   4. feed_subscriptions: add server_registration_id (backfilled via licence -> server row;
 --      stays NULL where the licence has no server row, noticed with a count that must equal
 --      preflight B's), add ends_at (non-trial rows from the bound licence's expires_at, which
@@ -40,7 +52,8 @@
 --      any composite FK to licenses(id, user_id) if one exists.
 --   5. feed_allowlist_records -- the allowlist of record (what IP the provider was told, when).
 --   6. Named listing (one notice line per row) of every live row whose ends_at is already
---      past, every trial row left with ends_at NULL, and every row left with no server row,
+--      past, every trial row left with ends_at NULL, every row left with no server row, and
+--      every legacy request row skipped under v1.54 (read from tmp_0086_skipped_requests),
 --      the summary counts, then the schema_migrations row.
 --
 -- DEPLOY ORDER -- READ BEFORE APPLYING. Three live write paths do not know the new columns:
@@ -73,6 +86,10 @@
 --           agree with computed, and the CHECK then holds. server_registrations.user_id keeps
 --           `set not null` as above; both request-detail tables already declare NOT NULL on
 --           their key columns in section 2 and keep it.
+--           Legacy request rows skipped under ledger v1.54 (no envelope): the tighten's
+--           preflight lists every legacy request row with no envelope (id, requester, tier,
+--           status, created_at, licence expires_at). A pending one blocks the tighten until
+--           coxwell's word disposes it; a rejected one drops with the table.
 --           This list is NOT the file the tighten gets written from. The tighten file will:
 --           re-run the section 1 and section 4 backfills and their gates (rows the old code
 --           wrote between apply and (ii) have NULL user_id / server_registration_id), re-run
@@ -196,27 +213,64 @@ begin
   raise notice 'preflight B ok: feed_subscriptions total=% no_licence=0 no_server=%', total, no_server;
 end $$;
 
--- C. feed_tier_requests: every row resolves to a server row, and every tier_key resolves to
---    >= 1 feed_tiers row (directly, or via the package literals -- same expansion as
---    PACKAGE_TIER_KEYS at src/lib/feed-tier-catalogue.ts:58-61, repeated here as SQL because
---    a migration cannot import TypeScript; if that map changes, this block AND section 3's
---    join must change too). Source as of branch head:
+-- C0. The v1.54 skip predicate, written ONCE. A feed_tier_requests row with no server row is
+--     SKIPPED (no envelope, named, counted) iff ALL of:
+--       (1) status in ('pending', 'rejected');
+--       (2) if status = 'pending', the bound licence's expires_at <= now();
+--       (3) zero feed_subscriptions rows have request_id = that row's id.
+--     Rationale on record (ledger v1.54): pending on a live licence = an open request a human
+--     must chase or reject; approved/provisioned with no server = the vendor was told an IP
+--     this database never held (Q25's class), never a skip. 'rejected' is inside the predicate
+--     so rejecting the row via the admin action before the prod run cannot re-block C.
+--     A pending row whose license_id resolves to no licenses row has a NULL expires_at, fails
+--     (2), and therefore blocks. Preflight C, section 3, section 6 and the summary all read
+--     this table; none restates the predicate. Temp table is on commit drop, inside the
+--     transaction, so now() is the transaction's timestamp throughout.
+-- Expected: SELECT <skipped count>.
+create temp table tmp_0086_skipped_requests on commit drop as
+select
+  ftr.id,
+  coalesce(u.email, u.display_name, u.id::text) as requester,
+  ftr.tier_key,
+  ftr.status,
+  ftr.created_at,
+  l.expires_at as licence_expires_at
+from feed_tier_requests ftr
+left join users u on u.id = ftr.user_id
+left join licenses l on l.id = ftr.license_id
+where not exists (select 1 from server_registrations sr where sr.license_id = ftr.license_id)
+  and ftr.status in ('pending', 'rejected')
+  and (ftr.status <> 'pending' or l.expires_at <= now())
+  and not exists (select 1 from feed_subscriptions fs where fs.request_id = ftr.id);
+
+-- C. feed_tier_requests: every row resolves to a server row or sits in
+--    tmp_0086_skipped_requests (skipped, named below, continue); any other no-server row is
+--    blocking (named below, abort). Every tier_key resolves to >= 1 feed_tiers row (directly,
+--    or via the package literals -- same expansion as PACKAGE_TIER_KEYS at
+--    src/lib/feed-tier-catalogue.ts:58-61, repeated here as SQL because a migration cannot
+--    import TypeScript; if that map changes, this block AND section 3's join must change
+--    too); that abort is strict and unchanged, skipped rows included. Source as of branch head:
 --      "ld-retail-package": ["ld-beta-56", "ld-gamma-19", "ld-delta-18"]
 --      "ny-retail-package": ["ny-fast", "ny-normal"]
 --    The NY set was never on the provisioning ledger; it is taken from that source line only.
 do $$
 declare
+  r record;
   total integer;
-  no_server integer;
+  skipped integer;
+  blocking integer;
   no_tier integer;
   provisioned integer;
 begin
   select count(*) into total from feed_tier_requests;
 
-  select count(*) into no_server
+  select count(*) into skipped from tmp_0086_skipped_requests;
+
+  select count(*) into blocking
   from feed_tier_requests ftr
   left join server_registrations sr on sr.license_id = ftr.license_id
-  where sr.id is null;
+  where sr.id is null
+    and not exists (select 1 from tmp_0086_skipped_requests s where s.id = ftr.id);
 
   select count(*) into no_tier
   from feed_tier_requests ftr
@@ -229,13 +283,43 @@ begin
 
   select count(*) into provisioned from feed_tier_requests where status = 'provisioned';
 
-  if no_server != 0 or no_tier != 0 then
-    raise exception
-      'preflight C: feed_tier_requests total=% without server row=% with unresolvable tier_key=%',
-      total, no_server, no_tier;
+  if skipped != 0 then
+    for r in
+      select s.id, s.requester, s.tier_key, s.status, s.created_at, s.licence_expires_at
+      from tmp_0086_skipped_requests s
+      order by s.requester, s.created_at, s.id
+    loop
+      raise notice 'preflight C skipped: id=% requester=% tier=% status=% created_at=% licence_expires_at=%',
+        r.id, r.requester, r.tier_key, r.status, r.created_at, r.licence_expires_at;
+    end loop;
+    raise notice 'preflight C: % of % feed_tier_requests rows skipped under ledger v1.54 (listed above; no envelope; named again in section 6)',
+      skipped, total;
   end if;
-  raise notice 'preflight C ok: feed_tier_requests total=% no_server=0 no_tier=0 provisioned_to_map=%',
-    total, provisioned;
+
+  if blocking != 0 then
+    for r in
+      select ftr.id, coalesce(u.email, u.display_name, u.id::text) as requester,
+             ftr.tier_key, ftr.status, ftr.created_at, l.expires_at as licence_expires_at
+      from feed_tier_requests ftr
+      left join users u on u.id = ftr.user_id
+      left join licenses l on l.id = ftr.license_id
+      left join server_registrations sr on sr.license_id = ftr.license_id
+      where sr.id is null
+        and not exists (select 1 from tmp_0086_skipped_requests s where s.id = ftr.id)
+      order by requester, ftr.created_at, ftr.id
+    loop
+      raise notice 'preflight C blocking: id=% requester=% tier=% status=% created_at=% licence_expires_at=%',
+        r.id, r.requester, r.tier_key, r.status, r.created_at, r.licence_expires_at;
+    end loop;
+  end if;
+
+  if blocking != 0 or no_tier != 0 then
+    raise exception
+      'preflight C: feed_tier_requests total=% skipped=% blocking (no server row, outside the v1.54 predicate)=% with unresolvable tier_key=%',
+      total, skipped, blocking, no_tier;
+  end if;
+  raise notice 'preflight C ok: feed_tier_requests total=% skipped=% blocking=0 no_tier=0 provisioned_to_map=%',
+    total, skipped, provisioned;
 end $$;
 
 -- D. The new live business key (server_registration_id, feed_tier_id) must have no duplicate
@@ -356,6 +440,8 @@ create table if not exists software_request_details (
 -- Two plain INSERTs off one temp table, not a data-modifying CTE: sub-statements in WITH share
 -- one snapshot, so the detail rows' FK to envelopes inserted in the same statement is not
 -- guaranteed to resolve on first run. Temp table is on commit drop.
+-- Rows in tmp_0086_skipped_requests (ledger v1.54, predicate defined once before preflight C)
+-- are excluded by anti-join: they get no envelope and no detail row.
 -- Expected: SELECT <N> (temp), INSERT <N> (envelopes), INSERT <N> (details), notice.
 create temp table tmp_0086_expanded on commit drop as
 select
@@ -373,7 +459,8 @@ from feed_tier_requests ftr
 join feed_tiers ft
   on ft.tier_key = ftr.tier_key
   or (ftr.tier_key = 'ld-retail-package' and ft.tier_key in ('ld-beta-56', 'ld-gamma-19', 'ld-delta-18'))
-  or (ftr.tier_key = 'ny-retail-package' and ft.tier_key in ('ny-fast', 'ny-normal'));
+  or (ftr.tier_key = 'ny-retail-package' and ft.tier_key in ('ny-fast', 'ny-normal'))
+where not exists (select 1 from tmp_0086_skipped_requests s where s.id = ftr.id);
 
 insert into access_requests
   (id, user_id, product_kind, batch_id, status, decision, ends_at, invoice_ref, reason,
@@ -409,13 +496,23 @@ from tmp_0086_expanded e
 join server_registrations sr on sr.license_id = e.license_id
 on conflict (request_id) do nothing;
 
+-- GATE: every legacy row not skipped has >= 1 envelope and no skipped row has one, i.e. the
+-- count of DISTINCT legacy ids carrying an envelope = legacy_rows - skipped (skipped recomputed
+-- in-transaction from tmp_0086_skipped_requests). Distinct legacy ids, not envelope rows: a
+-- package literal request is one legacy row with N envelopes, so envelope rows = legacy_rows
+-- - skipped would abort on any package request. Plus envelopes = details.
 do $$
 declare
   legacy_rows integer;
+  skipped integer;
+  mapped_legacy integer;
   envelopes integer;
   details integer;
 begin
   select count(*) into legacy_rows from feed_tier_requests;
+  select count(*) into skipped from tmp_0086_skipped_requests;
+  select count(distinct legacy_feed_tier_request_id) into mapped_legacy
+  from access_requests where legacy_feed_tier_request_id is not null;
   select count(*) into envelopes from access_requests where legacy_feed_tier_request_id is not null;
   select count(*) into details
   from feed_tier_request_details d
@@ -424,10 +521,12 @@ begin
   if envelopes != details then
     raise exception 'section 3: envelope/detail mismatch envelopes=% details=%', envelopes, details;
   end if;
-  if envelopes < legacy_rows then
-    raise exception 'section 3: fewer envelopes (%) than legacy rows (%)', envelopes, legacy_rows;
+  if mapped_legacy != legacy_rows - skipped then
+    raise exception 'section 3: legacy rows with an envelope=% but legacy_rows - skipped = % - % = %',
+      mapped_legacy, legacy_rows, skipped, legacy_rows - skipped;
   end if;
-  raise notice 'section 3 ok: legacy_rows=% envelopes=% details=%', legacy_rows, envelopes, details;
+  raise notice 'section 3 ok: legacy_rows=% skipped=% legacy_rows_with_envelope=% envelopes=% details=%',
+    legacy_rows, skipped, mapped_legacy, envelopes, details;
 end $$;
 
 -- feed_subscriptions.access_request_id (Q9, ruled v1.49): the grant identity on the new
@@ -614,14 +713,19 @@ create index if not exists feed_allowlist_records_open_idx
 -- v1.52 named exception), same shape, ordered by subscriber then tier; its count must equal
 -- the summary's fs_no_server and preflight B's / section 4's count. A no-server row whose
 -- licence has already expired appears in BOTH the past-ends_at and the no-server listing.
--- marcus: paste every '0086 past ends_at:', '0086 trial ends_at NULL:' and '0086 no server:'
--- line into the thread.
+-- Then every legacy request row skipped under ledger v1.54, read from
+-- tmp_0086_skipped_requests (id, requester, tier, status, created_at, licence expires_at),
+-- ordered by requester then created_at then id; its count must equal preflight C's skipped,
+-- section 3's skipped and the summary's ftr_skipped.
+-- marcus: paste every '0086 past ends_at:', '0086 trial ends_at NULL:', '0086 no server:' and
+-- '0086 request skipped:' line into the thread.
 do $$
 declare
   r record;
   past_rows integer := 0;
   null_trial_rows integer := 0;
   no_server_rows integer := 0;
+  skipped_rows integer := 0;
 begin
   for r in
     select fs.id, coalesce(u.email, u.display_name, u.id::text) as subscriber,
@@ -667,6 +771,17 @@ begin
       r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status, r.ends_at;
   end loop;
   raise notice '0086 no server: % row(s) listed above', no_server_rows;
+
+  for r in
+    select s.id, s.requester, s.tier_key, s.status, s.created_at, s.licence_expires_at
+    from tmp_0086_skipped_requests s
+    order by s.requester, s.created_at, s.id
+  loop
+    skipped_rows := skipped_rows + 1;
+    raise notice '0086 request skipped: id=% requester=% tier=% status=% created_at=% licence_expires_at=%',
+      r.id, r.requester, r.tier_key, r.status, r.created_at, r.licence_expires_at;
+  end loop;
+  raise notice '0086 request skipped: % row(s) listed above', skipped_rows;
 end $$;
 
 select
@@ -678,7 +793,8 @@ select
   (select count(*) from feed_subscriptions where request_id is not null and access_request_id is null) as fs_request_unmapped,
   (select count(*) from access_requests) as access_requests_rows,
   (select count(*) from feed_tier_request_details) as feed_tier_detail_rows,
-  (select count(*) from feed_tier_requests) as legacy_request_rows;
+  (select count(*) from feed_tier_requests) as legacy_request_rows,
+  (select count(*) from tmp_0086_skipped_requests) as ftr_skipped;
 
 insert into schema_migrations (version, name) values
   ('0086', '0086_marketplace_recut.sql')
