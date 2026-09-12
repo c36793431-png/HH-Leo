@@ -23,8 +23,9 @@ function isMissingTable(err: unknown): boolean {
 }
 
 /** Postgres unique_violation. Used to tell "this insert collided with a real constraint"
- * apart from any other failure -- see upsertFeedSubscriptionForRequest below. */
-function isUniqueViolation(err: unknown): boolean {
+ * apart from any other failure. Exported for lib/access-requests.ts (0086 phase 2), whose
+ * approval insert maps a 23505 on either live index to DuplicateTierGrantError. */
+export function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }
 
@@ -38,7 +39,18 @@ export interface CreateSubscriptionInput {
    * with a raw 23502 that no layer translates. It is also half of the live business-key index
    * 0081 step 5 installed -- see upsertFeedSubscriptionForRequest below. Callers must resolve a
    * real licence and fail loudly if there isn't one; there is no "unknown licence" sentinel. */
-  licenseId: string;
+  licenseId: string | null;
+  /** 0086 phase 2 (docs/specs/0086-phase2-code.md section 3): a grant is keyed on the server
+   * row, not the licence -- feed_subscriptions_server_feed_tier_live_uidx (0086) is the live
+   * business key and the tighten adds `check (status = 'lapsed' or server_registration_id is
+   * not null)`. Required: there is no server-less grant. */
+  serverRegistrationId: string;
+  /** Written on every new live row (Source J/K): for a direct grant it is the licence's
+   * expires_at (the rule 0086 section 4 seeded non-trial rows with), for an approval it is the
+   * envelope's decision. The flip's preflight needs zero live rows with ends_at NULL. */
+  endsAt: Date;
+  /** Envelope id on the approval path (Source C); NULL for a direct grant. */
+  accessRequestId?: string | null;
   feedTierId?: string | null;
   providerTierId?: string | null;
   status?: SubscriptionStatus;
@@ -241,8 +253,10 @@ export function pseudonymLabel(seq: number): string {
  * subscription being created, never of it being viewed. The counter UPDATE takes a
  * row lock scoped to this provider, so two providers assigning concurrently never race;
  * two concurrent *first* subscriptions for the same (provider, subscriber) pair are
- * resolved by the final on-conflict re-select below rather than by the lock alone. */
-async function assignPseudonymSeq(
+ * resolved by the final on-conflict re-select below rather than by the lock alone.
+ * Exported for lib/access-requests.ts (0086 phase 2), which runs it on its own transaction
+ * client before the approval insert. */
+export async function assignPseudonymSeq(
   client: PoolClient,
   providerUserId: string,
   subscriberUserId: string
@@ -288,31 +302,134 @@ async function assignPseudonymSeq(
 /** Creates (or reuses) the pair's pseudonym, then inserts the subscription row, all in one
  * transaction -- a crash mid-create can't leave a pseudonym allocated with no subscription,
  * or a subscription with no pseudonym. Throws if 0071 hasn't landed yet (42P01); there is
- * nowhere to write to pre-migration, unlike the read paths below which degrade instead. */
-export async function createSubscription(input: CreateSubscriptionInput): Promise<string> {
-  const { providerUserId, subscriberUserId, licenseId, feedTierId = null, providerTierId = null, status = "trial" } = input;
+ * nowhere to write to pre-migration, unlike the read paths below which degrade instead.
+ * When the caller already holds a transaction (assignFeedTierSubscription below, which has
+ * the server row FOR UPDATE), pass its client and this runs inside it with no begin/commit of
+ * its own. Window rule (Source B, 0086 phase 2): license_id is written from the caller's
+ * resolved licence, never NULLed here. */
+export async function createSubscription(input: CreateSubscriptionInput, client?: PoolClient): Promise<string> {
+  const {
+    providerUserId,
+    subscriberUserId,
+    licenseId,
+    serverRegistrationId,
+    endsAt,
+    accessRequestId = null,
+    feedTierId = null,
+    providerTierId = null,
+    status = "trial",
+  } = input;
   if ((feedTierId == null) === (providerTierId == null)) {
     throw new Error("Exactly one of feedTierId or providerTierId is required");
   }
 
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    await assignPseudonymSeq(client, providerUserId, subscriberUserId);
-    const result = await client.query<{ id: string }>(
-      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, license_id, feed_tier_id, provider_tier_id, status)
-       values ($1, $2, $3, $4, $5, $6)
+  const insert = async (c: PoolClient): Promise<string> => {
+    await assignPseudonymSeq(c, providerUserId, subscriberUserId);
+    const result = await c.query<{ id: string }>(
+      `insert into feed_subscriptions
+         (provider_user_id, subscriber_user_id, license_id, server_registration_id, feed_tier_id,
+          provider_tier_id, status, access_request_id, ends_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        returning id`,
-      [providerUserId, subscriberUserId, licenseId, feedTierId, providerTierId, status]
+      [providerUserId, subscriberUserId, licenseId, serverRegistrationId, feedTierId, providerTierId, status, accessRequestId, endsAt]
     );
-    await client.query("commit");
     return result.rows[0].id;
+  };
+
+  if (client) return insert(client);
+
+  const own = await pool.connect();
+  try {
+    await own.query("begin");
+    const id = await insert(own);
+    await own.query("commit");
+    return id;
   } catch (err) {
-    await client.query("rollback");
+    await own.query("rollback");
     throw err;
   } finally {
-    client.release();
+    own.release();
   }
+}
+
+/** The server row as the grant primitive locks it (Source D, 0086 phase 2 spec section 2 step 2
+ * and section 3 step 3a). ownerUserId is coalesce(sr.user_id, l.user_id): the window rule
+ * (Source B) -- a row Leo's /account/servers follow-up has not yet rewritten may carry user_id
+ * NULL until the tighten's backfill, and the licence's owner is the same person. */
+export interface LockedServerRegistration {
+  id: string;
+  ownerUserId: string | null;
+  licenseId: string | null;
+  /** NOT NULL on server_registrations (0031:16), so every locked row carries one. */
+  declaredIp: string;
+  serverName: string;
+}
+
+export async function lockServerRegistration(client: PoolClient, serverRegistrationId: string): Promise<LockedServerRegistration | null> {
+  const result = await client.query<{
+    id: string;
+    owner_user_id: string | null;
+    license_id: string | null;
+    declared_ip: string;
+    server_name: string;
+  }>(
+    `select sr.id, coalesce(sr.user_id, l.user_id) as owner_user_id, sr.license_id, sr.declared_ip, sr.server_name
+     from server_registrations sr
+     left join licenses l on l.id = sr.license_id
+     where sr.id = $1
+     for update of sr`,
+    [serverRegistrationId]
+  );
+  if (!result.rowCount) return null;
+  const row = result.rows[0];
+  return { id: row.id, ownerUserId: row.owner_user_id, licenseId: row.license_id, declaredIp: row.declared_ip, serverName: row.server_name };
+}
+
+/** Live-grant check on the new business key, plus the 0081 key for the deploy window (0086
+ * phase 2 spec section 2 step 4, fable P2). A row the old direct-grant code (:272 / :784 at
+ * 0a493be) wrote between 0086 apply (2026-09-12 17:30Z) and this deploy carries
+ * server_registration_id NULL and is invisible to the first query.
+ * REMOVAL POINT: the tighten migration that drops feed_subscriptions_license_feed_tier_live_uidx
+ * deletes the second query with it (spec section 9). */
+export async function assertNoLiveGrant(
+  client: PoolClient,
+  args: { serverRegistrationId: string; licenseId: string | null; feedTierId: string; tierName: string }
+): Promise<void> {
+  const live = await client.query(
+    `select 1 from feed_subscriptions
+     where server_registration_id = $1 and feed_tier_id = $2 and status in ('trial', 'active')`,
+    [args.serverRegistrationId, args.feedTierId]
+  );
+  if (live.rowCount) throw new DuplicateTierGrantError(args.tierName);
+  if (args.licenseId) {
+    const window = await client.query(
+      `select 1 from feed_subscriptions
+       where license_id = $1 and feed_tier_id = $2 and status in ('trial', 'active')`,
+      [args.licenseId, args.feedTierId]
+    );
+    if (window.rowCount) throw new DuplicateTierGrantError(args.tierName);
+  }
+}
+
+/** The allowlist record of what the vendor holds (0086 phase 2 spec section 4(a); fable P6 +
+ * S1). ip = the server's declared_ip at approval time (Source G(e)). Guard keyed on (server,
+ * tier, ip) open: an open row with the SAME ip is reused, an open row with a DIFFERENT ip is
+ * left as is (the vendor was not told to revoke it) and a new row is inserted so a changed
+ * declared_ip is recorded. told_at = now(): "what the vendor is deemed to hold"; telling the
+ * vendor is still the human step. revoked_at is never written by this slice. */
+export async function insertAllowlistRecord(
+  client: PoolClient,
+  args: { serverRegistrationId: string; feedTierId: string; ip: string }
+): Promise<void> {
+  await client.query(
+    `insert into feed_allowlist_records (server_registration_id, feed_tier_id, ip, told_at)
+     select $1, $2, $3, now()
+     where not exists (
+       select 1 from feed_allowlist_records
+       where server_registration_id = $1 and feed_tier_id = $2 and ip = $3 and revoked_at is null
+     )`,
+    [args.serverRegistrationId, args.feedTierId, args.ip]
+  );
 }
 
 /** Allocates (or reuses) this provider-subscriber pair's pseudonym without requiring a
@@ -1166,58 +1283,13 @@ export async function getFeedTierForAssignment(tierKey: string): Promise<FeedTie
   return { feedTierId: row.id, tierName: row.name, regionKey: row.region_key, providerUserId: row.provider_user_id };
 }
 
-/** Approval-path write -- Fable's ruling, specs/horizon-feed-provisioning-ledger-v1.md
- * section 3.3 item 1 (d108353, relayed m36289, thread leo-package-grant-fix-2026-09-04):
- * "the identity of the approval is the request; the identity of a grant is (request, tier)."
- * One approval can back N grant rows (a package tier_key expands to N member tiers via
- * expandTierKey, feed-tier-catalogue.ts), so the conflict target is the pair, not request_id
- * alone -- `on conflict (request_id, feed_tier_id)` against
- * feed_subscriptions_request_tier_uidx (migration 0079). A single-tier request is the N = 1
- * case of this same call, made once from approveFeedTierRequest's loop; there is no separate
- * "primary" vs "member" path. Replaying the same request (retry, double-click, re-approving an
- * already-approved request) reactivates the SAME N rows via their (request_id, feed_tier_id)
- * identity, never inserts new ones. The business key still carries its own partial unique index
- * scoped to live rows, but it is keyed on (license_id, feed_tier_id) -- migration 0081 step 5
- * DROPped the (subscriber_user_id, feed_tier_id) index this comment used to name
- * (feed_subscriptions_subscriber_feed_tier_live_uidx) and replaced it in the same transaction
- * with feed_subscriptions_license_feed_tier_live_uidx on (license_id, feed_tier_id) WHERE
- * feed_tier_id IS NOT NULL AND status IN ('trial','active'). Per-licence grain, which is the
- * grain a grant actually has: the same subscriber legitimately holds the same tier twice under
- * two different licences (two servers), and that is no longer a collision. If a DIFFERENT
- * request_id collides with an already-live grant for the same (licence, tier) -- including a
- * different member of the same package colliding with an unrelated direct grant on that same
- * licence -- the insert throws a Postgres unique_violation on THAT index, which this rethrows as
- * DuplicateTierGrantError -- the caller's transaction rolls back and the whole approval fails
- * loudly, no partial package grant. licenseId is the request's OWN feed_tier_requests.license_id,
- * passed down by the caller rather than re-derived from the subscriber: it is the licence the
- * client registered a server against when they asked for this tier, so it is the correct grain
- * and not merely a convenient one, and it is already on the row (no lookup, nothing to race).
- * Must run inside the SAME transaction as the request's status flip to 'approved'
- * (caller's job) -- feed_tier_requests carries no subscription_id column
- * (dropped, migration 0080); the relation is feed_subscriptions.request_id, and "is this request
- * granted" is the request's own status column. */
-export async function upsertFeedSubscriptionForRequest(
-  client: PoolClient,
-  args: { requestId: string; providerUserId: string; subscriberUserId: string; licenseId: string; feedTierId: string; tierName: string }
-): Promise<string> {
-  const { requestId, providerUserId, subscriberUserId, licenseId, feedTierId, tierName } = args;
-  await assignPseudonymSeq(client, providerUserId, subscriberUserId);
-  try {
-    const result = await client.query<{ id: string }>(
-      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, license_id, feed_tier_id, status, request_id)
-       values ($1, $2, $3, $4, 'active', $5)
-       on conflict (request_id, feed_tier_id) where request_id is not null and feed_tier_id is not null do update
-         set status = 'active', lapsed_at = null, provider_user_id = excluded.provider_user_id,
-             license_id = excluded.license_id, updated_at = now()
-       returning id`,
-      [providerUserId, subscriberUserId, licenseId, feedTierId, requestId]
-    );
-    return result.rows[0].id;
-  } catch (err) {
-    if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
-    throw err;
-  }
-}
+/** The approval-path write (formerly upsertFeedSubscriptionForRequest here, `on conflict
+ * (request_id, feed_tier_id)` against the legacy feed_tier_requests id) moved to
+ * lib/access-requests.ts under 0086 phase 2 (docs/specs/0086-phase2-code.md section 3): the
+ * identity of an approval is one access_requests envelope, approval is per line never per batch
+ * (Source F), the insert is plain with no on-conflict (re-approving refuses instead of replaying,
+ * fable P3), and feed_subscriptions.request_id is no longer written -- it drops with the old
+ * table in the tighten. */
 
 /** Admin-facing upsert: grants a subscriber ONE specific Horizon-catalogue TIER. Idempotent --
  * re-saving the same tierKey is a no-op (reactivates if lapsed). A region can hold more than
@@ -1254,13 +1326,17 @@ export async function upsertFeedSubscriptionForRequest(
  * With exactly one active licence the two resolvers return the same row, so the singular case
  * is unchanged; the ordering only ever mattered in the case this now refuses.
  *
- * The reactivate lookup below is scoped by license_id as well as feed_tier_id -- the same key
- * the live partial unique index uses since 0081 step 5 (which DROPped the (subscriber, tier)
- * index). Scoping it on (subscriber, tier) instead would find a row bound to a DIFFERENT,
- * now-expired licence and flip it to 'active', and EFFECTIVE_STATUS_SQL's licence gate would
- * still read that row 'lapsed' -- the admin sees success and the client gets nothing. Under the
- * per-licence index such a row is not a conflict at all, so the correct outcome is a NEW row
- * bound to the live licence, which is what this now does. */
+ * SERVER GRAIN (0086 phase 2, docs/specs/0086-phase2-code.md section 3 "Admin direct grant";
+ * fable P5 + S2): the grant is keyed on the licence's server_registrations row, the same
+ * primitive the approval path uses (Source D: "direct grant and approval both go through the
+ * server-grain primitive"). The reactivate lookup is scoped by (server_registration_id,
+ * feed_tier_id), the live business key since 0086 -- a row bound to a DIFFERENT server is not a
+ * conflict, the correct outcome is a NEW row on this server. A licence with no server row is a
+ * refusal (NoServerForFeedGrantError): there is nothing to key the grant on, and the client
+ * registers a server first (Q25). Every branch writes ends_at = the licence's expires_at (the
+ * rule 0086 section 4 seeded non-trial rows with) so no live row carries ends_at NULL into the
+ * flip's preflight, and every branch writes the allowlist record (section 4(a)). No envelope is
+ * written for a direct grant (access_request_id NULL; Source H mandates one for trials only). */
 export async function assignFeedTierSubscription(subscriberUserId: string, tierKey: string): Promise<void> {
   const { feedTierId, tierName, regionKey, providerUserId } = await getFeedTierForAssignment(tierKey);
   if (!providerUserId) throw new FeedTierNotAssignedError(tierName, regionKey);
@@ -1269,49 +1345,98 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
   if (licenses.length === 0) throw new NoActiveLicenseForFeedGrantError(tierName);
   if (licenses.length > 1) throw new MultipleActiveLicensesForFeedGrantError(tierName, licenses);
   const license = licenses[0];
+  // S2(ii). licenses.expires_at is NOT NULL (0001:57) and the resolver above filters
+  // expires_at > now(), so this is unreachable today; kept as ruled so the flip's preflight
+  // never depends on that constraint staying.
+  if (!license.expiresAt) throw new LicenseHasNoExpiryError(tierName);
 
-  const existing = await pool.query<{ id: string; provider_user_id: string }>(
-    `select id, provider_user_id from feed_subscriptions where license_id = $1 and feed_tier_id = $2`,
-    [license.id, feedTierId]
-  );
+  const server = await pool.query<{ id: string }>(`select id from server_registrations where license_id = $1`, [license.id]);
+  if (!server.rowCount) throw new NoServerForFeedGrantError(tierName, license.licenseNumber);
 
-  if (existing.rowCount) {
-    const row = existing.rows[0];
-    if (row.provider_user_id === providerUserId) {
-      await pool.query(
-        `update feed_subscriptions set status = 'active', lapsed_at = null, updated_at = now() where id = $1`,
-        [row.id]
-      );
-      return;
-    }
-    // Same tier, different provider_user_id -- the tier's provider assignment changed since
-    // this row was created (feed_tiers.provider_user_id is reassignable). Follow the tier's
-    // current owner rather than leaving the row pointed at a stale provider.
-    const client = await pool.connect();
-    try {
-      await client.query("begin");
-      await assignPseudonymSeq(client, providerUserId, subscriberUserId);
-      await client.query(
-        `update feed_subscriptions
-         set provider_user_id = $2, status = 'active', lapsed_at = null, updated_at = now()
-         where id = $1`,
-        [row.id, providerUserId]
-      );
-      await client.query("commit");
-    } catch (err) {
-      await client.query("rollback");
-      throw err;
-    } finally {
-      client.release();
-    }
-    return;
-  }
-
+  const client = await pool.connect();
   try {
-    await createSubscription({ providerUserId, subscriberUserId, licenseId: license.id, feedTierId, status: "active" });
+    await client.query("begin");
+    const sr = await lockServerRegistration(client, server.rows[0].id);
+    if (!sr) throw new NoServerForFeedGrantError(tierName, license.licenseNumber);
+
+    // Live rows are unique per (server, tier) (0086 live index); lapsed history may hold more
+    // than one, so prefer the live row, then the newest.
+    const existing = await client.query<{ id: string; provider_user_id: string }>(
+      `select id, provider_user_id from feed_subscriptions
+       where server_registration_id = $1 and feed_tier_id = $2
+       order by (status = 'lapsed'), created_at desc
+       limit 1`,
+      [sr.id, feedTierId]
+    );
+
+    if (existing.rowCount) {
+      const row = existing.rows[0];
+      if (row.provider_user_id === providerUserId) {
+        await client.query(
+          `update feed_subscriptions set status = 'active', lapsed_at = null, ends_at = $2, updated_at = now() where id = $1`,
+          [row.id, license.expiresAt]
+        );
+      } else {
+        // Same tier, different provider_user_id -- the tier's provider assignment changed since
+        // this row was created (feed_tiers.provider_user_id is reassignable). Follow the tier's
+        // current owner rather than leaving the row pointed at a stale provider.
+        await assignPseudonymSeq(client, providerUserId, subscriberUserId);
+        await client.query(
+          `update feed_subscriptions
+           set provider_user_id = $2, status = 'active', lapsed_at = null, ends_at = $3, updated_at = now()
+           where id = $1`,
+          [row.id, providerUserId, license.expiresAt]
+        );
+      }
+    } else {
+      try {
+        await createSubscription(
+          {
+            providerUserId,
+            subscriberUserId,
+            licenseId: license.id,
+            serverRegistrationId: sr.id,
+            endsAt: license.expiresAt,
+            feedTierId,
+            status: "active",
+          },
+          client
+        );
+      } catch (err) {
+        if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
+        throw err;
+      }
+    }
+
+    await insertAllowlistRecord(client, { serverRegistrationId: sr.id, feedTierId, ip: sr.declaredIp });
+    await client.query("commit");
   } catch (err) {
-    if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
+    await client.query("rollback");
     throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Thrown by assignFeedTierSubscription when the subscriber's one active licence has no
+ * server_registrations row. A grant is keyed on the server (0086 live index, Source D), so
+ * there is nothing to bind to; the client registers a server under /account/servers and the
+ * admin tries again (Q25). Named by the HH<n> label the admin already sees, never the key. */
+export class NoServerForFeedGrantError extends Error {
+  constructor(tierName: string, licenseNumber: number) {
+    super(
+      `HH${licenseNumber} has no registered server, so ${tierName} can't be granted: a grant is keyed on the server. The client registers one under Account > Servers first.`
+    );
+    this.name = "NoServerForFeedGrantError";
+  }
+}
+
+/** S2(ii): a direct grant copies the licence's expiry onto the row, so a licence without one
+ * cannot be direct-granted; the request queue takes an explicit date instead. */
+export class LicenseHasNoExpiryError extends Error {
+  constructor(tierName: string) {
+    super(`This licence has no expiry, so ${tierName} can't be granted from here: approve it through the request queue with a date.`);
+    this.name = "LicenseHasNoExpiryError";
   }
 }
 

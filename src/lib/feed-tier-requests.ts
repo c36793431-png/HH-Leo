@@ -1,20 +1,40 @@
-import { pool } from "./db";
 import { notifyFeedTierRequestSubmitted, notifyFeedTierTrialActivated } from "./telemetry-sink";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
 import { expandTierKey, feedTierMeta, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
 import {
   insertFeedTierTrial,
   notifyTrialClientActivated,
+  startFeedTierTrial,
   TrialAlreadyClaimedError,
   TrialNotEligibleError,
 } from "./feed-tier-trials";
+import { getFeedTierForAssignment } from "./feed-subscriptions";
 import {
-  FeedTierNotAssignedError,
-  getFeedTierForAssignment,
-  upsertFeedSubscriptionForRequest,
-} from "./feed-subscriptions";
+  approveAccessRequest,
+  createAccessRequestBatch,
+  findAccessRequestsByIdOrLegacyId,
+  getServerRegistrationForLicense,
+  listAccessRequests,
+  NoServerForLicenseError,
+  PackageNeedsQueueError,
+  PaidApprovalNeedsQueueError,
+  rejectAccessRequest,
+  startSelfServeTrial,
+  type AccessDecision,
+  type AccessRequestRow,
+} from "./access-requests";
 
-export const FEED_TIER_REQUEST_STATUSES = ["pending", "approved", "rejected", "provisioned"] as const;
+/** 0086 phase 2 (step ii): this module is now a compatibility FACADE over lib/access-requests.ts
+ * (docs/specs/0086-phase2-code.md section 5 "Facade" and 4(f)). It writes NOTHING to
+ * feed_tier_requests (Source A) and reads nothing from it; every caller keeps its function
+ * names and the FeedTierRequestRow shape, backed by the access_requests envelope + detail read.
+ * Shape deltas: `id` is the envelope id; a legacy package request shows as N rows (one per
+ * member tier, as 0086 section 3 copied it); `status` loses 'provisioned'; new optional fields
+ * decision / endsAt / invoiceRef / batchId / decidedBy. */
+
+/** Three values. 'provisioned' is gone: no row carries it after 0086 (Source G(d)) and its last
+ * comparison (tiers/page.tsx:177, a dead branch) was deleted under marcus m48906 / fable m48897. */
+export const FEED_TIER_REQUEST_STATUSES = ["pending", "approved", "rejected"] as const;
 export type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number];
 
 export interface FeedTierRequestRow {
@@ -22,7 +42,8 @@ export interface FeedTierRequestRow {
   userId: string;
   userName: string | null;
   userEmail: string | null;
-  licenseId: string;
+  /** The server row's licence; nullable since 0086 (server_registrations.license_id drop not null). */
+  licenseId: string | null;
   licenseKeyTail: string | null;
   telegramUserId: string | null;
   region: FeedRegion;
@@ -35,66 +56,43 @@ export interface FeedTierRequestRow {
   reason: string | null;
   createdAt: Date;
   actionedAt: Date | null;
+  batchId: string;
+  /** NULL on envelopes 0086 copied from the old table (Source I). */
+  decision: AccessDecision | null;
+  endsAt: Date | null;
+  invoiceRef: string | null;
+  /** NULL with decision = 'trial' means self-serve (spec section 7; rendered "self-serve"). */
+  decidedBy: string | null;
 }
 
-interface RequestRow {
-  id: string;
-  user_id: string;
-  user_name: string | null;
-  user_email: string | null;
-  telegram_user_id: string | null;
-  license_id: string;
-  license_key: string | null;
-  region: string;
-  tier_key: string;
-  server_name: string | null;
-  declared_ip: string | null;
-  captured_ip: string | null;
-  status: string;
-  reason: string | null;
-  created_at: Date;
-  actioned_at: Date | null;
-}
-
-function mapRow(row: RequestRow): FeedTierRequestRow {
-  const meta = feedTierMeta(row.tier_key);
+function mapRow(a: AccessRequestRow): FeedTierRequestRow {
+  const tierKey = a.tierKey ?? "";
+  const meta = feedTierMeta(tierKey);
   return {
-    id: row.id,
-    userId: row.user_id,
-    userName: row.user_name,
-    userEmail: row.user_email,
-    licenseId: row.license_id,
-    licenseKeyTail: row.license_key ? row.license_key.slice(-4) : null,
-    telegramUserId: row.telegram_user_id,
-    region: isFeedRegion(row.region) ? row.region : "london",
-    tierKey: row.tier_key,
-    tierName: meta?.name ?? row.tier_key,
-    serverName: row.server_name,
-    serverIp: row.declared_ip ?? row.captured_ip,
-    serverRegistered: row.declared_ip != null,
-    status: row.status as FeedTierRequestStatus,
-    reason: row.reason,
-    createdAt: row.created_at,
-    actionedAt: row.actioned_at,
+    id: a.id,
+    userId: a.userId,
+    userName: a.userName,
+    userEmail: a.userEmail,
+    licenseId: a.licenseId,
+    licenseKeyTail: a.licenseKey ? a.licenseKey.slice(-4) : null,
+    telegramUserId: a.telegramUserId,
+    region: a.regionKey && isFeedRegion(a.regionKey) ? a.regionKey : "london",
+    tierKey,
+    tierName: meta?.name ?? a.tierName ?? tierKey,
+    serverName: a.serverName,
+    serverIp: a.declaredIp,
+    serverRegistered: a.declaredIp != null,
+    status: a.status,
+    reason: a.reason,
+    createdAt: a.createdAt,
+    actionedAt: a.decidedAt,
+    batchId: a.batchId,
+    decision: a.decision,
+    endsAt: a.endsAt,
+    invoiceRef: a.invoiceRef,
+    decidedBy: a.decidedBy,
   };
 }
-
-const SELECT_BASE = `
-  select ftr.id, ftr.user_id, u.display_name as user_name, u.email as user_email, u.telegram_user_id,
-         ftr.license_id, l.license_key, ftr.region, ftr.tier_key, ftr.status, ftr.reason,
-         ftr.created_at, ftr.actioned_at,
-         sr.server_name, sr.declared_ip, ci.ip as captured_ip
-  from feed_tier_requests ftr
-  join users u on u.id = ftr.user_id
-  join licenses l on l.id = ftr.license_id
-  left join server_registrations sr on sr.license_id = ftr.license_id
-  left join lateral (
-    select ip from connection_ips
-    where license_id = ftr.license_id
-    order by captured_at desc
-    limit 1
-  ) ci on true
-`;
 
 interface CreateArgs {
   userId: string;
@@ -104,33 +102,43 @@ interface CreateArgs {
   adminUrl: string;
 }
 
-export async function createFeedTierRequest(args: CreateArgs): Promise<FeedTierRequestRow> {
-  const result = await pool.query<RequestRow>(
-    `insert into feed_tier_requests (user_id, license_id, region, tier_key)
-     values ($1, $2, $3, $4)
-     returning id`,
-    [args.userId, args.licenseId, args.region, args.tierKey]
-  );
-  const row = await getFeedTierRequest(result.rows[0].id);
-  if (!row) throw new Error("failed to load created feed tier request");
+/** Request Access (spec section 2). The modal still posts one (region, tierKey, licenseId);
+ * the licence resolves to its server row, a package key expands to N items in ONE batch
+ * (Source F), a single tier is a batch of one. Returns the N envelope rows. */
+export async function createFeedTierRequest(args: CreateArgs): Promise<FeedTierRequestRow[]> {
+  const server = await getServerRegistrationForLicense(args.licenseId);
+  if (!server) throw new NoServerForLicenseError();
+  const members = await Promise.all(expandTierKey(args.tierKey).map((k) => getFeedTierForAssignment(k)));
+  const { requestIds } = await createAccessRequestBatch({
+    userId: args.userId,
+    items: members.map((m) => ({ kind: "feed_tier", serverRegistrationId: server.id, feedTierId: m.feedTierId })),
+  });
+  const rows = (await listAccessRequests({ ids: requestIds })).map(mapRow);
+  if (rows.length === 0) throw new Error("failed to load created access requests");
 
+  // After commit, best-effort, once per batch (spec section 2), naming the key the client
+  // clicked (package name for a package) rather than N member pings.
+  const first = rows[0];
   await notifyFeedTierRequestSubmitted({
-    id: row.id,
-    email: row.userEmail,
-    tierName: row.tierName,
-    licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
-    serverName: row.serverName,
-    serverIp: row.serverIp,
-    serverRegistered: row.serverRegistered,
+    id: first.id,
+    email: first.userEmail,
+    tierName: feedTierMeta(args.tierKey)?.name ?? args.tierKey,
+    licenseKey: first.licenseKeyTail ? `****${first.licenseKeyTail}` : "unknown",
+    serverName: first.serverName,
+    serverIp: first.serverIp,
+    serverRegistered: first.serverRegistered,
     adminUrl: args.adminUrl,
   }).catch(() => {});
 
-  return row;
+  return rows;
 }
 
+/** By envelope id, or by a legacy feed_tier_requests id a pre-deploy Telegram card carries
+ * (spec 4(c)). A legacy package id maps to N envelopes; this returns the first for status
+ * display, and the decide paths below refuse to act on more than one. */
 export async function getFeedTierRequest(id: string): Promise<FeedTierRequestRow | null> {
-  const result = await pool.query<RequestRow>(`${SELECT_BASE} where ftr.id = $1`, [id]);
-  return result.rowCount ? mapRow(result.rows[0]) : null;
+  const rows = await findAccessRequestsByIdOrLegacyId(id);
+  return rows.length ? mapRow(rows[0]) : null;
 }
 
 export interface ListFeedTierRequestsOptions {
@@ -139,34 +147,15 @@ export interface ListFeedTierRequestsOptions {
 }
 
 export async function listFeedTierRequests(options: ListFeedTierRequestsOptions = {}): Promise<FeedTierRequestRow[]> {
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-  if (options.status) {
-    params.push(options.status);
-    conditions.push(`ftr.status = $${params.length}`);
-  }
-  if (options.userId) {
-    params.push(options.userId);
-    conditions.push(`ftr.user_id = $${params.length}`);
-  }
-  const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
-  const result = await pool.query<RequestRow>(`${SELECT_BASE} ${where} order by ftr.created_at desc`, params);
-  return result.rows.map(mapRow);
+  const rows = await listAccessRequests({ status: options.status, userId: options.userId, productKind: "feed_tier" });
+  return rows.map(mapRow);
 }
 
-async function actionRequest(
-  id: string,
-  status: "approved" | "rejected",
-  actionedBy: string,
-  reason: string | null
-): Promise<FeedTierRequestRow> {
-  await pool.query(
-    `update feed_tier_requests set status = $2, reason = $3, actioned_at = now(), actioned_by = $4 where id = $1`,
-    [id, status, reason, actionedBy]
-  );
-  const row = await getFeedTierRequest(id);
-  if (!row) throw new Error("feed tier request not found after update");
-  return row;
+async function resolveSingleEnvelope(id: string): Promise<AccessRequestRow> {
+  const rows = await findAccessRequestsByIdOrLegacyId(id);
+  if (rows.length === 0) throw new Error("feed tier request not found");
+  if (rows.length > 1) throw new PackageNeedsQueueError(rows.length);
+  return rows[0];
 }
 
 /** Best-effort DM via the Trading Alerts bot -- same "not started this bot" 403 handling
@@ -176,13 +165,14 @@ async function notifyClient(row: FeedTierRequestRow, text: string): Promise<void
   await sendHftAlertMessage(row.telegramUserId, text).catch(() => {});
 }
 
-/** Only trial-eligible tiers (ld-alpha-85, ld-ultra, ny-normal, ny-fast) get a real
- * feed_tier_trials row + "trial activated" ping on approve -- the paid-only middle tiers
- * (ld-beta-56 etc.) have no trial concept, so approving one of those stays a plain status
- * flip + client DM, same as before (leo-feed-activation-notification-2026-08-17). A failure
- * here (already claimed, race, etc.) must never fail the approve action itself. */
+/** feed_tier_trials is NOT retired in this slice (Source H; feed-tier-trials.ts untouched):
+ * EFFECTIVE_STATUS_SQL branch (4), the expire-trials cron and the provider Trials tab still
+ * read it, so a trial decision on a trial-eligible tier still writes the row, best-effort,
+ * after the envelope commit. Its own 7-day clock matches the envelope's derived ends_at to
+ * within the after-commit gap (S4). A failure here (already claimed, race, etc.) must never
+ * fail the approve action itself. */
 async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string): Promise<void> {
-  if (!isTrialEligibleTier(row.tierKey)) return;
+  if (!isTrialEligibleTier(row.tierKey) || !row.licenseId) return;
   try {
     const trial = await insertFeedTierTrial({
       userId: row.userId,
@@ -208,87 +198,104 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
   }
 }
 
-/** Approve = one transaction: every grant write and the status flip must land together or not
- * at all (Fable's ruling, specs/horizon-feed-provisioning-ledger-v1.md section 3.3, d108353,
- * relayed m36289, thread leo-package-grant-fix-2026-09-04 -- "one approval action, N grant
- * rows, one transaction"). Each grant upserts on (request_id, feed_tier_id)
- * (upsertFeedSubscriptionForRequest, feed-subscriptions.ts) -- a DuplicateTierGrantError (this
- * tier already has a live grant from a DIFFERENT request) rolls the whole transaction back, so
- * the request stays 'pending' and the admin sees a real error instead of a silent merge into
- * someone else's row. There is no "is this a package" branch and no primary/member split: a
- * single-tier request is the N = 1 case of the same loop below. feed_tier_requests carries no
- * subscription_id column (dropped, migration 0080) -- the relation is
- * feed_subscriptions.request_id (the only direction a 1-to-N relation can point), and "is this
- * request granted" is this row's own status column, not a pointer to one arbitrary grant.
- *
- * pending.tierKey may be a package pseudo-key (ld-retail-package, ny-retail-package -- see
- * PACKAGE_TIER_KEYS in feed-tier-catalogue.ts) with no feed_tiers row of its own, so it's
- * expanded via expandTierKey() -- the same expansion feed-providers.ts already uses to scope
- * package requests into a provider's queue -- before any tier lookup runs. A non-package key
- * expands to a single member, so this is a no-op shape for the single-tier case. Every member
- * is resolved and provider-checked up front so a mid-grant failure never leaves a package
- * half-assigned. */
-export async function approveFeedTierRequest(id: string, actionedBy: string, adminUrl: string): Promise<FeedTierRequestRow> {
-  const pending = await getFeedTierRequest(id);
-  if (!pending) throw new Error("feed tier request not found");
+export interface ApproveDecisionInput {
+  decision: AccessDecision;
+  endsAt: Date | null;
+  invoiceRef: string | null;
+}
 
-  // Trial row (if eligible) goes in first -- best-effort, see activateTrialIfEligible -- so
-  // EFFECTIVE_STATUS_SQL's trial carve-out already sees it before the subscription row it
-  // backs becomes visible on the provider's Accounts page. Deliberately outside the
-  // transaction below: a trial-insert failure must never roll back a successful approval.
-  await activateTrialIfEligible(pending, adminUrl);
-
-  const memberKeys = expandTierKey(pending.tierKey);
-  const members = await Promise.all(memberKeys.map((k) => getFeedTierForAssignment(k)));
-  const unassigned = members.find((m) => !m.providerUserId);
-  if (unassigned) throw new FeedTierNotAssignedError(unassigned.tierName, unassigned.regionKey);
-
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    for (const member of members) {
-      await upsertFeedSubscriptionForRequest(client, {
-        requestId: pending.id,
-        providerUserId: member.providerUserId!,
-        subscriberUserId: pending.userId,
-        // The request's own licence -- the one the client registered a server against when they
-        // asked for this tier. Already on the row, so no lookup and nothing to race, and every
-        // member tier of a package grant binds to the same licence the request named.
-        licenseId: pending.licenseId,
-        feedTierId: member.feedTierId,
-        tierName: member.tierName,
-      });
-    }
-    await client.query(
-      `update feed_tier_requests
-       set status = 'approved', reason = null, actioned_at = now(), actioned_by = $2
-       where id = $1`,
-      [id, actionedBy]
-    );
-    await client.query("commit");
-  } catch (err) {
-    await client.query("rollback");
-    throw err;
-  } finally {
-    client.release();
+/** Approve ONE line (spec section 3). With a decision (the admin queue, section 4(d)) it is
+ * passed through. Without one -- the Telegram card and the provider panel (spec 4(c), coxwell's
+ * C2: provider approve enabled, trial-only) -- the trial-only rule applies: a trial-eligible
+ * tier is approved as a 7-day trial, anything else is refused to the admin queue, because
+ * neither surface can supply an end date or an invoice ref. */
+export async function approveFeedTierRequest(
+  id: string,
+  actionedBy: string,
+  adminUrl: string,
+  decision?: ApproveDecisionInput
+): Promise<FeedTierRequestRow> {
+  const pending = mapRow(await resolveSingleEnvelope(id));
+  let input: ApproveDecisionInput;
+  if (decision) {
+    input = decision;
+  } else {
+    if (!isTrialEligibleTier(pending.tierKey)) throw new PaidApprovalNeedsQueueError(pending.tierName);
+    input = { decision: "trial", endsAt: null, invoiceRef: null };
   }
 
-  const row = await getFeedTierRequest(id);
+  await approveAccessRequest({ requestId: pending.id, decidedBy: actionedBy, ...input });
+
+  const row = await getFeedTierRequest(pending.id);
   if (!row) throw new Error("feed tier request not found after approval");
-  // Trial-eligible tiers get the richer notifyTrialClientActivated() DM instead (see
-  // activateTrialIfEligible) -- sending both would double-DM the client
-  // (coxwell green-light, leo-feed-activation-notification-2026-08-17 / m22397).
-  if (!isTrialEligibleTier(row.tierKey)) {
+  // After commit, best-effort. A trial on a trial-eligible tier gets the richer
+  // notifyTrialClientActivated() DM from activateTrialIfEligible instead of the plain one --
+  // sending both would double-DM the client (coxwell green-light,
+  // leo-feed-activation-notification-2026-08-17 / m22397).
+  if (input.decision === "trial") await activateTrialIfEligible(row, adminUrl);
+  if (!(input.decision === "trial" && isTrialEligibleTier(row.tierKey))) {
     await notifyClient(row, `<b>✅ Feed access approved</b>\n${row.tierName} is approved on your account.`);
   }
   return row;
 }
 
 export async function rejectFeedTierRequest(id: string, actionedBy: string, reason: string | null): Promise<FeedTierRequestRow> {
-  const row = await actionRequest(id, "rejected", actionedBy, reason);
+  const pending = await resolveSingleEnvelope(id);
+  await rejectAccessRequest({ requestId: pending.id, decidedBy: actionedBy, reason });
+  const row = await getFeedTierRequest(pending.id);
+  if (!row) throw new Error("feed tier request not found after update");
   await notifyClient(
     row,
     `<b>❌ Feed access declined</b>\n${row.tierName} request was declined.` + (reason ? `\nReason: ${reason}` : "")
   );
   return row;
+}
+
+interface SelfServeTrialArgs {
+  userId: string;
+  licenseId: string;
+  region: FeedRegion;
+  tierKey: string;
+  adminUrl: string;
+}
+
+export interface SelfServeTrialResult {
+  requestId: string;
+  /** The feed_tier_trials row id (for the cancel button); null if the best-effort trial-row
+   * write failed after the envelope committed. */
+  trialId: string | null;
+  endsAt: Date;
+}
+
+/** Self-serve trial button (spec section 7, answer A: the button survives, coxwell notice C7).
+ * Writes Source H's pre-approved envelope + subscription row + allowlist record in one
+ * transaction (startSelfServeTrial), then, after commit and best-effort, the same
+ * feed_tier_trials row + client/admin notifications the button wrote before (startFeedTierTrial,
+ * feed-tier-trials.ts, unchanged). */
+export async function startSelfServeFeedTierTrial(args: SelfServeTrialArgs): Promise<SelfServeTrialResult> {
+  if (!isTrialEligibleTier(args.tierKey)) throw new TrialNotEligibleError();
+  const server = await getServerRegistrationForLicense(args.licenseId);
+  if (!server) throw new NoServerForLicenseError();
+  const tier = await getFeedTierForAssignment(args.tierKey);
+
+  const approved = await startSelfServeTrial({
+    userId: args.userId,
+    serverRegistrationId: server.id,
+    feedTierId: tier.feedTierId,
+    tierKey: args.tierKey,
+  });
+
+  try {
+    const trial = await startFeedTierTrial({
+      userId: args.userId,
+      licenseId: args.licenseId,
+      region: args.region,
+      tierKey: args.tierKey,
+      adminUrl: args.adminUrl,
+    });
+    return { requestId: approved.requestId, trialId: trial.id, endsAt: trial.trialEndsAt };
+  } catch (err) {
+    console.error("startSelfServeFeedTierTrial: envelope committed but the feed_tier_trials row failed", err);
+    return { requestId: approved.requestId, trialId: null, endsAt: approved.endsAt };
+  }
 }

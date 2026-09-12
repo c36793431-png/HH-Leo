@@ -6,6 +6,7 @@ import { getActiveLicenseDetailsForUser, getGroupTarget, isPaidTier } from "@/li
 import { sendPaidGroupInvite } from "@/lib/group-membership";
 import { resolveAdminUserId } from "@/lib/admin-telegram-map";
 import { approveFeedTierRequest, rejectFeedTierRequest, getFeedTierRequest } from "@/lib/feed-tier-requests";
+import { PaidApprovalNeedsQueueError, PackageNeedsQueueError } from "@/lib/access-requests";
 import { approvePartnerApplication, declinePartnerApplication, getPartnerApplication } from "@/lib/partner-applications";
 
 const INVITE_RATE_LIMIT_MS = 60_000;
@@ -99,10 +100,22 @@ async function handleCallbackQuery(cq: NonNullable<TelegramUpdate["callback_quer
   );
   const adminName = adminRow.rows[0]?.display_name || adminRow.rows[0]?.email || "admin";
 
-  if (action === "approve") {
-    await entry.approve(recordId, adminUserId);
-  } else {
-    await entry.reject(recordId, adminUserId);
+  try {
+    if (action === "approve") {
+      await entry.approve(recordId, adminUserId);
+    } else {
+      await entry.reject(recordId, adminUserId);
+    }
+  } catch (err) {
+    // 0086 phase 2 spec 4(c), file 9: a feedreq approve from the card carries no decision, so
+    // the facade applies the trial-only rule. Its two named refusals (a paid-only tier; a legacy
+    // id that 0086 copied as a package) are the admin's instruction to use the queue -- show
+    // that text as the alert instead of the outer catch's generic "Action failed".
+    if (err instanceof PaidApprovalNeedsQueueError || err instanceof PackageNeedsQueueError) {
+      await answerCallbackQuery(cq.id, { text: err.message, showAlert: true });
+      return;
+    }
+    throw err;
   }
 
   await answerCallbackQuery(cq.id, { text: action === "approve" ? "Approved" : "Declined" });
