@@ -174,7 +174,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const requestStateByTierKey = new Map<string, TierRequestState>();
   for (const r of existingRequests) {
     if (r.region !== region) continue;
-    if (r.status === "approved" || r.status === "provisioned") {
+    if (r.status === "approved") {
       requestStateByTierKey.set(r.tierKey, "granted");
     } else if (r.status === "pending" && requestStateByTierKey.get(r.tierKey) !== "granted") {
       requestStateByTierKey.set(r.tierKey, "pending");

@@ -32,12 +32,10 @@ import {
  * member tier, as 0086 section 3 copied it); `status` loses 'provisioned'; new optional fields
  * decision / endsAt / invoiceRef / batchId / decidedBy. */
 
+/** Three values. 'provisioned' is gone: no row carries it after 0086 (Source G(d)) and its last
+ * comparison (tiers/page.tsx:177, a dead branch) was deleted under marcus m48906 / fable m48897. */
 export const FEED_TIER_REQUEST_STATUSES = ["pending", "approved", "rejected"] as const;
-/** 'provisioned' is a TYPE-ONLY legacy member: no row carries it after 0086 (Source G(d)) and
- * the array above does not list it, so no filter, style or stat is built for it. It stays in
- * the union only until src/app/feeds/[region]/tiers/page.tsx:177 (undeclared, marcus to rule)
- * drops its comparison against it; then this line loses the `| "provisioned"`. */
-export type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number] | "provisioned";
+export type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number];
 
 export interface FeedTierRequestRow {
   id: string;
@@ -149,8 +147,7 @@ export interface ListFeedTierRequestsOptions {
 }
 
 export async function listFeedTierRequests(options: ListFeedTierRequestsOptions = {}): Promise<FeedTierRequestRow[]> {
-  const status = options.status === "provisioned" ? undefined : options.status;
-  const rows = await listAccessRequests({ status, userId: options.userId, productKind: "feed_tier" });
+  const rows = await listAccessRequests({ status: options.status, userId: options.userId, productKind: "feed_tier" });
   return rows.map(mapRow);
 }
 
@@ -208,10 +205,10 @@ export interface ApproveDecisionInput {
 }
 
 /** Approve ONE line (spec section 3). With a decision (the admin queue, section 4(d)) it is
- * passed through. Without one -- the Telegram card and, until coxwell's C2 is relayed, the
- * provider panel (spec 4(c), files 8 and 9 held) -- the trial-only rule applies: a
- * trial-eligible tier is approved as a 7-day trial, anything else is refused to the admin
- * queue, because neither surface can supply an end date or an invoice ref. */
+ * passed through. Without one -- the Telegram card and the provider panel (spec 4(c), coxwell's
+ * C2: provider approve enabled, trial-only) -- the trial-only rule applies: a trial-eligible
+ * tier is approved as a 7-day trial, anything else is refused to the admin queue, because
+ * neither surface can supply an end date or an invoice ref. */
 export async function approveFeedTierRequest(
   id: string,
   actionedBy: string,

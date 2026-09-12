@@ -84,7 +84,7 @@ export class AccessRequestNotFoundError extends Error {
   }
 }
 
-/** Section 4(c): a surface with no decision input (Telegram card; provider panel pending C2)
+/** Section 4(c): a surface with no decision input (Telegram card; provider panel, coxwell's C2)
  * may only approve a trial-eligible tier as a 7-day trial. */
 export class PaidApprovalNeedsQueueError extends Error {
   constructor(tierName: string) {

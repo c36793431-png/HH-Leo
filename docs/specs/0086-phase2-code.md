@@ -3,10 +3,16 @@
 Author: kai. Branch: `kai/phase2-access-requests-2026-09-12`, off origin/main `0a493be` (the merge
 of 0086, applied to prod 2026-09-12 17:30Z). Reviewer: fable. Owner: marcus. Product owner: coxwell.
 
-Status: PASS-WITH-STRIKES (fable, bus m48856..m48859, ledger v1.57). The five strikes S1..S5 and
-the non-strike amendments (P2 comment + section 9 line, P7 per-surface split pending C2, P8
-"self-serve" rendering) are folded in below and marked "RULED". Code on sections 2, 3, 4(a), 5, 6,
-7 proceeds; files 8 and 9 (provider panel, Telegram) wait on coxwell's C2. Every ruling cited as
+Status: PASS, strikes S1..S5 CLEARED (fable m48897, 18:05Z, read against 0754de1; the
+PASS-WITH-STRIKES was bus m48856..m48859, ledger v1.57). The five strikes and the non-strike
+amendments (P2 comment + section 9 line, P7 per-surface split, P8 "self-serve" rendering) are
+folded in below and marked "RULED". Code on sections 2, 3, 4(a), 5, 6, 7 proceeds; files 8 and 9
+(provider panel, Telegram) are RELEASED by coxwell's C2 (18:02Z, marcus m48886, ledger v1.59;
+section 4(c)). Fable's addendum
+(marcus m48872, 17:58Z, no new strike): S5 section-10 grep proof extended to `request_id` under
+the feed code; G6 repoint-all ACCEPTED as written; section 7 answer B mechanics ACCEPTED, C7 does
+not gate code start; section 9 gains the P2 interval line; section 11 sentences 1-4 ruled
+not-this-slice / Leo's / =S4 / tighten's, no action. Every ruling cited as
 "Source X" is quoted verbatim in `docs/specs/0086-phase2-ledger-extract.md` (banked from bus
 m48760..m48763). Anything below that is not a Source citation is a PROPOSAL and is marked so; a
 PROPOSAL fable ruled on carries her verdict in brackets.
@@ -31,8 +37,8 @@ Kai's files. Marcus rules on collisions with Leo before any of these are opened.
 | 5 | `src/app/admin/feed-tier-requests/actions.ts` | :15-25 `approveFeedTierRequestAction` | Approve reads `decision`, `endsAt`, `invoiceRef` from the form. |
 | 6 | `src/components/admin/feed-tier-request-row-actions.tsx` | :23-27 approve `FormData` | Approve form gains the three fields (section 4(d)). |
 | 7 | `src/app/admin/feed-tier-requests/page.tsx` | :3-6 imports; :12-17 `STATUS_STYLES`; :38-55 status filter + stats | Drop the `provisioned` filter/style (status vocabulary is now `pending|approved|rejected`, Source G(d)). Read stays on the facade. |
-| 8 | `src/lib/feed-providers.ts` | :101-107 `listPendingRequestsForProvider`; :123-149 provider approve/reject | Provider approve passes a decision (section 4(c)); reads stay on the facade. |
-| 9 | `src/app/api/telegram/webhook/route.ts` | :45-54 `feedreq` dispatch | Approve-from-Telegram rule (section 4(c)); id lookup tolerates legacy ids. |
+| 8 | `src/lib/feed-providers.ts` | :101-107 `listPendingRequestsForProvider`; :123-149 provider approve/reject | Provider approve = the trial-only rule (C2, section 4(c)), applied by the facade when no decision is passed; the re-point IS the facade, so this file has NO diff at HEAD. Reads stay on the facade. |
+| 9 | `src/app/api/telegram/webhook/route.ts` | :45-54 `feedreq` dispatch; :142-148 callback catch | Approve-from-Telegram = the same facade default; legacy-id lookup is the facade's. The route's only diff: the two named refusals (section 4(c)) reach the admin as the callback alert text instead of "Action failed". |
 
 NOT touched by kai (stated so marcus can hold them):
 - `src/lib/server-registration.ts` :145-202 `saveServerRegistration` (inserts :158-185): Leo's `/account/servers` follow-up writes `user_id` (Source A, owner split in Source N).
@@ -291,20 +297,32 @@ actions and Telegram callback, re-pointed:
 - Admin queue approve/reject: `admin/feed-tier-requests/actions.ts:15,27` -> `approveAccessRequest`
   / `rejectAccessRequest`; approve form gains `decision`, `endsAt`, `invoiceRef`.
 - Provider approve (`feed-providers.ts:133`) and Telegram approve (`webhook/route.ts:48`) have no
-  decision input. PROPOSAL [RULED P7 amend, split by surface, coxwell's word C2]:
+  decision input. RULED by coxwell, C2, 18:02Z, verbatim via marcus m48886 (ledger v1.59): "Client
+  requests a feed, the feed provider, admin gets the request to approve. Feed provider or admin
+  both can approve it equally both." Provider approve is ENABLED. Fable's recommendation (approve
+  disabled on the vendor surface) is overruled and withdrawn (m48897). Build:
   - Telegram card (coxwell's own button): approve as `decision = 'trial'`, `ends_at = now() +
     TRIAL_DURATION_DAYS` (`feed-tier-trials.ts:7`, 7 days), ONLY when the tier is trial-eligible;
     otherwise the callback fails with "Paid approval needs an end date and invoice ref: use the
     admin queue". Accepted by fable as Source K as written (the admin deciding trial with the
-    default length).
-  - Provider panel (the vendor): PLACEHOLDER pending C2. Fable's recommendation to coxwell: provider
-    approve disabled, provider reject stays. Alternative: provider approve = trial-only, same as
-    Telegram. Whichever coxwell says, the difference is confined to files 8 and 9.
-  - Until C2 is relayed, files 8 and 9 are not opened. So that they compile unchanged, the facade's
-    `approveFeedTierRequest(id, actionedBy, adminUrl)` keeps its signature and, when called without
-    a decision, applies the trial-only rule above (the Telegram rule); file 8 is re-pointed to
-    whichever provider rule C2 picks, file 9 gains the legacy-id lookup below.
-  A provider cannot supply `invoice_ref` (billing is Horizon's, manual, Source K).
+    default length). Unchanged by C2.
+  - Provider panel (the vendor): approve ENABLED, the same trial-only rule (7 days,
+    trial-eligible tiers only; otherwise the action returns "Paid approval needs an end date and
+    invoice ref: use the admin queue"); provider reject kept. A provider cannot supply
+    `invoice_ref` (billing is Horizon's, manual, Source K). Whether the provider also gets the
+    paid form (end date + invoice ref) is an open sub-question marcus has put to coxwell; if yes it
+    is a follow-on to file 8 and the 4(d) form component, not a restart, and nothing in sections
+    2-7 changes either way.
+  - Mechanics: the facade's `approveFeedTierRequest(id, actionedBy, adminUrl, decision?)` applies
+    the trial-only rule when called without a decision, so file 8 (which already calls it that
+    way) needs no logic change; the re-point is the facade and file 8 has no diff. File 9 keeps
+    the same call; the legacy-id lookup below is the facade's. The two named refusals
+    (`PaidApprovalNeedsQueueError`, `PackageNeedsQueueError`) surface as the provider action's
+    error string (`runAction`) and as the Telegram callback alert text.
+  - Consequence (fable m48897, not a strike): a provider approval writes `decided_by` = the
+    provider's `users.id`, so the queue's decider column now shows three shapes: an admin, a
+    provider, or "self-serve". The section 5 facade query already carries `decided_by`; nothing to
+    add beyond this sentence.
 - Telegram callback ids: a pending Telegram card sent before deploy carries a LEGACY
   `feed_tier_requests.id`. `getFeedTierRequest(id)` (facade) looks up `access_requests.id = $1 or
   legacy_feed_tier_request_id = $1`; if the legacy id maps to N envelopes (a package), the Telegram
@@ -328,8 +346,8 @@ the `feed_tier_trials` row agree to within the after-commit gap (the trials inse
 commit, section 3), `feed-tier-trials.ts` stays untouched, and marcus's no-touch does not need
 lifting. A trial length other than the constant is a later slice with the retire (C4 notice).
 
-**(f) Which `feed_tier_requests` UI pages are repointed vs left on the old table (G6).** PROPOSAL:
-ALL repointed in one deploy, NONE left reading the old table. Facts from `git grep` at `0a493be`:
+**(f) Which `feed_tier_requests` UI pages are repointed vs left on the old table (G6).** PROPOSAL
+[RULED ACCEPTED as written, m48872]: ALL repointed in one deploy, NONE left reading the old table. Facts from `git grep` at `0a493be`:
 - The only SQL touching `feed_tier_requests` in `src` is `feed-tier-requests.ts` (:87 `SELECT_BASE`,
   :109 insert, :164 update, :263 update).
 - Every UI reader goes through that module's `listFeedTierRequests` / `getFeedTierRequest`:
@@ -343,7 +361,8 @@ would show it a queue that stops receiving writes at the same deploy. After this
 not depend on `feed_tier_requests` existing" is met. The one remaining schema tie is
 `feed_subscriptions.request_id` (FK to the old table, 0078): the :784 insert stops writing it and the
 `on conflict (request_id, feed_tier_id)` clause at :786 goes; no reader in `src` selects it. It drops
-with the table in the tighten.
+with the table in the tighten. "No reader" is not a claim but the section 10 `request_id` grep
+output (addendum m48872), so the tighten's DROP COLUMN cannot land on a reader this spec missed.
 
 ---
 
@@ -410,7 +429,8 @@ update.
   section 3 with `decision = 'trial'`.
 - Self-serve button (`startFeedTierTrialAction`, `feeds/actions.ts:87-116`): whether it survives
   is the v1.48 open item (Source N), now coxwell notice C7. PROPOSAL [RULED P8 accept; build
-  answer A unless marcus says C7 flipped]: keep it, and make it write Source H's form:
+  answer A unless marcus says C7 flipped; answer B mechanics below ACCEPTED, C7 does not gate
+  code start (m48872)]: keep it, and make it write Source H's form:
   `createAccessRequestBatch` for the one tier, then, in the SAME transaction, the section 3 feed
   handler with `decision = 'trial'`, `endsAt = now() + TRIAL_DURATION_DAYS`, `invoiceRef = null`,
   `decided_by = NULL` (column is nullable, 0086:396; there is no admin; flagged), `decided_at =
@@ -469,6 +489,14 @@ direct-grant code wrote between 0086 apply (2026-09-12 17:30Z) and this deploy. 
 drops `feed_subscriptions_license_feed_tier_live_uidx` also deletes that check; the code comment
 at the check names this section.
 
+Interval statement (P2, addendum m48872): between this deploy and the tighten, the vendor record
+set (`feed_allowlist_records`) is PARTIAL. It carries rows only for grants approved or directly
+granted through the new path; the `'provisioned'` carry of legacy grants is the tighten's (section
+11 item 4). The provider panel is locked per ledger section 9 in that interval (fable m48897,
+marcus m48906): no provider surface presents the record set, and provider approve (C2, section
+4(c)) writes through the same path without reading it. Nobody reads the allowlist set as the truth
+of what a provider has been told until the tighten lands.
+
 ---
 
 ## 10. Test plan
@@ -487,6 +515,40 @@ No non-prod database exists. Two layers.
   src/lib/access-requests.ts` shows no writer setting `license_id` to NULL (no `license_id = null`
   and no insert omitting it), and every `insert into feed_subscriptions` in `src` names
   `license_id` alongside `server_registration_id`.
+- `request_id` reader proof (S5, addendum m48872, marcus m48906), so the tighten's `DROP COLUMN
+  feed_subscriptions.request_id` cannot land on an unfound reader. Command, run by kai on the
+  branch at the C2 docs commit:
+  `git grep -n request_id -- 'src/lib/feed-*.ts' src/lib/access-requests.ts src/app/feeds src/app/feed
+  src/app/admin/feed-tier-requests src/components/admin/feed-tier-request-row-actions.tsx
+  src/components/feeds src/app/api/telegram src/app/api/cron`. Output, 18 lines, verbatim:
+
+  ```
+  src/lib/access-requests.ts:24: * legacy_feed_tier_request_id, or touches the read side (EFFECTIVE_STATUS_SQL, section 8). */
+  src/lib/access-requests.ts:200:       join access_requests a on a.id = d.request_id
+  src/lib/access-requests.ts:218:      `insert into feed_tier_request_details (request_id, server_registration_id, feed_tier_id) values ($1, $2, $3)`,
+  src/lib/access-requests.ts:308:        `select server_registration_id, feed_tier_id from feed_tier_request_details where request_id = $1`,
+  src/lib/access-requests.ts:321:        // access_request_id = the envelope (Source C), ends_at from the decision (Source K),
+  src/lib/access-requests.ts:322:        // status 'active' for both decisions (fable P4; trial-ness is decision + access_request_id).
+  src/lib/access-requests.ts:328:              status, access_request_id, ends_at)
+  src/lib/access-requests.ts:492:  legacy_feed_tier_request_id: string | null;
+  src/lib/access-requests.ts:513:         a.invoice_ref, a.reason, a.decided_by, a.decided_at, a.legacy_feed_tier_request_id,
+  src/lib/access-requests.ts:521:  left join feed_tier_request_details d on d.request_id = a.id
+  src/lib/access-requests.ts:525:  left join software_request_details s on s.request_id = a.id
+  src/lib/access-requests.ts:541:    legacyFeedTierRequestId: row.legacy_feed_tier_request_id,
+  src/lib/access-requests.ts:594: * feed_tier_requests.id; 0086 section 3 copied it onto legacy_feed_tier_request_id, as N
+  src/lib/access-requests.ts:600:    `${LIST_SQL} where a.id = $1 or a.legacy_feed_tier_request_id = $1 order by a.created_at desc, a.batch_id, ft.tier_key`,
+  src/lib/feed-subscriptions.ts:300:          provider_tier_id, status, access_request_id, ends_at)
+  src/lib/feed-subscriptions.ts:864: * (request_id, feed_tier_id)` against the legacy feed_tier_requests id) moved to
+  src/lib/feed-subscriptions.ts:868: * fable P3), and feed_subscriptions.request_id is no longer written -- it drops with the old
+  src/lib/feed-subscriptions.ts:916: * written for a direct grant (access_request_id NULL; Source H mandates one for trials only). */
+  ```
+
+  Reading of the 18: 7 are comments (:24, :321, :322, :594 and feed-subscriptions :864, :868,
+  :916); 5 are `feed_tier_request_details.request_id` / `software_request_details.request_id`
+  (:200, :218, :308, :521, :525); 6 are substring hits on the columns `access_request_id` (:328,
+  feed-subscriptions :300) or `legacy_feed_tier_request_id` (:492, :513, :541, :600). No line
+  selects, inserts or updates `feed_subscriptions.request_id`. Zero hits outside the two `src/lib`
+  files. The `requestId` TypeScript identifiers carry the envelope id (`access_requests.id`).
 - Pure-function checks kai can run with `npx tsx` if marcus allows it (node is refused on this
   box today): input validation of `approveAccessRequest` (paid without invoice, trial with
   invoice, `endsAt` in the past) and inside-batch dedupe. Otherwise these are reviewed, not run.
@@ -534,7 +596,8 @@ No non-prod database exists. Two layers.
    states at deploy whether any pending `feedreq` card exists; if one does, approving it from the
    card resolves the legacy id to its envelope and lands as a trial (or refuses with "use the admin
    queue" for a paid-only tier, or "open the queue" for a package); if none exists, the step reads
-   "no pending card at deploy" and the path is covered by the id lookup alone. Waits on C2 (file 9).
+   "no pending card at deploy" and the path is covered by the id lookup alone. C2 answered
+   (m48886); file 9 released.
 
 Rollback of this slice is a code revert; it writes no schema and leaves `feed_tier_requests`
 untouched, so the old code path works again immediately (the envelopes written meanwhile are
@@ -544,6 +607,9 @@ envelope, Source N).
 ---
 
 ## 11. Ledger sentences this slice does not satisfy (stated, not derived around)
+
+Ruled (fable via m48872): 1 not-this-slice, 2 Leo's, 3 = S4, 4 tighten's. No action in this slice
+beyond the section 9 interval statement.
 
 1. Source J/K "renewal extends `ends_at` in place": no renewal write exists in main today and none
    is added here (section 3 says so). Needs its own job.

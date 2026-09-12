@@ -20,9 +20,7 @@ const STATUS_STYLES: Record<FeedTierRequestStatus, string> = {
 };
 
 function statusStyle(status: FeedTierRequestRow["status"]): string {
-  // "provisioned" is a type-only legacy member of the row type (see feed-tier-requests.ts);
-  // no row carries it after 0086, so this branch never renders.
-  return status === "provisioned" ? "" : STATUS_STYLES[status];
+  return STATUS_STYLES[status];
 }
 
 /** Decision cell (spec section 5, Source I + fable P8): copied envelopes carry decision NULL
