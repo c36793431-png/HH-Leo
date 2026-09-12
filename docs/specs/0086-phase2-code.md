@@ -29,11 +29,11 @@ Kai's files. Marcus rules on collisions with Leo before any of these are opened.
 | 7 | `src/app/admin/feed-tier-requests/page.tsx` | :3-6 imports; :12-17 `STATUS_STYLES`; :38-55 status filter + stats | Drop the `provisioned` filter/style (status vocabulary is now `pending|approved|rejected`, Source G(d)). Read stays on the facade. |
 | 8 | `src/lib/feed-providers.ts` | :101-107 `listPendingRequestsForProvider`; :123-149 provider approve/reject | Provider approve passes a decision (section 4(c)); reads stay on the facade. |
 | 9 | `src/app/api/telegram/webhook/route.ts` | :45-54 `feedreq` dispatch | Approve-from-Telegram rule (section 4(c)); id lookup tolerates legacy ids. |
-| 10 | `src/lib/feed-tier-trials.ts` | :118-146 `insertFeedTierTrial` (insert :130) | Gains an optional `trialEndsAt` so the trial row's clock equals the envelope's `ends_at` (section 7). Table NOT retired. |
 
 NOT touched by kai (stated so marcus can hold them):
 - `src/lib/server-registration.ts` :145-202 `saveServerRegistration` (inserts :158-185): Leo's `/account/servers` follow-up writes `user_id` (Source A, owner split in Source N).
 - `src/lib/feed-subscriptions.ts` :108-127 `EFFECTIVE_STATUS_SQL` and :138-150 `SUBSCRIBER_STATUS_SQL`: unchanged (section 8).
+- `src/lib/feed-tier-trials.ts` and the `feed_tier_trials` table: not edited, not retired (marcus part 2 rule; Source H). The existing `insertFeedTierTrial` is called as-is (section 7, gap 4(e)).
 - `src/app/api/cron/expire-trials/route.ts`, `src/app/feed/dashboard/active-users/page.tsx`: still read `feed_tier_trials`, unchanged (Source H).
 - `src/app/feeds/[region]/tiers/page.tsx` :143, `src/app/admin/accounts/page.tsx` :25, `src/app/feed/dashboard/users/actions.ts`: callers of the facade; no edit needed if the facade keeps its return shape (section 5). Listed so marcus knows they are readers of the cut-over data.
 - `db/migrations/*`: no migration in this job. `feed_allowlist_records.told_by` (Source I, optional) is NOT added here; see 4(a).
@@ -122,6 +122,10 @@ NO write to `feed_tier_requests` from this path (Source A: "code rule from phase
 
 ## 3. Approval (Sources C, D, J, K, L)
 
+COMMERCIAL FACTS (coxwell's product decisions, recorded in the ledger v1.48 header, Source K, and
+v1.47, Source J; not reopened here): no checkout; admin decides trial vs paid per request; approval
+writes `ends_at` (+ `invoice_ref` when paid); renewal extends `ends_at` in place.
+
 Entry: `approveAccessRequest(input)` in `access-requests.ts`.
 
 ```
@@ -195,9 +199,9 @@ Transaction, in order, on one `PoolClient`:
 After commit, best-effort (never fails the approval, same as today :278-283 and :184-209):
 - client DM "Feed access approved".
 - If `decision = 'trial'` and the tier is trial-eligible (`isTrialEligibleTier`), write the
-  `feed_tier_trials` row via `insertFeedTierTrial` with `trialEndsAt = endsAt` (section 7). Kept
-  because `EFFECTIVE_STATUS_SQL` branch (4), the expire-trials cron and the provider Trials tab
-  still read that table (Source H: not retired in this slice).
+  `feed_tier_trials` row via the existing `insertFeedTierTrial` (unchanged, its own 7-day clock;
+  gap 4(e)). Kept because `EFFECTIVE_STATUS_SQL` branch (4), the expire-trials cron and the
+  provider Trials tab still read that table (Source H: not retired in this slice).
 
 Renewal ("extends `ends_at` in place", Source J) is NOT in this slice; no renewal write exists in
 main today and none is added. Stated so the spec is not read as covering it.
@@ -279,6 +283,17 @@ shown and required only when paid. The server action validates the same way as s
 invoice date itself is not stored; `ends_at` is what the invoice bought (Source J "set by the
 invoice together with `invoice_ref`").
 
+**(e) Trial-row clock vs envelope `ends_at`.** `feed-tier-trials.ts` is not edited in this slice
+(section 1), so `insertFeedTierTrial` keeps computing `trial_ends_at = now() + 7 days`
+(`feed-tier-trials.ts:7,130`). When an admin approves a trial with the default end date the two
+clocks agree to the second; when the admin picks another date, the envelope and subscription say
+one thing and the `feed_tier_trials` row (read by `EFFECTIVE_STATUS_SQL` branch (4) and the
+expire-trials cron) says 7 days. PROPOSAL: accept the drift in this slice and document it; the
+retire slice (Source H: "each live trial's end is carried onto its `feed_subscriptions.ends_at`
+first") removes it. Alternative, if fable prefers exactness now: marcus lifts the no-touch for a
+one-line optional `trialEndsAt` parameter on `insertFeedTierTrial`, or the admin form clamps a
+trial decision's `endsAt` to the 7-day default (then only paid decisions have a free date).
+
 ---
 
 ## 5. Queue read (Sources E, I)
@@ -334,8 +349,8 @@ update.
 
 - Every trial is an `access_requests` row with `decision = 'trial'` (Source H). Admin-side that is
   section 3 with `decision = 'trial'`.
-- Self-serve button (`startFeedTierTrialAction`, `feeds/actions.ts:87-116`): coxwell has not said
-  whether it survives (Source N open item). PROPOSAL: keep it, and make it write Source H's form:
+- Self-serve button (`startFeedTierTrialAction`, `feeds/actions.ts:87-116`): whether it survives
+  is the v1.48 open item (Source N), unruled. PROPOSAL: keep it, and make it write Source H's form:
   `createAccessRequestBatch` for the one tier, then, in the SAME transaction, the section 3 feed
   handler with `decision = 'trial'`, `endsAt = now() + TRIAL_DURATION_DAYS`, `invoiceRef = null`,
   `decided_by = NULL` (column is nullable, 0086:396; there is no admin; flagged), `decided_at =
@@ -347,10 +362,10 @@ update.
   server grain it needs that licence's server row, else "Register a server first".
   Eligibility (`isTrialEligibleTier`) and one-trial-per-(user, tier) (`feed_tier_trials_user_tier_uidx`,
   0036) are checked BEFORE the transaction opens so the existing errors surface unchanged.
-- `feed_tier_trials` is NOT retired. Both trial entry points still write it (best-effort, after
-  commit) via `insertFeedTierTrial`, which gains an optional `trialEndsAt` (default unchanged: 7
-  days) so the row's `trial_ends_at` equals the envelope's `ends_at`. Its readers (branch (4) of
-  `EFFECTIVE_STATUS_SQL`, expire-trials cron, provider Trials tab, `markFeedTierTrialConverted`)
+- `feed_tier_trials` is NOT retired and `feed-tier-trials.ts` is not edited. Both trial entry
+  points still write the table (best-effort, after commit) via the existing `insertFeedTierTrial`,
+  whose 7-day clock is independent of the envelope's `ends_at` (gap 4(e)). Its readers (branch (4)
+  of `EFFECTIVE_STATUS_SQL`, expire-trials cron, provider Trials tab, `markFeedTierTrialConverted`)
   are untouched.
 
 ---
@@ -384,8 +399,8 @@ No non-prod database exists. Two layers.
 **Local, before the branch is handed over (kai runs, output pasted to marcus):**
 - `npx tsc --noEmit` clean.
 - `npm run lint` clean.
-- Grep proofs: `grep -rn "insert into feed_tier_requests\|update feed_tier_requests" src` returns 0
-  lines; `grep -rn "insert into feed_subscriptions" src` returns exactly the two inserts and each
+- Grep proofs: `grep -rn -e "insert into feed_tier_requests" -e "update feed_tier_requests" src`
+  returns 0 lines; `grep -rn "insert into feed_subscriptions" src` returns exactly the two inserts and each
   names `server_registration_id`; `grep -n "EFFECTIVE_STATUS_SQL = " src/lib/feed-subscriptions.ts`
   shows the block unchanged against `0a493be` (`git diff 0a493be -- src/lib/feed-subscriptions.ts`
   has no hunk inside :108-150).
