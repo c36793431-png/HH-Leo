@@ -845,17 +845,27 @@ function monthLabel(year: number, monthIndex: number): string {
  * NEVER SUMMED ACROSS MONTHS (m49083). A client on a one-month term must not read as three months
  * of revenue, so this returns per-month figures and no grand total, and the page renders none. */
 export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): MonthlyHistoryEntry[] {
-  /** HALF-OPEN, [started_at, end) -- marcus m49147. A row whose period ends exactly at the first
-   * instant of month M was not live in M, and a month is likewise [first instant, first instant of
-   * the next month). Both comparisons are strict, so a boundary instant belongs to exactly one
-   * month and a one-month term can never be counted twice.
+  /** HALF-OPEN AT DATE GRANULARITY, [start_date, end_date) -- marcus m49161, superseding the
+   * instant-level rule of m49147. A term ending ON a calendar date covers up to that date and
+   * stops there: every period is reduced to whole UTC days before being compared, so a row running
+   * 2026-08-01T17:59 -> 2026-09-01T17:59 is August only. At instant granularity that 18-hour tail
+   * put a one-month contract into two months, which is the exact error m49083 set out to avoid.
    *
-   * The third conjunct is the same rule applied to the row itself: [t, t) is empty, so a period
-   * that starts and ends at the same instant was live for no time and belongs to no month. Without
-   * it a zero-length row would still land in whatever month contained that instant. */
+   * The `endDay > startDay` conjunct is the same rule applied to the row itself: [d, d) is empty,
+   * so a period starting and ending on the SAME DATE was live for no whole day and belongs to no
+   * month. That is what keeps a 3-second row out of History.
+   *
+   * An open row (no lapsed_at and no ends_at) has no end to round, and `now` is a censoring point
+   * rather than an agreed end -- so it is live THROUGH the end of today, exclusive end tomorrow.
+   * Rounding `now` down instead would make a row that started today read as zero-length. */
+  const DAY_MS = 86_400_000;
+  const dayOf = (d: Date): number => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+
   const overlaps = (row: ProviderSubscriberRow, start: Date, endExclusive: Date): boolean => {
-    const ends = row.lapsedAt ?? row.endsAt ?? now;
-    return row.startedAt < endExclusive && ends > start && ends > row.startedAt;
+    const recordedEnd = row.lapsedAt ?? row.endsAt;
+    const startDay = dayOf(row.startedAt);
+    const endDay = recordedEnd == null ? dayOf(now) + DAY_MS : dayOf(recordedEnd);
+    return startDay < dayOf(endExclusive) && endDay > dayOf(start) && endDay > startDay;
   };
 
   /** A trial licence is never a contracted payment, in any month, so its rows are dropped here
