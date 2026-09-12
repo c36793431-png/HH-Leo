@@ -12,8 +12,12 @@
 -- WHAT THIS DOES, IN ORDER
 --   0. Preflights (DO blocks, read-only, raise = whole transaction aborts):
 --      A. every server_registrations row resolves to a licence with a non-null user_id
---      B. every feed_subscriptions row resolves, via its licence, to exactly one
---         server_registrations row (0031 unique(license_id) makes "at most one" structural)
+--      B. every feed_subscriptions row resolves to a licenses row (abort otherwise). A licence
+--         with no server_registrations row is NOT fatal (ledger v1.52 named exception: the
+--         0081 London-backfill clients, provisioned by the legacy tick with no registered
+--         server, request_id NULL): counted here, left with server_registration_id NULL in
+--         section 4, named in section 6. "At most one" server row per licence is structural
+--         (0031 unique(license_id)); this checks the licence exists and counts the no-server set.
 --      C. every feed_tier_requests row resolves the same way, and its tier_key resolves to
 --         >= 1 feed_tiers row (directly, or via the two package literals expanded inline)
 --      D. no live (server, tier) duplicate would violate the new business-key index
@@ -25,16 +29,19 @@
 --      phase 2 cutover to pick up rows the old code wrote in between. Then
 --      feed_subscriptions.access_request_id (nullable FK to access_requests) is added and
 --      backfilled from request_id at tier grain, GATED: zero unmapped where request_id is set.
---   4. feed_subscriptions: add server_registration_id (backfilled via licence -> server row),
---      add ends_at (non-trial rows from the bound licence's expires_at; trial rows from the
---      trial's own feed_tier_trials.trial_ends_at, else left NULL and named in section 6;
+--   4. feed_subscriptions: add server_registration_id (backfilled via licence -> server row;
+--      stays NULL where the licence has no server row, noticed with a count that must equal
+--      preflight B's), add ends_at (non-trial rows from the bound licence's expires_at, which
+--      needs no server row, so the no-server rows are seeded too and the already-expired ones
+--      also show in section 6's past-ends_at listing; trial rows from the trial's own
+--      feed_tier_trials.trial_ends_at, else left NULL and named in section 6;
 --      GATED: zero active rows with ends_at NULL), license_id nullable, new live business-key
 --      index on (server_registration_id, feed_tier_id) created ALONGSIDE the 0081 one, drop
 --      any composite FK to licenses(id, user_id) if one exists.
 --   5. feed_allowlist_records -- the allowlist of record (what IP the provider was told, when).
 --   6. Named listing (one notice line per row) of every live row whose ends_at is already
---      past and every trial row left with ends_at NULL, the summary counts, then the
---      schema_migrations row.
+--      past, every trial row left with ends_at NULL, and every row left with no server row,
+--      the summary counts, then the schema_migrations row.
 --
 -- DEPLOY ORDER -- READ BEFORE APPLYING. Three live write paths do not know the new columns:
 --     src/lib/server-registration.ts:158-185   insert ... on conflict (license_id)   (no user_id)
@@ -42,24 +49,37 @@
 --     src/lib/feed-subscriptions.ts:784         insert into feed_subscriptions        (no server_registration_id)
 --   Because of that, this file reaches the ledger's target schema in TWO steps, the same
 --   two-migrations-code-in-between order Fable set for 0079 -> code -> 0080:
---     (i)   this file: additive. New columns are backfilled to zero nulls and GATED, but the
---           NOT NULL is not yet declared; the new live index sits beside the 0081 one; the 0031
---           unique(license_id) CONSTRAINT is kept, not swapped for a partial index.
+--     (i)   this file: additive. user_id is backfilled to zero nulls and GATED;
+--           server_registration_id is backfilled and GATED to "NULL only where the licence has
+--           no server row" (preflight B's count); NOT NULL / the CHECK below are not yet
+--           declared; the new live index sits beside the 0081 one; the 0031 unique(license_id)
+--           CONSTRAINT is kept, not swapped for a partial index.
 --     (ii)  code: phase 2 (kai, lib/access-requests.ts + approval path) and Leo's /account/servers
 --           follow-up write user_id and server_registration_id on every insert.
 --     (iii) tighten migration (number assigned by marcus after Leo's 0085 lands), applied once
 --           (ii) is live. Target statements, so the end state is on record here:
 --             alter table server_registrations alter column user_id set not null;
---             alter table feed_subscriptions alter column server_registration_id set not null;
+--             alter table feed_subscriptions add constraint feed_subscriptions_server_or_lapsed_chk
+--               check (status = 'lapsed' or server_registration_id is not null);
 --             drop index feed_subscriptions_license_feed_tier_live_uidx;
 --             -- and, once phase 2 has cut every reader over: drop table feed_tier_requests
 --             -- (feed_subscriptions.request_id drops with it, not here).
+--           feed_subscriptions.server_registration_id is deliberately NOT `set not null` (ledger
+--           v1.52): SET NOT NULL is column-wide and would fail on a lapsed row with NULL server
+--           forever, so three dead licences would hold the tighten hostage. The tighten's
+--           preflight lists every still-NULL server_registration_id row; live ones
+--           (ends_at > now()) block the tighten until resolved; dead ones (ends_at <= now()) are
+--           stored status='lapsed' inside the tighten transaction, which makes stored status
+--           agree with computed, and the CHECK then holds. server_registrations.user_id keeps
+--           `set not null` as above; both request-detail tables already declare NOT NULL on
+--           their key columns in section 2 and keep it.
 --           This list is NOT the file the tighten gets written from. The tighten file will:
 --           re-run the section 1 and section 4 backfills and their gates (rows the old code
 --           wrote between apply and (ii) have NULL user_id / server_registration_id), re-run
---           preflight D over the completed mapping, and only then SET NOT NULL and drop the
---           0081 index. The 0031 unique(license_id) constraint is kept as-is: a plain UNIQUE on
---           a nullable column already permits any number of NULL license_id rows (NULLS
+--           preflight D over the completed mapping, and only then SET NOT NULL on user_id, add
+--           the CHECK, and drop the 0081 index. The 0031 unique(license_id) constraint is kept
+--           as-is: a plain UNIQUE on a nullable column already permits any number of NULL
+--           license_id rows (NULLS
 --           DISTINCT is the Postgres default), so no partial-index swap is needed (ledger
 --           v1.49). Declaring NOT NULL in THIS file would make the three inserts above fail
 --           with not_null_violation from the moment of apply until (ii) deploys (server
@@ -108,8 +128,9 @@
 --   - feed_subscriptions.request_id (FK to feed_tier_requests, 0078) is NOT dropped or
 --     repointed here; it goes with the old table in the tighten. access_request_id (Q9, ruled
 --     v1.49: add now, additive) sits beside it -- see section 3.
---   - server_registrations.license_id keeps `on delete cascade` (0031). Under key-on-the-server
---     a deleted licence arguably should `set null` instead; not changed without a ruling.
+--   - server_registrations.license_id keeps `on delete cascade` (0031) in THIS file. The switch
+--     to `on delete set null` (key-on-the-server: a deleted licence must not delete the server)
+--     is in the tighten migration, ruled ledger v1.49 5(b).
 --   - ends_at is copied for lapsed rows too (harmless: records the licence expiry the row was
 --     last gated by). Liveness = status + ends_at > now() is phase 2's read-side change; the
 --     gate here is NULL-ness on active rows, not futurity -- a live row whose licence (or
@@ -144,23 +165,35 @@ begin
   raise notice 'preflight A ok: server_registrations total=% unresolved=0', total;
 end $$;
 
--- B. feed_subscriptions -> licence -> server_registrations row must resolve for every row.
---    At most one is structural today (0031 unique(license_id)); this checks at least one.
+-- B. feed_subscriptions -> licence must resolve for every row (a license_id with no licenses
+--    row is a different defect and stays fatal). licence -> server_registrations row is NOT
+--    required (ledger v1.52 named exception): a licence with no server row is counted here,
+--    left NULL by section 4's backfill (which must report the same count) and named in
+--    section 6. At most one server row per licence is structural (0031 unique(license_id)).
 do $$
 declare
   total integer;
-  unresolved integer;
+  no_licence integer;
+  no_server integer;
 begin
   select count(*) into total from feed_subscriptions;
-  select count(*) into unresolved
+  select count(*) into no_licence
+  from feed_subscriptions fs
+  left join licenses l on l.id = fs.license_id
+  where l.id is null;
+  if no_licence != 0 then
+    raise exception
+      'preflight B: % of % feed_subscriptions rows have no licenses row for their license_id', no_licence, total;
+  end if;
+  select count(*) into no_server
   from feed_subscriptions fs
   left join server_registrations sr on sr.license_id = fs.license_id
   where sr.id is null;
-  if unresolved != 0 then
-    raise exception
-      'preflight B: % of % feed_subscriptions rows have no server_registrations row for their licence', unresolved, total;
+  if no_server != 0 then
+    raise notice
+      'preflight B: % of % feed_subscriptions rows have no server row for their licence (named in section 6)', no_server, total;
   end if;
-  raise notice 'preflight B ok: feed_subscriptions total=% unresolved=0', total;
+  raise notice 'preflight B ok: feed_subscriptions total=% no_licence=0 no_server=%', total, no_server;
 end $$;
 
 -- C. feed_tier_requests: every row resolves to a server row, and every tier_key resolves to
@@ -436,8 +469,8 @@ end $$;
 -- 4. feed_subscriptions: server-keyed, licence-agnostic clock
 -- ---------------------------------------------------------------------------------------
 
--- Expected: ALTER TABLE x3, UPDATE x3 (server_registration_id: <total from preflight B>;
--- ends_at non-trial: <active+lapsed count>; ends_at trial: <trial rows with a trial row>,
+-- Expected: ALTER TABLE x3, UPDATE x3 (server_registration_id: <total minus no_server from
+-- preflight B>; ends_at non-trial: <active+lapsed count>; ends_at trial: <trial rows with a trial row>,
 -- 0 on prod as of 2026-09-12 01:07Z where status counts are active=35 lapsed=2 trial=0),
 -- notice x2, CREATE INDEX, DO (drops a composite FK only if one exists; none in 0001-0084).
 alter table feed_subscriptions
@@ -452,15 +485,23 @@ from server_registrations sr
 where sr.license_id = fs.license_id
   and fs.server_registration_id is null;
 
+-- Rows whose licence has no server row stay NULL (ledger v1.52 named exception). The count
+-- left NULL must equal the count of licences with no server row (the same set preflight B
+-- reported); any other NULL means the backfill missed a row that does have a server, abort.
 do $$
 declare
-  unresolved integer;
+  left_null integer;
+  no_server integer;
 begin
-  select count(*) into unresolved from feed_subscriptions where server_registration_id is null;
-  if unresolved != 0 then
-    raise exception 'section 4: server_registration_id backfill left % row(s) null', unresolved;
+  select count(*) into left_null from feed_subscriptions where server_registration_id is null;
+  select count(*) into no_server
+  from feed_subscriptions fs
+  left join server_registrations sr on sr.license_id = fs.license_id
+  where sr.id is null;
+  if left_null != no_server then
+    raise exception 'section 4: server_registration_id backfill left % row(s) null but only % have no server row', left_null, no_server;
   end if;
-  raise notice 'section 4 ok: feed_subscriptions.server_registration_id null rows=0';
+  raise notice 'section 4 ok: feed_subscriptions.server_registration_id null rows=% (all with no server row; must equal preflight B; named in section 6)', left_null;
 end $$;
 
 -- ends_at for NON-trial rows := the bound licence's expires_at (coxwell may overwrite with
@@ -507,7 +548,8 @@ begin
   raise notice 'section 4 gate ok: active rows with ends_at NULL=0; trial rows left with ends_at NULL=% (named in section 6)', trial_null;
 end $$;
 
--- NOT NULL on server_registration_id deferred to the tighten migration (see DEPLOY ORDER).
+-- The check (status = 'lapsed' or server_registration_id is not null) is deferred to the
+-- tighten migration (see DEPLOY ORDER); no NOT NULL on server_registration_id, ever.
 alter table feed_subscriptions
   alter column license_id drop not null;
 
@@ -568,12 +610,18 @@ create index if not exists feed_allowlist_records_open_idx
 -- read-side flip (liveness = status + ends_at > now()) will start reading as lapsed. coxwell
 -- must see the names before the flip (v1.47 (b), v1.49 strike 3a); a count is not a name.
 -- Then every trial row left with ends_at NULL (no feed_tier_trials row matched), same shape.
--- marcus: paste every '0086 past ends_at:' and '0086 trial ends_at NULL:' line into the thread.
+-- Then every row left with server_registration_id NULL (licence with no server row, ledger
+-- v1.52 named exception), same shape, ordered by subscriber then tier; its count must equal
+-- the summary's fs_no_server and preflight B's / section 4's count. A no-server row whose
+-- licence has already expired appears in BOTH the past-ends_at and the no-server listing.
+-- marcus: paste every '0086 past ends_at:', '0086 trial ends_at NULL:' and '0086 no server:'
+-- line into the thread.
 do $$
 declare
   r record;
   past_rows integer := 0;
   null_trial_rows integer := 0;
+  no_server_rows integer := 0;
 begin
   for r in
     select fs.id, coalesce(u.email, u.display_name, u.id::text) as subscriber,
@@ -604,11 +652,26 @@ begin
       r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status;
   end loop;
   raise notice '0086 trial ends_at NULL: % trial row(s) listed above', null_trial_rows;
+
+  for r in
+    select fs.id, coalesce(u.email, u.display_name, u.id::text) as subscriber,
+           ft.tier_key, fs.status, fs.ends_at
+    from feed_subscriptions fs
+    join users u on u.id = fs.subscriber_user_id
+    left join feed_tiers ft on ft.id = fs.feed_tier_id
+    where fs.server_registration_id is null
+    order by subscriber, ft.tier_key, fs.id
+  loop
+    no_server_rows := no_server_rows + 1;
+    raise notice '0086 no server: id=% subscriber=% tier=% status=% ends_at=%',
+      r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status, r.ends_at;
+  end loop;
+  raise notice '0086 no server: % row(s) listed above', no_server_rows;
 end $$;
 
 select
   (select count(*) from server_registrations where user_id is null) as sr_user_id_null,
-  (select count(*) from feed_subscriptions where server_registration_id is null) as fs_server_null,
+  (select count(*) from feed_subscriptions where server_registration_id is null) as fs_no_server,
   (select count(*) from feed_subscriptions where status = 'active' and ends_at is null) as fs_active_ends_at_null,
   (select count(*) from feed_subscriptions where status = 'trial' and ends_at is null) as fs_trial_ends_at_null,
   (select count(*) from feed_subscriptions where status in ('trial', 'active') and ends_at <= now()) as fs_live_ends_at_past,
