@@ -149,8 +149,9 @@ own list for step (iii), quoted above, also contains: the section 1/3/4 re-runs 
 preflight D re-run, `user_id SET NOT NULL`, the `server_or_lapsed` CHECK with the dead-row lapse,
 `drop index feed_subscriptions_license_feed_tier_live_uidx`, and the v1.49 5(b) FK switch. This
 spec designs ONE file with all of them, because (a) the header calls the whole list "(iii)", (b) the
-CHECK must exist before the 0081 index goes or a live row with NULL server would be covered by no
-unique index (NULLs are distinct under the new index), and (c) the section-3 re-run is what makes the
+replacement no-server index (section 3 step 6, section 12 R3; was "the CHECK" in v1) must exist
+before the 0081 index goes or a live row with NULL server would be covered by no unique index
+(NULLs are distinct under the 0086 server index), and (c) the section-3 re-run is what makes the
 `request_id` DROP COLUMN lossless (section 3 step 2). If fable or marcus want the three named
 statements split from the rest, the order below already isolates them as steps 8-9 and the split is
 a file boundary, not a redesign. RECOMMENDATION: one file.
@@ -230,22 +231,39 @@ status, ends_at, computed = (ends_at > now())`. Then:
   Computed status does not move for these rows (they already compute `lapsed` through the licence
   branch, `l.expires_at > now()` false); stored status now agrees with computed. Test plan names
   them as the ONLY stored-status movers and ZERO computed movers.
-- `alter table feed_subscriptions add constraint feed_subscriptions_server_or_lapsed_chk check
-  (status = 'lapsed' or server_registration_id is not null);` -- the header's exact statement.
-  Postgres validates it against every row at ADD, so it is its own gate.
-  **CONFLICT, UNRESOLVED (section 12 R1, flagged to marcus, not picked by me):** with the WARN
-  ruling above, the 6 live no-server rows keep `status = 'active'` and `server_registration_id
-  NULL`, and this ADD CONSTRAINT fails on them; the file aborts here whatever the preflight says.
-  Either the CHECK leaves the tighten (header line 92-93 target statement changes) or it is added
-  `not valid` (new rows only) or the rows are disposed. Also affected: the scope-note reason (b)
-  in section 2 (CHECK before the 0081 index drop so no live row is under no unique index) and
-  step 6's "after step 5 no live row has NULL server". Marcus or fable rules; this document
-  changes nothing else until then.
+- NO CHECK. **RULED (section 12 R3, marcus m49207 23:29Z; fable overrides):** the header's
+  `feed_subscriptions_server_or_lapsed_chk` (0086 header :75-76 target statement) LEAVES the
+  tighten. Not added `not valid` either: under Arm B a licence-bound live subscription with no
+  server yet is a legitimate state for every future row, so the rule the CHECK asserts is wrong,
+  not merely premature. The v1 CONFLICT note that stood here is resolved by R3. The header
+  target list (0086:75-77, "add the CHECK, and drop the 0081 index" at :96-97) changes:
+  flagged for fable in section 11 as Q8.
 
-**6. Preflight D re-run, then drop the 0081 index (header 77, 95-97).** Duplicate groups on
-`(server_registration_id, feed_tier_id)` among live rows (0086:327-344) must be 0 (structurally
-true: `feed_subscriptions_server_feed_tier_live_uidx` exists since 0086, and after step 5 no live
-row has NULL server, so every live row is under it). Then `drop index if exists
+**6. Preflight D re-run, create the no-server index, then drop the 0081 index (header 77,
+95-97; section 12 R3).** Duplicate groups on `(server_registration_id, feed_tier_id)` among live
+rows (0086:327-344) must be 0 (structurally true: `feed_subscriptions_server_feed_tier_live_uidx`
+exists since 0086 and covers every live row whose server is NOT NULL). Live rows with NULL
+server (the 6 of R1, plus any future Arm B row) are NOT under that index (NULLs are distinct), so
+BEFORE the 0081 index goes, in the same transaction:
+```
+create unique index if not exists feed_subscriptions_subscriber_feed_tier_live_noserver_uidx
+  on feed_subscriptions (subscriber_user_id, feed_tier_id)
+  where server_registration_id is null and status <> 'lapsed';
+```
+(predicate as ruled; `status <> 'lapsed'` equals `status in ('trial','active')` because 0071:49
+constrains `status` to exactly those three values, so it is the same live set as the 0086 and
+0078 indexes. Postgres validates at CREATE, so the create is its own gate; the added preflight
+read in section 11 shows the duplicate count ahead of the dry-run.) Coverage after this step, my
+read of the three predicates: a live row with server NOT NULL is under the 0086 index
+(server, tier); a live row with server NULL is under the new index (subscriber, tier); no live
+row is outside both. NOT prevented by the pair, said before writing as asked: the same
+(subscriber, tier) held live TWICE, once server-less and once server-bound. Today the 0081 index
+forbids that pair when both rows carry the same `license_id`; after the drop nothing does. In
+`src` at 9e84f16 the only writer-side guard for it is the second query in `assertNoLiveGrant`
+(feed-subscriptions.ts :403-410, the `license_id` window check) that section 8 deletes. Section 8
+therefore REPLACES that query instead of deleting it (see there); marcus rules if he wants the
+cross-half pair forbidden at the schema too (it cannot be one index: the two halves key on
+different columns). Then `drop index if exists
 feed_subscriptions_license_feed_tier_live_uidx;`. Nothing in `src` names that index in an `ON
 CONFLICT` (my grep: the only mentions at 9e84f16 are the comment at feed-subscriptions :392 and the
 comment at access-requests :323); the window check at :403-410 is a plain SELECT and keeps working
@@ -311,8 +329,9 @@ Cannot restore exactly, said up front:
 Restores exactly: 0078 FK (`request_id references feed_tier_requests(id)`, after the table is
 back), 0079 index `feed_subscriptions_request_tier_uidx`, the 0081 index
 `feed_subscriptions_license_feed_tier_live_uidx` (preflight in the rollback: zero live `(license_id,
-feed_tier_id)` duplicate groups, else abort), drop the `server_or_lapsed` CHECK, `user_id DROP NOT
-NULL`, FK back to `on delete cascade`, delete the carried allowlist rows (`told_at <
+feed_tier_id)` duplicate groups, else abort), then `drop index if exists
+feed_subscriptions_subscriber_feed_tier_live_noserver_uidx` (R3; no CHECK to drop, none was
+added), `user_id DROP NOT NULL`, FK back to `on delete cascade`, delete the carried allowlist rows (`told_at <
 '2026-09-12T17:30:00Z'`: `feed_allowlist_records` did not exist before the 0086 apply, so an
 earlier `told_at` can only be a carried row; guard = that count equals the summary's
 `allowlist_carried`, else abort), delete the `'0087'` ledger row. The step-5 lapse is NOT reverted
@@ -471,11 +490,16 @@ What that binds in this file:
 
 ## 8. Code cleanup after apply (declared in section 1; separate commit, after marcus confirms apply)
 
-- feed-subscriptions.ts :388-411 `assertNoLiveGrant`: delete the `if (args.licenseId)` second
-  query (:403-410) and the REMOVAL POINT paragraph (:388-393); `licenseId` leaves the args type;
-  the two callers (access-requests.ts batch create and approval, feed-subscriptions.ts direct
-  grant) drop the argument. Behaviour: the check is the new-key query alone, which after step 5 +
-  step 6 is the only live uniqueness there is.
+- feed-subscriptions.ts :388-411 `assertNoLiveGrant`: the `if (args.licenseId)` second query
+  (:403-410, keyed on `license_id`) and the REMOVAL POINT paragraph (:388-393) go; `licenseId`
+  leaves the args type; the two callers (access-requests.ts batch create and approval,
+  feed-subscriptions.ts direct grant) drop the argument. R3 CHANGE (was "delete, new-key query
+  alone"): in its place a second query keyed on the subscriber, `where subscriber_user_id = $1
+  and feed_tier_id = $2 and server_registration_id is null and status in ('trial','active')`,
+  so a server-bound grant is refused while the same subscriber holds a live server-less row on
+  that tier (the cross-half pair step 6 says the two indexes do not forbid). `subscriberUserId`
+  is already in scope at both callers (it is written into the same INSERT). Behaviour: two
+  queries, one per half of the step-6 pair, mirroring the schema. PROPOSAL, marcus rules.
 - feed-subscriptions.ts :37-45 and :1295-1302, access-requests.ts :323: comment text that says
   "until the tighten" / "or on the 0081 licence index" / "drops with the old table in the tighten"
   is rewritten to the past tense with the 0087 reference. No behaviour.
@@ -514,7 +538,10 @@ no-server live rows) is known BEFORE the dry-run, not discovered by it.
    step 1 UPDATE 0; step 2 INSERT 0 / 0 unless the window wrote requests (then N, named); step 2
    gate `unmapped=0`; step 3 lists 31cd1813 (status decides: `rejected` = continue, `pending` =
    abort here); step 4 UPDATE 0/0/0; step 5 warn count 6 (named, section 12 R1) and lapse count
-   = the dead no-server rows (named); CHECK added (BLOCKED by the R1 conflict until ruled); preflight D 0; step 7 FK name found; step 8 `request_id` rows with
+   = the dead no-server rows (named); no CHECK (R3); preflight D 0; step 6 no-server index
+   CREATE succeeds (fails = a live no-server (subscriber, tier) duplicate, which the added
+   section-11 read shows ahead: expected 0, the 6 R1 rows are 2 subscribers x 3 distinct tiers
+   per marcus's relayed read); step 7 FK name found; step 8 `request_id` rows with
    a value = the 0086 apply's `with_request` count, unmapped 0; step 9 carry enumerated = the
    `provisioned_to_map` count expanded by package membership, inserted = that minus same-IP
    overlaps with new-path records, misses 0; drop guard 0; summary row.
@@ -528,9 +555,10 @@ no-server live rows) is known BEFORE the dry-run, not discovered by it.
    means the file is wrong and the rollback runs.
 5. Schema reads: `information_schema.columns` has no `feed_subscriptions.request_id`;
    `to_regclass('feed_tier_requests') is null`; `pg_indexes` has neither
-   `feed_subscriptions_request_tier_uidx` nor `feed_subscriptions_license_feed_tier_live_uidx`;
-   `pg_constraint` has `feed_subscriptions_server_or_lapsed_chk` and the new
-   `server_registrations` FK with `confdeltype = 'n'`; `server_registrations.user_id` is
+   `feed_subscriptions_request_tier_uidx` nor `feed_subscriptions_license_feed_tier_live_uidx`,
+   and HAS `feed_subscriptions_subscriber_feed_tier_live_noserver_uidx` with the step-6
+   predicate (R3); `pg_constraint` has NO `feed_subscriptions_server_or_lapsed_chk` (R3) and has
+   the new `server_registrations` FK with `confdeltype = 'n'`; `server_registrations.user_id` is
    `is_nullable = 'NO'`; `'0087'` in `schema_migrations`.
 6. Allowlist read: `select server_registration_id, feed_tier_id, ip, told_at from
    feed_allowlist_records where told_at < '2026-09-12T17:30:00Z' order by told_at` = the carry
@@ -576,6 +604,14 @@ order.
 - Q6 The window rule's end: section 7 flag (ledger says tighten, code says flip).
 - Q7 Your B-1 sentence verbatim, and the ledger's section 9 paragraph verbatim, so v2 of this
   document quotes them instead of marcus's relay and the 0086 spec's citation.
+- Q8 (ADDED after your Q1-Q7 pass; marcus m49207 asked that it be marked for you explicitly
+  because it changes the header TARGET LIST, 0086:75-77 and :96-97). Section 12 R3: the
+  `server_or_lapsed` CHECK leaves the tighten (not `not valid`, not deferred: wrong under Arm B),
+  and the 0081 index drop gains a replacement in the same step,
+  `feed_subscriptions_subscriber_feed_tier_live_noserver_uidx` on (subscriber_user_id,
+  feed_tier_id) where server_registration_id is null and status <> 'lapsed'. Your Q1 ordering
+  ("CHECK before 0081 index drop") reads as "no-server index before 0081 index drop". Also the
+  cross-half pair in step 6 and the section-8 replacement query. Marcus ruled; you override.
 
 **For marcus (read-only, prod, paste the outputs; none of these I can run):**
 ```
@@ -587,6 +623,8 @@ select count(*) from server_registrations where user_id is null;                
 select count(*) from feed_subscriptions where server_registration_id is null;       -- fs_no_server (0086 named 6?)
 select count(*) from feed_subscriptions where server_registration_id is null and status in ('trial','active') and ends_at > now();   -- step-5 WARN count (RUN 23:24Z: 6, section 12 R1)
 select count(*) from feed_subscriptions where server_registration_id is null and status in ('trial','active') and ends_at <= now();  -- step-5 lapse count
+select subscriber_user_id, feed_tier_id, count(*) from feed_subscriptions where server_registration_id is null and status <> 'lapsed' and ends_at > now() group by 1, 2 having count(*) > 1;  -- R3: step-6 no-server index would fail on any row here; expect 0 rows
+select count(*) from feed_subscriptions fs where fs.server_registration_id is null and fs.status <> 'lapsed' and exists (select 1 from feed_subscriptions o where o.subscriber_user_id = fs.subscriber_user_id and o.feed_tier_id = fs.feed_tier_id and o.server_registration_id is not null and o.status <> 'lapsed');  -- R3: cross-half pairs the two indexes do not forbid; today's count
 select count(*) from feed_allowlist_records;                                        -- new-path records so far
 select conname, confdeltype from pg_constraint where conrelid = 'server_registrations'::regclass and contype = 'f';
 select count(*) from pg_constraint where confrelid = 'feed_tier_requests'::regclass;  -- expect 1 (the 0078 FK)
@@ -618,9 +656,9 @@ yet" a legitimate post-tighten state. Both are 0081-cohort backfills from before
 Disposition: step 5 preflight = WARN + list; `server_registration_id` stays nullable; no lapse;
 no synthetic server row. Fable's Q1-Q7 pass overrides if it says otherwise; a conflict goes to
 marcus, not picked by kai.
-Open consequence (flagged to marcus in the same reply, unresolved): the header's CHECK
-`server_or_lapsed` (section 3 step 5, last bullet) cannot be added while these 6 rows are
-`active` with NULL server. See the CONFLICT note there.
+Consequence (flagged to marcus in the same reply, RESOLVED by R3 below): the header's CHECK
+`server_or_lapsed` cannot be added while these 6 rows are `active` with NULL server; R3 removes
+the CHECK from the tighten.
 
 **Item 2 (31cd1813)**: separate SQL file from kai, lands before 0087, not folded in. In front of
 coxwell as of 23:19Z; open. **Item 1 (carry, Q4)**: wait for fable.
@@ -640,3 +678,30 @@ when v2 is written (no other action now):
 - Branch `kai/tighten-0087-2026-09-12`, thread `kai-tighten-0087-2026-09-12` and this file's
   name stay as they are. Prose references to "0087" in sections 3-9 read as the tighten
   migration, i.e. 0088, until v2 rewrites them.
+
+**R3 -- the `server_or_lapsed` CHECK leaves the tighten; the 0081 index drop gets a no-server
+replacement index.** Ruled by marcus, m49207_mtz0iz0q, 23:29Z, same thread. (Marcus's message
+says "record as R2"; R2 was already taken by m49203 above in eb5340b, so this is R3; numbering
+flagged in my reply.) Fable overrides (Q8 in section 11). Resolves the R1 open consequence.
+- Option (a), not (b): a `not valid` CHECK would still assert, for every future row, a rule
+  that coxwell's 18:07Z Arm B (servers register freely, licence allocated to a server later)
+  makes false. A licence-bound live subscription with no server yet is legitimate going forward,
+  so the constraint is wrong, not premature. No CHECK in this file, no CHECK in the rollback.
+- Knock-on ruled with it: `create unique index feed_subscriptions_subscriber_feed_tier_live_noserver_uidx
+  on feed_subscriptions (subscriber_user_id, feed_tier_id) where server_registration_id is null
+  and status <> 'lapsed'`, in step 6 BEFORE `drop index feed_subscriptions_license_feed_tier_live_uidx`.
+  With the 0086 `feed_subscriptions_server_feed_tier_live_uidx` (server, tier) the pair covers
+  both halves. My reads behind that: 0086:657-659 (server index predicate `feed_tier_id is not
+  null and status in ('trial','active')`), 0081:275-277 (the index being dropped, keyed on
+  `license_id`, which 0086:652-653 made nullable), 0071:49 (`status` domain is exactly trial /
+  active / lapsed, so `<> 'lapsed'` is the same live set).
+- Said before writing, as marcus asked: no single live row is left outside both indexes. The
+  pair does not forbid one (subscriber, tier) held live in both halves at once (one row with a
+  server, one without); the 0081 index forbids that today only when both rows share
+  `license_id`. Step 6 states it; section 8 keeps a subscriber-keyed second query in
+  `assertNoLiveGrant` in place of the licence-keyed one (proposal). Section 11 gains two reads
+  for marcus: the no-server duplicate groups (must be 0 or the CREATE fails) and today's
+  cross-half count.
+- Applied in this document: section 2 scope-note (b), step 5 last bullet, step 6, section 4
+  rollback list, section 8 first bullet, section 9 dry-run item 1 and schema-read item 5,
+  section 11 Q8 and the two reads. Migration filename stays 0088 (R2). Nothing built.
