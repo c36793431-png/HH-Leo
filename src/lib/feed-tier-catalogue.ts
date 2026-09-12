@@ -9,6 +9,18 @@ import type { FeedType } from "./licenses";
 export type FeedRegion = "london" | "ny" | "cme" | "tokyo";
 export const FEED_REGIONS: FeedRegion[] = ["london", "ny", "cme", "tokyo"];
 
+/** Human labels for a region_key, hoisted out of the Subscribers page 2026-09-12 (bus thread
+ * leo-provider-revenue-ny-base-2026-09-12) when Revenue's region switch became a second
+ * consumer -- two provider surfaces naming the same region differently is the kind of drift
+ * that makes coxwell doubt both. Callers keep their own fallback for a null/unknown region_key
+ * ("Other" on Subscribers); this map only covers the four keys the catalogue knows. */
+export const FEED_REGION_LABELS: Record<FeedRegion, string> = {
+  london: "London",
+  ny: "New York",
+  cme: "CME",
+  tokyo: "Tokyo",
+};
+
 /** Maps a signup region to the license feed_types entitlement it corresponds to.
  * null regions (cme, tokyo) aren't wired to a FeedType yet -- coming soon only. */
 export const FEED_REGION_TYPE: Record<FeedRegion, FeedType | null> = {

@@ -320,7 +320,22 @@ export async function pseudonymForSubscriber(
  * "provider needs to see the IP ... he allowlists that IP on his own box"). Registered IP
  * only -- no captured_ip fallback, no mismatch/verification state; that stays admin-only
  * per the 2026-08-29 ruling. Null when the client has no server registered at all, which is
- * the true state for most of the London backfill rows, not a bug to paper over. */
+ * the true state for most of the London backfill rows, not a bug to paper over.
+ *
+ * The ORDER BY is TOTAL (seq, then started_at, then id) as of 2026-09-12, not just `p.seq`:
+ * within one account every row shares a seq, so under `order by p.seq` alone their relative
+ * order was unspecified -- and groupAccountSubscriptions takes a package group's status from
+ * `members[0]`, so an account holding one lapsed and three active tiers of the same package
+ * could read either way. Evidence it was genuinely unpinned rather than incidentally stable:
+ * HH1's LD Base rendered its members Beta-first under the old clause and Delta-first (true
+ * earliest grant) under this one. I did not catch the *count* flipping, so treat "it flipped in
+ * prod" as unproven -- the query simply never guaranteed otherwise.
+ *
+ * This makes the row set stable; it does NOT decide whether such a group *should* read lapsed
+ * (it now reads the earliest grant's status, which for coxwell's own HH20 is a 09-03 lapsed
+ * ld-beta-56 row, so his three 09-11 active London tiers stay invisible on Revenue). That
+ * semantic question moves money on three surfaces and is with marcus/coxwell -- bus thread
+ * leo-provider-revenue-ny-base-2026-09-12. See statusForGroup below. */
 export async function listSubscribersForProvider(providerUserId: string): Promise<ProviderSubscriberRow[]> {
   try {
     const result = await pool.query<{
@@ -343,7 +358,7 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
        left join provider_tiers pt on pt.id = s.provider_tier_id
        left join server_registrations sr on sr.license_id = s.license_id
        where s.provider_user_id = $1
-       order by p.seq`,
+       order by p.seq, s.started_at, s.id`,
       [providerUserId]
     );
     return result.rows.map((row) => ({
@@ -398,6 +413,46 @@ export function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): Accoun
   return groups;
 }
 
+/** The one read of a group's status, extracted 2026-09-12 (bus thread
+ * leo-provider-revenue-ny-base-2026-09-12) when the Revenue page grew a second view and a
+ * region filter and would otherwise have inlined this ternary a fourth and fifth time.
+ * Behaviour is unchanged from the copies it replaces in sumProviderShareCents /
+ * sumMonthlyGrossCents. NOTE, not fixed here because it moves money and needs a ruling: for a
+ * package the status is `members[0].status`, so a mixed group (one lapsed tier, three active)
+ * reads entirely by whichever row sorts first -- now deterministically the earliest grant, see
+ * listSubscribersForProvider's ORDER BY above. "Earliest grant wins" is a stable rule, not a
+ * justified one: it currently hides coxwell's own three active London tiers behind one lapsed
+ * 09-03 row. Whether a mixed group should read active (any live member), lapsed, or split into
+ * per-tier rows is marcus/coxwell's call -- reported with the m49019 answer. */
+export function statusForGroup(group: AccountRowGroup): ProviderSubscriberRow["status"] {
+  return group.kind === "package" ? group.status : group.row.status;
+}
+
+/** The region a group belongs to, for the Revenue page's region switch (coxwell 2026-09-12
+ * 21:18Z via marcus m49032: "ability to change between region"). Reads feed_tiers.region_key as
+ * carried on the row -- the same column the Subscribers page's "By location" note and
+ * EFFECTIVE_STATUS_SQL's licence gate key on -- never re-derived from a tier name or a PACKAGES
+ * label. Null means no region is recorded for this grant (a provider_tiers row: ft.region_key
+ * is null for third-party self-serve tiers), which is a real absence, not a default to London;
+ * such a group is visible under "All" and under no single-region filter. A PACKAGES entry is
+ * region-local by construction, so the first member carrying a region speaks for the group. */
+export function regionKeyForGroup(group: AccountRowGroup): string | null {
+  if (group.kind === "package") {
+    return group.members.map((m) => m.regionKey).find((r) => r != null) ?? null;
+  }
+  return group.row.regionKey ?? null;
+}
+
+/** A group's start date: the earliest `started_at` among its rows, since a package group has no
+ * started_at of its own (bus thread leo-provider-panel-package-labels-2026-09-04, marcus
+ * follow-up B). Hoisted out of the Subscribers page 2026-09-12 so the Revenue page's Clients
+ * view shows the identical date for the identical group instead of a second reduce.
+ * This is a GRANT date, not purchase history -- see m47007; label it as such wherever it lands. */
+export function startedAtForGroup(group: AccountRowGroup): Date {
+  if (group.kind === "single") return group.row.startedAt;
+  return group.members.reduce((earliest, m) => (m.startedAt < earliest ? m.startedAt : earliest), group.members[0].startedAt);
+}
+
 /** Job C (bus thread leo-provider-subscribers-page-2026-09-06, coxwell-authorised): the price
  * a payout reads is THIS client's own negotiated feed_subscriptions.price_cents, never a
  * catalogue/package-wide constant -- a partner on a different number must produce a different
@@ -425,8 +480,7 @@ export function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
  * with another. */
 export function sumProviderShareCents(groups: AccountRowGroup[]): number {
   return groups.reduce((sum, g) => {
-    const status = g.kind === "package" ? g.status : g.row.status;
-    const cents = providerShareCentsFor(status, resolvedPriceCentsFor(g));
+    const cents = providerShareCentsFor(statusForGroup(g), resolvedPriceCentsFor(g));
     return sum + (cents ?? 0);
   }, 0);
 }
@@ -440,8 +494,7 @@ export function sumProviderShareCents(groups: AccountRowGroup[]): number {
  * price contributes zero, distinguishable from a real $0. */
 export function sumMonthlyGrossCents(groups: AccountRowGroup[]): number {
   return groups.reduce((sum, g) => {
-    const status = g.kind === "package" ? g.status : g.row.status;
-    if (status !== "active") return sum;
+    if (statusForGroup(g) !== "active") return sum;
     return sum + (resolvedPriceCentsFor(g) ?? 0);
   }, 0);
 }
