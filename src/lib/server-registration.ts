@@ -141,9 +141,27 @@ export async function countUserActiveServers(userId: string): Promise<number> {
 
 /** Upserts the registration and fires the "new registration" alert only on first insert
  * (an edit shouldn't re-fire it). adminUrl is passed in by the caller since this lib has
- * no request context to build one from. */
+ * no request context to build one from.
+ *
+ * userId is the signed-in user, and under 0086 it must also be the licence owner -- the
+ * only caller reaches here through requireLicenseId, which accepts licenseId only if it
+ * appears in getActiveLicensesForUser(session.user.id) (licenses.ts:589, `where user_id =
+ * $1`), so the two cannot diverge at this call site. Taking it from the session rather
+ * than re-reading licenses.user_id is deliberate: 0086 keys this table on the server, not
+ * the licence (license_id is already nullable and loses its NOT NULL/owner role in the
+ * tighten), so the owner has to come from somewhere that survives license_id.
+ *
+ * Writing it is required, not optional, while 0086 is applied but the tighten is not:
+ * ledger v1.49 Ruling 1(ii) -- "every server_registrations writer writes user_id" -- and
+ * the tighten re-runs the section 1 backfill only as a safety net for rows written between
+ * apply and this deploy. No information_schema guard like checkLocationColumnExists()
+ * below: 0072 shipped code ahead of the migration, whereas 0086 was applied in prod
+ * (2026-09-12 17:30Z) before this code existed, so the column is always there. If some
+ * other DB lags 0086 the write should fail loudly with 42703 rather than silently leave
+ * user_id NULL, which is exactly what the window rule forbids. */
 export async function saveServerRegistration(
   licenseId: string,
+  userId: string,
   input: ServerRegistrationInput,
   adminUrl: string,
   ownerEmail: string | null
@@ -156,9 +174,10 @@ export async function saveServerRegistration(
   const result = hasLocationColumn
     ? await pool.query(
         `insert into server_registrations
-           (license_id, server_name, vps_provider, vps_provider_other, server_location, location, declared_ip, updated_at)
-         values ($1, $2, $3, $4, $5, $6, $7, now())
+           (license_id, user_id, server_name, vps_provider, vps_provider_other, server_location, location, declared_ip, updated_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, now())
          on conflict (license_id) do update set
+           user_id = excluded.user_id,
            server_name = excluded.server_name,
            vps_provider = excluded.vps_provider,
            vps_provider_other = excluded.vps_provider_other,
@@ -167,13 +186,14 @@ export async function saveServerRegistration(
            declared_ip = excluded.declared_ip,
            updated_at = now()
          returning (xmax = 0) as inserted`,
-        [licenseId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.location, input.declaredIp]
+        [licenseId, userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.location, input.declaredIp]
       )
     : await pool.query(
         `insert into server_registrations
-           (license_id, server_name, vps_provider, vps_provider_other, server_location, declared_ip, updated_at)
-         values ($1, $2, $3, $4, $5, $6, now())
+           (license_id, user_id, server_name, vps_provider, vps_provider_other, server_location, declared_ip, updated_at)
+         values ($1, $2, $3, $4, $5, $6, $7, now())
          on conflict (license_id) do update set
+           user_id = excluded.user_id,
            server_name = excluded.server_name,
            vps_provider = excluded.vps_provider,
            vps_provider_other = excluded.vps_provider_other,
@@ -181,7 +201,7 @@ export async function saveServerRegistration(
            declared_ip = excluded.declared_ip,
            updated_at = now()
          returning (xmax = 0) as inserted`,
-        [licenseId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.declaredIp]
+        [licenseId, userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.declaredIp]
       );
 
   if (result.rows[0]?.inserted) {
