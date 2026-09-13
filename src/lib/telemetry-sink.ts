@@ -391,9 +391,13 @@ export async function notifyStrategySubmissionSubmitted(opts: {
 }
 
 export async function notifyFeedTierRequestSubmitted(opts: {
+  /** ONE envelope (the batch's first row). Both buttons below carry it, which is why a
+   * bundle of more than one gets no buttons at all -- see memberTierNames. */
   id: string;
   email: string | null;
   tierName: string;
+  /** Every envelope in the batch this DM announces; length 1 for a single tier. */
+  memberTierNames: string[];
   licenseKey: string;
   serverName: string | null;
   serverIp: string | null;
@@ -406,13 +410,38 @@ export async function notifyFeedTierRequestSubmitted(opts: {
   } else if (opts.serverIp) {
     server = `${opts.serverIp} (unregistered)`;
   }
+  const isBundle = opts.memberTierNames.length > 1;
   const text =
     `📡 new feed request\n` +
     `email: ${opts.email ?? "-"}\n` +
     `tier: ${opts.tierName}\n` +
+    (isBundle ? `tiers: ${opts.memberTierNames.join(", ")}\n` : "") +
     `license: …${keyTail(opts.licenseKey)}\n` +
     `server: ${server}\n` +
+    (isBundle ? `decide each tier in the admin queue:\n` : "") +
     `${opts.adminUrl}`;
+
+  // A bundle gets NO buttons, only the queue link already in the text above. Both
+  // callback_data values below carry ONE envelope id, so on a package card Decline rejects
+  // a single member and leaves the rest pending while the admin reads the label and
+  // believes the bundle is declined; Approve grants 1 of N the same way, and on NY Base
+  // nothing refuses because both members are trial-eligible (marcus, thread
+  // kai-feed-entitlement-vs-request-visibility-2026-09-13). A control that cannot do what
+  // its own label says should not be on the card.
+  //
+  // The control is REMOVED rather than widened to the batch. For Approve that is a rule:
+  // horizon-feed-provisioning-ledger-v1.md:401 (Source F v1.48(2)) makes batch_id "a
+  // grouping key only, no batch status column and no batch-level approve, because a
+  // batch-level state would have to model partial approval". Making the N writes atomic
+  // does not escape it -- all-or-none is itself a batch-level result. (access-requests.ts
+  // :97 and :246 are one-line summaries of that text, not the text.) For Decline the
+  // ledger says nothing: declining every member leaves no partial state to model and no
+  // per-line terms to set, so a one-tap Decline-all is a product call, not a forbidden
+  // one. It is simply not built here.
+  if (isBundle) {
+    await sendApprovalsTopicMessage(text);
+    return;
+  }
 
   // Actionable pings need the buttons' callback_query to land on a webhook we own, so
   // these go out via the portal bot (live webhook w/ secret validation) instead of the

@@ -118,11 +118,18 @@ export async function createFeedTierRequest(args: CreateArgs): Promise<FeedTierR
 
   // After commit, best-effort, once per batch (spec section 2), naming the key the client
   // clicked (package name for a package) rather than N member pings.
+  //
+  // memberTierNames is every envelope this batch actually created, read off `rows` rather
+  // than off `members` so it names what exists and not what was asked for (the batch
+  // collapses a package/member overlap, access-requests.ts:175-182). It is the ONLY thing
+  // that decides whether the DM carries decision buttons, because `id` below is one
+  // envelope -- rows[0] -- and a button can only carry one. See notifyFeedTierRequestSubmitted.
   const first = rows[0];
   await notifyFeedTierRequestSubmitted({
     id: first.id,
     email: first.userEmail,
     tierName: feedTierMeta(args.tierKey)?.name ?? args.tierKey,
+    memberTierNames: rows.map((r) => r.tierName),
     licenseKey: first.licenseKeyTail ? `****${first.licenseKeyTail}` : "unknown",
     serverName: first.serverName,
     serverIp: first.serverIp,
