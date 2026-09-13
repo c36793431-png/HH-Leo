@@ -36,10 +36,12 @@
 --     columns and are left as written.
 --
 -- Restores exactly: the 0078 FK (request_id references feed_tier_requests(id)), the 0079 index
--- feed_subscriptions_request_tier_uidx, the 0031 single-column FK on delete cascade, the 0081
--- index feed_subscriptions_license_feed_tier_live_uidx (preflight: zero live (license_id,
--- feed_tier_id) duplicate groups, else abort), drops the CHECK, the composite FK, the licenses
--- unique, and NOT NULL on server_registrations.user_id; deletes the '0088' ledger row.
+-- feed_subscriptions_request_tier_uidx, the 0031 single-column FK on delete cascade; drops the
+-- CHECK (with its six-id exception, fable v1.71), the composite FK, the licenses unique, and
+-- NOT NULL on server_registrations.user_id; deletes the '0088' ledger row. The 0081 index
+-- feed_subscriptions_license_feed_tier_live_uidx is NOT recreated because 0088 no longer drops
+-- it (the drop is 0089's, with its own rollback); so no duplicate-group preflight here. If 0089
+-- has been applied, run 0089_rollback.sql FIRST: the preflight below refuses a '0089' ledger row.
 --
 -- The carried-record delete is bounded by the phase-2 deploy instant: new-path records cannot
 -- predate the deploy, and a legacy row actioned in the 17:30Z-22:58Z window carries a told_at
@@ -55,6 +57,9 @@ do $$
 begin
   if not exists (select 1 from schema_migrations where version = '0088') then
     raise exception 'rollback 0088: schema_migrations has no 0088 row; nothing to roll back';
+  end if;
+  if exists (select 1 from schema_migrations where version = '0089') then
+    raise exception 'rollback 0088: schema_migrations has a 0089 row; run 0089_rollback.sql first (it restores the CHECK exception and the 0081 index this file does not touch)';
   end if;
 end $$;
 
@@ -243,33 +248,12 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------------------
--- 6 reverse: the 0081 index back (preflight: no live (license_id, feed_tier_id) duplicates)
+-- 6 reverse: nothing. 0088 step 6 is a read-only preflight; the 0081 index is still there
+-- (its drop and its recreate are 0089's, fable v1.71 item 3).
 -- ---------------------------------------------------------------------------------------
 
-do $$
-declare
-  dup_groups integer;
-begin
-  select count(*) into dup_groups
-  from (
-    select license_id, feed_tier_id
-    from feed_subscriptions
-    where feed_tier_id is not null and status in ('trial', 'active')
-    group by license_id, feed_tier_id
-    having count(*) > 1
-  ) d;
-  if dup_groups != 0 then
-    raise exception 'rollback 0088 step 6: % live (license_id, feed_tier_id) duplicate groups; the 0081 index cannot be recreated', dup_groups;
-  end if;
-  raise notice 'rollback 0088 step 6 preflight ok: live (license_id, feed_tier_id) duplicate groups=0';
-end $$;
-
-create unique index if not exists feed_subscriptions_license_feed_tier_live_uidx
-  on feed_subscriptions (license_id, feed_tier_id)
-  where feed_tier_id is not null and status in ('trial', 'active');
-
 -- ---------------------------------------------------------------------------------------
--- 5 reverse: drop the CHECK (the expiry lapses stay)
+-- 5 reverse: drop the CHECK, exception and all (the expiry lapses stay)
 -- ---------------------------------------------------------------------------------------
 
 alter table feed_subscriptions

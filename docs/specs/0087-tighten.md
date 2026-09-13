@@ -93,6 +93,8 @@ Not in my reads, stated up front so nobody takes a relay for a finding (rule 8):
 | 3 | `db/migrations/0088_rollback.sql` | NEW | Section 4. Written in the same commit as file 2. |
 | 4 | `src/lib/feed-subscriptions.ts` | :388-411 `assertNoLiveGrant` (second query = the 0081 window check, REMOVAL POINT comment :392-393); :37-45 `CreateSubscriptionInput` comment; :1295-1302 comment | Code cleanup AFTER the migration is applied (section 8): delete the second query, `licenseId` leaves the args, rewrite the three comments citing the Q6 split (v1.63). Separate commit. |
 | 5 | `src/lib/access-requests.ts` | :323 comment ("or on the 0081 licence index") | Comment only, same cleanup commit. |
+| 6 | `db/migrations/0089_drop_server_or_lapsed_exception.sql` | NEW (section 12 R4) | Follow-up stub: gate live exempt rows = 0, CHECK without the exception, drop 0081. Number is the next free one; marcus confirms it. |
+| 7 | `db/migrations/0089_rollback.sql` | NEW (section 12 R4) | Companion to file 6, same commit. |
 
 NOT touched by kai (so marcus can hold them):
 - `src/lib/server-registration.ts` :160-215 (`saveServerRegistration`, writes `user_id` at :180 and
@@ -333,6 +335,9 @@ verbatim: live = `status <> 'lapsed' and (ends_at > now() or ends_at is null)` (
 live, v1.53/v1.55 reading; `status <> 'lapsed'` rather than `in ('trial','active')` so a row with
 any other stored status cannot slip past both branches and fail at ADD CONSTRAINT with Postgres's
 message instead of ours). Then:
+- AMENDED by R4 (section 12, fable v1.71): the count below must EQUAL the six exempt ids, not 0;
+  any other live no-server row still aborts, and an exempt id that is not a live no-server row
+  aborts too. The text that follows is the pre-R4 form, kept for the history of S2(b).
 - BLOCK (v1 wording restored; section 12 R1 withdrawn by marcus m49215, fable S2(b) governs):
   ```
   select count(*) from feed_subscriptions
@@ -362,6 +367,7 @@ message instead of ours). Then:
   alter table feed_subscriptions add constraint feed_subscriptions_server_or_lapsed_chk
     check (status = 'lapsed' or server_registration_id is not null);
   ```
+  AMENDED by R4: `or id in (<the six literal uuids>)` is appended, the exception 0089 removes.
   STAYS (marcus m49215 withdrawing his m49207: "'server without licence' (Arm B, legitimate)" is
   not "'live subscription without server' (not legitimate post-tighten)"; fable Q1 reason (b),
   Q6; fable m49231_mtz0pepn, confirmed landed in m49478: "CHECK STAYS, step 5 stays BLOCK, no
@@ -369,7 +375,10 @@ message instead of ours). Then:
   valid`: steps 2b + 5 make it hold at ADD, and the failure is ours, named, before Postgres's.
 
 **6. Preflight D re-run, then drop the 0081 index (header 77, 95-97; fable Q1 ordering: CHECK
-before the drop).** Duplicate groups on `(server_registration_id, feed_tier_id)` among live rows
+before the drop).** AMENDED by R4 (section 12): preflight D stays but counts only rows with a
+NOT NULL server (the six exempt rows share three tiers and GROUP BY would fold their NULL servers
+into three false duplicate groups); the 0081 drop MOVES OUT to 0089. The rest of this step is
+the pre-R4 text. Duplicate groups on `(server_registration_id, feed_tier_id)` among live rows
 (0086:327-344) must be 0 (structurally true: `feed_subscriptions_server_feed_tier_live_uidx`
 exists since 0086 and covers every live row whose server is NOT NULL, and after step 5's CHECK
 every live row has a NOT NULL server, so no live row is outside it). Then `drop index if exists
@@ -442,7 +451,10 @@ nothing;` `commit;`
 
 Same discipline as 0086_rollback.sql: written in the same commit, never run automatically, states
 what it cannot restore first. Reverse order of section 3. Preflight: `schema_migrations` has
-`'0088'`, else abort (nothing to roll back).
+`'0088'`, else abort (nothing to roll back); has no `'0089'`, else abort (0089_rollback.sql first).
+AMENDED by R4 (section 12): the 0081 index is NOT recreated and its duplicate-group preflight is
+gone (0088 no longer drops it; both live in 0089_rollback.sql); the CHECK dropped is the one with
+the six-id exception. The 0081 sentences below are the pre-R4 text.
 
 Cannot restore exactly, said up front:
 - `feed_tier_requests` rows. The rollback recreates the 0034 shape and repopulates it FROM the
@@ -670,6 +682,11 @@ What that binds in this file:
 
 ## 8. Code cleanup after apply (declared in section 1; separate commit, after marcus confirms apply)
 
+- AMENDED by R4 (section 12): the 0081 index survives 0088, so the second query and `licenseId`
+  are deleted after 0089 is applied, not after 0088. The 0088 cleanup commit only re-points the
+  REMOVAL POINT comment (:392-393) from "the tighten migration" to
+  `db/migrations/0089_drop_server_or_lapsed_exception.sql`, and rewrites the other comments as
+  below. The first bullet's deletion moves to the 0089 cleanup commit.
 - feed-subscriptions.ts :388-411 `assertNoLiveGrant`: the `if (args.licenseId)` second query
   (:403-410, keyed on `license_id`) and the REMOVAL POINT paragraph (:388-393) go; `licenseId`
   leaves the args type; the two callers (access-requests.ts batch create and approval,
@@ -875,7 +892,60 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY ONLY. The one live ruling here is R2 (0088 filename).
+## 12. Rulings ledger -- HISTORY, plus the two live rulings R2 (0088 filename) and R4 (exempt six).
+
+**R4 (LIVE) -- step 5 is set-equality against six named rows; the CHECK carries them by id; the
+0081 drop moves to 0089.** Ruled by fable 2026-09-13 12:53Z (ledger v1.71, `3800e9d`), relayed by
+marcus m49590_mtztfsz1 (12:54Z) and m49643_mtztu8s7 (13:05Z), on marcus's question
+m49538_mtzt2uia (12:44Z, to fable). Marcus's prod read in m49538 (his, read-only via Neon; NOT
+my read): of 39 live feed-tier rows 24 have a NULL server, 18 of those are expired and step 5
+lapses them, 6 are live with no server: `giang2000ln` x3 (paid, $30, ends 2026-09-19 17:12Z) and
+`rasoolx55` x3 (trial, $0, ends 2026-09-25 19:01Z); servers ever registered by either = 0; giang
+is the only paying feed client. Fable rejected both of marcus's options (a partial licence-keyed
+twin covering NULL-server live rows; waiting for 09-25) and ruled a third that touches no paying
+client and waits on nothing:
+1. Step 5 gate = set-equality against the six full uuids (giang `82147257` / `4a0a7fb8` /
+   `00f9e32c`, rasool `a453d4c0` / `2e7ad400` / `1161625a`). Any other live NULL-server row
+   aborts. Dead rows lapse as already written.
+2. The CHECK carries the exception: `status = 'lapsed' or server_registration_id is not null or
+   id in (<the 6 literal uuids>)`. Nothing can join the set (uuid primary keys); every new
+   NULL-server live row is still refused; the six rows' renewal UPDATEs pass. `NOT VALID` was
+   considered and REJECTED: Postgres re-checks every UPDATED row against a NOT VALID constraint,
+   so giang's renewal would fail 23514, the same paying client cut by another route.
+3. Step 6: preflight D as written, the 0081 drop moves out to the follow-up. The rollback no
+   longer recreates 0081 and no longer needs its duplicate-group preflight.
+4. A follow-up migration, its own number, applied once all six are bound or lapsed: gate
+   live-rows-with-an-exempt-id = 0, drop and re-add the CHECK without the exception, drop 0081.
+   The REMOVAL POINT comment at feed-subscriptions.ts:392 and the section-8 cleanup sentence
+   re-point there.
+Scope she set: step 5, the CHECK, step 6, the rollback, this section, the stub. T1-T6 unchanged.
+The apply stays gated on coxwell; the exemption is a ruling with named ids and a removal, not a
+softened guard.
+
+Applied at this commit (diff against 9c62556, files 2, 3, 6, 7 of section 1):
+- 0088 step 5: `tmp_0088_exempt` (six literal ids, FILL-IN placeholders until marcus supplies the
+  full uuids; they are not in my reads, the bus carries only the 8-char prefixes) and two gates,
+  live-not-exempt = 0 (BLOCK, rows named) and exempt-not-live = 0 (a spare exemption is refused;
+  prune both lists). New summary column `fs_no_server_live_exempt`; `fs_no_server_live` now
+  expects 6, not 0. The CHECK gains the `id in (...)` branch; a DO block after ADD CONSTRAINT
+  reads `pg_get_constraintdef` back and aborts unless every exempt id is in the text and the
+  text carries exactly that many uuid literals.
+- 0088 step 6: preflight D adds `server_registration_id is not null` to its WHERE. As written it
+  would have aborted on the six: they are two subscribers on the same three tiers, and GROUP BY
+  treats their NULL servers as one group per tier (count 2, three false duplicate groups) where
+  the unique index treats NULLs as distinct. Flagged to marcus as the one change inside "preflight
+  D as written". The `drop index` statement is gone; the 0081 twin is named as staying.
+- 0088 rollback: step-6 reverse block deleted (no recreate, no duplicate preflight); preflight
+  refuses a '0089' ledger row (0089_rollback.sql runs first); header restore list updated.
+- 0089_drop_server_or_lapsed_exception.sql + 0089_rollback.sql: stubs as item 4, with the same
+  FILL-IN list, a step-1 read-back of the live CHECK text (list must match as applied), and the
+  duplicate-group preflight relocated to the rollback's 0081 recreate. Number 0089 = next free in
+  db/migrations at this branch (0087 parked, Leo; 0088 this file); marcus confirms.
+- Not touched (marcus m49643): 2b(a)/(b)/(c), T1-T6 hunks, the two extra summary columns (KEEP,
+  his ruling 3(a)), the 2b staging mechanism (fable's to strike or keep, 3(b)), the rollback
+  fill-in and the 0087 notice (3(c)). The 2b(b) gate comment at 0088:384 still says "exactly
+  step 5's block set"; the gate itself (staged ids must be live no-server rows) still holds, and a
+  worded lapse of an exempt row is legitimate provided the list is pruned. Left as is, flagged.
 
 R1 and R3 were marcus's rulings of 23:26Z and 23:29Z, made before he had read fable's 23:23Z
 review, and WITHDRAWN by him in m49215_mtz0lxlf (23:27Z, "fable governs") and again in m49385
