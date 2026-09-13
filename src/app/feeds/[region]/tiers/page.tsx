@@ -103,7 +103,15 @@ type PackageCardState = TierRequestState | "mixed";
  * feed_tier batches, 2 multi-member, 0 with a rejection and 0 with mixed member statuses. This
  * branch has to be correct the first time it executes, not pretty. Members are the ones this
  * region actually renders, not expandTierKey()'s full list -- the card can only speak for the
- * tiers on it. */
+ * tiers on it.
+ *
+ * QUANTIFIER, vs the other package rollup: feed-providers.ts:105 rolls a package up with
+ * .some() and this rolls it up with every(). Deliberately opposite, deliberately NOT one
+ * shared helper. :105 asks "is there live money here" -- a provider who owns ONE member of a
+ * bundle must see and be paid for that request, so any overlap qualifies. This asks "does this
+ * client hold what the card promises" -- the card sells three feeds as one bundle, so anything
+ * short of all three must not render as granted. Generalising them would make one of the two
+ * wrong. Change one, read the other (marcus, same thread). */
 function packageCardState(memberStates: TierRequestState[]): PackageCardState {
   if (memberStates.every((s) => s === "granted")) return "granted";
   if (memberStates.every((s) => s === "pending")) return "pending";
@@ -327,28 +335,12 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                   {group.members.length} feeds from one provider, sold as a single bundle at one price.
                 </p>
                 <div className="ftd-pkg-members">
-                  {group.members.map((m, i) => {
+                  {group.members.map((m) => {
                     const londonScore = region === "london" ? londonScoreDisplay(m.tierKey) : null;
                     return (
                       <div key={m.tierKey} className="ftd-pkg-member">
                         <div className="ftd-pkg-member-row">
                           <span className="ftd-pkg-member-name">{m.name}</span>
-                          {/* Per-member status only in the mixed case: when the members agree the
-                              control below says it once. Every state is named, 'none' included --
-                              a blank slot next to two labelled siblings reads as unknown, and the
-                              mixed card's whole job is that each tier carries its own state
-                              (marcus R1, kai-feed-entitlement-vs-request-visibility-2026-09-13).
-                              Reuses ftd-subtitle rather than adding a class portal.css does not
-                              have (that file is not in my grant this thread). */}
-                          {cardState === "mixed" && (
-                            <span className="ftd-subtitle">
-                              {memberStates[i] === "granted"
-                                ? "Approved"
-                                : memberStates[i] === "pending"
-                                  ? "Requested"
-                                  : "Not requested"}
-                            </span>
-                          )}
                           <span className="ftd-pkg-member-score">
                             {londonScore ?? m.speedDisplay}
                             <span className="ftd-speed-unit">{isScoreRegion(region) ? "/100" : "µs"}</span>
@@ -359,15 +351,19 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                   })}
                 </div>
                 {cardState === "mixed" ? (
-                  /* No button, not even a disabled one: every submit path from here throws
-                     (DuplicateTierGrantError / DuplicatePendingRequestError on the members that
-                     already have a row), and a control that can only throw must not render as
-                     actionable -- a greyed button still advertises an action (marcus R2).
-                     No package-level pill either: the card stops claiming a single state when
-                     its members disagree, because a count ("2 of 3 approved") is a SUMMARY of a
-                     disagreement, and that is where the truth gets lost. The member rows above
-                     already carry the whole answer; this line only says where to read it. */
-                  <p className="ftd-desc">Each tier above is handled individually.</p>
+                  /* No button, not even a disabled one: the submit path from here throws
+                     (access-requests.ts:205 asserts no live grant per member and rolls the whole
+                     batch back), and a control that can only throw must not render as actionable
+                     -- a greyed button still advertises an action. No pill and no per-member
+                     labels either: this is loud-and-stuck on purpose, NOT a designed state, and
+                     a real partial pill with a CTA for the remainder is Iris's later (marcus R2
+                     AMENDED, kai-feed-entitlement-vs-request-visibility-2026-09-13).
+                     The wording does NOT say "partly approved": "mixed" is any disagreement,
+                     including pending + none with nothing approved at all, so an approval claim
+                     would be false on that shape. "different stages" is true on every shape. */
+                  <p className="ftd-desc">
+                    Tiers in this bundle are at different stages, so it cannot be requested as one.
+                  </p>
                 ) : (
                   <TierRequestControl
                     region={region}
