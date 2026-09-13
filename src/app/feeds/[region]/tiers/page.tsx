@@ -114,9 +114,9 @@ type PackageCardState = TierRequestState | "mixed";
  * than an under-reporting one. Do not "fix" this to expandTierKey() without reading that
  * trade-off first.
  *
- * QUANTIFIER, vs the other package rollup: feed-providers.ts:105 rolls a package up with
+ * QUANTIFIER, vs the other package rollup: feed-providers.ts:112 rolls a package up with
  * .some() and this rolls it up with every(). Deliberately opposite, deliberately NOT one
- * shared helper. :105 asks "is there live money here" -- a provider who owns ONE member of a
+ * shared helper. :112 asks "is there live money here" -- a provider who owns ONE member of a
  * bundle must see and be paid for that request, so any overlap qualifies. This asks "does this
  * client hold what the card promises" -- the card sells three feeds as one bundle, so anything
  * short of all three must not render as granted. Generalising them would make one of the two

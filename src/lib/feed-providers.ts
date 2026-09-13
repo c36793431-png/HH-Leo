@@ -102,6 +102,13 @@ export async function listPendingRequestsForProvider(providerUserId: string): Pr
   const owned = await tierKeySetFor(providerUserId);
   if (owned.size === 0) return [];
   const all = await listFeedTierRequests({ status: "pending" });
+  /** Package rollup, provider side: .some(). The mirror of this is packageCardState() in
+   * app/feeds/[region]/tiers/page.tsx, which rolls the same package up with every(). The
+   * quantifiers are opposite on purpose and must not be merged into one helper. This asks
+   * "is there live money here": a provider owning ONE member of a bundle must see and be
+   * paid for that request, so any overlap qualifies. The card asks "does this client hold
+   * what the card promises", so anything short of all members is not granted. Change one,
+   * read the other. */
   const scoped = all.filter((r) => expandTierKey(r.tierKey).some((k) => owned.has(k)));
   return maskIdentity(providerUserId, scoped);
 }
