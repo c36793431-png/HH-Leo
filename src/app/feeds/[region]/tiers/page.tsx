@@ -77,11 +77,39 @@ const PACKAGE_LABELS: Record<string, string> = {
 
 /** The tier_key a package's single Request access button submits under -- see the
  * ld-retail-package comment in feed-tier-catalogue.ts for why this is a pseudo-tier
- * rather than the three real member tier keys. */
+ * rather than the three real member tier keys. Submit-only: nothing ever READS a request
+ * back under this key (see packageCardState). */
 const PACKAGE_REQUEST_TIER_KEY: Record<string, string> = {
   retail: "ld-retail-package",
   "ny-retail": "ny-retail-package",
 };
+
+/** "mixed" is a package-card-only state: members disagree, so there is no single honest
+ * pill and no live button (marcus R2, kai-feed-entitlement-vs-request-visibility-2026-09-13).
+ * It is deliberately NOT a TierRequestState -- the control renders three states and takes
+ * no fourth; the mixed branch renders instead of the control, not through it. */
+type PackageCardState = TierRequestState | "mixed";
+
+/** A package card's state derives from its MEMBER tiers, never from the package pseudo-tier
+ * key (marcus R1, same thread). The card used to look its state up under
+ * PACKAGE_REQUEST_TIER_KEY, which no row has carried since 0086 phase 2: createFeedTierRequest
+ * expands the package key through expandTierKey() and writes one access_requests envelope per
+ * MEMBER tier, and listFeedTierRequests maps each envelope back to its member tier_key. So the
+ * lookup could only ever miss, and a client holding the whole bundle -- granted or pending --
+ * kept being shown a live "Request access" button that DuplicateTierGrantError /
+ * DuplicatePendingRequestError would reject on submit.
+ *
+ * Mixed (R2) has never occurred in prod: marcus's Neon read 2026-09-13 20:06Z found 12
+ * feed_tier batches, 2 multi-member, 0 with a rejection and 0 with mixed member statuses. This
+ * branch has to be correct the first time it executes, not pretty. Members are the ones this
+ * region actually renders, not expandTierKey()'s full list -- the card can only speak for the
+ * tiers on it. */
+function packageCardState(memberStates: TierRequestState[]): PackageCardState {
+  if (memberStates.every((s) => s === "granted")) return "granted";
+  if (memberStates.every((s) => s === "pending")) return "pending";
+  if (memberStates.every((s) => s === "none")) return "none";
+  return "mixed";
+}
 
 /** Institutional ($10k+) vs retail segment split (marcus/coxwell,
  * leo-tiers-institutional-retail-labels-2026-08-21). feed_tiers has no price_cents
@@ -284,6 +312,9 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
         {tierGroups.map((group) => {
           if (group.members.length > 1) {
             const label = PACKAGE_LABELS[group.packageKey] ?? group.packageKey;
+            const memberStates = group.members.map((m) => requestStateFor(m.tierKey));
+            const cardState = packageCardState(memberStates);
+            const grantedCount = memberStates.filter((s) => s === "granted").length;
             return (
               <div key={group.packageKey} className="card ftd-tier-card ftd-package">
                 {region === "london" && (
@@ -297,12 +328,21 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                   {group.members.length} feeds from one provider, sold as a single bundle at one price.
                 </p>
                 <div className="ftd-pkg-members">
-                  {group.members.map((m) => {
+                  {group.members.map((m, i) => {
                     const londonScore = region === "london" ? londonScoreDisplay(m.tierKey) : null;
                     return (
                       <div key={m.tierKey} className="ftd-pkg-member">
                         <div className="ftd-pkg-member-row">
                           <span className="ftd-pkg-member-name">{m.name}</span>
+                          {/* Per-member status only in the mixed case (R2's "show the truth"); the
+                              three agreeing states already say it once in the pill below, and this
+                              slot reuses ftd-subtitle rather than adding a class portal.css does not
+                              have (that file is not in my grant this thread). */}
+                          {cardState === "mixed" && memberStates[i] !== "none" && (
+                            <span className="ftd-subtitle">
+                              {memberStates[i] === "granted" ? "Approved" : "Requested"}
+                            </span>
+                          )}
                           <span className="ftd-pkg-member-score">
                             {londonScore ?? m.speedDisplay}
                             <span className="ftd-speed-unit">{isScoreRegion(region) ? "/100" : "µs"}</span>
@@ -312,16 +352,26 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                     );
                   })}
                 </div>
-                <TierRequestControl
-                  region={region}
-                  tierKey={PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey}
-                  tierName={`${label} package`}
-                  requestState={requestStateFor(PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey)}
-                  servers={serverOptions}
-                  hasAnyRegisteredServer={hasAnyRegisteredServer}
-                  fallbackLicenseTail={licenseTail}
-                  variant="primary"
-                />
+                {cardState === "mixed" ? (
+                  /* No button, not even a disabled one: every submit path from here throws
+                     (DuplicateTierGrantError / DuplicatePendingRequestError on the members that
+                     already have a row), and a control that can only throw must not render as
+                     actionable -- marcus R2, Fable's S3 "loud-and-stuck beats silent-and-wrong". */
+                  <span className="ftd-requested-pill">
+                    <span className="dot" /> {grantedCount} of {group.members.length} approved
+                  </span>
+                ) : (
+                  <TierRequestControl
+                    region={region}
+                    tierKey={PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey}
+                    tierName={`${label} package`}
+                    requestState={cardState}
+                    servers={serverOptions}
+                    hasAnyRegisteredServer={hasAnyRegisteredServer}
+                    fallbackLicenseTail={licenseTail}
+                    variant="primary"
+                  />
+                )}
               </div>
             );
           }

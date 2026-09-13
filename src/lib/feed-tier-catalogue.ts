@@ -46,9 +46,15 @@ export const FEED_TIERS: FeedTierMeta[] = [
   { key: "ny-fast", name: "NY Alpha", region: "ny" },
   /** Pseudo-tier for the Base package card's single request button (tiers/page.tsx
    * TIER_PACKAGE_KEY, london-tiers-retail-package-card-2026-08-29). Not a real feed_tiers
-   * DB row and never rendered as its own card -- exists only so feed_tier_requests gets
-   * one row per package purchase (tier_key is unconstrained text, no migration needed)
-   * instead of three disconnected per-tier rows for what the client bought as one bundle.
+   * DB row and never rendered as its own card. SUBMIT-SIDE ONLY since 0086 phase 2: the
+   * button posts this key, createFeedTierRequest expands it through expandTierKey() and
+   * writes one access_requests envelope per MEMBER tier in one batch, so no stored row
+   * carries this tier_key and no read path can find one under it (it named the single
+   * feed_tier_requests row per package purchase before 0086; that table is no longer
+   * written or read). Anything showing a package's state has to derive it from the member
+   * tiers -- tiers/page.tsx packageCardState(), added after this stale wording cost the
+   * package card its granted/pending state (marcus R1,
+   * kai-feed-entitlement-vs-request-visibility-2026-09-13).
    * name is client-facing via feed-tier-requests.ts's admin queue + Telegram approve/decline
    * DM (feedTierMeta lookup) -- renamed Retail -> Base per coxwell (marcus, feed-tier-entitlement-2026-09-01),
    * tier_key ("ld-retail-package") intentionally unchanged, same pattern as 0074's Alpha/Ultra rename. */
