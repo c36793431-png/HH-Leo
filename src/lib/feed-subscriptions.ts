@@ -269,12 +269,22 @@ export async function computeUnlockedFeedTypes(userId: string): Promise<FeedType
  * Subject key: the user PK, falling back to the licence id for an unclaimed pre-provisioned
  * licence (user_id NULL, see claimPendingLicense). Without the fallback every unclaimed licence
  * would collapse into a single NULL subject and the tile would undercount them as one client --
- * the old per-licence count had no such hazard, and zero such licences exist today, so this
- * guard is holding a door the population has not yet walked through.
+ * the same footgun as grouping by a nullable email, one grain up. **There are zero such licences
+ * as of 2026-09-13; this prevents them collapsing to a single NULL client if any appear.** It is
+ * a stated precaution, not load-bearing logic -- do not read the fallback as evidence that
+ * unclaimed licences carry feed_types today.
  *
  * Liveness is EFFECTIVE_STATUS_SQL's, not s.status -- a grant on an expired licence stops being
- * billed here the same moment its card re-locks for the client. A trial-originated grant DOES
- * count: the feed provider charges us for the connection whether or not the client is paying yet.
+ * billed here the same moment its card re-locks for the client.
+ *
+ * A trial-originated grant DOES count, and this is the one place the Costs tile is SUPPOSED to
+ * disagree with the Subscribers headcount. SUBSCRIBER_STATUS_SQL above deliberately excludes a
+ * trial-licence row, because "Subscribers is live paying clients" (coxwell). This function
+ * deliberately includes it, because the feed provider charges us for the connection whether or
+ * not the client is paying yet. Cost is a cost fact; the headcount is an entitlement fact.
+ * **The divergence is intended -- do not "fix" it by pointing this at SUBSCRIBER_STATUS_SQL**
+ * (marcus, m50259: an intended disagreement with no marker is indistinguishable from an
+ * unintended one, and the standing rule is that two surfaces disagreeing is a defect).
  *
  * The join to feed_definitions is inner on purpose: a feed_type with no definition row has no
  * price, so it contributes no money AND no client, exactly as the old
