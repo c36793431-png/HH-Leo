@@ -116,13 +116,6 @@ export default async function FeedLandingPage() {
                 </svg>
                 Institutional&nbsp;+&nbsp;retail reach
               </li>
-              <li className="fl-pill">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 3v18h18" />
-                  <path d="m7 15 3-4 3 2 4-6" />
-                </svg>
-                Transparent uptime
-              </li>
               <li className="fl-pill fl-earn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
@@ -238,7 +231,7 @@ export default async function FeedLandingPage() {
             </div>
             <div className="fl-tcell">
               <div className="fl-tv">Measured</div>
-              <div className="fl-tl">Uptime &amp; latency by Horizon, not self-reported</div>
+              <div className="fl-tl">Latency &amp; gaps by Horizon, not self-reported</div>
             </div>
           </div>
         </section>
@@ -272,7 +265,7 @@ export default async function FeedLandingPage() {
             </div>
             <h3>Measured, not claimed</h3>
             <p>
-              Uptime, tick rate, and gaps are measured by Horizon and shown the same way in our open Feed Comparison
+              Tick rate and gaps are measured by Horizon and shown the same way in our open Feed Comparison
               — your quality speaks for itself, no invented vendor numbers.
             </p>
           </div>
@@ -368,7 +361,7 @@ export default async function FeedLandingPage() {
                   <span className="fl-n">2</span>
                   <div className="fl-sx">
                     <b>Reviewed &amp; measured</b>
-                    <p>We benchmark uptime, latency, and gaps, then set a capability tier from the data.</p>
+                    <p>We benchmark latency and gaps, then set a capability tier from the data.</p>
                   </div>
                 </div>
                 <div className="fl-step">
