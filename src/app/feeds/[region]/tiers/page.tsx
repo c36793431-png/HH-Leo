@@ -314,7 +314,6 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             const label = PACKAGE_LABELS[group.packageKey] ?? group.packageKey;
             const memberStates = group.members.map((m) => requestStateFor(m.tierKey));
             const cardState = packageCardState(memberStates);
-            const grantedCount = memberStates.filter((s) => s === "granted").length;
             return (
               <div key={group.packageKey} className="card ftd-tier-card ftd-package">
                 {region === "london" && (
@@ -334,13 +333,20 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                       <div key={m.tierKey} className="ftd-pkg-member">
                         <div className="ftd-pkg-member-row">
                           <span className="ftd-pkg-member-name">{m.name}</span>
-                          {/* Per-member status only in the mixed case (R2's "show the truth"); the
-                              three agreeing states already say it once in the pill below, and this
-                              slot reuses ftd-subtitle rather than adding a class portal.css does not
+                          {/* Per-member status only in the mixed case: when the members agree the
+                              control below says it once. Every state is named, 'none' included --
+                              a blank slot next to two labelled siblings reads as unknown, and the
+                              mixed card's whole job is that each tier carries its own state
+                              (marcus R1, kai-feed-entitlement-vs-request-visibility-2026-09-13).
+                              Reuses ftd-subtitle rather than adding a class portal.css does not
                               have (that file is not in my grant this thread). */}
-                          {cardState === "mixed" && memberStates[i] !== "none" && (
+                          {cardState === "mixed" && (
                             <span className="ftd-subtitle">
-                              {memberStates[i] === "granted" ? "Approved" : "Requested"}
+                              {memberStates[i] === "granted"
+                                ? "Approved"
+                                : memberStates[i] === "pending"
+                                  ? "Requested"
+                                  : "Not requested"}
                             </span>
                           )}
                           <span className="ftd-pkg-member-score">
@@ -356,10 +362,12 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                   /* No button, not even a disabled one: every submit path from here throws
                      (DuplicateTierGrantError / DuplicatePendingRequestError on the members that
                      already have a row), and a control that can only throw must not render as
-                     actionable -- marcus R2, Fable's S3 "loud-and-stuck beats silent-and-wrong". */
-                  <span className="ftd-requested-pill">
-                    <span className="dot" /> {grantedCount} of {group.members.length} approved
-                  </span>
+                     actionable -- a greyed button still advertises an action (marcus R2).
+                     No package-level pill either: the card stops claiming a single state when
+                     its members disagree, because a count ("2 of 3 approved") is a SUMMARY of a
+                     disagreement, and that is where the truth gets lost. The member rows above
+                     already carry the whole answer; this line only says where to read it. */
+                  <p className="ftd-desc">Each tier above is handled individually.</p>
                 ) : (
                   <TierRequestControl
                     region={region}
