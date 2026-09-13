@@ -38,6 +38,18 @@ interface AdminRow {
   created_at: Date;
 }
 
+/** The connection columns carried forward onto provider_tiers at confirm time (0083).
+ * Kept off AdminRow deliberately: every other query in this file selects the terms columns
+ * only, so widening AdminRow would type those rows for fields they never fetch. */
+interface ConnectionRow {
+  protocol: string | null;
+  endpoint_host: string | null;
+  endpoint_port: string | null;
+  compid: string | null;
+  regions: string[] | null;
+  coverage: string[] | null;
+}
+
 function mapAdminRow(row: AdminRow): ProposalRoundRow {
   return {
     id: row.id,
@@ -313,10 +325,13 @@ export function calcRetainedCents(clientPriceCents: number, providerSplitPct: nu
  * the reviewed proposal row itself is never mutated beyond its own status/decision
  * fields, so the override never touches the audit trail). Stamps the round confirmed
  * (this is also what arms the trial clock -- provider_tiers.confirmed_at), then mirrors
- * terms onto provider_tiers -- update in place if a row for this (application_id,
- * tier_name) already exists (renegotiation of a live tier), otherwise insert one (first
- * confirmation). Built against marcus's authoritative §5/§6 spec, bus thread
- * provider-terms-negotiation-2026-08-24 (m29333/m29343 reconciled). */
+ * terms and the scalar connection details onto provider_tiers -- update in place if a row
+ * for this (application_id, tier_name) already exists (renegotiation of a live tier),
+ * otherwise insert one (first confirmation). Built against marcus's authoritative §5/§6
+ * spec, bus thread provider-terms-negotiation-2026-08-24 (m29333/m29343 reconciled); the
+ * connection copy-forward is marcus's later go (m47739/m47740, 2026-09-10) and now covers all
+ * six columns -- the four scalars plus the regions/coverage arrays, whose hold he withdrew the
+ * same day. See the comment at the branch for the null and endpoint_verified semantics. */
 export async function confirmProposalRound(
   proposalId: string,
   adminUserId: string,
@@ -326,10 +341,11 @@ export async function confirmProposalRound(
   try {
     await client.query("begin");
 
-    const proposalResult = await client.query<AdminRow>(
+    const proposalResult = await client.query<AdminRow & ConnectionRow>(
       `select id, application_id, provider_user_id, tier_name, client_price_cents,
               provider_split_pct, trial_length_days, terms_status, declined_note,
-              decided_by, decided_at, created_at
+              decided_by, decided_at, created_at,
+              protocol, endpoint_host, endpoint_port, compid, regions, coverage
        from provider_tier_proposals where id = $1 for update`,
       [proposalId]
     );
@@ -356,24 +372,79 @@ export async function confirmProposalRound(
     // now() this statement stamps on confirmed_at. A trial-less round must clear
     // trial_expires_at and set status='live' explicitly -- re-confirming a later round must
     // not silently regress to the column default or leave a stale trial window in place.
+    //
+    // Connection copy-forward (marcus, m47739/m47740, 2026-09-10; regions/coverage added on his
+    // withdrawal of the hold, 2026-09-10): the confirmed round's connection details land on
+    // provider_tiers verbatim -- no parsing and no shape change, source and destination being the
+    // same declared type on both sides. protocol/endpoint_host/endpoint_port/compid are text on
+    // 0061 and on 0060+0083 alike; regions/coverage are text[] on provider_tier_proposals
+    // (0061:25-26) AND on provider_tiers (0083:56-57), so those two are a straight same-type array
+    // copy, not a delimiter decision. The free-text regions/coverage that WOULD need a split rule
+    // live on provider_applications (0059:24-25) -- a different table, never read on this path.
+    // marcus's no-parse ruling is scoped to that table and does not travel here just because the
+    // column names match.
+    //
+    // Null is written as null on all six columns and on BOTH branches by design: a blank proposal
+    // field means "not supplied", never "unchanged", so the update must overwrite a previously-set
+    // value with null rather than coalesce the old one forward, and must never synthesise a
+    // default. coalesce here would make "clear this field" inexpressible and would silently
+    // reinterpret an intentional blank as "keep" (marcus, 2026-09-10). The real guard -- refusing
+    // a blank connection field at renegotiation submit time -- belongs on the submit form and is
+    // logged as a separate item, deliberately not built here.
+    //
+    // endpoint_verified (0060) has no proposal counterpart, but it cannot simply be left alone on
+    // the update branch (marcus, 2026-09-10). Verification is a claim about a specific host:port,
+    // not about a row: move the endpoint and the claim is void by definition, and a stale `true`
+    // riding onto an endpoint nobody checked is worse than a blank because it will be believed.
+    // So it is forced false -- but only on an ACTUAL change, keyed in SQL off the pre-update row
+    // rather than in JS, so a no-op re-confirmation cannot destroy a real verification. (In an
+    // UPDATE, every SET right-hand side sees the OLD row, so provider_tiers.endpoint_host here is
+    // the value before this statement, not $6.) `is distinct from` rather than `<>` so a
+    // null-to-value or value-to-null transition counts as a change instead of being swallowed by
+    // three-valued logic. The insert branch needs no clause: a brand-new tier row takes 0060's
+    // `not null default false`, which is already the honest starting claim.
     if (existingTier.rows[0]) {
       await client.query(
         `update provider_tiers
          set client_price_cents = $2,
              provider_split_pct = $3,
              trial_length_days = $4,
+             protocol = $5,
+             endpoint_host = $6,
+             endpoint_port = $7,
+             compid = $8,
+             regions = $9,
+             coverage = $10,
+             endpoint_verified = case
+               when provider_tiers.endpoint_host is distinct from $6::text
+                 or provider_tiers.endpoint_port is distinct from $7::text
+               then false
+               else provider_tiers.endpoint_verified
+             end,
              confirmed_at = now(),
              status = case when $4::int > 0 then 'trial' else 'live' end,
              trial_expires_at = case when $4::int > 0 then now() + make_interval(days => $4::int) else null end
          where id = $1`,
-        [existingTier.rows[0].id, proposal.client_price_cents, effectiveSplitPct, proposal.trial_length_days]
+        [
+          existingTier.rows[0].id,
+          proposal.client_price_cents,
+          effectiveSplitPct,
+          proposal.trial_length_days,
+          proposal.protocol,
+          proposal.endpoint_host,
+          proposal.endpoint_port,
+          proposal.compid,
+          proposal.regions,
+          proposal.coverage,
+        ]
       );
     } else {
       await client.query(
         `insert into provider_tiers
            (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
-            trial_length_days, confirmed_at, status, trial_expires_at)
-         values ($1, $2, $3, $4, $5, $6, now(),
+            trial_length_days, protocol, endpoint_host, endpoint_port, compid, regions, coverage,
+            confirmed_at, status, trial_expires_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(),
                  case when $6::int > 0 then 'trial' else 'live' end,
                  case when $6::int > 0 then now() + make_interval(days => $6::int) else null end)`,
         [
@@ -383,6 +454,12 @@ export async function confirmProposalRound(
           proposal.client_price_cents,
           effectiveSplitPct,
           proposal.trial_length_days,
+          proposal.protocol,
+          proposal.endpoint_host,
+          proposal.endpoint_port,
+          proposal.compid,
+          proposal.regions,
+          proposal.coverage,
         ]
       );
     }

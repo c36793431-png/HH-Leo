@@ -3,12 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createFeedRequest } from "@/lib/feed-requests";
-import { createFeedTierRequest } from "@/lib/feed-tier-requests";
+import { createFeedTierRequest, startSelfServeFeedTierTrial } from "@/lib/feed-tier-requests";
 import { feedTierMeta, isFeedRegion } from "@/lib/feed-tier-catalogue";
 import { getActiveLicenseForUser, getActiveLicensesForUser } from "@/lib/licenses";
-import { getServerRegistrationsForUser } from "@/lib/server-registration";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { startFeedTierTrial, cancelFeedTierTrial, getFeedTierTrial } from "@/lib/feed-tier-trials";
+import { cancelFeedTierTrial, getFeedTierTrial } from "@/lib/feed-tier-trials";
 
 export async function submitFeedRequestAction(
   _prevState: ActionResult | null,
@@ -55,16 +54,13 @@ export async function submitFeedTierRequestAction(
     const license = licenses.find((l) => l.id === licenseId);
     if (!license) throw new Error("Invalid server selection");
 
-    // A license with no server_registrations row of its own is a deliberate allowed
-    // submission (coxwell, leo-cross-region-server-picker-2026-09-04 refinement 3) -- it
-    // lands in Fable's R6 "binding unconfirmed" list downstream. But R6 never extends to a
-    // client with zero registrations anywhere (marcus, same thread, 2026-09-04 ruling): that
-    // request would carry no server for the provider to allowlist. The client-side disabled
-    // state must not be the only thing enforcing this -- check the user, not the per-license
-    // row, so it still catches an unregistered license paired with a tampered form submit.
-    const registrations = await getServerRegistrationsForUser(session.user.id);
-    if (registrations.length === 0) throw new Error("Register a server before requesting access");
-
+    // 0086 phase 2 (docs/specs/0086-phase2-code.md section 2; coxwell notice C3): a request is
+    // keyed on the licence's server row (feed_tier_request_details.server_registration_id NOT
+    // NULL, 0086:414), so a licence with no registration can no longer be submitted -- the
+    // library refuses with "Register a server for this licence before requesting access". That
+    // replaces the former "any registration anywhere" check (R6 "binding unconfirmed" is gone:
+    // there is nothing to write for an unbound licence). Ownership of the server row is
+    // re-checked inside the library's transaction, never trusted from the form.
     await createFeedTierRequest({
       userId: session.user.id,
       licenseId: license.id,
@@ -81,9 +77,13 @@ export type StartTrialResult =
   | { ok: false; error: string };
 
 /** Trial CTA on the LD Alpha / LD Ultra tier-detail cards (marcus, horizon-portal-v2051-polish
- * trial add-on). Wraps the lib/feed-tier-trials.ts functions shipped in 4f6ab0b. Returns the
- * created trial's id/endsAt (unlike the generic ActionResult) so the client can render the
- * countdown + wire the cancel button without a page reload. */
+ * trial add-on). Since 0086 phase 2 (spec section 7, Source H) a self-serve trial is an
+ * access_requests envelope already approved as a trial (decided_by NULL) with its subscription
+ * row and allowlist record, written through startSelfServeFeedTierTrial; the feed_tier_trials
+ * row + notifications still follow, best-effort, as before. Needs the licence's registered
+ * server, not just an active licence (coxwell notice C3). Returns the trial's id/endsAt (unlike
+ * the generic ActionResult) so the client can render the countdown + wire the cancel button
+ * without a page reload. */
 export async function startFeedTierTrialAction(
   _prevState: StartTrialResult | null,
   formData: FormData
@@ -101,7 +101,7 @@ export async function startFeedTierTrialAction(
     const license = await getActiveLicenseForUser(session.user.id);
     if (!license) throw new Error("No active license on this account");
 
-    const trial = await startFeedTierTrial({
+    const trial = await startSelfServeFeedTierTrial({
       userId: session.user.id,
       licenseId: license.id,
       region,
@@ -109,7 +109,7 @@ export async function startFeedTierTrialAction(
       adminUrl: "https://feed.horizonhft.com/admin/feed-tier-trials",
     });
     revalidatePath(`/feeds/${region}/tiers`);
-    return { ok: true, trialId: trial.id, endsAt: trial.trialEndsAt.toISOString() };
+    return { ok: true, trialId: trial.trialId ?? "", endsAt: trial.endsAt.toISOString() };
   } catch (err) {
     return { ok: false, error: err instanceof Error && err.message ? err.message : "Failed to start trial" };
   }

@@ -16,6 +16,10 @@ export const VPS_PROVIDERS = ["Beeks", "Contabo", "UltraFX Cloud", "personal", "
 export type VpsProvider = (typeof VPS_PROVIDERS)[number];
 
 export interface ServerRegistration {
+  /** The server row's own primary key (0031). This is the stable identity of a *server*;
+   * licenseId is an attribute of it, and under 0086 becomes nullable. Every by-id write
+   * below keys on this, never on licenseId. */
+  id: string;
   licenseId: string;
   serverName: string;
   vpsProvider: string;
@@ -40,6 +44,7 @@ export interface ServerRegistrationInput {
 }
 
 interface RegistrationRow {
+  id: string;
   license_id: string;
   server_name: string;
   vps_provider: string;
@@ -54,6 +59,7 @@ interface RegistrationRow {
 
 function mapRegistration(row: RegistrationRow): ServerRegistration {
   return {
+    id: row.id,
     licenseId: row.license_id,
     serverName: row.server_name,
     vpsProvider: row.vps_provider,
@@ -92,6 +98,19 @@ export async function getServerRegistration(licenseId: string): Promise<ServerRe
   const result = await pool.query<RegistrationRow>(
     "select * from server_registrations where license_id = $1",
     [licenseId]
+  );
+  return result.rowCount ? mapRegistration(result.rows[0]) : null;
+}
+
+/** By-id counterpart of getServerRegistration. The licence-keyed reader above only works
+ * while license_id is NOT NULL and unique; this one reads a server by its own identity and
+ * keeps working after the 0086 tighten. No owner filter -- it is a plain reader, and every
+ * caller that acts on the result must itself scope the write (see
+ * updateServerRegistrationById). */
+export async function getServerRegistrationById(id: string): Promise<ServerRegistration | null> {
+  const result = await pool.query<RegistrationRow>(
+    "select * from server_registrations where id = $1",
+    [id]
   );
   return result.rowCount ? mapRegistration(result.rows[0]) : null;
 }
@@ -141,9 +160,27 @@ export async function countUserActiveServers(userId: string): Promise<number> {
 
 /** Upserts the registration and fires the "new registration" alert only on first insert
  * (an edit shouldn't re-fire it). adminUrl is passed in by the caller since this lib has
- * no request context to build one from. */
+ * no request context to build one from.
+ *
+ * userId is the signed-in user, and under 0086 it must also be the licence owner -- the
+ * only caller reaches here through requireLicenseId, which accepts licenseId only if it
+ * appears in getActiveLicensesForUser(session.user.id) (licenses.ts:589, `where user_id =
+ * $1`), so the two cannot diverge at this call site. Taking it from the session rather
+ * than re-reading licenses.user_id is deliberate: 0086 keys this table on the server, not
+ * the licence (license_id is already nullable and loses its NOT NULL/owner role in the
+ * tighten), so the owner has to come from somewhere that survives license_id.
+ *
+ * Writing it is required, not optional, while 0086 is applied but the tighten is not:
+ * ledger v1.49 Ruling 1(ii) -- "every server_registrations writer writes user_id" -- and
+ * the tighten re-runs the section 1 backfill only as a safety net for rows written between
+ * apply and this deploy. No information_schema guard like checkLocationColumnExists()
+ * below: 0072 shipped code ahead of the migration, whereas 0086 was applied in prod
+ * (2026-09-12 17:30Z) before this code existed, so the column is always there. If some
+ * other DB lags 0086 the write should fail loudly with 42703 rather than silently leave
+ * user_id NULL, which is exactly what the window rule forbids. */
 export async function saveServerRegistration(
   licenseId: string,
+  userId: string,
   input: ServerRegistrationInput,
   adminUrl: string,
   ownerEmail: string | null
@@ -156,9 +193,10 @@ export async function saveServerRegistration(
   const result = hasLocationColumn
     ? await pool.query(
         `insert into server_registrations
-           (license_id, server_name, vps_provider, vps_provider_other, server_location, location, declared_ip, updated_at)
-         values ($1, $2, $3, $4, $5, $6, $7, now())
+           (license_id, user_id, server_name, vps_provider, vps_provider_other, server_location, location, declared_ip, updated_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, now())
          on conflict (license_id) do update set
+           user_id = excluded.user_id,
            server_name = excluded.server_name,
            vps_provider = excluded.vps_provider,
            vps_provider_other = excluded.vps_provider_other,
@@ -167,13 +205,14 @@ export async function saveServerRegistration(
            declared_ip = excluded.declared_ip,
            updated_at = now()
          returning (xmax = 0) as inserted`,
-        [licenseId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.location, input.declaredIp]
+        [licenseId, userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.location, input.declaredIp]
       )
     : await pool.query(
         `insert into server_registrations
-           (license_id, server_name, vps_provider, vps_provider_other, server_location, declared_ip, updated_at)
-         values ($1, $2, $3, $4, $5, $6, now())
+           (license_id, user_id, server_name, vps_provider, vps_provider_other, server_location, declared_ip, updated_at)
+         values ($1, $2, $3, $4, $5, $6, $7, now())
          on conflict (license_id) do update set
+           user_id = excluded.user_id,
            server_name = excluded.server_name,
            vps_provider = excluded.vps_provider,
            vps_provider_other = excluded.vps_provider_other,
@@ -181,7 +220,7 @@ export async function saveServerRegistration(
            declared_ip = excluded.declared_ip,
            updated_at = now()
          returning (xmax = 0) as inserted`,
-        [licenseId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.declaredIp]
+        [licenseId, userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.declaredIp]
       );
 
   if (result.rows[0]?.inserted) {
@@ -201,6 +240,61 @@ export async function saveServerRegistration(
   }
 }
 
+/** Edits an EXISTING server row by its own id. Split out of saveServerRegistration rather
+ * than folded into it: that function's upsert is keyed on `on conflict (license_id)` and
+ * stays exactly as it is (it is still the only insert path, and it still writes license_id
+ * and user_id on every insert). This is the edit path, and it touches neither license_id
+ * nor user_id -- an edit can never NULL the licence or move the row to another owner.
+ *
+ * The `and user_id = $2` clause is load-bearing, not defensive. Before the re-key the
+ * ownership check WAS the licence key: actions.ts's requireLicenseId only accepted a
+ * licenseId that appeared in the caller's own active licences, and the UPDATE then keyed on
+ * that same licenseId. Keyed on a row id instead, `where id = $1` alone would let any
+ * signed-in user edit any server row whose uuid they hold, so the owner clause has to carry
+ * the check the licence key used to carry (Fable, ledger v1.61 condition (c)). Sound today
+ * because 0086 backfilled user_id (no NULLs) and every insert has written it since ad0e10f.
+ *
+ * Returns false when nothing matched -- wrong id, or the row is not this user's. The caller
+ * cannot tell those apart, which is deliberate.
+ *
+ * No notifyServerRegistered here: that alert fires on first insert only (xmax = 0), and an
+ * edit never fired it before this split either. */
+export async function updateServerRegistrationById(
+  id: string,
+  userId: string,
+  input: ServerRegistrationInput
+): Promise<boolean> {
+  const serverLocationLabel = SERVER_LOCATION_LABELS[input.location];
+  const hasLocationColumn = await checkLocationColumnExists();
+
+  const result = hasLocationColumn
+    ? await pool.query(
+        `update server_registrations set
+           server_name = $3,
+           vps_provider = $4,
+           vps_provider_other = $5,
+           server_location = $6,
+           location = $7,
+           declared_ip = $8,
+           updated_at = now()
+         where id = $1 and user_id = $2`,
+        [id, userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.location, input.declaredIp]
+      )
+    : await pool.query(
+        `update server_registrations set
+           server_name = $3,
+           vps_provider = $4,
+           vps_provider_other = $5,
+           server_location = $6,
+           declared_ip = $7,
+           updated_at = now()
+         where id = $1 and user_id = $2`,
+        [id, userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.declaredIp]
+      );
+
+  return (result.rowCount ?? 0) > 0;
+}
+
 /** Most recent observed IP for a license, or null if the client has never connected.
  * Used client-side to distinguish Registered (nothing observed) from Verified (declared
  * IP matches what we see) — the third state, mismatch, is admin-only and never
@@ -213,11 +307,17 @@ export async function getLatestConnectionIp(licenseId: string): Promise<string |
   return result.rows[0]?.ip ?? null;
 }
 
-export async function setMultipleIpsOk(licenseId: string, value: boolean): Promise<void> {
-  await pool.query(
-    "update server_registrations set multiple_ips_ok = $2, updated_at = now() where license_id = $1",
-    [licenseId, value]
+/** Admin-only flag, keyed on the server row's id. No owner clause on purpose: the caller
+ * (admin/connections/actions.ts) gates on isAdminUser, and an admin acting on someone
+ * else's server is the whole point of the surface (Fable, ledger v1.61 condition (c)).
+ * Returns false when no row matched, so a click on a licence with no registered server
+ * reports that instead of a silent success. */
+export async function setMultipleIpsOk(registrationId: string, value: boolean): Promise<boolean> {
+  const result = await pool.query(
+    "update server_registrations set multiple_ips_ok = $2, updated_at = now() where id = $1",
+    [registrationId, value]
   );
+  return (result.rowCount ?? 0) > 0;
 }
 
 interface ConnectionRow {
@@ -227,8 +327,9 @@ interface ConnectionRow {
 
 /** Dedupes against the most recent capture for this license — every desktop-client call
  * hitting this on an unchanged IP would otherwise flood connection_ips for no signal. A
- * row only lands when the IP actually changed, which is also exactly the trigger point
- * for the mismatch/country-change alerts below. Fire-and-forget from route handlers. */
+ * row only lands when the IP actually changed, which is also the trigger point for the
+ * mismatch/country-change alerts below — with one extra guard on the mismatch alert for
+ * source "heartbeat", see inline. Fire-and-forget from route handlers. */
 export async function captureConnectionIp(
   licenseId: string,
   ip: string,
@@ -243,6 +344,32 @@ export async function captureConnectionIp(
   );
   const previous = last.rows[0] ?? null;
   if (previous && previous.ip === ip) return; // unchanged, nothing to log or alert on
+
+  // /v1/hb beats every 180s per open tab, so a client on a flapping address (mobile,
+  // residential DHCP, rotating VPS egress) hops A->B->A->B all day and would re-fire the
+  // mismatch alert on every hop. Window that ALERT at one per (license, ip) per 24h, for
+  // source "heartbeat" only — the /v1/validate path is one-shot and is left untouched.
+  // The connection_ips row below is still written on every change, so the capture log and
+  // the admin history keep full fidelity; only the notification is suppressed.
+  //
+  // The window is read off connection_ips itself rather than a new alert-log table
+  // (marcus's ruling: cheapest form, and 0085 is already queued for coxwell). That makes
+  // it a proxy — it suppresses when this pair was last SEEN by a heartbeat inside 24h, not
+  // when it was last ALERTED on. The two diverge only if the earlier sighting couldn't
+  // alert (no registration, multiple_ips_ok set, or no declared IP at the time), in which
+  // case a first alert can be delayed by up to 24h. Read BEFORE the insert below, so this
+  // beat's own row can't suppress this beat's own alert.
+  let mismatchAlertWindowed = false;
+  if (source === "heartbeat") {
+    const recent = await pool.query<{ one: number }>(
+      `select 1 as one from connection_ips
+        where license_id = $1 and ip = $2 and source = 'heartbeat'
+          and captured_at > now() - interval '24 hours'
+        limit 1`,
+      [licenseId, ip]
+    );
+    mismatchAlertWindowed = recent.rows.length > 0;
+  }
 
   await pool.query(
     `insert into connection_ips (license_id, ip, source) values ($1, $2, $3)`,
@@ -262,7 +389,7 @@ export async function captureConnectionIp(
   const feeds = feedLabels(owner.rows[0]?.feed_types);
   if (!registration || registration.multipleIpsOk) return;
 
-  if (registration.declaredIp && registration.declaredIp !== ip) {
+  if (registration.declaredIp && registration.declaredIp !== ip && !mismatchAlertWindowed) {
     await notifyIpMismatch({
       email: ownerEmail,
       serverName: registration.serverName,
@@ -315,7 +442,12 @@ export async function getConnectionHistory(licenseId: string, limit = 10): Promi
 }
 
 export interface ConnectionOverviewRow {
-  licenseId: string;
+  /** The server row's id, or null for the union's second arm (a licence with connection
+   * history but no registered server). This, not licenseId, is what identifies a row
+   * once license_id is nullable -- two licence-less servers would otherwise be
+   * indistinguishable. */
+  registrationId: string | null;
+  licenseId: string | null;
   userId: string | null;
   email: string | null;
   serverName: string | null;
@@ -332,11 +464,28 @@ export interface ConnectionOverviewRow {
   feeds: string[];
 }
 
-/** /admin/connections source of truth — one row per license that has EITHER a
- * registration or at least one captured connection, newest capture first. */
+/** /admin/connections source of truth — one row per REGISTERED SERVER, plus one row per
+ * licence that has captured connections but no server row, newest capture first.
+ *
+ * The key set used to be `select license_id from server_registrations union select
+ * license_id from latest`. Once 0086's tighten makes server_registrations.license_id
+ * nullable that unions a NULL into the key set, and every join below is on that key, so
+ * `sr.license_id = li.license_id` is never true for it: the licence-less server would
+ * collapse to a single all-NULL phantom row (SQL `union` folds every NULL into one) and
+ * the servers themselves would vanish from the admin's only view of them.
+ *
+ * So the first arm is now keyed on the server's own id and the second arm is stated
+ * explicitly as "licences with history and no server row" rather than being deduped into
+ * shape by `union`. On today's data the two are the same set of rows: license_id is still
+ * NOT NULL and still unique on server_registrations, so one key per server row is one key
+ * per license_id, and `not exists` removes exactly what `union` deduped. connection_ips
+ * .license_id is NOT NULL with an FK (0031), so the second arm cannot contribute a NULL
+ * either. Ordering expression is untouched; ties between equal timestamps were already
+ * unordered and still are. */
 export async function listConnectionOverview(): Promise<ConnectionOverviewRow[]> {
   const result = await pool.query<{
-    license_id: string;
+    registration_id: string | null;
+    license_id: string | null;
     user_id: string | null;
     email: string | null;
     server_name: string | null;
@@ -353,13 +502,22 @@ export async function listConnectionOverview(): Promise<ConnectionOverviewRow[]>
        from connection_ips
        order by license_id, captured_at desc
      ),
-     license_ids as (
-       select license_id from server_registrations
-       union
-       select license_id from latest
+     keys as (
+       -- one key per registered server, by its own id; its license_id rides along as an
+       -- attribute and may be null once the tighten lands
+       select sr.id as registration_id, sr.license_id
+       from server_registrations sr
+       union all
+       -- licences with connection history but no server row of their own
+       select null::uuid as registration_id, latest.license_id
+       from latest
+       where not exists (
+         select 1 from server_registrations sr2 where sr2.license_id = latest.license_id
+       )
      )
      select
-       li.license_id,
+       k.registration_id,
+       k.license_id,
        u.id as user_id,
        u.email,
        sr.server_name,
@@ -370,10 +528,10 @@ export async function listConnectionOverview(): Promise<ConnectionOverviewRow[]>
        latest.ip as latest_ip,
        latest.captured_at as latest_captured_at,
        l.feed_types
-     from license_ids li
-     left join server_registrations sr on sr.license_id = li.license_id
-     left join latest on latest.license_id = li.license_id
-     left join licenses l on l.id = li.license_id
+     from keys k
+     left join server_registrations sr on sr.id = k.registration_id
+     left join latest on latest.license_id = k.license_id
+     left join licenses l on l.id = k.license_id
      left join users u on u.id = l.user_id
      order by coalesce(latest.captured_at, sr.updated_at) desc nulls last`
   );
@@ -388,6 +546,7 @@ export async function listConnectionOverview(): Promise<ConnectionOverviewRow[]>
         !row.multiple_ips_ok
       );
       return {
+        registrationId: row.registration_id,
         licenseId: row.license_id,
         userId: row.user_id,
         email: row.email,

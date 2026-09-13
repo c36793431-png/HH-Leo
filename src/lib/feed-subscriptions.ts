@@ -1,8 +1,14 @@
 import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
-import type { FeedType } from "./licenses";
+import {
+  computeUserActiveFeeds,
+  getActiveLicensesForUser,
+  isFeedType,
+  type ActiveLicense,
+  type FeedType,
+} from "./licenses";
 import { FEED_REGION_TYPE, FEED_REGIONS, isFeedRegion, regionForFeedType, type FeedRegion } from "./feed-tier-catalogue";
-import { PACKAGES, packageLabelForTierKey, providerShareCentsFor } from "./feed-provider-packages";
+import { PACKAGES, packageLabelForTierKey, providerShareCentsFor, isUnpriced } from "./feed-provider-packages";
 
 /** Bus thread provider-feed-subscriber-linkage-2026-08-29 (marcus, overnight block 2,
  * migration 0071). Joins a portal account to a provider's package and masks the
@@ -17,8 +23,9 @@ function isMissingTable(err: unknown): boolean {
 }
 
 /** Postgres unique_violation. Used to tell "this insert collided with a real constraint"
- * apart from any other failure -- see upsertFeedSubscriptionForRequest below. */
-function isUniqueViolation(err: unknown): boolean {
+ * apart from any other failure. Exported for lib/access-requests.ts (0086 phase 2), whose
+ * approval insert maps a 23505 on either live index to DuplicateTierGrantError. */
+export function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }
 
@@ -27,6 +34,23 @@ export type SubscriptionStatus = "trial" | "active" | "lapsed";
 export interface CreateSubscriptionInput {
   providerUserId: string;
   subscriberUserId: string;
+  /** Required, not optional: feed_subscriptions.license_id is NOT NULL as of migration 0081
+   * step 4, with no column default and no trigger to fill it, so an insert that omits it fails
+   * with a raw 23502 that no layer translates. It is also half of the live business-key index
+   * 0081 step 5 installed -- see upsertFeedSubscriptionForRequest below. Callers must resolve a
+   * real licence and fail loudly if there isn't one; there is no "unknown licence" sentinel. */
+  licenseId: string | null;
+  /** 0086 phase 2 (docs/specs/0086-phase2-code.md section 3): a grant is keyed on the server
+   * row, not the licence -- feed_subscriptions_server_feed_tier_live_uidx (0086) is the live
+   * business key and the tighten adds `check (status = 'lapsed' or server_registration_id is
+   * not null)`. Required: there is no server-less grant. */
+  serverRegistrationId: string;
+  /** Written on every new live row (Source J/K): for a direct grant it is the licence's
+   * expires_at (the rule 0086 section 4 seeded non-trial rows with), for an approval it is the
+   * envelope's decision. The flip's preflight needs zero live rows with ends_at NULL. */
+  endsAt: Date;
+  /** Envelope id on the approval path (Source C); NULL for a direct grant. */
+  accessRequestId?: string | null;
   feedTierId?: string | null;
   providerTierId?: string | null;
   status?: SubscriptionStatus;
@@ -38,14 +62,34 @@ export interface ProviderSubscriberRow {
   tierName: string;
   tierKey: string | null;
   regionKey: string | null;
+  /** The EFFECTIVE status a surface renders -- EFFECTIVE_STATUS_SQL's verdict, then relabelled
+   * trial by statusForLicenseTier. Not the stored column; see rawStatus. */
   status: SubscriptionStatus;
+  /** The literal `feed_subscriptions.status` column, carried alongside the effective one purely
+   * so the lapse REASON can tell the two ways a row dies apart (m49070/m49081): an explicit admin
+   * lapse ("Ended {date}", the one-way ratchet, always has lapsed_at) versus a row the licence
+   * gate killed while its own column still reads 'active' ("Licence expired {date}"). Nothing may
+   * gate money or status on this -- that is `status`'s job, and mixing the two is exactly the bug
+   * class EFFECTIVE_STATUS_SQL exists to prevent. */
+  rawStatus: SubscriptionStatus;
   startedAt: Date;
+  /** When an explicit lapse was recorded, and the licence's own expiry -- the two dates the
+   * reason text prints. Both null on a live row. */
+  lapsedAt: Date | null;
+  endsAt: Date | null;
+  licenseExpiresAt: Date | null;
+  /** `licenses.tier` of the bound licence. Two jobs, both label-only: statusForLicenseTier reads
+   * it to call a live grant trial rather than paying (m49078 item 2), and the reason text reads it
+   * to say "Trial ended {date}" instead of "Licence expired {date}" when what ran out was a trial
+   * (m49101). Never an entitlement test -- that is EFFECTIVE_STATUS_SQL's, and only its. */
+  licenseTier: string | null;
   serverIp: string | null;
   /** This client's own negotiated price (Job C, bus thread
    * leo-provider-subscribers-page-2026-09-06) -- null means no price has ever been negotiated
    * for this client. Per marcus's m46504 ruling there is no fallback to any package/tier
    * default: a caller must render and total null as unset, never substitute a list price and
-   * never read it as $0. See providerShareCentsFor/-For in feed-provider-packages.ts. */
+   * never read it as $0. A stored 0 is the same unknown, not a free client -- see isUnpriced
+   * and providerShareCentsFor/-For in feed-provider-packages.ts. */
   priceCents: number | null;
 }
 
@@ -70,9 +114,10 @@ export interface ProviderSubscriberRow {
 const REGION_TO_FEED_TYPE_SQL = `case ft.region_key when 'london' then 'london' when 'ny' then 'ny' when 'tokyo' then 'crypto' else null end`;
 
 /** Bus thread feed-approve-request-creates-subscription-item3-2026-09-03 (marcus ruling):
- * a trial-originated subscription (approveFeedTierRequest -> assignFeedTierSubscription, same
- * function the admin picker uses) is written with status='active' like any other grant, so it
- * can't be told apart from a purchased one by s.status alone. Its subscriber also frequently
+ * a trial-originated subscription (approveFeedTierRequest -> upsertFeedSubscriptionForRequest --
+ * a different function from the admin picker's assignFeedTierSubscription, but both write the
+ * same 'active' literal) is written with status='active' like any other grant, so it can't be
+ * told apart from a purchased one by s.status alone. Its subscriber also frequently
  * has no license carrying the region yet -- that's the point of a trial -- so without a
  * carve-out it would immediately read 'lapsed' via the license-exists check below, hiding the
  * one case item 3 exists for. feed_tier_trials is the authority instead: a row here means the
@@ -121,10 +166,21 @@ const EFFECTIVE_STATUS_SQL = `
  * happens to also exist for the same tier -- that grant doesn't depend on the trial. Used
  * only by getActiveSubscriberCountForProvider below; listSubscribersForProvider still uses
  * EFFECTIVE_STATUS_SQL since its own status column (including "trial") is out of scope for
- * this naming pass. */
+ * this naming pass.
+ *
+ * The trial-LICENCE branch (marcus m49097 item 4, 2026-09-12) is the same rule
+ * statusForLicenseTier applies on the page, moved here so the Overview headcount and the money
+ * cannot disagree about who is a paying client: after m49078 item 2 the Subscribers page labelled
+ * HH1/HH2/HH12/HH19 trial while this tile still counted them as subscribers. It sits after the
+ * explicit-lapse branch and before every entitlement branch, so a lapse still wins and no
+ * licence-expiry logic is touched -- it only renames a row this CASE was going to call live. */
 const SUBSCRIBER_STATUS_SQL = `
   case
     when s.status = 'lapsed' then 'lapsed'
+    when exists (
+      select 1 from licenses lt
+      where lt.id = s.license_id and lt.tier = 'trial'
+    ) then 'trial'
     when ft.region_key is null then s.status
     when ${REGION_TO_FEED_TYPE_SQL} is null then s.status
     when exists (
@@ -136,6 +192,57 @@ const SUBSCRIBER_STATUS_SQL = `
   end
 `;
 
+/** The FeedTypes a client's own live grants cover -- the grant half of computeUnlockedFeedTypes
+ * below, never used on its own as a card gate (marcus, leo-approval-invisible-to-client-2026-09-11).
+ *
+ * "Live" is decided by EFFECTIVE_STATUS_SQL itself rather than by s.status, so this inherits
+ * the exact licence gate every provider-facing surface already applies: when the licence the
+ * grant is bound to expires, the row reads lapsed here too and the card re-locks. A grant must
+ * not be able to unlock a feed forever -- that would make this reader a worse entitlement
+ * source than the feed_types array it supplements.
+ *
+ * Rows whose tier has no FeedType are dropped, not guessed: cme maps to null
+ * (REGION_TO_FEED_TYPE_SQL / FEED_REGION_TYPE) and provider_tier_id rows have no region_key at
+ * all. Neither corresponds to a FEED_CATALOGUE card, so there is nothing here to unlock.
+ *
+ * Degrades to [] pre-0071 (42P01) like every other reader in this file -- a missing table must
+ * never 500 a client's own dashboard. */
+export async function computeGrantedFeedTypes(userId: string): Promise<FeedType[]> {
+  try {
+    const result = await pool.query<{ feed_type: string }>(
+      `select distinct ${REGION_TO_FEED_TYPE_SQL} as feed_type
+       from feed_subscriptions s
+       join feed_tiers ft on ft.id = s.feed_tier_id
+       where s.subscriber_user_id = $1
+         and ${REGION_TO_FEED_TYPE_SQL} is not null
+         and ${EFFECTIVE_STATUS_SQL} <> 'lapsed'`,
+      [userId]
+    );
+    return result.rows.map((r) => r.feed_type).filter(isFeedType);
+  } catch (err) {
+    if (isMissingTable(err)) return [];
+    throw err;
+  }
+}
+
+/** Which feed cards this client has -- one source for /feeds and /dashboard, so the two can
+ * never disagree about the same account (marcus, leo-approval-invisible-to-client-2026-09-11).
+ *
+ * Union, never a swap. licenses.feed_types alone missed every client whose access came from an
+ * approved tier request; grants alone would strand every pre-flow client on feed_types and
+ * permanently lock `futures` (no region in FEED_REGIONS) and `cme` (region with no FeedType),
+ * neither of which has any subscription path in the data model. The union is the only gate
+ * that is correct for both populations.
+ *
+ * Each arm degrades to [] on its own so one failing source can't erase the other's access. */
+export async function computeUnlockedFeedTypes(userId: string): Promise<FeedType[]> {
+  const [fromLicenses, fromGrants] = await Promise.all([
+    computeUserActiveFeeds(userId).catch((): FeedType[] => []),
+    computeGrantedFeedTypes(userId).catch((): FeedType[] => []),
+  ]);
+  return [...new Set([...fromLicenses, ...fromGrants])];
+}
+
 export function pseudonymLabel(seq: number): string {
   return `HH${seq}`;
 }
@@ -146,8 +253,10 @@ export function pseudonymLabel(seq: number): string {
  * subscription being created, never of it being viewed. The counter UPDATE takes a
  * row lock scoped to this provider, so two providers assigning concurrently never race;
  * two concurrent *first* subscriptions for the same (provider, subscriber) pair are
- * resolved by the final on-conflict re-select below rather than by the lock alone. */
-async function assignPseudonymSeq(
+ * resolved by the final on-conflict re-select below rather than by the lock alone.
+ * Exported for lib/access-requests.ts (0086 phase 2), which runs it on its own transaction
+ * client before the approval insert. */
+export async function assignPseudonymSeq(
   client: PoolClient,
   providerUserId: string,
   subscriberUserId: string
@@ -193,31 +302,134 @@ async function assignPseudonymSeq(
 /** Creates (or reuses) the pair's pseudonym, then inserts the subscription row, all in one
  * transaction -- a crash mid-create can't leave a pseudonym allocated with no subscription,
  * or a subscription with no pseudonym. Throws if 0071 hasn't landed yet (42P01); there is
- * nowhere to write to pre-migration, unlike the read paths below which degrade instead. */
-export async function createSubscription(input: CreateSubscriptionInput): Promise<string> {
-  const { providerUserId, subscriberUserId, feedTierId = null, providerTierId = null, status = "trial" } = input;
+ * nowhere to write to pre-migration, unlike the read paths below which degrade instead.
+ * When the caller already holds a transaction (assignFeedTierSubscription below, which has
+ * the server row FOR UPDATE), pass its client and this runs inside it with no begin/commit of
+ * its own. Window rule (Source B, 0086 phase 2): license_id is written from the caller's
+ * resolved licence, never NULLed here. */
+export async function createSubscription(input: CreateSubscriptionInput, client?: PoolClient): Promise<string> {
+  const {
+    providerUserId,
+    subscriberUserId,
+    licenseId,
+    serverRegistrationId,
+    endsAt,
+    accessRequestId = null,
+    feedTierId = null,
+    providerTierId = null,
+    status = "trial",
+  } = input;
   if ((feedTierId == null) === (providerTierId == null)) {
     throw new Error("Exactly one of feedTierId or providerTierId is required");
   }
 
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    await assignPseudonymSeq(client, providerUserId, subscriberUserId);
-    const result = await client.query<{ id: string }>(
-      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, feed_tier_id, provider_tier_id, status)
-       values ($1, $2, $3, $4, $5)
+  const insert = async (c: PoolClient): Promise<string> => {
+    await assignPseudonymSeq(c, providerUserId, subscriberUserId);
+    const result = await c.query<{ id: string }>(
+      `insert into feed_subscriptions
+         (provider_user_id, subscriber_user_id, license_id, server_registration_id, feed_tier_id,
+          provider_tier_id, status, access_request_id, ends_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        returning id`,
-      [providerUserId, subscriberUserId, feedTierId, providerTierId, status]
+      [providerUserId, subscriberUserId, licenseId, serverRegistrationId, feedTierId, providerTierId, status, accessRequestId, endsAt]
     );
-    await client.query("commit");
     return result.rows[0].id;
+  };
+
+  if (client) return insert(client);
+
+  const own = await pool.connect();
+  try {
+    await own.query("begin");
+    const id = await insert(own);
+    await own.query("commit");
+    return id;
   } catch (err) {
-    await client.query("rollback");
+    await own.query("rollback");
     throw err;
   } finally {
-    client.release();
+    own.release();
   }
+}
+
+/** The server row as the grant primitive locks it (Source D, 0086 phase 2 spec section 2 step 2
+ * and section 3 step 3a). ownerUserId is coalesce(sr.user_id, l.user_id): the window rule
+ * (Source B) -- a row Leo's /account/servers follow-up has not yet rewritten may carry user_id
+ * NULL until the tighten's backfill, and the licence's owner is the same person. */
+export interface LockedServerRegistration {
+  id: string;
+  ownerUserId: string | null;
+  licenseId: string | null;
+  /** NOT NULL on server_registrations (0031:16), so every locked row carries one. */
+  declaredIp: string;
+  serverName: string;
+}
+
+export async function lockServerRegistration(client: PoolClient, serverRegistrationId: string): Promise<LockedServerRegistration | null> {
+  const result = await client.query<{
+    id: string;
+    owner_user_id: string | null;
+    license_id: string | null;
+    declared_ip: string;
+    server_name: string;
+  }>(
+    `select sr.id, coalesce(sr.user_id, l.user_id) as owner_user_id, sr.license_id, sr.declared_ip, sr.server_name
+     from server_registrations sr
+     left join licenses l on l.id = sr.license_id
+     where sr.id = $1
+     for update of sr`,
+    [serverRegistrationId]
+  );
+  if (!result.rowCount) return null;
+  const row = result.rows[0];
+  return { id: row.id, ownerUserId: row.owner_user_id, licenseId: row.license_id, declaredIp: row.declared_ip, serverName: row.server_name };
+}
+
+/** Live-grant check on the new business key, plus the 0081 key for the deploy window (0086
+ * phase 2 spec section 2 step 4, fable P2). A row the old direct-grant code (:272 / :784 at
+ * 0a493be) wrote between 0086 apply (2026-09-12 17:30Z) and this deploy carries
+ * server_registration_id NULL and is invisible to the first query.
+ * REMOVAL POINT: the tighten migration that drops feed_subscriptions_license_feed_tier_live_uidx
+ * deletes the second query with it (spec section 9). */
+export async function assertNoLiveGrant(
+  client: PoolClient,
+  args: { serverRegistrationId: string; licenseId: string | null; feedTierId: string; tierName: string }
+): Promise<void> {
+  const live = await client.query(
+    `select 1 from feed_subscriptions
+     where server_registration_id = $1 and feed_tier_id = $2 and status in ('trial', 'active')`,
+    [args.serverRegistrationId, args.feedTierId]
+  );
+  if (live.rowCount) throw new DuplicateTierGrantError(args.tierName);
+  if (args.licenseId) {
+    const window = await client.query(
+      `select 1 from feed_subscriptions
+       where license_id = $1 and feed_tier_id = $2 and status in ('trial', 'active')`,
+      [args.licenseId, args.feedTierId]
+    );
+    if (window.rowCount) throw new DuplicateTierGrantError(args.tierName);
+  }
+}
+
+/** The allowlist record of what the vendor holds (0086 phase 2 spec section 4(a); fable P6 +
+ * S1). ip = the server's declared_ip at approval time (Source G(e)). Guard keyed on (server,
+ * tier, ip) open: an open row with the SAME ip is reused, an open row with a DIFFERENT ip is
+ * left as is (the vendor was not told to revoke it) and a new row is inserted so a changed
+ * declared_ip is recorded. told_at = now(): "what the vendor is deemed to hold"; telling the
+ * vendor is still the human step. revoked_at is never written by this slice. */
+export async function insertAllowlistRecord(
+  client: PoolClient,
+  args: { serverRegistrationId: string; feedTierId: string; ip: string }
+): Promise<void> {
+  await client.query(
+    `insert into feed_allowlist_records (server_registration_id, feed_tier_id, ip, told_at)
+     select $1, $2, $3, now()
+     where not exists (
+       select 1 from feed_allowlist_records
+       where server_registration_id = $1 and feed_tier_id = $2 and ip = $3 and revoked_at is null
+     )`,
+    [args.serverRegistrationId, args.feedTierId, args.ip]
+  );
 }
 
 /** Allocates (or reuses) this provider-subscriber pair's pseudonym without requiring a
@@ -246,6 +458,29 @@ export async function pseudonymForSubscriber(
   }
 }
 
+/** Trial vs paid, ON TOP of EFFECTIVE_STATUS_SQL -- marcus m49078 item 2 (2026-09-12): HH1, HH2,
+ * HH12 and HH19 all hold licences.tier = 'trial' at price_cents 0, yet every provider surface
+ * listed them under "paying subscribers only", contradicting its own scope note. A trial-originated
+ * grant is written with status = 'active' like any purchased one (see the feed_tier_trials note on
+ * EFFECTIVE_STATUS_SQL), so s.status alone cannot tell them apart; the bound licence's tier can.
+ *
+ * Deliberately NOT a fourth branch inside EFFECTIVE_STATUS_SQL: m49078 rules that the
+ * entitlement/licence-expiry branch is coxwell's (21:55Z) and must not be touched, so this only
+ * re-labels a row the CASE already decided is live. A 'lapsed' verdict always survives -- both the
+ * explicit admin lapse (the one-way ratchet) and the licence-expiry branch.
+ *
+ * That last point is STRICTER than m49078's literal wording ("and s.status is not 'lapsed'"), and
+ * it is a visible difference on live data, not a hypothetical: HH15 and HH18 sit on trial licences
+ * that have already EXPIRED (2026-09-06 / 2026-09-09), so s.status is 'active' while the effective
+ * status is 'lapsed'. Read literally they would flip lapsed -> trial and lose their expiry date;
+ * that would be the licence-expiry branch being overridden from outside, which is the one thing
+ * m49078 forbids. They stay lapsed and read "Licence expired {date}". Flagged to marcus; flipping
+ * to the literal reading is changing `effective === "lapsed"` to a raw-status test here. */
+export function statusForLicenseTier(effective: SubscriptionStatus, licenseTier: string | null): SubscriptionStatus {
+  if (effective === "lapsed") return "lapsed";
+  return licenseTier === "trial" ? "trial" : effective;
+}
+
 /** Provider-facing subscriber list -- pseudonyms only. Never select subscriber_user_id,
  * email, or display_name here; leaking any of those into a provider-visible response
  * defeats the entire point of the pseudonym table. Degrades to an empty list pre-migration
@@ -256,7 +491,28 @@ export async function pseudonymForSubscriber(
  * "provider needs to see the IP ... he allowlists that IP on his own box"). Registered IP
  * only -- no captured_ip fallback, no mismatch/verification state; that stays admin-only
  * per the 2026-08-29 ruling. Null when the client has no server registered at all, which is
- * the true state for most of the London backfill rows, not a bug to paper over. */
+ * the true state for most of the London backfill rows, not a bug to paper over.
+ *
+ * licenses is joined on s.license_id purely to read l.tier for statusForLicenseTier above (trial
+ * vs paid, m49078 item 2). It joins on the licences PRIMARY KEY, so like server_registrations it
+ * can never fan a subscription row out into several. The entitlement question still belongs to
+ * EFFECTIVE_STATUS_SQL's own `exists` sub-select, which is untouched -- this join adds a label,
+ * not a second liveness test, and the two must not be merged.
+ *
+ * The ORDER BY is TOTAL (seq, then started_at, then id) as of 2026-09-12, not just `p.seq`:
+ * within one account every row shares a seq, so under `order by p.seq` alone their relative
+ * order was unspecified -- and groupAccountSubscriptions then took a package group's status from
+ * `members[0]`, so an account holding one lapsed and three active tiers of the same package
+ * could read either way. Evidence it was genuinely unpinned rather than incidentally stable:
+ * HH1's LD Base rendered its members Beta-first under the old clause and Delta-first (true
+ * earliest grant) under this one. I did not catch the *count* flipping, so treat "it flipped in
+ * prod" as unproven -- the query simply never guaranteed otherwise.
+ *
+ * This makes the row set stable; it never decided whether such a group *should* read lapsed.
+ * That semantic question (it hid coxwell's own HH20's three 09-11 active London tiers behind a
+ * 09-03 lapsed ld-beta-56 row) was ruled by marcus in m49051 and no longer depends on this
+ * ORDER BY at all -- see statusForPackageMembers below. The order still fixes which member
+ * speaks for a group's price, server IP and member list, so it stays. */
 export async function listSubscribersForProvider(providerUserId: string): Promise<ProviderSubscriberRow[]> {
   try {
     const result = await pool.query<{
@@ -269,17 +525,25 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       started_at: Date;
       declared_ip: string | null;
       price_cents: number | null;
+      license_tier: string | null;
+      raw_status: SubscriptionStatus;
+      lapsed_at: Date | null;
+      ends_at: Date | null;
+      license_expires_at: Date | null;
     }>(
       `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, ft.tier_key, ft.region_key,
-              ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip, s.price_cents
+              ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip, s.price_cents,
+              l.tier as license_tier, s.status as raw_status, s.lapsed_at, s.ends_at,
+              l.expires_at as license_expires_at
        from feed_subscriptions s
        join provider_client_pseudonyms p
          on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
        left join feed_tiers ft on ft.id = s.feed_tier_id
        left join provider_tiers pt on pt.id = s.provider_tier_id
        left join server_registrations sr on sr.license_id = s.license_id
+       left join licenses l on l.id = s.license_id
        where s.provider_user_id = $1
-       order by p.seq`,
+       order by p.seq, s.started_at, s.id`,
       [providerUserId]
     );
     return result.rows.map((row) => ({
@@ -288,8 +552,13 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       tierName: row.tier_name,
       tierKey: row.tier_key,
       regionKey: row.region_key,
-      status: row.status,
+      status: statusForLicenseTier(row.status, row.license_tier),
+      rawStatus: row.raw_status,
       startedAt: row.started_at,
+      lapsedAt: row.lapsed_at,
+      endsAt: row.ends_at,
+      licenseExpiresAt: row.license_expires_at,
+      licenseTier: row.license_tier,
       serverIp: row.declared_ip,
       priceCents: row.price_cents,
     }));
@@ -299,9 +568,185 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
   }
 }
 
+/** How many of this provider's subscription rows listSubscribersForProvider cannot show, because
+ * their subscriber has no `provider_client_pseudonyms` row (marcus m49127: "YES, ship it").
+ *
+ * That join is an INNER join and it is the only one in the query, so a subscriber without a
+ * pseudonym is dropped with no error and no placeholder -- invisible on every provider surface and
+ * in every total. It happened once for real: Wwwsss (f56eb4a8) had three live LD Base rows from a
+ * hand-written INSERT on 2026-09-12 and appeared nowhere, and the absence was indistinguishable
+ * from "this client does not exist". Every APP write path assigns a pseudonym in the same
+ * transaction as the insert (assignPseudonymSeq), so this can only be non-zero after a direct SQL
+ * write -- which makes it exactly the thing a human needs told, rather than a state to design for.
+ *
+ * READ-ONLY and deliberately so: it counts, it never assigns. Assignment stays on the write path
+ * where it is transactional; a read that silently created identity rows would be a page load with
+ * a side effect, and two concurrent loads could race for the same seq. */
+export async function countUnpseudonymedRowsForProvider(providerUserId: string): Promise<number> {
+  try {
+    const result = await pool.query<{ count: string }>(
+      `select count(*) as count
+       from feed_subscriptions s
+       where s.provider_user_id = $1
+         and not exists (
+           select 1 from provider_client_pseudonyms p
+           where p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
+         )`,
+      [providerUserId]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  } catch (err) {
+    if (isMissingTable(err)) return 0;
+    throw err;
+  }
+}
+
+/** One provider's slice of the admin-wide subscriber read (m49045: /admin/revenue "shows the same
+ * figures the provider Revenue page shows, summed across ALL providers"). */
+export interface ProviderSubscriberPartition {
+  providerUserId: string;
+  /** Admin-visible provider name. `provider_applications.name` when the provider applied, else the
+   * account's own display name or email, else a short id -- this is an admin-only surface, so real
+   * identity is allowed here. CLIENT identity stays pseudonymous even for admins: the rows below
+   * still carry nothing but HH-labels, because the pseudonym is the only client identifier the
+   * subscriber query selects at all. */
+  providerLabel: string;
+  rows: ProviderSubscriberRow[];
+}
+
+/** THE ADMIN-WIDE READ, partitioned BY PROVIDER and not merged (m49045 + marcus m49168).
+ *
+ * The partitioning is the whole point and it is not presentational. `provider_client_pseudonyms.seq`
+ * is allocated per (provider, subscriber) pair, so "HH1" is only unique WITHIN one provider -- two
+ * providers each have an HH1, and they are different people. `groupAccountSubscriptions` keys its
+ * map on `row.pseudonym` alone, so handing it one flat cross-provider list would weld two unrelated
+ * clients into a single group, take one of their prices for the pair under `resolvedPriceCentsFor`,
+ * and report a client count lower than the truth. Callers must group each partition separately --
+ * which also means every per-provider figure is computed by the exact same functions the provider's
+ * own Revenue page uses, rather than by an admin-only reimplementation.
+ *
+ * Provider names are resolved in a SECOND query rather than joined in. `provider_applications` has
+ * no uniqueness guarantee on `user_id`, so joining it to the subscription rows could fan a single
+ * subscription out into several and inflate the money -- the one failure mode this page exists to
+ * fix. A separate lookup cannot multiply rows.
+ *
+ * Degrades to [] pre-migration (42P01) like every other reader in this file. */
+export async function listSubscribersByProvider(): Promise<ProviderSubscriberPartition[]> {
+  try {
+    const result = await pool.query<{
+      provider_user_id: string;
+      id: string;
+      seq: number;
+      tier_name: string;
+      tier_key: string | null;
+      region_key: string | null;
+      status: SubscriptionStatus;
+      started_at: Date;
+      declared_ip: string | null;
+      price_cents: number | null;
+      license_tier: string | null;
+      raw_status: SubscriptionStatus;
+      lapsed_at: Date | null;
+      ends_at: Date | null;
+      license_expires_at: Date | null;
+    }>(
+      /* Identical column list, joins and ORDER BY to listSubscribersForProvider -- only the
+       * provider predicate is dropped and provider_user_id added. Any divergence here would mean
+       * admin and provider surfaces disagreeing about the same subscription. */
+      `select s.provider_user_id, s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name,
+              ft.tier_key, ft.region_key, ${EFFECTIVE_STATUS_SQL} as status, s.started_at,
+              sr.declared_ip, s.price_cents, l.tier as license_tier, s.status as raw_status,
+              s.lapsed_at, s.ends_at, l.expires_at as license_expires_at
+       from feed_subscriptions s
+       join provider_client_pseudonyms p
+         on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
+       left join feed_tiers ft on ft.id = s.feed_tier_id
+       left join provider_tiers pt on pt.id = s.provider_tier_id
+       left join server_registrations sr on sr.license_id = s.license_id
+       left join licenses l on l.id = s.license_id
+       order by s.provider_user_id, p.seq, s.started_at, s.id`
+    );
+
+    const byProvider = new Map<string, ProviderSubscriberRow[]>();
+    for (const row of result.rows) {
+      const list = byProvider.get(row.provider_user_id) ?? [];
+      list.push({
+        subscriptionId: row.id,
+        pseudonym: pseudonymLabel(row.seq),
+        tierName: row.tier_name,
+        tierKey: row.tier_key,
+        regionKey: row.region_key,
+        status: statusForLicenseTier(row.status, row.license_tier),
+        rawStatus: row.raw_status,
+        startedAt: row.started_at,
+        lapsedAt: row.lapsed_at,
+        endsAt: row.ends_at,
+        licenseExpiresAt: row.license_expires_at,
+        licenseTier: row.license_tier,
+        serverIp: row.declared_ip,
+        priceCents: row.price_cents,
+      });
+      byProvider.set(row.provider_user_id, list);
+    }
+
+    const labels = await providerLabelsFor([...byProvider.keys()]);
+    return [...byProvider.entries()]
+      .map(([providerUserId, rows]) => ({
+        providerUserId,
+        providerLabel: labels.get(providerUserId) ?? `Provider ${providerUserId.slice(0, 8)}`,
+        rows,
+      }))
+      .sort((a, b) => a.providerLabel.localeCompare(b.providerLabel));
+  } catch (err) {
+    if (isMissingTable(err)) return [];
+    throw err;
+  }
+}
+
+/** Provider id -> admin-visible name, one row per provider BY CONSTRUCTION. `min(pa.name)` with a
+ * `group by` rather than a plain select, because nothing stops a user holding two provider
+ * applications; picking one deterministically is honest, while returning two rows would tempt the
+ * caller back into a fan-out. Missing ids are simply absent from the map -- the caller labels them. */
+async function providerLabelsFor(providerUserIds: string[]): Promise<Map<string, string>> {
+  if (providerUserIds.length === 0) return new Map();
+  const result = await pool.query<{ user_id: string; label: string | null }>(
+    `select u.id as user_id,
+            coalesce(min(pa.name), min(u.display_name), min(u.email)) as label
+     from users u
+     left join provider_applications pa on pa.user_id = u.id
+     where u.id = any($1::uuid[])
+     group by u.id`,
+    [providerUserIds]
+  );
+  const map = new Map<string, string>();
+  for (const row of result.rows) if (row.label) map.set(row.user_id, row.label);
+  return map;
+}
+
 export type AccountRowGroup =
   | { kind: "package"; pseudonym: string; label: string; status: ProviderSubscriberRow["status"]; members: ProviderSubscriberRow[] }
   | { kind: "single"; row: ProviderSubscriberRow };
+
+/** A package group's status. Ruled by marcus, m49051 (2026-09-12, bus thread
+ * leo-provider-revenue-ny-base-2026-09-12), replacing the former `members[0].status`: a group
+ * reads ACTIVE if ANY member is effective-active, and LAPSED only when EVERY member is lapsed.
+ * His reason: price is written and resolved per package (setFeedSubscriptionPriceForPackage /
+ * resolvedPriceCentsFor), so a package holding a live paid tier is live money, and letting one
+ * dead tier speak for the whole group under-reports on three surfaces at once. It hid coxwell's
+ * own HH20 LD Base -- three tiers live since 09-11 -- behind one lapsed 09-03 ld-beta-56 row.
+ * Decided here, inside the grouping, so Revenue, Subscribers and Overview move together once
+ * rather than each applying its own predicate.
+ *
+ * The third outcome is explicit, not a fallthrough: members that are neither any-active nor
+ * all-lapsed (a trial-covered tier beside a lapsed one) read "trial", never "active" -- a trial
+ * earns no payout (providerShareCentsFor returns null for it) and this rule must not promote one
+ * into a paying client. No such group exists in the live data today (35 active / 2 lapsed rows,
+ * zero status='trial'), so this branch is written from the type, not from an observed row. */
+function statusForPackageMembers(members: ProviderSubscriberRow[]): ProviderSubscriberRow["status"] {
+  if (members.some((m) => m.status === "active")) return "active";
+  if (members.every((m) => m.status === "lapsed")) return "lapsed";
+  return "trial";
+}
 
 /** Mirrors groupTiers' package/single split (feed-provider-packages.ts) but scoped per
  * account instead of per provider -- Revenue groups every tier a provider sells, this groups
@@ -325,7 +770,7 @@ export function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): Accoun
       const members = accountRows.filter((r) => r.tierKey && pkg.tierKeys.includes(r.tierKey));
       if (members.length === 0) continue;
       members.forEach((m) => used.add(m.subscriptionId));
-      groups.push({ kind: "package", pseudonym, label: pkg.label, status: members[0].status, members });
+      groups.push({ kind: "package", pseudonym, label: pkg.label, status: statusForPackageMembers(members), members });
     }
     for (const row of accountRows) {
       if (!used.has(row.subscriptionId)) groups.push({ kind: "single", row });
@@ -334,21 +779,318 @@ export function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): Accoun
   return groups;
 }
 
+/** The one read of a group's status, extracted 2026-09-12 (bus thread
+ * leo-provider-revenue-ny-base-2026-09-12) when the Revenue page grew a second view and a
+ * region filter and would otherwise have inlined this ternary a fourth and fifth time.
+ * Behaviour is unchanged from the copies it replaces in sumProviderShareCents /
+ * sumMonthlyGrossCents. The mixed-group question this used to flag as unresolved is now ruled
+ * (marcus m49051) and answered by statusForPackageMembers above, which this just reads: a
+ * package is active if any member is, lapsed only if all are. Nothing here re-derives a status
+ * from member rows, so a caller cannot apply a different predicate to the same group. */
+export function statusForGroup(group: AccountRowGroup): ProviderSubscriberRow["status"] {
+  return group.kind === "package" ? group.status : group.row.status;
+}
+
+/** The region a group belongs to, for the Revenue page's region switch (coxwell 2026-09-12
+ * 21:18Z via marcus m49032: "ability to change between region"). Reads feed_tiers.region_key as
+ * carried on the row -- the same column the Subscribers page's "By location" note and
+ * EFFECTIVE_STATUS_SQL's licence gate key on -- never re-derived from a tier name or a PACKAGES
+ * label. Null means no region is recorded for this grant (a provider_tiers row: ft.region_key
+ * is null for third-party self-serve tiers), which is a real absence, not a default to London;
+ * such a group is visible under "All" and under no single-region filter. A PACKAGES entry is
+ * region-local by construction, so the first member carrying a region speaks for the group. */
+export function regionKeyForGroup(group: AccountRowGroup): string | null {
+  if (group.kind === "package") {
+    return group.members.map((m) => m.regionKey).find((r) => r != null) ?? null;
+  }
+  return group.row.regionKey ?? null;
+}
+
+/** A group's start date: the earliest `started_at` among its rows, since a package group has no
+ * started_at of its own (bus thread leo-provider-panel-package-labels-2026-09-04, marcus
+ * follow-up B). Hoisted out of the Subscribers page 2026-09-12 so the Revenue page's Clients
+ * view shows the identical date for the identical group instead of a second reduce.
+ * This is a GRANT date, not purchase history -- see m47007; label it as such wherever it lands. */
+export function startedAtForGroup(group: AccountRowGroup): Date {
+  if (group.kind === "single") return group.row.startedAt;
+  return group.members.reduce((earliest, m) => (m.startedAt < earliest ? m.startedAt : earliest), group.members[0].startedAt);
+}
+
 /** Job C (bus thread leo-provider-subscribers-page-2026-09-06, coxwell-authorised): the price
  * a payout reads is THIS client's own negotiated feed_subscriptions.price_cents, never a
  * catalogue/package-wide constant -- a partner on a different number must produce a different
  * line. Per marcus's m46504 ruling, there is NO fallback to any package/tier default list
  * price -- a group with no override anywhere resolves to null (unset), which providerShareFor
- * renders as "Not set" and providerShareCentsFor counts as zero, never as the catalogue's
+ * renders as "unpriced" and providerShareCentsFor counts as zero, never as the catalogue's
  * $30. For a package, every member row is written the same price together
  * (setFeedSubscriptionPriceForPackage) so any one member's non-null value speaks for the whole
  * group; this does not sum or average across members, and does not read feed_tiers/ProviderTierRow
- * catalogue prices directly -- that was the members[0]-off-the-catalogue bug this job fixed. */
+ * catalogue prices directly -- that was the members[0]-off-the-catalogue bug this job fixed.
+ *
+ * A stored 0 resolves as 0 here, unchanged by C3 (m49063). The surfaces spell a 0 "unpriced"
+ * (isUnpriced) but this stays the literal stored value: skipping 0 members in the find() below
+ * would let a sibling's price speak for a row that does not carry it, which moves money.
+ *
+ * EFFECTIVE-ACTIVE MEMBERS ONLY, ruled by marcus 2026-09-12 (m49078 item 1, restated m49088 as
+ * option (a)). The "every member is written the same price together" invariant above holds only
+ * while a group's members are all live: the moment ENDED history and live rows share one
+ * (client, package) group, the first non-null price can come from a dead row. That is exactly
+ * what happened tonight -- coxwell's own three $30 LD Base rows from his expired paid licence
+ * were backfilled beside his live, never-priced team-licence rows, and HH20 rendered $30 / $15,
+ * pushing London's total to $90 / $45 off money that is not being paid. A lapsed row is history,
+ * not a rate card: a group whose only priced members are lapsed resolves to null and every
+ * surface spells it "unpriced". Applied to `single` groups too, so one rule covers both shapes.
+ *
+ * This is why the Lapsed filter must NOT read its price column from here -- a lapsed group's
+ * last known price is a separate question from what it is being charged now, and it needs its
+ * own accessor rather than a relaxed version of this one. */
 export function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
   if (group.kind === "package") {
-    return group.members.map((m) => m.priceCents).find((c) => c != null) ?? null;
+    return (
+      group.members
+        .filter((m) => m.status === "active")
+        .map((m) => m.priceCents)
+        .find((c) => c != null) ?? null
+    );
   }
-  return group.row.priceCents ?? null;
+  return group.row.status === "active" ? group.row.priceCents ?? null : null;
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** WHY a group isn't paying, for the Paying | Lapsed | All filter (coxwell via marcus m49070,
+ * pulled onto the Revenue thread by m49081; the Subscribers page reuses THIS function rather than
+ * spelling the same three sentences a second time). Null for a paying group -- a live client needs
+ * no explanation, and a null here is what a caller keys "is this row greyed" off.
+ *
+ * Four outcomes (m49101 fixes the wording): "Ended {date}" is a decision somebody recorded (an
+ * explicit admin lapse, always with a lapsed_at), while "Licence expired {date}" is a row nobody
+ * touched whose licence simply ran out underneath it -- the provider can act on the second (chase
+ * a renewal) and cannot on the first, so collapsing them into one "lapsed" would hide that. When
+ * the thing that ran out was a TRIAL licence it reads "Trial ended {date}", because "Licence
+ * expired" invites a renewal conversation about a client who was never paying. Plain "Trial"
+ * carries no date: that trial has NOT ended, the client is live and simply isn't paying, and a
+ * date beside them would read as a lapse.
+ *
+ * A package group's reason comes from the member that stopped LAST (max date, nulls first, then
+ * the pinned member order for ties). A group dies when its final member does, so the latest date
+ * is the one a provider would recognise; taking members[0] would let whichever tier happens to
+ * sort first speak for the group, which is the members[0] class of bug this file has already been
+ * burned by twice. Only members sharing the group's own status are eligible, so a stray live row
+ * can't explain a lapsed group.
+ *
+ * This walk is now shared: `statusReasonForGroup` takes the sentence and `statusEndedAtForGroup`
+ * takes the instant it was formatted from. Behaviour of the sentence is unchanged by that split. */
+function statusEndFor(group: AccountRowGroup): { text: string; at: Date | null } | null {
+  const status = statusForGroup(group);
+  if (status === "active") return null;
+  if (status === "trial") return { text: "Trial", at: null };
+
+  const rows = group.kind === "package" ? group.members.filter((m) => m.status === status) : [group.row];
+  let best: { text: string; at: Date | null } | null = null;
+  for (const row of rows) {
+    const explicit = row.rawStatus === "lapsed";
+    const at = (explicit ? row.lapsedAt ?? row.endsAt : row.licenseExpiresAt ?? row.endsAt) ?? null;
+    const label = explicit ? "Ended" : row.licenseTier === "trial" ? "Trial ended" : "Licence expired";
+    const candidate = { text: at ? `${label} ${isoDate(at)}` : label, at };
+    if (best == null || (candidate.at != null && (best.at == null || candidate.at > best.at))) best = candidate;
+  }
+  return best;
+}
+
+export function statusReasonForGroup(group: AccountRowGroup): string | null {
+  return statusEndFor(group)?.text ?? null;
+}
+
+/** The DATE behind that reason, for the Subscribers page's Lapsed section ordering (m49058 item 1
+ * via m49224). Split out of statusReasonForGroup rather than re-derived beside it: the section is
+ * sorted by the very date each row prints, so a second walk over the same members -- with its own
+ * idea of which member speaks for the group, or of whether an explicit lapse reads lapsed_at or a
+ * licence expiry -- could order rows in a sequence their own visible dates contradict. One walk,
+ * one answer; this returns exactly the instant `statusReasonForGroup` formatted.
+ *
+ * Null for a paying group (no reason at all) and for a LIVE trial, whose reason is the bare word
+ * "Trial" with deliberately no date (m49101): that trial has not ended, so there is no end instant
+ * to sort on, and callers must place such a group by something else rather than treat null as old. */
+export function statusEndedAtForGroup(group: AccountRowGroup): Date | null {
+  return statusEndFor(group)?.at ?? null;
+}
+
+/** The LAST price a non-paying group carried, for the Lapsed filter's price cell (m49070: "their
+ * LAST price shown as text not money"). Deliberately a separate accessor from
+ * resolvedPriceCentsFor rather than a flag on it: that function answers "what is this client
+ * being charged", which for a group with no live priced member is nothing at all, and relaxing it
+ * to answer this question too is precisely the defect ruling (a) fixed. Callers must render this
+ * as text and must never add it to a total -- a lapsed client's old price is history, not revenue.
+ *
+ * Reads the most RECENTLY started member that carries a price (started_at desc, subscriptionId as
+ * the tie-break so the walk is totally ordered), which is the last price actually written for this
+ * client-package. Null, and "unpriced" on screen, when no member ever had one. */
+export function lastPriceCentsFor(group: AccountRowGroup): number | null {
+  if (group.kind === "single") return group.row.priceCents ?? null;
+  return (
+    [...group.members]
+      .sort((a, b) =>
+        b.startedAt.getTime() - a.startedAt.getTime() || a.subscriptionId.localeCompare(b.subscriptionId)
+      )
+      .map((m) => m.priceCents)
+      .find((c) => c != null) ?? null
+  );
+}
+
+export interface MonthlyHistoryClient {
+  key: string;
+  client: string;
+  label: string;
+  regionKey: string | null;
+  priceCents: number | null;
+  fromISO: string;
+  toISO: string;
+  /** True when no end date exists on the rows at all -- `toISO` is then "now", a date nobody
+   * agreed to, so the UI must print "ongoing" rather than pass it off as a contracted end. */
+  open: boolean;
+}
+
+export interface MonthlyHistoryEntry {
+  monthKey: string;
+  label: string;
+  clients: number;
+  pricedClients: number;
+  grossCents: number;
+  shareCents: number;
+  rows: MonthlyHistoryClient[];
+}
+
+function monthLabel(year: number, monthIndex: number): string {
+  return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][monthIndex]} ${year}`;
+}
+
+/** Revenue's History view, coxwell 22:08Z via marcus m49083 ("yes but we need history also") --
+ * the 09-09 "combined purchases" ask (m47007) resurfacing, built once here.
+ *
+ * CONTRACTED PERIODS, NOT PAYMENTS. There is no ledger and nothing has ever been charged, so this
+ * derives entirely from the periods already on feed_subscriptions -- no new table, no invented
+ * transaction. A group counts in month M when any of its member rows was live at any point in M:
+ * `started_at <= end of M AND coalesce(lapsed_at, ends_at, now) >= start of M`, exactly m49083's
+ * test. `now` is a parameter, not read here, so a month boundary can be reasoned about.
+ *
+ * PRICE COMES FROM THE ROWS THAT WERE LIVE IN THAT MONTH, which is why this does not call
+ * resolvedPriceCentsFor: that function answers "what is this client being charged now" and (since
+ * ruling (a), m49088) deliberately ignores lapsed members -- every historical month would price at
+ * nothing. Here the overlapping members are the live ones for that month, so their own price is
+ * the right one, and a member priced 0/NULL stays unpriced rather than becoming a $0 client.
+ *
+ * The 50% is providerShareCentsFor with an explicit "active": in the month being described the row
+ * WAS live, so the same shared calc applies -- there is no second halving anywhere in this file.
+ *
+ * NEVER SUMMED ACROSS MONTHS (m49083). A client on a one-month term must not read as three months
+ * of revenue, so this returns per-month figures and no grand total, and the page renders none. */
+export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): MonthlyHistoryEntry[] {
+  /** HALF-OPEN AT DATE GRANULARITY, [start_date, end_date) -- marcus m49161, superseding the
+   * instant-level rule of m49147. A term ending ON a calendar date covers up to that date and
+   * stops there: every period is reduced to whole UTC days before being compared, so a row running
+   * 2026-08-01T17:59 -> 2026-09-01T17:59 is August only. At instant granularity that 18-hour tail
+   * put a one-month contract into two months, which is the exact error m49083 set out to avoid.
+   *
+   * The `endDay > startDay` conjunct is the same rule applied to the row itself: [d, d) is empty,
+   * so a period starting and ending on the SAME DATE was live for no whole day and belongs to no
+   * month. That is what keeps a 3-second row out of History.
+   *
+   * An open row (no lapsed_at and no ends_at) has no end to round, and `now` is a censoring point
+   * rather than an agreed end -- so it is live THROUGH the end of today, exclusive end tomorrow.
+   * Rounding `now` down instead would make a row that started today read as zero-length. */
+  const DAY_MS = 86_400_000;
+  const dayOf = (d: Date): number => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+
+  const overlaps = (row: ProviderSubscriberRow, start: Date, endExclusive: Date): boolean => {
+    const recordedEnd = row.lapsedAt ?? row.endsAt;
+    const startDay = dayOf(row.startedAt);
+    const endDay = recordedEnd == null ? dayOf(now) + DAY_MS : dayOf(recordedEnd);
+    return startDay < dayOf(endExclusive) && endDay > dayOf(start) && endDay > startDay;
+  };
+
+  /** A trial licence is never a contracted payment, in any month, so its rows are dropped here
+   * per ROW rather than by the group's current status (m49083: "trials excluded"). Row grain
+   * matters: a client who trialled and then bought has both kinds of row, and only the trial ones
+   * should vanish. This is also what keeps HH15/HH18 -- expired trial licences, correctly lapsed
+   * on the live views -- out of a column headed "Paying clients", where they never belonged. */
+  const membersOf = (g: AccountRowGroup): ProviderSubscriberRow[] =>
+    (g.kind === "package" ? g.members : [g.row]).filter((r) => r.licenseTier !== "trial");
+
+  const starts = groups.flatMap(membersOf).map((r) => r.startedAt);
+  if (starts.length === 0) return [];
+  const earliest = starts.reduce((a, b) => (b < a ? b : a));
+
+  const entries: MonthlyHistoryEntry[] = [];
+  for (
+    let year = earliest.getUTCFullYear(), month = earliest.getUTCMonth();
+    year < now.getUTCFullYear() || (year === now.getUTCFullYear() && month <= now.getUTCMonth());
+    month === 11 ? ((year += 1), (month = 0)) : (month += 1)
+  ) {
+    const start = new Date(Date.UTC(year, month, 1));
+    const endExclusive = new Date(Date.UTC(year, month + 1, 1));
+
+    const rows: MonthlyHistoryClient[] = [];
+    let grossCents = 0;
+    let shareCents = 0;
+    let pricedClients = 0;
+
+    for (const g of groups) {
+      const members = membersOf(g).filter((r) => overlaps(r, start, endExclusive));
+      if (members.length === 0) continue;
+
+      const priceCents = members.map((r) => r.priceCents).find((c) => c != null) ?? null;
+      /** UNPRICED IS NOT A CONTRACT IN A MONTH (marcus m49171). This tab is headed contracted
+       * revenue, so a group with no price does not belong to any month here -- unlike the live
+       * Paying view, where an unpriced live row stays VISIBLE by standing ruling. The group is
+       * dropped whole, not merely left out of the count: a month reading "4 clients" above a
+       * disclosure list of five would be the paired-metric split this page exists to avoid, and
+       * `pricedClients` consequently always equals `clients`, so the "n of m priced" sub-line
+       * stops appearing on History. */
+      if (isUnpriced(priceCents)) continue;
+      /** The period must describe the rows the PRICE came from, not the union of everything that
+       * happened to be live. coxwell's own group is why: in September his three $30 rows (ended
+       * 09-01) and his unpriced live team rows both overlap, and a "2026-08-01 → 2026-09-20" beside
+       * "$30" would be one period welded out of two different agreements. Same failure ruling (a)
+       * fixed on the live views, in its historical form. */
+      const priceSource = priceCents == null ? members : members.filter((r) => r.priceCents === priceCents);
+      const from = priceSource.reduce((a, r) => (r.startedAt < a ? r.startedAt : a), priceSource[0].startedAt);
+      const ends = priceSource.map((r) => r.lapsedAt ?? r.endsAt).filter((d): d is Date => d != null);
+      /** "ongoing" is reserved for a row with NO end date at all. A period that simply runs past
+       * this month still has an agreed end, and printing that date is more honest than implying
+       * the client is open-ended. */
+      const to = ends.length === priceSource.length ? ends.reduce((a, d) => (d > a ? d : a)) : null;
+
+      rows.push({
+        key: g.kind === "package" ? `${g.pseudonym}-${g.label}` : g.row.subscriptionId,
+        client: g.kind === "package" ? g.pseudonym : g.row.pseudonym,
+        label: g.kind === "package" ? g.label : g.row.tierName,
+        regionKey: regionKeyForGroup(g),
+        priceCents,
+        fromISO: isoDate(from),
+        toISO: isoDate(to ?? now),
+        open: to == null,
+      });
+
+      grossCents += priceCents ?? 0;
+      shareCents += providerShareCentsFor("active", priceCents) ?? 0;
+      if (!isUnpriced(priceCents)) pricedClients += 1;
+    }
+
+    entries.push({
+      monthKey: `${year}-${String(month + 1).padStart(2, "0")}`,
+      label: monthLabel(year, month),
+      clients: rows.length,
+      pricedClients,
+      grossCents,
+      shareCents,
+      rows,
+    });
+  }
+
+  return entries.reverse();
 }
 
 /** The one place that walks account groups and adds up the provider's 50% share, bus thread
@@ -361,8 +1103,7 @@ export function resolvedPriceCentsFor(group: AccountRowGroup): number | null {
  * with another. */
 export function sumProviderShareCents(groups: AccountRowGroup[]): number {
   return groups.reduce((sum, g) => {
-    const status = g.kind === "package" ? g.status : g.row.status;
-    const cents = providerShareCentsFor(status, resolvedPriceCentsFor(g));
+    const cents = providerShareCentsFor(statusForGroup(g), resolvedPriceCentsFor(g));
     return sum + (cents ?? 0);
   }, 0);
 }
@@ -376,10 +1117,28 @@ export function sumProviderShareCents(groups: AccountRowGroup[]): number {
  * price contributes zero, distinguishable from a real $0. */
 export function sumMonthlyGrossCents(groups: AccountRowGroup[]): number {
   return groups.reduce((sum, g) => {
-    const status = g.kind === "package" ? g.status : g.row.status;
-    if (status !== "active") return sum;
+    if (statusForGroup(g) !== "active") return sum;
     return sum + (resolvedPriceCentsFor(g) ?? 0);
   }, 0);
+}
+
+/** How many of the paying groups behind a money total actually carry a price (marcus C3,
+ * m49063): "a package line whose priced members are fewer than its subscribers shows the
+ * priced count beside the money, e.g. '6 subscribers, 1 priced, $30', so nobody divides $30 by
+ * 6". Walks the SAME groups and the same active predicate as sumProviderShareCents /
+ * sumMonthlyGrossCents above, so the count beside a figure can never describe a different row
+ * set than the figure does. `priced` is also what tells a $0 total from an unknown one:
+ * priced === 0 means no row behind the total has a price at all, and moneyOrUnpriced then
+ * prints "unpriced" rather than "$0". */
+export function pricedGroupCounts(groups: AccountRowGroup[]): { priced: number; subscribers: number } {
+  let priced = 0;
+  let subscribers = 0;
+  for (const g of groups) {
+    if (statusForGroup(g) !== "active") continue;
+    subscribers += 1;
+    if (!isUnpriced(resolvedPriceCentsFor(g))) priced += 1;
+  }
+  return { priced, subscribers };
 }
 
 /** Fetch-and-sum wrapper around sumProviderShareCents for callers (Overview) that don't
@@ -394,14 +1153,20 @@ export async function getProviderMonthlyShareCents(providerUserId: string): Prom
 /** Overview panel's "Subscribers" stat -- distinct subscribers with a live, non-trial grant,
  * where a Horizon-catalogue row counts only if its region is still license-entitled (see
  * SUBSCRIBER_STATUS_SQL above) as well as not explicitly lapsed and not merely trial-covered.
- * Degrades to 0 pre-migration, same rule as every other counter this panel renders. */
+ * Degrades to 0 pre-migration, same rule as every other counter this panel renders.
+ *
+ * Tests `= 'active'` rather than `!= 'lapsed'` since m49097 item 4: SUBSCRIBER_STATUS_SQL can now
+ * answer 'trial' (a grant on a trial LICENCE), and a headcount that counted anything not-lapsed
+ * would keep calling those clients subscribers while the money on Subscribers/Revenue calls them
+ * trial. There is no third live value for this to exclude by accident -- 'active' and 'trial' are
+ * the only non-lapsed outcomes. */
 export async function getActiveSubscriberCountForProvider(providerUserId: string): Promise<number> {
   try {
     const result = await pool.query<{ count: string }>(
       `select count(distinct s.subscriber_user_id) as count
        from feed_subscriptions s
        left join feed_tiers ft on ft.id = s.feed_tier_id
-       where s.provider_user_id = $1 and (${SUBSCRIBER_STATUS_SQL}) != 'lapsed'`,
+       where s.provider_user_id = $1 and (${SUBSCRIBER_STATUS_SQL}) = 'active'`,
       [providerUserId]
     );
     return Number(result.rows[0]?.count ?? 0);
@@ -610,6 +1375,53 @@ export class DuplicateTierGrantError extends Error {
   }
 }
 
+/** Thrown by assignFeedTierSubscription when the target subscriber holds no active, unexpired
+ * licence. A feed grant is bound to a licence (feed_subscriptions.license_id, NOT NULL since
+ * 0081) because that is the grain a grant has -- one server's access on one licence -- so there
+ * is nothing to bind to here and no honest way to invent one. Deliberately a refusal rather
+ * than a fallback: picking the subscriber's latest-issued or most-recently-expired licence
+ * would pin the grant to a dead or revoked row, which then reads 'lapsed' through
+ * EFFECTIVE_STATUS_SQL's licence gate anyway -- a grant the admin was told succeeded and the
+ * client never receives. Granting a feed tier to a licence-less user IS the feed-only-client
+ * case; that mechanism is not built (it is queued on Fable's feed-only plan, where the
+ * subscription-level clock and the replacement business key get decided together), so the
+ * correct answer today is an error that says why. Message is surfaced verbatim to the admin by
+ * runAction (lib/action-result.ts). */
+export class NoActiveLicenseForFeedGrantError extends Error {
+  constructor(tierName: string) {
+    super(`This user has no active, unexpired licence, so ${tierName} can't be granted -- a feed subscription is bound to a licence. Issue or renew a licence first.`);
+    this.name = "NoActiveLicenseForFeedGrantError";
+  }
+}
+
+/** Thrown by assignFeedTierSubscription when the target subscriber holds MORE than one active,
+ * unexpired licence. A grant binds to exactly one licence and a licence names one server, so
+ * taking the furthest-expiring row would tie the grant to a server the admin never chose -- and
+ * no surface anywhere renders which licence a subscription is bound to, so that choice would be
+ * invisible until it was wrong. Hence a refusal rather than a tiebreak (marcus's ruling, thread
+ * leo-feed-subscriptions-license-id-2026-09-10): a grant path must never silently pick between
+ * two live licences. *Choosing* between them is a business decision and stays queued with the
+ * feed-only plan; *refusing* to choose is the honest default and needs no such decision.
+ * Deliberately NOT enforced inside getActiveLicenseForUser (same ruling) -- that resolver is
+ * shared with callers who legitimately want *a* licence, and making it raise would break them.
+ * The route that already works for a multi-licence subscriber is the client's own feed-tier
+ * request: it carries feed_tier_requests.license_id, the licence they registered the server
+ * against, so approving it binds the grain the client picked instead of one this path guessed.
+ * Licences are named by the HH<n> label (licenseNumberSql) the admin already sees on the user's
+ * row and detail page, so the message points at something on screen -- never the licence key.
+ * Message is surfaced verbatim to the admin by runAction (lib/action-result.ts). */
+export class MultipleActiveLicensesForFeedGrantError extends Error {
+  constructor(tierName: string, licenses: ActiveLicense[]) {
+    const named = licenses
+      .map((l) => `HH${l.licenseNumber} (expires ${l.expiresAt.toLocaleDateString()})`)
+      .join(", ");
+    super(
+      `This user holds ${licenses.length} active licences -- ${named} -- so ${tierName} can't be granted from here: a feed subscription binds to one licence, and picking one here would tie the grant to a server nobody chose. Approve the client's own request for this tier instead -- it carries the licence they registered the server against.`
+    );
+    this.name = "MultipleActiveLicensesForFeedGrantError";
+  }
+}
+
 export interface FeedTierForAssignment {
   feedTierId: string;
   tierName: string;
@@ -632,47 +1444,13 @@ export async function getFeedTierForAssignment(tierKey: string): Promise<FeedTie
   return { feedTierId: row.id, tierName: row.name, regionKey: row.region_key, providerUserId: row.provider_user_id };
 }
 
-/** Approval-path write -- Fable's ruling, specs/horizon-feed-provisioning-ledger-v1.md
- * section 3.3 item 1 (d108353, relayed m36289, thread leo-package-grant-fix-2026-09-04):
- * "the identity of the approval is the request; the identity of a grant is (request, tier)."
- * One approval can back N grant rows (a package tier_key expands to N member tiers via
- * expandTierKey, feed-tier-catalogue.ts), so the conflict target is the pair, not request_id
- * alone -- `on conflict (request_id, feed_tier_id)` against
- * feed_subscriptions_request_tier_uidx (migration 0079). A single-tier request is the N = 1
- * case of this same call, made once from approveFeedTierRequest's loop; there is no separate
- * "primary" vs "member" path. Replaying the same request (retry, double-click, re-approving an
- * already-approved request) reactivates the SAME N rows via their (request_id, feed_tier_id)
- * identity, never inserts new ones. The business key still carries its own partial unique index
- * scoped to live rows (subscriber_user_id, feed_tier_id) WHERE status IN ('trial','active'): if
- * a DIFFERENT request_id collides with an already-live grant for the same tier (including a
- * different member of the same package colliding with an unrelated direct grant), the insert
- * throws a Postgres unique_violation on THAT index, which this rethrows as
- * DuplicateTierGrantError -- the caller's transaction rolls back and the whole approval fails
- * loudly, no partial package grant. Must run inside the SAME transaction as the request's status
- * flip to 'approved' (caller's job) -- feed_tier_requests carries no subscription_id column
- * (dropped, migration 0080); the relation is feed_subscriptions.request_id, and "is this request
- * granted" is the request's own status column. */
-export async function upsertFeedSubscriptionForRequest(
-  client: PoolClient,
-  args: { requestId: string; providerUserId: string; subscriberUserId: string; feedTierId: string; tierName: string }
-): Promise<string> {
-  const { requestId, providerUserId, subscriberUserId, feedTierId, tierName } = args;
-  await assignPseudonymSeq(client, providerUserId, subscriberUserId);
-  try {
-    const result = await client.query<{ id: string }>(
-      `insert into feed_subscriptions (provider_user_id, subscriber_user_id, feed_tier_id, status, request_id)
-       values ($1, $2, $3, 'active', $4)
-       on conflict (request_id, feed_tier_id) where request_id is not null and feed_tier_id is not null do update
-         set status = 'active', lapsed_at = null, provider_user_id = excluded.provider_user_id, updated_at = now()
-       returning id`,
-      [providerUserId, subscriberUserId, feedTierId, requestId]
-    );
-    return result.rows[0].id;
-  } catch (err) {
-    if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
-    throw err;
-  }
-}
+/** The approval-path write (formerly upsertFeedSubscriptionForRequest here, `on conflict
+ * (request_id, feed_tier_id)` against the legacy feed_tier_requests id) moved to
+ * lib/access-requests.ts under 0086 phase 2 (docs/specs/0086-phase2-code.md section 3): the
+ * identity of an approval is one access_requests envelope, approval is per line never per batch
+ * (Source F), the insert is plain with no on-conflict (re-approving refuses instead of replaying,
+ * fable P3), and feed_subscriptions.request_id is no longer written -- it drops with the old
+ * table in the tighten. */
 
 /** Admin-facing upsert: grants a subscriber ONE specific Horizon-catalogue TIER. Idempotent --
  * re-saving the same tierKey is a no-op (reactivates if lapsed). A region can hold more than
@@ -687,56 +1465,139 @@ export async function upsertFeedSubscriptionForRequest(
  * deactivateFeedTierSubscription the old one -- not this function's job to infer that intent.
  * Status is 'active' (not createSubscription's 'trial' default): this is a direct admin grant,
  * not the request/trial flow. Unlike upsertFeedSubscriptionForRequest above, this still upserts
- * on the business key (subscriber, tier) -- there is no request identity here to upsert on
- * instead, and idempotent re-click-to-reactivate is the desired admin UX, not an error
- * condition. Fable's "never upsert on a business key" targets the approval path specifically,
- * where a retried/duplicated REQUEST must not silently coalesce into an unrelated grant. */
+ * on the business key -- now (licence, tier), per the licence-binding note below -- because
+ * there is no request identity here to upsert on instead, and idempotent re-click-to-reactivate
+ * is the desired admin UX, not an error condition.
+ * Fable's "never upsert on a business key" targets the approval path specifically,
+ * where a retried/duplicated REQUEST must not silently coalesce into an unrelated grant.
+ *
+ * LICENCE BINDING (marcus's ruling, thread leo-feed-subscriptions-license-id-2026-09-10):
+ * feed_subscriptions.license_id is NOT NULL since 0081 step 4 with no default and no trigger,
+ * and this path supplied nothing for it -- every admin direct grant of a tier the subscriber
+ * didn't already hold died on a raw 23502 that no layer translates. The licence is resolved
+ * explicitly here via getActiveLicensesForUser (status = 'active' AND expires_at > now()).
+ * NOT getLatestIssuedLicenseForUser: that one is latest-issued with no status or expiry filter
+ * and would happily pin a grant to a revoked licence. BOTH non-singular cases are refusals, not
+ * fallbacks -- zero throws NoActiveLicenseForFeedGrantError, more than one throws
+ * MultipleActiveLicensesForFeedGrantError (see both above). The plural resolver is called
+ * precisely so this path can SEE a second licence: getActiveLicenseForUser answers the same
+ * predicate but `limit 1` on `expires_at desc`, so it would hand back the furthest-expiring row
+ * with no indication a choice had been made. It stays as it is -- it is shared with callers that
+ * legitimately want *a* licence -- so the guard lives here, in the write path, not in it.
+ * With exactly one active licence the two resolvers return the same row, so the singular case
+ * is unchanged; the ordering only ever mattered in the case this now refuses.
+ *
+ * SERVER GRAIN (0086 phase 2, docs/specs/0086-phase2-code.md section 3 "Admin direct grant";
+ * fable P5 + S2): the grant is keyed on the licence's server_registrations row, the same
+ * primitive the approval path uses (Source D: "direct grant and approval both go through the
+ * server-grain primitive"). The reactivate lookup is scoped by (server_registration_id,
+ * feed_tier_id), the live business key since 0086 -- a row bound to a DIFFERENT server is not a
+ * conflict, the correct outcome is a NEW row on this server. A licence with no server row is a
+ * refusal (NoServerForFeedGrantError): there is nothing to key the grant on, and the client
+ * registers a server first (Q25). Every branch writes ends_at = the licence's expires_at (the
+ * rule 0086 section 4 seeded non-trial rows with) so no live row carries ends_at NULL into the
+ * flip's preflight, and every branch writes the allowlist record (section 4(a)). No envelope is
+ * written for a direct grant (access_request_id NULL; Source H mandates one for trials only). */
 export async function assignFeedTierSubscription(subscriberUserId: string, tierKey: string): Promise<void> {
   const { feedTierId, tierName, regionKey, providerUserId } = await getFeedTierForAssignment(tierKey);
   if (!providerUserId) throw new FeedTierNotAssignedError(tierName, regionKey);
 
-  const existing = await pool.query<{ id: string; provider_user_id: string }>(
-    `select id, provider_user_id from feed_subscriptions where subscriber_user_id = $1 and feed_tier_id = $2`,
-    [subscriberUserId, feedTierId]
-  );
+  const licenses = await getActiveLicensesForUser(subscriberUserId);
+  if (licenses.length === 0) throw new NoActiveLicenseForFeedGrantError(tierName);
+  if (licenses.length > 1) throw new MultipleActiveLicensesForFeedGrantError(tierName, licenses);
+  const license = licenses[0];
+  // S2(ii). licenses.expires_at is NOT NULL (0001:57) and the resolver above filters
+  // expires_at > now(), so this is unreachable today; kept as ruled so the flip's preflight
+  // never depends on that constraint staying.
+  if (!license.expiresAt) throw new LicenseHasNoExpiryError(tierName);
 
-  if (existing.rowCount) {
-    const row = existing.rows[0];
-    if (row.provider_user_id === providerUserId) {
-      await pool.query(
-        `update feed_subscriptions set status = 'active', lapsed_at = null, updated_at = now() where id = $1`,
-        [row.id]
-      );
-      return;
-    }
-    // Same tier, different provider_user_id -- the tier's provider assignment changed since
-    // this row was created (feed_tiers.provider_user_id is reassignable). Follow the tier's
-    // current owner rather than leaving the row pointed at a stale provider.
-    const client = await pool.connect();
-    try {
-      await client.query("begin");
-      await assignPseudonymSeq(client, providerUserId, subscriberUserId);
-      await client.query(
-        `update feed_subscriptions
-         set provider_user_id = $2, status = 'active', lapsed_at = null, updated_at = now()
-         where id = $1`,
-        [row.id, providerUserId]
-      );
-      await client.query("commit");
-    } catch (err) {
-      await client.query("rollback");
-      throw err;
-    } finally {
-      client.release();
-    }
-    return;
-  }
+  const server = await pool.query<{ id: string }>(`select id from server_registrations where license_id = $1`, [license.id]);
+  if (!server.rowCount) throw new NoServerForFeedGrantError(tierName, license.licenseNumber);
 
+  const client = await pool.connect();
   try {
-    await createSubscription({ providerUserId, subscriberUserId, feedTierId, status: "active" });
+    await client.query("begin");
+    const sr = await lockServerRegistration(client, server.rows[0].id);
+    if (!sr) throw new NoServerForFeedGrantError(tierName, license.licenseNumber);
+
+    // Live rows are unique per (server, tier) (0086 live index); lapsed history may hold more
+    // than one, so prefer the live row, then the newest.
+    const existing = await client.query<{ id: string; provider_user_id: string }>(
+      `select id, provider_user_id from feed_subscriptions
+       where server_registration_id = $1 and feed_tier_id = $2
+       order by (status = 'lapsed'), created_at desc
+       limit 1`,
+      [sr.id, feedTierId]
+    );
+
+    if (existing.rowCount) {
+      const row = existing.rows[0];
+      if (row.provider_user_id === providerUserId) {
+        await client.query(
+          `update feed_subscriptions set status = 'active', lapsed_at = null, ends_at = $2, updated_at = now() where id = $1`,
+          [row.id, license.expiresAt]
+        );
+      } else {
+        // Same tier, different provider_user_id -- the tier's provider assignment changed since
+        // this row was created (feed_tiers.provider_user_id is reassignable). Follow the tier's
+        // current owner rather than leaving the row pointed at a stale provider.
+        await assignPseudonymSeq(client, providerUserId, subscriberUserId);
+        await client.query(
+          `update feed_subscriptions
+           set provider_user_id = $2, status = 'active', lapsed_at = null, ends_at = $3, updated_at = now()
+           where id = $1`,
+          [row.id, providerUserId, license.expiresAt]
+        );
+      }
+    } else {
+      try {
+        await createSubscription(
+          {
+            providerUserId,
+            subscriberUserId,
+            licenseId: license.id,
+            serverRegistrationId: sr.id,
+            endsAt: license.expiresAt,
+            feedTierId,
+            status: "active",
+          },
+          client
+        );
+      } catch (err) {
+        if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
+        throw err;
+      }
+    }
+
+    await insertAllowlistRecord(client, { serverRegistrationId: sr.id, feedTierId, ip: sr.declaredIp });
+    await client.query("commit");
   } catch (err) {
-    if (isUniqueViolation(err)) throw new DuplicateTierGrantError(tierName);
+    await client.query("rollback");
     throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Thrown by assignFeedTierSubscription when the subscriber's one active licence has no
+ * server_registrations row. A grant is keyed on the server (0086 live index, Source D), so
+ * there is nothing to bind to; the client registers a server under /account/servers and the
+ * admin tries again (Q25). Named by the HH<n> label the admin already sees, never the key. */
+export class NoServerForFeedGrantError extends Error {
+  constructor(tierName: string, licenseNumber: number) {
+    super(
+      `HH${licenseNumber} has no registered server, so ${tierName} can't be granted: a grant is keyed on the server. The client registers one under Account > Servers first.`
+    );
+    this.name = "NoServerForFeedGrantError";
+  }
+}
+
+/** S2(ii): a direct grant copies the licence's expiry onto the row, so a licence without one
+ * cannot be direct-granted; the request queue takes an explicit date instead. */
+export class LicenseHasNoExpiryError extends Error {
+  constructor(tierName: string) {
+    super(`This licence has no expiry, so ${tierName} can't be granted from here: approve it through the request queue with a date.`);
+    this.name = "LicenseHasNoExpiryError";
   }
 }
 

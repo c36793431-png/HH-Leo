@@ -101,16 +101,42 @@ type ShareStatus = "trial" | "active" | "lapsed";
  * predicate as the Status badge) AND for a row with no priceCents at all -- there is no
  * default-price fallback here (m46504: a hardcoded default reads as a real negotiated price
  * once it flows into a revenue total). Callers must treat null as "unset", not $0. */
+export const UNPRICED_LABEL = "unpriced";
+
+/** The one predicate for "this row's price is unknown", ruled by marcus (C3, m49063,
+ * 2026-09-12): BOTH a null price_cents and a stored 0 are unpriced, on every provider surface
+ * -- Revenue By-package, Revenue Clients, Subscribers. Nothing has ever been charged on this
+ * platform, and the 0086 recut wrote 0 into rows that had simply never been negotiated, so a 0
+ * here is a missing commercial decision, not a client who genuinely pays nothing. It was
+ * previously split: null rendered "Not set" and 0 rendered "$0", which invites a reader to add
+ * a real zero into a run-rate.
+ *
+ * This is a DISPLAY rule and deliberately not a resolution rule: resolvedPriceCentsFor still
+ * returns the row's literal stored value (0 stays 0), and every total still adds a 0 as 0, so
+ * no figure on any surface moves because of this -- only how an unknown one is spelled. */
+export function isUnpriced(priceCents: number | null | undefined): priceCents is null | undefined | 0 {
+  return priceCents == null || priceCents === 0;
+}
+
+/** A money total that may be composed entirely of unpriced rows. `pricedCount` is how many of
+ * the rows behind `cents` carried a real price; at zero the total is unknown rather than nil,
+ * so it must not print "$0" (m49063: "Money columns never print $0 for an unknown price"). */
+export function moneyOrUnpriced(cents: number, pricedCount: number): string {
+  return pricedCount === 0 ? UNPRICED_LABEL : money(cents);
+}
+
 export function providerShareCentsFor(status: ShareStatus, priceCents: number | null | undefined): number | null {
-  if (status !== "active" || priceCents == null) return null;
+  if (status !== "active" || isUnpriced(priceCents)) return null;
   return Math.round(priceCents / 2);
 }
 
 /** Display text for providerShareCentsFor. Three distinct outcomes: null (status isn't
- * active -- "no payment applies", renders blank), "Not set" (active, but no price has ever
- * been negotiated for this client -- distinct from a real $0), or the dollar figure. */
+ * active -- "no payment applies", renders blank), "unpriced" (active, but no price has ever
+ * been negotiated for this client -- null or a recut 0, see isUnpriced), or the dollar figure.
+ * The unpriced wording replaced "Not set" per marcus's C3 ruling so Subscribers spells an
+ * unknown price the same way Revenue does. */
 export function providerShareFor(status: ShareStatus, priceCents: number | null | undefined): string | null {
   if (status !== "active") return null;
   const cents = providerShareCentsFor(status, priceCents);
-  return cents == null ? "Not set" : money(cents);
+  return cents == null ? UNPRICED_LABEL : money(cents);
 }

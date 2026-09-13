@@ -15,6 +15,10 @@ import { ServerRegistrationForm } from "./server-registration-form";
 type BoundAction = (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 
 export interface GroupedServerEntry {
+  /** Row identity for this list: which row is open for editing, and the React key. Was
+   * licenseId, which stops identifying a server once license_id is nullable -- two
+   * licence-less servers would share a key and collapse. */
+  registrationId: string;
   licenseId: string;
   licenseKey: string;
   registration: ServerRegistration;
@@ -28,9 +32,34 @@ interface ServerRegistrationsGroupedProps {
    * "+ Add server" / "+ Add here". Adding a genuinely new server beyond a user's
    * existing licenses needs issuance, which is out of scope here. */
   addTarget: { licenseId: string; action: BoundAction } | null;
+  /** Where "Get another licence" points when addTarget is null. The same
+   * config.telegramChannelUrl the page's locked state already uses for "Upgrade to
+   * Paid" -- passed in rather than read here so there is one source for the route. */
+  upgradeUrl: string;
 }
 
 type GroupKey = ServerLocation | "unspecified";
+
+/** Shown in the add-button slot when the user has no spare licence to register against.
+ * One server (one IP) per licence is the commercial rule, not a limitation (coxwell,
+ * 2026-09-12): server_registrations has unique(license_id), so a second submit for a
+ * licence that already has a server would edit that server rather than add one. This
+ * replaced a dim one-line note that only ever rendered on the *empty* location groups,
+ * which meant a client with a single server never saw any explanation inside the group
+ * they were actually looking at -- they just saw the Add button disappear. */
+function NeedsAnotherLicence({ upgradeUrl, inFooter = false }: { upgradeUrl: string; inFooter?: boolean }) {
+  return (
+    <div className={`srv-glic${inFooter ? " footer" : ""}`}>
+      <span className="srv-glic-h">Each server needs its own licence</span>
+      <span className="srv-glic-b">
+        One licence covers one server (one IP). To register another server, add a licence.
+      </span>
+      <a className="srv-glic-a" href={upgradeUrl} target="_blank" rel="noopener noreferrer">
+        <span className="srv-gadd-icon">＋</span> Get another licence
+      </a>
+    </div>
+  );
+}
 
 function mostRecentGroup(entries: GroupedServerEntry[]): GroupKey | null {
   if (entries.length === 0) return null;
@@ -38,9 +67,9 @@ function mostRecentGroup(entries: GroupedServerEntry[]): GroupKey | null {
   return effectiveServerLocation(newest.registration.location, newest.registration.serverLocation);
 }
 
-export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistrationsGroupedProps) {
+export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl }: ServerRegistrationsGroupedProps) {
   const [openGroup, setOpenGroup] = useState<GroupKey | null>(() => mostRecentGroup(entries));
-  const [editingLicenseId, setEditingLicenseId] = useState<string | null>(null);
+  const [editingServerId, setEditingServerId] = useState<string | null>(null);
   const [addingInGroup, setAddingInGroup] = useState<GroupKey | null>(null);
 
   const byGroup = new Map<GroupKey, GroupedServerEntry[]>();
@@ -82,7 +111,7 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
                     <span className="srv-gadd-icon">＋</span> Add here
                   </button>
                 )}
-                {!addTarget && <span className="srv-gsub">Each server needs its own licence.</span>}
+                {!addTarget && key !== "unspecified" && <NeedsAnotherLicence upgradeUrl={upgradeUrl} />}
               </div>
               {isAdding && addTarget && key !== "unspecified" && (
                 <div className="srv-grows">
@@ -121,18 +150,18 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
             {isOpen && (
               <div className="srv-grows">
                 {groupEntries.map((entry) => {
-                  const isEditing = editingLicenseId === entry.licenseId;
+                  const isEditing = editingServerId === entry.registrationId;
                   if (isEditing) {
                     return (
-                      <div className="srv-detail" key={entry.licenseId}>
+                      <div className="srv-detail" key={entry.registrationId}>
                         <div className="srv-dtop">
                           <span className="srv-dn">{entry.registration.serverName}</span>
                         </div>
                         <ServerRegistrationForm
                           action={entry.action}
                           value={entry.registration}
-                          onSaved={() => setEditingLicenseId(null)}
-                          onCancel={() => setEditingLicenseId(null)}
+                          onSaved={() => setEditingServerId(null)}
+                          onCancel={() => setEditingServerId(null)}
                         />
                       </div>
                     );
@@ -141,8 +170,8 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
                     <button
                       type="button"
                       className="srv-srow"
-                      key={entry.licenseId}
-                      onClick={() => setEditingLicenseId(entry.licenseId)}
+                      key={entry.registrationId}
+                      onClick={() => setEditingServerId(entry.registrationId)}
                     >
                       <span className="srv-ic">🖥</span>
                       <span className="srv-sname">{entry.registration.serverName}</span>
@@ -178,6 +207,9 @@ export function ServerRegistrationsGrouped({ entries, addTarget }: ServerRegistr
                   >
                     <span className="srv-gadd-icon">＋</span> Add here
                   </button>
+                )}
+                {!addTarget && key !== "unspecified" && (
+                  <NeedsAnotherLicence upgradeUrl={upgradeUrl} inFooter />
                 )}
               </div>
             )}

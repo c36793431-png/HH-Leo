@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { submitFeedRequestAction } from "@/app/feeds/actions";
-import { emitToast } from "@/lib/toast-bus";
 
 export function FeedRequestForm() {
   const [open, setOpen] = useState(false);
@@ -25,8 +24,11 @@ export function FeedRequestForm() {
       if (result.ok) {
         setSucceeded(true);
       } else {
+        // Inline only -- the error renders at the bottom of the form (below), beside the
+        // fields that caused it. Now that /feeds mounts a ToastHost, an emitToast() here
+        // would say the same sentence twice in two places; inline wins (marcus, RULING 1,
+        // leo-feeds-toast-host-2026-09-11).
         setError(result.error);
-        emitToast(result.error, "error");
       }
     });
   }

@@ -1,57 +1,6 @@
 import { pool } from "./db";
 import { getProviderApplication, notifyProviderLive } from "./provider-applications";
 
-export interface ProviderTierRow {
-  id: string;
-  applicationId: string;
-  providerUserId: string;
-  tierName: string;
-  clientPriceCents: number;
-  providerSplitPct: number;
-  endpointHost: string | null;
-  endpointPort: string | null;
-  endpointVerified: boolean;
-  publishedAt: Date;
-}
-
-interface Row {
-  id: string;
-  application_id: string;
-  provider_user_id: string;
-  tier_name: string;
-  client_price_cents: number;
-  provider_split_pct: number;
-  endpoint_host: string | null;
-  endpoint_port: string | null;
-  endpoint_verified: boolean;
-  published_at: Date;
-}
-
-function mapRow(row: Row): ProviderTierRow {
-  return {
-    id: row.id,
-    applicationId: row.application_id,
-    providerUserId: row.provider_user_id,
-    tierName: row.tier_name,
-    clientPriceCents: row.client_price_cents,
-    providerSplitPct: row.provider_split_pct,
-    endpointHost: row.endpoint_host,
-    endpointPort: row.endpoint_port,
-    endpointVerified: row.endpoint_verified,
-    publishedAt: row.published_at,
-  };
-}
-
-export async function listTiersForApplication(applicationId: string): Promise<ProviderTierRow[]> {
-  const result = await pool.query<Row>(
-    `select id, application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
-            endpoint_host, endpoint_port, endpoint_verified, published_at
-     from provider_tiers where application_id = $1 order by published_at`,
-    [applicationId]
-  );
-  return result.rows.map(mapRow);
-}
-
 export interface ProviderMarketplaceSummary {
   liveProviderCount: number;
   liveTierCount: number;
@@ -138,13 +87,52 @@ export async function listAllLiveTiers(): Promise<LiveTierRevenueRow[]> {
   });
 }
 
+/** Connection details as captured on provider_applications (0059) -- ONE set per provider,
+ * describing the whole application, not any single tier. Every column is plain `text`, including
+ * regions/coverage, and nothing normalizes them on the register-provider write path, so these are
+ * carried and rendered verbatim. No split rule is applied to them here or anywhere downstream
+ * (marcus, m47740: the live rows disagree on delimiter outright -- 'FX,COmmodities' vs
+ * 'FX Majors - Metals - Indices - BTC' -- so no single rule was ever right). */
+export interface ApplicationConnectionDetails {
+  protocol: string | null;
+  host: string | null;
+  port: string | null;
+  compid: string | null;
+  regions: string | null;
+  coverage: string | null;
+}
+
+/** Connection details as captured on provider_tiers -- PER TIER. protocol/compid are text and
+ * regions/coverage are text[] (0083), matching provider_tier_proposals, so these arrive already
+ * structured and need no parsing. Populated only by confirmProposalRound's copy-forward
+ * (3f96166/d25c250/849b383); the manual register-provider path still writes none of the four
+ * 0083 columns, so hand-registered tiers read null here by design and fall back to the
+ * application grain at render time. */
+export interface TierConnectionDetails {
+  protocol: string | null;
+  compid: string | null;
+  endpointHost: string | null;
+  endpointPort: string | null;
+  /** A claim about this tier's specific endpoint_host:endpoint_port, not about the row -- so it
+   * must never be shown against an endpoint sourced from anywhere else. */
+  endpointVerified: boolean;
+  regions: string[];
+  coverage: string[];
+}
+
 export interface ProviderRosterEntry {
   applicationId: string;
   providerName: string;
   status: "live" | "onboarding";
   source: "application" | "admin_manual";
   reviewedByLabel: string | null;
-  tiers: { tierName: string; clientPriceCents: number; providerSplitPct: number }[];
+  applicationConnection: ApplicationConnectionDetails;
+  tiers: {
+    tierName: string;
+    clientPriceCents: number;
+    providerSplitPct: number;
+    connection: TierConnectionDetails;
+  }[];
 }
 
 /** /admin/providers roster table (bus thread feed-admin-dashboard-build-2026-08-24,
@@ -157,7 +145,15 @@ export interface ProviderRosterEntry {
  * the field that actually does. Base is provider_applications (status='approved') left-joined
  * to provider_tiers, not an inner join on provider_tiers, so onboarding applicants with zero
  * confirmed tiers still show up as a row instead of being invisible. Uptime remains unmodeled
- * -- same gap as the aggregate dashboard's dropped connections-state tile. */
+ * -- same gap as the aggregate dashboard's dropped connections-state tile.
+ *
+ * Connection details are selected from BOTH tables at the grain each was actually captured, and
+ * are NOT merged here (marcus's ruling, thread leo-provider-self-registration-scope-2026-09-10):
+ * per-tier data stays per-tier, application-level data stays application-level, nothing is copied
+ * onto provider_tiers to make it displayable. Fanning one application value onto N tier rows would
+ * create copies with no writer to re-sync them -- right the day they are written and silently
+ * wrong the moment a provider runs two tiers on different protocols. The two shapes stay distinct
+ * in the return type so the caller has to state which one it is rendering. */
 export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
   const result = await pool.query<{
     application_id: string;
@@ -166,13 +162,31 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
     source: "application" | "admin_manual";
     reviewer_display_name: string | null;
     reviewer_email: string | null;
+    app_protocol: string | null;
+    app_host: string | null;
+    app_port: string | null;
+    app_compid: string | null;
+    app_regions: string | null;
+    app_coverage: string | null;
     tier_name: string | null;
     client_price_cents: number | null;
     provider_split_pct: number | null;
+    tier_protocol: string | null;
+    tier_compid: string | null;
+    endpoint_host: string | null;
+    endpoint_port: string | null;
+    endpoint_verified: boolean | null;
+    tier_regions: string[] | null;
+    tier_coverage: string[] | null;
   }>(
     `select pa.id as application_id, pa.name as provider_name, pa.onboarded_at, pa.source,
             u.display_name as reviewer_display_name, u.email as reviewer_email,
-            t.tier_name, t.client_price_cents, t.provider_split_pct
+            pa.protocol as app_protocol, pa.host as app_host, pa.port as app_port,
+            pa.compid as app_compid, pa.regions as app_regions, pa.coverage as app_coverage,
+            t.tier_name, t.client_price_cents, t.provider_split_pct,
+            t.protocol as tier_protocol, t.compid as tier_compid,
+            t.endpoint_host, t.endpoint_port, t.endpoint_verified,
+            t.regions as tier_regions, t.coverage as tier_coverage
      from provider_applications pa
      left join users u on u.id = pa.reviewed_by
      left join provider_tiers t on t.application_id = pa.id
@@ -193,6 +207,14 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
           row.source === "admin_manual"
             ? row.reviewer_display_name || row.reviewer_email?.split("@")[0] || "an admin"
             : null,
+        applicationConnection: {
+          protocol: row.app_protocol,
+          host: row.app_host,
+          port: row.app_port,
+          compid: row.app_compid,
+          regions: row.app_regions,
+          coverage: row.app_coverage,
+        },
         tiers: [],
       };
       byApplication.set(row.application_id, entry);
@@ -202,6 +224,17 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
         tierName: row.tier_name,
         clientPriceCents: row.client_price_cents,
         providerSplitPct: row.provider_split_pct,
+        connection: {
+          protocol: row.tier_protocol,
+          compid: row.tier_compid,
+          endpointHost: row.endpoint_host,
+          endpointPort: row.endpoint_port,
+          // provider_tiers.endpoint_verified is `not null default false` (0060:25); it only
+          // arrives null from a left-join miss, which this branch has already excluded.
+          endpointVerified: row.endpoint_verified ?? false,
+          regions: row.tier_regions ?? [],
+          coverage: row.tier_coverage ?? [],
+        },
       });
     }
   }

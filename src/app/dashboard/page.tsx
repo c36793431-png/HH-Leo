@@ -8,12 +8,12 @@ import {
   getLatestIssuedLicenseForUser,
   getActiveLicenseDetailsForUser,
   computeLicenseDisplayStatus,
-  computeUserActiveFeeds,
   computePortalTierFromLicenses,
   FEED_TYPES,
   FEED_TYPE_META,
 } from "@/lib/licenses";
 import { FEED_CATALOGUE, computeFeedCardStatus } from "@/lib/feeds-catalogue";
+import { computeUnlockedFeedTypes } from "@/lib/feed-subscriptions";
 import { countUserActiveServers } from "@/lib/server-registration";
 import { regionForFeedType } from "@/lib/feed-tier-catalogue";
 import { getTierCountsByRegion, getBestLatencyByRegion } from "@/lib/feed-tiers";
@@ -74,8 +74,12 @@ export default async function DashboardPage() {
       : null;
   const licenseDetail = await getLatestIssuedLicenseForUser(session.user.id).catch(() => null);
   const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
+  // Same feed_types ∪ live grants reader as /feeds (marcus,
+  // leo-approval-invisible-to-client-2026-09-11) — this drives the cards below AND the
+  // "Feeds — N of 4 active" counters, so an approved request can't leave the first page a
+  // client lands on contradicting the one it links to.
   const [activeFeeds, activeServerCount] = await Promise.all([
-    computeUserActiveFeeds(session.user.id).catch((): typeof FEED_TYPES => []),
+    computeUnlockedFeedTypes(session.user.id).catch((): typeof FEED_TYPES => []),
     countUserActiveServers(session.user.id).catch(() => 0),
   ]);
   const isAdmin = isAdminUser(session.user);

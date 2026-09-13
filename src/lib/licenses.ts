@@ -1307,7 +1307,7 @@ export async function listDistinctTiers(): Promise<string[]> {
   return result.rows.map((r) => r.tier);
 }
 
-/** Appends to the append-only signin_events log — called from the NextAuth signIn callback for every successful sign-in. */
+/** Appends to the append-only signin_events log — called once per successful sign-in from the NextAuth events.createUser (first magic-link login) and events.signIn (returning + Telegram) handlers. */
 export async function recordSigninEvent(userId: string, provider: string): Promise<void> {
   await pool.query("insert into signin_events (user_id, provider) values ($1, $2)", [userId, provider]);
 }
@@ -1338,7 +1338,7 @@ export const FEED_TYPE_META: Record<FeedType, FeedTypeMeta> = {
   crypto: { id: "crypto", name: "Crypto Tokyo Feed", description: "Tokyo · TY3 co-lo — Institutional crypto aggregator, spot & perpetual futures", coloCode: "TY3" },
 };
 
-function isFeedType(value: string): value is FeedType {
+export function isFeedType(value: string): value is FeedType {
   return (FEED_TYPES as string[]).includes(value);
 }
 

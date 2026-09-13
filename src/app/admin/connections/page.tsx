@@ -104,14 +104,25 @@ export default async function AdminConnectionsPage({
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {rows.map((r) => (
-                <tr key={r.licenseId} className="group">
+                // registrationId first: it is the row's own identity. Falls back to
+                // licenseId for the union's second arm (connection history, no server
+                // row), which has no registrationId. Exactly one of the two is always
+                // non-null, so the key set can never carry a NULL.
+                <tr key={r.registrationId ?? r.licenseId} className="group">
                   <td className="py-2 pr-4 text-zinc-200">
-                    <Link
-                      href={`/admin/connections/${r.licenseId}`}
-                      className="hover:text-cyan-300 hover:underline"
-                    >
-                      {r.email ?? "—"}
-                    </Link>
+                    {r.licenseId ? (
+                      <Link
+                        href={`/admin/connections/${r.licenseId}`}
+                        className="hover:text-cyan-300 hover:underline"
+                      >
+                        {r.email ?? "—"}
+                      </Link>
+                    ) : (
+                      // No licence to address the detail route by. Cannot happen before the
+                      // 0086 tighten; renders the same text unlinked rather than linking to
+                      // /admin/connections/null.
+                      <span>{r.email ?? "—"}</span>
+                    )}
                   </td>
                   <td className="py-2 pr-4 text-zinc-400">{r.feeds.length ? r.feeds.join(", ") : "—"}</td>
                   <td className="py-2 pr-4 text-zinc-400">{r.serverName ?? "—"}</td>

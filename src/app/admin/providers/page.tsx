@@ -1,8 +1,15 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { formatRelative } from "@/lib/format-time";
 import { getBookContext, getTermsQueueStats, listTermsReviewQueue } from "@/lib/provider-terms-queue";
 import type { TermsQueueRow } from "@/lib/provider-terms-queue";
 import { listProviderRoster } from "@/lib/provider-tiers";
+import type {
+  ApplicationConnectionDetails,
+  ProviderRosterEntry,
+  TierConnectionDetails,
+} from "@/lib/provider-tiers";
+import { ChipList, Field } from "@/components/admin/detail-fields";
 import { TermsQueueRowActions } from "@/components/admin/terms-queue-row-actions";
 import { confirmProposalAction } from "./actions";
 
@@ -35,6 +42,183 @@ function groupQueueByProvider(queue: TermsQueueRow[]): ProviderQueueGroup[] {
 
 function fmtUsd(cents: number): string {
   return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** Marks a value that was captured once on the provider's application rather than on this tier.
+ * Required by marcus (thread leo-provider-self-registration-scope-2026-09-10): an application-wide
+ * value displayed as if it were per-tier is a wrong claim that looks right -- the same defect class
+ * that got endpoint_verified voided on endpoint change in 849b383. The badge states the grain
+ * inline; APPLICATION_GRAIN_LEGEND below spells it out in full once per block. */
+const APPLICATION_GRAIN_NOTE = "from application · all tiers";
+const APPLICATION_GRAIN_LEGEND =
+  "Fields marked “from application · all tiers” come from the provider's application — one set for " +
+  "the whole provider, not per tier. Unmarked fields were captured on this tier's confirmed row.";
+
+/** Per-field fallback: the tier's own value if it has one, otherwise the application's, flagged as
+ * such. Empty string is treated as absent -- register-provider submits blank inputs as "" rather
+ * than null, and a blank is not a value worth preferring over one that exists. */
+function pickScalar(
+  tierValue: string | null,
+  appValue: string | null
+): { value: string | null; fromApplication: boolean } {
+  if (tierValue) return { value: tierValue, fromApplication: false };
+  if (appValue) return { value: appValue, fromApplication: true };
+  return { value: null, fromApplication: false };
+}
+
+/** Host and port resolve TOGETHER, never field-by-field. Composing a tier's host with the
+ * application's port would render a host:port pair that has never existed at either grain -- an
+ * endpoint fabricated by the UI. Both grains really can hold different values at once:
+ * registerProviderTiers writes host/port to provider_applications AND endpoint_host/endpoint_port
+ * to provider_tiers in the same submit, from separate inputs.
+ *
+ * endpoint_verified rides with the tier grain only. It is a claim about the tier's specific
+ * endpoint, so it is withheld entirely when the endpoint on display came from the application. */
+function pickEndpoint(
+  tier: TierConnectionDetails,
+  app: ApplicationConnectionDetails
+): { host: string | null; port: string | null; fromApplication: boolean; verified: boolean | null } {
+  if (tier.endpointHost || tier.endpointPort) {
+    return {
+      host: tier.endpointHost,
+      port: tier.endpointPort,
+      fromApplication: false,
+      verified: tier.endpointVerified,
+    };
+  }
+  if (app.host || app.port) {
+    return { host: app.host, port: app.port, fromApplication: true, verified: null };
+  }
+  return { host: null, port: null, fromApplication: false, verified: null };
+}
+
+/** regions/coverage are the one pair whose two grains have different *types*: text[] on
+ * provider_tiers (0083), plain free text on provider_applications (0059). They are rendered
+ * differently on purpose. A real array becomes chips because it genuinely is multi-value; the
+ * application's free text is printed exactly as typed, never split. No conversion happens in
+ * either direction -- that is marcus's no-parser ruling, and the live rows prove it: CW1 wrote
+ * 'FX,COmmodities', Black FastFeed wrote 'FX Majors - Metals - Indices - BTC'. */
+function MultiValueField({
+  label,
+  tierValues,
+  appValue,
+}: {
+  label: string;
+  tierValues: string[];
+  appValue: string | null;
+}) {
+  if (tierValues.length > 0) return <ChipList label={label} chips={tierValues} />;
+  return <Field label={label} value={appValue} note={appValue ? APPLICATION_GRAIN_NOTE : undefined} />;
+}
+
+function ConnectionFields({
+  tier,
+  app,
+}: {
+  tier: TierConnectionDetails | null;
+  app: ApplicationConnectionDetails;
+}) {
+  const empty: TierConnectionDetails = {
+    protocol: null,
+    compid: null,
+    endpointHost: null,
+    endpointPort: null,
+    endpointVerified: false,
+    regions: [],
+    coverage: [],
+  };
+  const t = tier ?? empty;
+  const protocol = pickScalar(t.protocol, app.protocol);
+  const compid = pickScalar(t.compid, app.compid);
+  const endpoint = pickEndpoint(t, app);
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <Field
+        label="Feed protocol"
+        value={protocol.value}
+        note={protocol.fromApplication ? APPLICATION_GRAIN_NOTE : undefined}
+      />
+      <Field
+        label="Host endpoint"
+        value={endpoint.host}
+        note={endpoint.fromApplication ? APPLICATION_GRAIN_NOTE : undefined}
+      />
+      <Field
+        label="Port"
+        value={endpoint.port}
+        note={endpoint.fromApplication ? APPLICATION_GRAIN_NOTE : undefined}
+      />
+      <Field
+        label="CompID / stream id"
+        value={compid.value}
+        note={compid.fromApplication ? APPLICATION_GRAIN_NOTE : undefined}
+      />
+      <MultiValueField label="Regions" tierValues={t.regions} appValue={app.regions} />
+      <MultiValueField label="Coverage" tierValues={t.coverage} appValue={app.coverage} />
+      {endpoint.verified !== null && (
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-zinc-500">Endpoint verified</div>
+          <div className={`mt-0.5 text-sm ${endpoint.verified ? "text-emerald-400" : "text-zinc-400"}`}>
+            {endpoint.verified ? "Yes" : "Not verified"}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Expandable Connection block for a roster row. Reads both sources at the grain each was
+ * captured (listProviderRoster) and shows whichever exists, labelled by which it is -- nothing is
+ * copied onto provider_tiers to make it renderable.
+ *
+ * Native <details> rather than a client component: this is disclosure, not state, and the same
+ * pattern is already in use in an admin table cell on /admin/downloads. Keeps the page a server
+ * component with no JS added. */
+function ConnectionBlock({ entry }: { entry: ProviderRosterEntry }) {
+  const app = entry.applicationConnection;
+  const hasApplicationDetail = Boolean(
+    app.protocol || app.host || app.port || app.compid || app.regions || app.coverage
+  );
+  const hasTierDetail = entry.tiers.some(
+    (tier) =>
+      tier.connection.protocol ||
+      tier.connection.compid ||
+      tier.connection.endpointHost ||
+      tier.connection.endpointPort ||
+      tier.connection.regions.length > 0 ||
+      tier.connection.coverage.length > 0
+  );
+  if (!hasApplicationDetail && !hasTierDetail) return null;
+
+  return (
+    <details className="group">
+      <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 hover:border-cyan-500 hover:text-cyan-300">
+        <span className="transition-transform group-open:rotate-90">›</span>
+        Connection details
+      </summary>
+      <div className="mt-2 flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+        {entry.tiers.length > 0 ? (
+          entry.tiers.map((tier) => (
+            <div key={tier.tierName} className="border-b border-zinc-800 pb-3 last:border-b-0 last:pb-0">
+              <div className="mb-3 text-[11px] font-medium uppercase tracking-wide text-teal-400">
+                {tier.tierName}
+              </div>
+              <ConnectionFields tier={tier.connection} app={app} />
+            </div>
+          ))
+        ) : (
+          <div>
+            <div className="mb-3 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+              No confirmed tiers yet — application details only
+            </div>
+            <ConnectionFields tier={null} app={app} />
+          </div>
+        )}
+        <p className="text-[11px] leading-relaxed text-zinc-500">{APPLICATION_GRAIN_LEGEND}</p>
+      </div>
+    </details>
+  );
 }
 
 const FILTER_SEGMENTS = [
@@ -150,7 +334,8 @@ export default async function AdminProvidersPage({
               {roster
                 .filter((entry) => filter === "all" || entry.status === "live")
                 .map((entry) => (
-                  <tr key={entry.applicationId}>
+                  <Fragment key={entry.applicationId}>
+                  <tr>
                     <td className="px-4 py-3 text-zinc-100">
                       <span className="flex items-center gap-2">
                         {entry.providerName}
@@ -200,6 +385,16 @@ export default async function AdminProvidersPage({
                       </span>
                     </td>
                   </tr>
+                  {/* Second row rather than a nested cell so the block gets the table's full
+                      width -- /admin/providers renders tiers as inline spans and has no per-tier
+                      detail area to hang this off. border-t-0 cancels tbody's divide-y, which
+                      would otherwise rule a line between a row and its own expansion. */}
+                  <tr className="border-t-0">
+                    <td colSpan={4} className="px-4 pb-3 pt-0">
+                      <ConnectionBlock entry={entry} />
+                    </td>
+                  </tr>
+                  </Fragment>
                 ))}
               {roster.filter((entry) => filter === "all" || entry.status === "live").length === 0 && (
                 <tr>
