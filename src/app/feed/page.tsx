@@ -231,7 +231,7 @@ export default async function FeedLandingPage() {
             </div>
             <div className="fl-tcell">
               <div className="fl-tv">Measured</div>
-              <div className="fl-tl">Latency &amp; gaps by Horizon, not self-reported</div>
+              <div className="fl-tl">Latency &amp; gaps by Horizon, not self-reported — benchmark run, 16 Aug 2026</div>
             </div>
           </div>
         </section>
@@ -266,7 +266,8 @@ export default async function FeedLandingPage() {
             <h3>Measured, not claimed</h3>
             <p>
               Tick rate and gaps are measured by Horizon and shown the same way in our open Feed Comparison
-              — your quality speaks for itself, no invented vendor numbers.
+              — your quality speaks for itself, no invented vendor numbers. Those scores come from a benchmark
+              run, not a continuous monitor: the published set was measured over 51h, 16 Aug 2026.
             </p>
           </div>
           <div className="fl-prop fl-money">
