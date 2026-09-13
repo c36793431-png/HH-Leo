@@ -93,7 +93,7 @@ Not in my reads, stated up front so nobody takes a relay for a finding (rule 8):
 | 3 | `db/migrations/0088_rollback.sql` | NEW | Section 4. Written in the same commit as file 2. |
 | 4 | `src/lib/feed-subscriptions.ts` | :388-411 `assertNoLiveGrant` (second query = the 0081 window check, REMOVAL POINT comment :392-393); :37-45 `CreateSubscriptionInput` comment; :1295-1302 comment | Code cleanup AFTER the migration is applied (section 8): delete the second query, `licenseId` leaves the args, rewrite the three comments citing the Q6 split (v1.63). Separate commit. |
 | 5 | `src/lib/access-requests.ts` | :323 comment ("or on the 0081 licence index") | Comment only, same cleanup commit. |
-| 6 | `db/migrations/0089_drop_server_or_lapsed_exception.sql` | NEW (section 12 R4) | Follow-up stub: gate live exempt rows = 0, CHECK without the exception, drop 0081. Number is the next free one; marcus confirms it. |
+| 6 | `db/migrations/0089_drop_server_or_lapsed_exception.sql` | NEW (section 12 R4, order R5) | Follow-up stub: re-key the six, gate live NULL-server exempt rows = 0, lapse the expired six, CHECK without the exception, drop 0081. Number is the next free one; marcus confirms it. |
 | 7 | `db/migrations/0089_rollback.sql` | NEW (section 12 R4) | Companion to file 6, same commit. |
 
 NOT touched by kai (so marcus can hold them):
@@ -338,6 +338,13 @@ message instead of ours). Then:
 - AMENDED by R4 (section 12, fable v1.71): the count below must EQUAL the six exempt ids, not 0;
   any other live no-server row still aborts, and an exempt id that is not a live no-server row
   aborts too. The text that follows is the pre-R4 form, kept for the history of S2(b).
+- RE-AMENDED by R5 (section 12, fable v1.75): set-equality is STRUCK. Gate = SUBSET (every live
+  no-server row is one of the six, else abort naming each) + EXISTENCE (each of the six is a
+  `feed_subscriptions` row, else abort naming it). The notice names which of the six are still
+  live; summary `fs_exempt_live` = that count; any 0..6 passes. Order inside the step: gate ->
+  lapse -> CHECK, never CHECK before lapse (marcus's ~13:37Z read: 18 active rows with
+  `ends_at <= now()` and NULL server, all on licences with zero server rows; only the lapse
+  converts them). 2b(b) asserts every staged id is one of the six AND live with NULL server.
 - BLOCK (v1 wording restored; section 12 R1 withdrawn by marcus m49215, fable S2(b) governs):
   ```
   select count(*) from feed_subscriptions
@@ -892,10 +899,72 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the two live rulings R2 (0088 filename) and R4 (exempt six).
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R4 (exempt six) and R5 (subset gate, 0089 order).
 
-**R4 (LIVE) -- step 5 is set-equality against six named rows; the CHECK carries them by id; the
-0081 drop moves to 0089.** Ruled by fable 2026-09-13 12:53Z (ledger v1.71, `3800e9d`), relayed by
+**R5 (LIVE) -- step 5 is SUBSET + EXISTENCE, not set-equality; the CHECK is added after the lapse;
+2b(b) asserts against the six; the 0089 stub re-keys, gates, LAPSES, re-adds the CHECK, drops
+0081.** Ruled by fable, ledger v1.75 (step-5 gate, 2b(b), stub items (i)-(iv)) and v1.76 (stub
+order with the lapse step), forwarded verbatim by marcus m49852_mtzwjuib (2026-09-13 14:21Z,
+"0088 SCOPE -- RE-ISSUE, SELF-CONTAINED", superseding m49643 and the lost m49590). Marcus struck
+set-equality at 13:31Z and fable retracted it independently at ~13:35Z: every legitimate way one
+of the six clears before the run (server bound and re-keyed by step 4, expiry, a word in 2b(b))
+SHRINKS the set, and equality aborts on a shrink; only growth is dangerous, and the subset test is
+what names growth. Marcus's prod read of ~13:37Z (his, not mine; Leo flagged the ordering): 18
+rows `status='active'` with `ends_at <= now()` and NULL server, ALL on licences with zero
+`server_registrations`, so step 4 clears none and only the lapse converts them; a CHECK added
+before the lapse fails on those 18 with Postgres's 23514. Fable's v1.75 block, in effect:
+1. Step 5 gate: abort naming each row if any row has `server_registration_id is null and status
+   <> 'lapsed' and (ends_at > now() or ends_at is null)` and its id is not one of the six; abort
+   naming it if any of the six does not exist in `feed_subscriptions` (typo guard); the notice
+   lists which of the six are still live; summary column `fs_exempt_live` = that count, any 0..6
+   passes. Then the lapse (predicate word for word, on `now()`), then the CHECK.
+2. 2b(b) assertion: every staged id is one of the six AND live with a NULL server at 2b time.
+   "Step 5's BLOCK set" struck there: under v1.71 that set is empty by construction.
+3. Follow-up stub (v1.76 order, replacing v1.75 (iii)): (1) 0088 step 4's re-key restricted to
+   `id in (<six>)`; (2) gate: rows live under the S4 predicate with an id in the six = 0, else
+   abort naming each; (3) LAPSE `update feed_subscriptions set status = 'lapsed', lapsed_at =
+   coalesce(lapsed_at, ends_at), updated_at = now() where id in (<six>) and server_registration_id
+   is null and status <> 'lapsed' and ends_at <= now();`, row count into the summary; (4) drop
+   the CHECK and re-add it without the exemption; (5) drop 0081. Rollback does not revert (3)
+   (same reason 0088's rollback keeps the step-5 lapse) and treats (1) as 0088's rollback treats
+   step 4 (left as written). (4) holds by construction. Why the lapse belongs there: nothing in the
+   system ever writes a lapse, and running out is the most likely way the six clear.
+4. Unchanged: the CHECK text; NOT VALID rejected; 0081 kept in 0088; step 6 carries no 0081 drop;
+   rollback loses the 0081 recreate and its duplicate-group preflight; T1-T6; 2b(a) untouched.
+Marcus's three carried rulings (m49643, restated in m49852 item 8): (a) KEEP
+`fs_request_id_rows_dropped` and `legacy_rows_dropped`; (b) the 2b staging mechanism is fable's
+to rule; (c) rollback fill-in and the 0087 notice are fine as built. Apply gate unchanged: gated
+on coxwell's disposal of the six, nothing added to make step 5 pass; his two routes in fable's
+words: "Either the client registers a real server holding that licence (0088 re-keys the rows if
+that happens before the run, the follow-up re-keys them if after), or you word a lapse. Nobody
+re-grants the feed onto the new server by hand in between."
+
+Applied at this commit (diff against f5fc622, files 2, 3, 6, 7 of section 1):
+- 0088: `tmp_0088_exempt` (same six FILL-IN placeholders) MOVES from step 5 to just before the 2b
+  slot so 2b(b) can assert against it; the 2b(b) gate adds `not exists (tmp_0088_exempt)` to
+  its bad-row predicate and the notice gains `is_exempt`; the "(step 5's block set)" wording is
+  gone. Step 5: gate (i) subset unchanged; gate (ii) "spare exemption, prune" REPLACED by
+  existence (each of the six must be a row, else abort naming it); new per-id notice `step 5
+  exempt: id=... live_no_server=...`; `fs_exempt_live` replaces `fs_no_server_live_exempt` in
+  tmp_0088_counts and the summary; a consistency abort if `live <> exempt_live` after (i); lapse
+  and CHECK unchanged in text and order (gate -> lapse -> CHECK, as at efb0d8d :339/:350/:363).
+  Every "prune both lists" instruction deleted: the CHECK always carries all six. Header, step 5,
+  step 6 and CHECK comments re-cited to m49852 / v1.75.
+- 0088 rollback: citation only (v1.71 / v1.75). Shape unchanged from R4 (no 0081 recreate).
+- 0089 stub rewritten to the v1.76 order: step 0 ledger + CHECK-text read-back; step 1 re-key
+  (0088 step 4's UPDATE with `and fs.id in (select id from tmp_0089_exempt)`, count
+  `exempt_rekeyed`); step 2 gate (S4 predicate, id in the six, = 0 else named abort; plus
+  outside-the-six = 0 as its own gate); step 3 the lapse, verbatim, count `exempt_lapsed_now`;
+  step 4 CHECK without the exception; step 5 preflight D then `drop index` 0081; step 6 summary
+  row (`exempt_rekeyed`, `exempt_lapsed_now`, `exempt_already_settled`, `fs_no_server_live`,
+  `index_0081_present`) then the ledger row. Header states the rollback does not revert steps 1
+  and 3 and why.
+- 0089 rollback: header states the two non-reverts; step labels renumbered (5 reverse, 4 reverse).
+- Not touched: T1-T6 hunks, 2b(a), 2b(c), the two extra summary columns, the rollback fill-in,
+  the 0087 notice, step 6's body (still preflight D with the NOT NULL server filter, no drop).
+
+**R4 (LIVE, gate wording superseded by R5) -- step 5 is set-equality against six named rows; the
+CHECK carries them by id; the 0081 drop moves to 0089.** Ruled by fable 2026-09-13 12:53Z (ledger v1.71, `3800e9d`), relayed by
 marcus m49590_mtztfsz1 (12:54Z) and m49643_mtztu8s7 (13:05Z), on marcus's question
 m49538_mtzt2uia (12:44Z, to fable). Marcus's prod read in m49538 (his, read-only via Neon; NOT
 my read): of 39 live feed-tier rows 24 have a NULL server, 18 of those are expired and step 5

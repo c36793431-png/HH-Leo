@@ -4,8 +4,15 @@
 --
 -- Reverses 0089 in the opposite order: the 0081 index back (preflight: zero live (license_id,
 -- feed_tier_id) duplicate groups, else abort), the CHECK back WITH the six-id exception (same
--- list as 0089 step 1; fill in the same uuids), the '0089' ledger row deleted. Nothing lossy:
--- 0089 writes no rows.
+-- list as 0089 step 0; fill in the same uuids), the '0089' ledger row deleted.
+--
+-- NOT reverted, stated up front (fable v1.76 via marcus m49852):
+--   - 0089 step 1, the re-key of the six: a 0086 column backfill, left as written, exactly as
+--     0088_rollback.sql treats 0088 step 4.
+--   - 0089 step 3, the lapse of expired exempt rows: stored 'lapsed' on a row whose ends_at is
+--     past is truthful either way, exactly as 0088_rollback.sql keeps the step-5 lapse.
+-- Both are consistent with the restored CHECK (a bound row passes on its server, a lapsed row on
+-- its status), so the ADD CONSTRAINT below cannot fail on them.
 --
 -- Must run BEFORE 0088_rollback.sql if both are being reversed (0088_rollback refuses a '0089'
 -- ledger row).
@@ -20,7 +27,7 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------------------
--- 3 reverse: the 0081 index back (preflight: no live (license_id, feed_tier_id) duplicates)
+-- 5 reverse: the 0081 index back (preflight: no live (license_id, feed_tier_id) duplicates)
 -- ---------------------------------------------------------------------------------------
 
 do $$
@@ -36,9 +43,9 @@ begin
     having count(*) > 1
   ) d;
   if dup_groups != 0 then
-    raise exception 'rollback 0089 step 3: % live (license_id, feed_tier_id) duplicate groups; the 0081 index cannot be recreated', dup_groups;
+    raise exception 'rollback 0089 step 5: % live (license_id, feed_tier_id) duplicate groups; the 0081 index cannot be recreated', dup_groups;
   end if;
-  raise notice 'rollback 0089 step 3 preflight ok: live (license_id, feed_tier_id) duplicate groups=0';
+  raise notice 'rollback 0089 step 5 preflight ok: live (license_id, feed_tier_id) duplicate groups=0';
 end $$;
 
 create unique index if not exists feed_subscriptions_license_feed_tier_live_uidx
@@ -46,7 +53,7 @@ create unique index if not exists feed_subscriptions_license_feed_tier_live_uidx
   where feed_tier_id is not null and status in ('trial', 'active');
 
 -- ---------------------------------------------------------------------------------------
--- 2 reverse: the CHECK back with the exception (0088 step 5 form)
+-- 4 reverse: the CHECK back with the exception (0088 step 5 form). Steps 3 and 1: not reverted.
 -- ---------------------------------------------------------------------------------------
 
 alter table feed_subscriptions

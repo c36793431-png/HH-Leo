@@ -37,7 +37,7 @@
 --
 -- Restores exactly: the 0078 FK (request_id references feed_tier_requests(id)), the 0079 index
 -- feed_subscriptions_request_tier_uidx, the 0031 single-column FK on delete cascade; drops the
--- CHECK (with its six-id exception, fable v1.71), the composite FK, the licenses unique, and
+-- CHECK (with its six-id exception, fable v1.71 / v1.75), the composite FK, the licenses unique, and
 -- NOT NULL on server_registrations.user_id; deletes the '0088' ledger row. The 0081 index
 -- feed_subscriptions_license_feed_tier_live_uidx is NOT recreated because 0088 no longer drops
 -- it (the drop is 0089's, with its own rollback); so no duplicate-group preflight here. If 0089
