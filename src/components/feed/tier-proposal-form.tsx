@@ -80,7 +80,11 @@ export function TierProposalForm({
       <div className="field" style={{ marginBottom: 16 }}>
         <label htmlFor="coverage">Coverage</label>
         <input id="coverage" name="coverage" defaultValue={coverageHint ?? ""} placeholder="FX Majors, Metals, Indices" />
-        <span className="hint">Comma-separated. Endpoint, protocol, and coverage are optional — leave blank if you&apos;d rather confirm them with Horizon directly.</span>
+        <span className="hint">
+          Comma-separated. On a tier&rsquo;s first round, endpoint, protocol, and coverage are optional — leave
+          blank if you&apos;d rather confirm them with Horizon directly. When you re-propose a tier that is
+          already live, a blank box <b>clears</b> that detail, so re-enter anything you want to keep.
+        </span>
       </div>
 
       <button type="submit" className="btn primary sm" disabled={pending}>

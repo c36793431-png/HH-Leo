@@ -208,6 +208,44 @@ export interface SubmitProposalInput {
   coverage: string[] | null;
 }
 
+/** The six connection columns confirmProposalRound copies onto provider_tiers, paired with
+ * the label the provider actually sees on their own form -- an error that says "compid" when
+ * the box is labelled "SenderCompID" sends them hunting for a field that isn't there. */
+const CONNECTION_FIELDS: ReadonlyArray<{
+  label: string;
+  column: keyof ConnectionRow;
+  submitted: (input: SubmitProposalInput) => string | string[] | null;
+}> = [
+  { label: "Protocol", column: "protocol", submitted: (i) => i.protocol },
+  { label: "SenderCompID", column: "compid", submitted: (i) => i.compid },
+  { label: "Endpoint host", column: "endpoint_host", submitted: (i) => i.endpointHost },
+  { label: "Endpoint port", column: "endpoint_port", submitted: (i) => i.endpointPort },
+  { label: "Regions", column: "regions", submitted: (i) => i.regions },
+  { label: "Coverage", column: "coverage", submitted: (i) => i.coverage },
+];
+
+/** An empty array counts as unset, not as a value: registerProviderTiers and older rows can
+ * leave `{}` behind, and refusing a round to protect a zero-length array would block a submit
+ * that destroys nothing. The proposal path can't produce one -- list() in the terms action
+ * returns null rather than [] -- so this only ever softens the guard, never tightens it. */
+function connectionValueIsSet(value: string | string[] | null): boolean {
+  return Array.isArray(value) ? value.length > 0 : value !== null && value.trim() !== "";
+}
+
+function describeConnectionValue(value: string | string[]): string {
+  return Array.isArray(value) ? value.join(", ") : value;
+}
+
+/** Which of a live tier's connection details this submission would blank out, rendered as
+ * "Label (current value)". Deliberately pure and exported apart from the query it feeds: with
+ * provider_tiers empty there is no live row to drive the guard through the DB, so keeping the
+ * decision free of the lookup is what makes it checkable at all rather than shipped on faith. */
+export function connectionFieldsThatWouldClear(liveRow: ConnectionRow, input: SubmitProposalInput): string[] {
+  return CONNECTION_FIELDS.filter(
+    (f) => connectionValueIsSet(liveRow[f.column]) && !connectionValueIsSet(f.submitted(input))
+  ).map((f) => `${f.label} (${describeConnectionValue(liveRow[f.column]!)})`);
+}
+
 /** The missing writer: nothing in the codebase has ever inserted into
  * provider_tier_proposals before this (the table's been read-only since 0061 -- admin's
  * review card, decline/confirm, and the terms queue all assume rows just appear). This is
@@ -244,6 +282,44 @@ export async function submitProposalRound(
     [applicationId, tierName]
   );
   if (existing.rowCount) throw new Error(`"${tierName}" already has a round awaiting review.`);
+
+  // Null-overwrite guard (marcus, m49437, 2026-09-13). confirmProposalRound writes all six
+  // connection columns onto provider_tiers verbatim, null included, because a blank proposal
+  // field means "not supplied", never "unchanged". That semantic is correct and does not change
+  // here. Its consequence is what this guards: re-proposing an ALREADY-LIVE tier with the
+  // connection boxes left empty silently nulls the endpoint details subscribers connect
+  // against, and the provider gets a success toast for it. The fix belongs at submit, exactly
+  // as the comment on confirmProposalRound says -- refusing the round and naming the values
+  // beats teaching the copy-forward to coalesce, which would make "clear this field"
+  // inexpressible and reinterpret a deliberate blank as "keep".
+  //
+  // Keyed on (application_id, tier_name), the same key confirmProposalRound resolves its
+  // destination row with, so the two cannot disagree about which row is at risk. A tier with no
+  // provider_tiers row -- every first round, the common case -- has nothing to destroy and is
+  // not gated, so this cannot block onboarding. It covers hand-registered tiers as well as
+  // confirmed-round ones: provider_tiers.application_id is `not null` (0060:18) and
+  // registerProviderTiers sets it, so there is no provider_tiers row this lookup can miss.
+  //
+  // Deliberately a refusal and not a silent coalesce-to-current: the provider is told which
+  // details are live and what they read, and re-enters the ones they want to keep. Clearing a
+  // live connection field is consequently not expressible from this form -- that is a real
+  // narrowing, flagged to marcus, and it routes through Horizon, who own the write to
+  // provider_tiers anyway.
+  const liveTier = await pool.query<ConnectionRow>(
+    `select protocol, endpoint_host, endpoint_port, compid, regions, coverage
+       from provider_tiers where application_id = $1 and tier_name = $2`,
+    [applicationId, tierName]
+  );
+  const liveRow = liveTier.rows[0];
+  if (liveRow) {
+    const wouldClear = connectionFieldsThatWouldClear(liveRow, input);
+    if (wouldClear.length) {
+      throw new Error(
+        `"${tierName}" is already live and a blank box clears its connection details. ` +
+          `Re-enter what you want to keep, or ask Horizon to remove it — ${wouldClear.join(", ")}.`
+      );
+    }
+  }
 
   await pool.query(
     `insert into provider_tier_proposals
