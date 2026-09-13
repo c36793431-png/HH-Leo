@@ -1,6 +1,7 @@
 import { pool } from "./db";
 import { getPaymentTotals } from "./payments";
-import { getFeedCostStats, licenseStatusCaseSql } from "./licenses";
+import { licenseStatusCaseSql } from "./licenses";
+import { getFeedCostStats } from "./feed-subscriptions";
 import { ROLE_LABELS, type UserRole } from "./admin-user-roles";
 import type { ComputedLicenseStatus } from "./license-status-badge";
 
@@ -243,11 +244,13 @@ export interface RevenueStats {
   totalOutThisMonth: number;
   netThisMonth: number;
   mrr: number;
-  /** Real feed-provider cost: sum of feed_definitions.monthly_cost_usd across every
-   * feed_type entitlement on every currently-active license — a live recurring rate,
-   * not a payments-ledger total, so it has no separate "this month" figure. */
+  /** Real feed-provider cost: sum of feed_definitions.monthly_cost_usd across every live feed
+   * entitlement — licence feed_types UNION live grants, see getFeedCostStats — a live recurring
+   * rate, not a payments-ledger total, so it has no separate "this month" figure. The paired
+   * count is the clients those entitlements belong to, off the same row set, so the two cannot
+   * be read from different populations. */
   feedCost: number;
-  feedCostLicenseCount: number;
+  feedCostClientCount: number;
 }
 
 export async function getRevenueStats(): Promise<RevenueStats> {
@@ -261,6 +264,6 @@ export async function getRevenueStats(): Promise<RevenueStats> {
     netThisMonth: totals.netThisMonth,
     mrr: totals.mrrProxy,
     feedCost: feedCosts.totalMonthlyCost,
-    feedCostLicenseCount: feedCosts.activeLicenseCount,
+    feedCostClientCount: feedCosts.clientCount,
   };
 }

@@ -243,6 +243,75 @@ export async function computeUnlockedFeedTypes(userId: string): Promise<FeedType
   return [...new Set([...fromLicenses, ...fromGrants])];
 }
 
+/** Real feed-provider cost behind the admin dashboard Costs tile: sum of
+ * feed_definitions.monthly_cost_usd over every live feed entitlement, and the number of
+ * clients those entitlements belong to. Both numbers come off ONE row set so the money and
+ * the count can never be read from different populations (marcus, m50241).
+ *
+ * Lives here rather than in ./licenses (where it was until 3256f27) because the grant arm
+ * needs EFFECTIVE_STATUS_SQL and REGION_TO_FEED_TYPE_SQL, and licenses.ts cannot import this
+ * module -- this one imports it.
+ *
+ * WHAT CHANGED, and what the old number meant: the previous version unnested licenses.feed_types
+ * alone and counted `count(distinct l.id)` -- so access that came from an approved tier request
+ * (a live feed_subscriptions grant, the entitlement of record since the request-to-approve flow)
+ * contributed nothing at all. Measured against prod on 2026-09-13 that was $30 of a true $90:
+ * four of the six clients holding a live London feed held it entirely by grant, with
+ * feed_types = []. Same union, same reason, as computeUnlockedFeedTypes above -- never a swap
+ * to grants alone, which would strand every pre-flow client.
+ *
+ * The grain moved from the licence to the client, which is why the tile's caption moved with it:
+ * cost is per (client, feed_type) -- a client billed for London once is one London subscription
+ * whether they hold it on one licence or two -- so "active licenses" was no longer the thing
+ * being counted. UNION (not UNION ALL) is what does the deduping; the overlap between the two
+ * arms is a client who has both the tick and the grant.
+ *
+ * Subject key: the user PK, falling back to the licence id for an unclaimed pre-provisioned
+ * licence (user_id NULL, see claimPendingLicense). Without the fallback every unclaimed licence
+ * would collapse into a single NULL subject and the tile would undercount them as one client --
+ * the old per-licence count had no such hazard, and zero such licences exist today, so this
+ * guard is holding a door the population has not yet walked through.
+ *
+ * Liveness is EFFECTIVE_STATUS_SQL's, not s.status -- a grant on an expired licence stops being
+ * billed here the same moment its card re-locks for the client. A trial-originated grant DOES
+ * count: the feed provider charges us for the connection whether or not the client is paying yet.
+ *
+ * The join to feed_definitions is inner on purpose: a feed_type with no definition row has no
+ * price, so it contributes no money AND no client, exactly as the old
+ * `filter (where fd.feed_type is not null)` did.
+ *
+ * No isMissingTable degrade-to-[] here, unlike every client-facing reader in this file: this
+ * one returns money, and a tile reading $0.00 because a table was absent is worse than a tile
+ * that fails to render. Let it throw. */
+export async function getFeedCostStats(): Promise<{ totalMonthlyCost: number; clientCount: number }> {
+  const result = await pool.query<{ total: string; client_count: string }>(
+    `with entitlements as (
+       select coalesce(l.user_id::text, 'unclaimed-license:' || l.id::text) as subject,
+              lft.feed_type as feed_type
+         from licenses l
+         join lateral unnest(l.feed_types) as lft(feed_type) on true
+        where l.status = 'active' and l.expires_at > now()
+       union
+       select s.subscriber_user_id::text as subject,
+              ${REGION_TO_FEED_TYPE_SQL} as feed_type
+         from feed_subscriptions s
+         join feed_tiers ft on ft.id = s.feed_tier_id
+        where ${REGION_TO_FEED_TYPE_SQL} is not null
+          and ${EFFECTIVE_STATUS_SQL} <> 'lapsed'
+     )
+     select
+       coalesce(sum(fd.monthly_cost_usd), 0) as total,
+       count(distinct e.subject) as client_count
+     from entitlements e
+     join feed_definitions fd on fd.feed_type = e.feed_type`
+  );
+  const row = result.rows[0];
+  return {
+    totalMonthlyCost: Number(row?.total ?? 0),
+    clientCount: Number(row?.client_count ?? 0),
+  };
+}
+
 export function pseudonymLabel(seq: number): string {
   return `HH${seq}`;
 }
