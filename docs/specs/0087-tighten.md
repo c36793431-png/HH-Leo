@@ -38,19 +38,36 @@ Author: kai. Branch: `kai/tighten-0087-2026-09-12`, off origin/main `9e84f16` (3
 merge, 22:58Z; 9e84f16 = Leo's revenue-history date fix on top). Reviewer: fable. Owner: marcus.
 Product owner: coxwell. Thread: kai-tighten-0087-2026-09-12 (marcus m49169).
 
-Status: SPEC ONLY. No migration file and no code until fable PASSes this document. Every "Source X"
-is the verbatim ledger text banked in `docs/specs/0086-phase2-ledger-extract.md`. "0086 header"
+Status: SPEC v3, built on 6d20110 (v1) per marcus m49385_mtzpd4fx (2026-09-13 11:00Z, the
+complete job). Folds in fable's PASS-WITH-STRIKES on 6d20110 (m49198_mtz0hi3c S1-S4,
+m49199_mtz0hjpn Q1-Q7, m49201_mtz0hlbm N1-N5, all 2026-09-12 23:23Z, read by me on the bus), her
+m49231 amendments (23:30Z; NOT in my reads, taken from marcus m49385's relay and marked so where
+used), her S3 ruling m49275 (23:48Z, relayed the same way) and marcus m49215_mtz0lxlf (23:27Z,
+"fable governs", withdrawing his R1 and R3; section 12 is history only). The 7527d3c (R1 WARN)
+and 6f2ada9 (R3 no-CHECK + no-server index) edits are reverted: step 5 / step 6 / section 2 (b) /
+section 4 / section 9 are back in the CHECK form. Migration file = `db/migrations/0088_tighten.sql`
+(R2, the one live ruling in section 12); this document keeps its 0087 name. No migration file and
+no code until fable reads the v3 hunks.
+Every "Source X" is the verbatim ledger text banked in `docs/specs/0086-phase2-ledger-extract.md`;
+every "fable S/Q/N" is her text in the three messages above, quoted, not relayed. "0086 header"
 means the DEPLOY ORDER block of `db/migrations/0086_marketplace_recut.sql` as merged (lines 59-104
 at 9e84f16), which is the ledger's own statement list for this file. Anything that is not a Source
 citation or a header quote is a PROPOSAL and is marked so. Line anchors are at `9e84f16`.
 
 Not in my reads, stated up front so nobody takes a relay for a finding (rule 8):
-- The provisioning ledger's own section 9 text (provider panel lock). I have the 0086 spec's
-  section 9 interval statement, which cites it (fable m48897, marcus m48906); the bus GET by short
-  id returns "not found" for those two. Section 6 below quotes what I have and asks fable for the
-  paragraph.
-- Fable's B-1 sentence. Section 7 quotes marcus m49169's relay of it and asks for her words.
-- Every prod count. Section 11 lists the SELECTs; marcus runs them.
+- The ledger's section 9 paragraph and fable's B-1 sentence: now quoted verbatim from her Q7
+  (sections 6 and 7); still her text, not my read of the ledger file.
+- Every prod count. Section 11 lists the SELECTs; marcus runs them. Marcus's 23:22Z reads
+  (m49188_mtz0c0pq) are cited where used and marked as his.
+- The phase-2 deploy instant (S3): `2026-09-12T22:58:19Z`, ruled by fable m49275 (23:48Z, ledger
+  v1.65) as relayed in marcus m49385: option (a), no pad, "loud-and-stuck beats silent-and-wrong".
+  Not my read of any deploy log. It is the one literal in both SQL files (step 1 comment, section 4
+  guard) and in section 9 item 6. No placeholder remains in this document.
+- Postgres major version (S1): the composite FK's `on delete set null (license_id)` column-list
+  form needs PG >= 15; marcus pastes `show server_version` (section 11). If < 15 fable rules the
+  fallback; this spec does not design it.
+- Marcus's 23:37Z NULL-safe re-read (m49385 (B), his, Neon MCP, read-only): both S1 counts in
+  section 11 are 0 on today's data. Cited there as expected values, not as my finding.
 
 ---
 
@@ -59,9 +76,9 @@ Not in my reads, stated up front so nobody takes a relay for a finding (rule 8):
 | # | File | State at 9e84f16 | Change |
 |---|------|------------------|--------|
 | 1 | `docs/specs/0087-tighten.md` | NEW | This document. |
-| 2 | `db/migrations/0087_tighten.sql` | NEW | Section 3. Written only after PASS. |
-| 3 | `db/migrations/0087_rollback.sql` | NEW | Section 4. Written in the same commit as file 2. |
-| 4 | `src/lib/feed-subscriptions.ts` | :388-411 `assertNoLiveGrant` (second query = the 0081 window check, REMOVAL POINT comment :392-393); :37-45 `CreateSubscriptionInput` comment; :1295-1302 comment | Code cleanup AFTER the migration is applied (section 8): delete the second query, rewrite the three comments that say "until the tighten". Separate commit. |
+| 2 | `db/migrations/0088_tighten.sql` | NEW (0087 is Leo's, section 12 R2) | Section 3. Written after fable reads the v3 hunks; goes to her whole, once, with file 3. |
+| 3 | `db/migrations/0088_rollback.sql` | NEW | Section 4. Written in the same commit as file 2. |
+| 4 | `src/lib/feed-subscriptions.ts` | :388-411 `assertNoLiveGrant` (second query = the 0081 window check, REMOVAL POINT comment :392-393); :37-45 `CreateSubscriptionInput` comment; :1295-1302 comment | Code cleanup AFTER the migration is applied (section 8): delete the second query, `licenseId` leaves the args, rewrite the three comments citing the Q6 split (v1.63). Separate commit. |
 | 5 | `src/lib/access-requests.ts` | :323 comment ("or on the 0081 licence index") | Comment only, same cleanup commit. |
 
 NOT touched by kai (so marcus can hold them):
@@ -74,9 +91,9 @@ NOT touched by kai (so marcus can hold them):
 - `src/lib/feed-subscriptions.ts` :140-157 `EFFECTIVE_STATUS_SQL`: unchanged. It still joins
   `licenses` on `s.license_id` (:144-146, my read), i.e. the read-side flip (c) has NOT run.
   Consequence in section 7.
-- `src/app/feed/dashboard/*`, `src/lib/feed-providers.ts`: NOT opened in this job unless fable rules
-  section 6's proposal in AND marcus clears the collision (Leo committed to `/feed/dashboard` three
-  times today: 133ecc3, 592007d, 9e84f16).
+- `src/app/feed/dashboard/*`, `src/lib/feed-providers.ts`: NOT opened in this job. Fable Q5 ruled
+  section 6 PERMISSION ONLY; the Subscribers-page shape is banked in the ledger for a later Leo
+  slice after B-1.
 - `src/app/feed/dashboard/page.tsx` :16 `TYPE_ICON` still has a dead `provisioned` key; harmless,
   Leo's, not touched.
 
@@ -149,43 +166,114 @@ own list for step (iii), quoted above, also contains: the section 1/3/4 re-runs 
 preflight D re-run, `user_id SET NOT NULL`, the `server_or_lapsed` CHECK with the dead-row lapse,
 `drop index feed_subscriptions_license_feed_tier_live_uidx`, and the v1.49 5(b) FK switch. This
 spec designs ONE file with all of them, because (a) the header calls the whole list "(iii)", (b) the
-replacement no-server index (section 3 step 6, section 12 R3; was "the CHECK" in v1) must exist
-before the 0081 index goes or a live row with NULL server would be covered by no unique index
-(NULLs are distinct under the 0086 server index), and (c) the section-3 re-run is what makes the
-`request_id` DROP COLUMN lossless (section 3 step 2). If fable or marcus want the three named
-statements split from the rest, the order below already isolates them as steps 8-9 and the split is
-a file boundary, not a redesign. RECOMMENDATION: one file.
+CHECK must exist before the 0081 index goes or a live row with NULL server would be covered by no
+unique index (NULLs are distinct under the 0086 server index), and (c) the section-3 re-run is what
+makes the `request_id` DROP COLUMN lossless (section 3 step 2). The order below isolates the three
+named statements as steps 8-9 so a split is a file boundary, not a redesign. RULED (fable Q1): one
+file, "Kai's (b) is the decisive reason"; steps 8-9 stay isolated; no split asked for.
+
+**Fable S1, owner agreement (not in the 0086 header; her correction of her own v1.60):** "the
+tighten must gate and then constrain sr.user_id = licenses.user_id. Ledger: v1.56 Ruling A ('the
+tighten re-runs the section-1 backfill from licenses.user_id and gates that stored agrees with
+computed before set not null; a CHECK/composite-FK against the licence owner is the target'),
+v1.60 (2)(b), v1.61 (5) ('what B waits on is user_id NOT NULL + the owner CHECK')." Lands in
+step 1 (gate) and step 7 (constraint).
 
 ---
 
-## 3. `db/migrations/0087_tighten.sql` -- statement order, each step with its guard
+## 3. `db/migrations/0088_tighten.sql` -- statement order, each step with its guard
 
 One transaction, `begin` ... `commit`, DO-block gates that `raise exception` (whole transaction
 aborts) or `raise notice` with counts, the 0086 discipline. Marcus dry-runs it once with `rollback`
 in place of `commit` and pastes every notice line, then runs it for real (section 9). Header: what
 the file does, in order, with file/line/ledger-version references only; no sentence about who
-decided or ruled anything (the 0084 rule, marcus m49169).
+decided or ruled anything (the 0084 rule, marcus m49169). The header also carries, verbatim:
+- the step-2b line (fable S2): "literals present only when the cited word is on the thread; a run
+  without the word aborts at step 3 / step 5 as designed";
+- the after-apply note (fable Q5, section 6): "the vendor record set is complete after this file;
+  a provider surface may present it as the truth of what the provider was told";
+- the step-2 gate form (fable N3): "the gate is the v1.55 DISTINCT form: `count(distinct
+  legacy_feed_tier_request_id) = legacy_rows - skipped` plus `envelopes = details`";
+- the deploy-instant literal `2026-09-12T22:58:19Z` with its source comment (fable S3 + m49275,
+  section 4): "phase-2 deploy instant for 3ded80d; new-path allowlist records cannot predate it".
 
-**0. Ledger row preflight.** `schema_migrations` has `'0086'` and does not have `'0087'`; else abort.
+**0. Ledger row preflight.** `schema_migrations` has `'0086'` AND `'0087'` (Leo's
+feed_tiers connection fields, section 12 R2) and does not have `'0088'`; else abort.
 
-**1. Section 1 re-run (header 93-95).** `update server_registrations sr set user_id = l.user_id
-from licenses l where l.id = sr.license_id and sr.user_id is null`; gate `count(*) where user_id is
-null = 0` else abort. Expected UPDATE 0 on prod (Leo's writer has been live since 3ded80d; the
-window rows are those registered between 17:30Z and 22:58Z). `updated_at` untouched (0086 rule).
+**1. Section 1 re-run, then the owner gate (header 93-95; fable S1(a)).** `update
+server_registrations sr set user_id = l.user_id from licenses l where l.id = sr.license_id and
+sr.user_id is null`; gate `count(*) where user_id is null = 0` else abort. Second gate, S1(a):
+```
+select count(*) from server_registrations sr
+join licenses l on l.id = sr.license_id
+where sr.user_id is distinct from l.user_id;   -- must be 0, else abort, rows named
+```
+Fable wrote `sr.user_id <> l.user_id` in S1; `is distinct from` because `licenses.user_id` is
+nullable (0001:51, my read) and a NULL licence owner would pass `<>` silently and then fail step
+7's composite FK with Postgres's message instead of ours. Operator CONFIRMED by fable m49231 (per
+marcus m49385: "S1 gate + section-11 read use `is distinct from`"). The abort message names the
+mismatched rows AND carries a second count, also m49231 via m49385: licences with `user_id` NULL
+that have any `server_registrations` row,
+```
+select count(*) from licenses l
+where l.user_id is null
+  and exists (select 1 from server_registrations sr where sr.license_id = l.id);
+```
+so an unclaimed licence bound to a server is named as the cause, not left to be inferred from the
+mismatch. Expected 0 and 0 (0086 backfilled from `l.user_id`; Leo's writer takes `user_id` from
+a session proven to own the licence, v1.56; marcus's 23:37Z NULL-safe read of both, his, in
+m49385 (B): 0 and 0). Expected UPDATE 0 on prod (Leo's writer has been live since 3ded80d; the
+window rows are those registered between 17:30Z and `2026-09-12T22:58:19Z`, the phase-2 deploy
+instant, S3). `updated_at` untouched (0086 rule).
 
 **2. Section 3 re-run with predicate (iv) (header 109-110, Source M).** Same two temp tables and
-two INSERTs as 0086 lines 230-244 and 446-497, with ONE change: `tmp_0087_skipped_requests` adds
+two INSERTs as 0086 lines 230-244 and 446-497, with ONE change: `tmp_0088_skipped_requests` adds
 ```
   and not exists (select 1 from access_requests a where a.legacy_feed_tier_request_id = ftr.id)
 ```
 as the fourth conjunct. The envelope upsert keeps `on conflict (id) do update ... where
 access_requests.decided_at is null` (0086:483-488, Source I strike 6) so no decision made through
-the new path is reverted. Same gate as 0086:504-530 (`mapped_legacy = legacy_rows - skipped`,
-`envelopes = details`). Then the `access_request_id` backfill from `request_id` at tier grain
-(0086:542-548) and its gate (0086:551-565): `count(*) from feed_subscriptions where request_id is
-not null and access_request_id is null = 0`. THIS GATE IS THE READER CHECK FOR STEP 8: after it,
-every fact `request_id` carried is carried by `access_request_id` (row-level) plus
+the new path is reverted. Same gate as 0086:504-530, which IS the v1.55 DISTINCT form (fable N3;
+my read: 0086:514 `count(distinct legacy_feed_tier_request_id)`, :521 `envelopes = details`, :524
+`mapped = legacy_rows - skipped`), and the header says so in those words. Then the
+`access_request_id` backfill from `request_id` at tier grain (0086:542-548) and its gate
+(0086:551-565): `count(*) from feed_subscriptions where request_id is not null and
+access_request_id is null = 0`. THIS GATE IS THE READER CHECK FOR STEP 8: after it, every fact
+`request_id` carried is carried by `access_request_id` (row-level) plus
 `access_requests.legacy_feed_tier_request_id` (request-level), so the DROP COLUMN loses nothing.
+
+**2b. Coxwell dispositions (fable S2; the v1.49 3a pattern: named literals ahead of the gate, in
+the same file).** A block that holds literal UPDATEs ONLY, each under a comment citing the bus
+message id and date of coxwell's word. EMPTY BY DEFAULT. The gates in steps 3 and 5 stay exactly
+as strict as written; a run without the word aborts there as designed. Three literal shapes may
+appear, none present until the cited message exists:
+- (a) 31cd1813 (pending, licence expired 09-01, Source N; no envelope by construction, so step 3
+  aborts on it every run; no code path can reject it, companion grep = Q26 NO):
+  ```
+  -- coxwell <message id>, <date>: reject
+  update feed_tier_requests
+  set status = 'rejected', actioned_at = now(), reason = '<coxwell, message id, date>'
+  where id = '31cd1813-5994-4946-bc3e-b5e1f3a52f64' and status = 'pending';
+  ```
+  The row then drops with the table in step 9 as a rejected row; provenance = step 3's notice
+  paste + the ledger.
+- (b) worded lapse of a live no-server row (step 5's BLOCK set; fable S2(b)):
+  ```
+  -- coxwell <message id>, <date>: lapse
+  update feed_subscriptions
+  set status = 'lapsed', lapsed_at = now(), updated_at = now()
+  where id in ('<row id>', ...);
+  ```
+  `lapsed_at = now()` here, not `ends_at` (fable Q2: "a decision, dated when taken"). The other
+  resolution needs NO literal: coxwell's client registers a real server row through the existing
+  registration flow before the run, and step 4's licence -> server backfill re-keys the rows
+  (v1.52's "known IP on the vendor allowlist" case). Marcus m49215: the 6 live rows are coxwell's;
+  giang registers a real server (recommended) or worded lapse; rasoolx55 likewise. The 31cd1813
+  literal in (a) lives HERE, in this file, not in a separate SQL file (fable closed CONFLICT 2 that
+  way; marcus m49385 item 3).
+- (c) a legacy `approved`-only row coxwell says WAS told (fable Q4): one literal INSERT into
+  `feed_allowlist_records` per member tier, expanding packages exactly as section 5 does, under
+  the same comment form. Silence = no carry.
 
 **3. Disposition preflight (Source N, header 89-92).** List, one notice line per row, every
 `feed_tier_requests` row with no envelope:
@@ -201,8 +289,9 @@ order by requester, ftr.created_at, ftr.id;
 Any listed row with `status = 'pending'` (or `approved`/`provisioned`, which cannot be in this set
 after step 2 unless section 3's join lost it, so also abort) aborts the transaction, named. Rows
 with `status = 'rejected'` are noticed and drop with the table in step 9. Expected today: the one
-row 31cd1813 (Source N); its status decides whether this file can run at all. Runs AFTER step 2 so
-a row the old code wrote in the window and step 2 just carried is not listed.
+row 31cd1813 (Source N), listed as `rejected` via step 2b(a) and the run continues; without the
+2b literal it is `pending` and the file aborts here, as designed. Runs AFTER step 2 so a row the
+old code wrote in the window and step 2 just carried is not listed.
 
 **4. Section 4 re-run (header 93-95).** `server_registration_id` backfill via licence -> server
 (0086:581-585) and its gate (`left_null = no_server`, 0086:590-604); `ends_at` re-seed for rows
@@ -212,72 +301,87 @@ writers set all three columns; 0086 spec section 10 step 7 is the post-deploy in
 
 **5. NULL-server disposition, then the CHECK (header 80-86).** Listing, one notice per row, of
 every `feed_subscriptions` row with `server_registration_id is null`: `id, subscriber, tier,
-status, ends_at, computed = (ends_at > now())`. Then:
-- WARN + list (ruled marcus m49194 23:26Z, section 12 R1; was BLOCK in v1 of this document):
-  `count(*) where server_registration_id is null and status in ('trial','active') and ends_at >
-  now()` is noticed with every row named; it does NOT abort. These rows are 0081-cohort backfills
-  bound to a licence before server binding existed; under coxwell's 18:07Z Arm B ruling
-  (servers register without a licence, licence allocated to a server later) "subscription bound
-  to a licence, no server yet" is a legitimate post-tighten state. No lapse, no synthetic server
-  row. Column stays nullable. Prod read 23:24Z: 6 such rows (section 12 R1).
-- LAPSE the dead ones inside the transaction:
+status, ends_at, computed = (ends_at > now() or ends_at is null)`. Predicates are fable S4's,
+verbatim: live = `status <> 'lapsed' and (ends_at > now() or ends_at is null)` (NULL `ends_at` =
+live, v1.53/v1.55 reading; `status <> 'lapsed'` rather than `in ('trial','active')` so a row with
+any other stored status cannot slip past both branches and fail at ADD CONSTRAINT with Postgres's
+message instead of ours). Then:
+- BLOCK (v1 wording restored; section 12 R1 withdrawn by marcus m49215, fable S2(b) governs):
+  ```
+  select count(*) from feed_subscriptions
+  where server_registration_id is null and status <> 'lapsed'
+    and (ends_at > now() or ends_at is null);   -- must be 0, else abort, every row named
+  ```
+  Marcus's read 23:22Z (m49188, his): 6 such rows, two subscribers x 3 tiers (giang2000ln paid to
+  09-19, rasoolx55 trial to 09-25; v1.52 sharpening 3). Both resolutions are coxwell's and both
+  are step 2b(b): a real server row registered before the run (step 4 re-keys the rows, no
+  literal), or his worded lapse (literal in 2b, `lapsed_at = now()`). No synthetic server row.
+- LAPSE the dead ones inside the transaction (S4 predicate; Q2 RULED `coalesce`):
   ```
   update feed_subscriptions
   set status = 'lapsed', lapsed_at = coalesce(lapsed_at, ends_at), updated_at = now()
-  where server_registration_id is null and status in ('trial','active') and ends_at <= now();
+  where server_registration_id is null and status <> 'lapsed' and ends_at <= now();
   ```
-  PROPOSAL: `lapsed_at = coalesce(lapsed_at, ends_at)` (0071 has `lapsed_at`; the truthful lapse
-  instant is the seeded `ends_at`, and `now()` would date a 2026-09-06 expiry to the tighten).
-  Computed status does not move for these rows (they already compute `lapsed` through the licence
-  branch, `l.expires_at > now()` false); stored status now agrees with computed. Test plan names
-  them as the ONLY stored-status movers and ZERO computed movers.
-- NO CHECK. **RULED (section 12 R3, marcus m49207 23:29Z; fable overrides):** the header's
-  `feed_subscriptions_server_or_lapsed_chk` (0086 header :75-76 target statement) LEAVES the
-  tighten. Not added `not valid` either: under Arm B a licence-bound live subscription with no
-  server yet is a legitimate state for every future row, so the rule the CHECK asserts is wrong,
-  not merely premature. The v1 CONFLICT note that stood here is resolved by R3. The header
-  target list (0086:75-77, "add the CHECK, and drop the 0081 index" at :96-97) changes:
-  flagged for fable in section 11 as Q8.
+  `lapsed_at = coalesce(lapsed_at, ends_at)` RULED (fable Q2: "the truthful instant is the seeded
+  end; dating a 09-06 expiry to the tighten would be a fiction"). Condition she set: "0071 has
+  `lapsed_at`" is my read, so marcus's section-11 reads gain the `information_schema.columns`
+  SELECT for `feed_subscriptions`. Computed status does not move for these rows (they already
+  compute `lapsed` through the licence branch, `l.expires_at > now()` false); stored status now
+  agrees with computed. Test plan names them as the ONLY stored-status movers and ZERO computed
+  movers, with fable's S4 caveat (section 9 item 4).
+- THE CHECK (header :75-76 target statement, verbatim), now that no non-lapsed row has a NULL
+  server:
+  ```
+  alter table feed_subscriptions add constraint feed_subscriptions_server_or_lapsed_chk
+    check (status = 'lapsed' or server_registration_id is not null);
+  ```
+  STAYS (marcus m49215 withdrawing his m49207: "'server without licence' (Arm B, legitimate)" is
+  not "'live subscription without server' (not legitimate post-tighten)"; fable Q1 reason (b),
+  Q6; fable m49231 per marcus m49385: "CHECK STAYS, step 5 stays BLOCK, no no-server partial
+  index"). Column stays nullable (v1.52: a lapsed row may keep NULL server forever). Not `not
+  valid`: steps 2b + 5 make it hold at ADD, and the failure is ours, named, before Postgres's.
 
-**6. Preflight D re-run, create the no-server index, then drop the 0081 index (header 77,
-95-97; section 12 R3).** Duplicate groups on `(server_registration_id, feed_tier_id)` among live
-rows (0086:327-344) must be 0 (structurally true: `feed_subscriptions_server_feed_tier_live_uidx`
-exists since 0086 and covers every live row whose server is NOT NULL). Live rows with NULL
-server (the 6 of R1, plus any future Arm B row) are NOT under that index (NULLs are distinct), so
-BEFORE the 0081 index goes, in the same transaction:
-```
-create unique index if not exists feed_subscriptions_subscriber_feed_tier_live_noserver_uidx
-  on feed_subscriptions (subscriber_user_id, feed_tier_id)
-  where server_registration_id is null and status <> 'lapsed';
-```
-(predicate as ruled; `status <> 'lapsed'` equals `status in ('trial','active')` because 0071:49
-constrains `status` to exactly those three values, so it is the same live set as the 0086 and
-0078 indexes. Postgres validates at CREATE, so the create is its own gate; the added preflight
-read in section 11 shows the duplicate count ahead of the dry-run.) Coverage after this step, my
-read of the three predicates: a live row with server NOT NULL is under the 0086 index
-(server, tier); a live row with server NULL is under the new index (subscriber, tier); no live
-row is outside both. NOT prevented by the pair, said before writing as asked: the same
-(subscriber, tier) held live TWICE, once server-less and once server-bound. Today the 0081 index
-forbids that pair when both rows carry the same `license_id`; after the drop nothing does. In
-`src` at 9e84f16 the only writer-side guard for it is the second query in `assertNoLiveGrant`
-(feed-subscriptions.ts :403-410, the `license_id` window check) that section 8 deletes. Section 8
-therefore REPLACES that query instead of deleting it (see there); marcus rules if he wants the
-cross-half pair forbidden at the schema too (it cannot be one index: the two halves key on
-different columns). Then `drop index if exists
+**6. Preflight D re-run, then drop the 0081 index (header 77, 95-97; fable Q1 ordering: CHECK
+before the drop).** Duplicate groups on `(server_registration_id, feed_tier_id)` among live rows
+(0086:327-344) must be 0 (structurally true: `feed_subscriptions_server_feed_tier_live_uidx`
+exists since 0086 and covers every live row whose server is NOT NULL, and after step 5's CHECK
+every live row has a NOT NULL server, so no live row is outside it). Then `drop index if exists
 feed_subscriptions_license_feed_tier_live_uidx;`. Nothing in `src` names that index in an `ON
 CONFLICT` (my grep: the only mentions at 9e84f16 are the comment at feed-subscriptions :392 and the
 comment at access-requests :323); the window check at :403-410 is a plain SELECT and keeps working
-until the section-8 cleanup deletes it. Not dropped: the 0078 `provider_tier` twin
+until the section-8 cleanup deletes it. No replacement index (the 6f2ada9 R3 no-server index is
+withdrawn with R3, section 12: with the CHECK in place its predicate set, live rows with NULL
+server, is empty by construction, and the cross-half question R3 raised is moot for the same
+reason). Not dropped: the 0078 `provider_tier` twin
 (`feed_subscriptions_subscriber_provider_tier_live_uidx`), outside the ledger's list.
 
-**7. server_registrations: `user_id SET NOT NULL` and the 5(b) FK switch (header 74, 148-150).**
-`alter table server_registrations alter column user_id set not null;` (gate = step 1). Then, in a
-DO block that looks the FK up by `conrelid = 'server_registrations'::regclass and confrelid =
-'licenses'::regclass and contype = 'f'` (0031 created it unnamed, so the default name
-`server_registrations_license_id_fkey` is expected but not assumed): drop it, re-add
-`foreign key (license_id) references licenses(id) on delete set null`, notice the name it found.
-`unique (license_id)` kept as-is (Source B: swap dropped; NULLs distinct). No writer NULLs
-`license_id` in this file and none exists in code (section 7).
+**7. server_registrations: `user_id SET NOT NULL`, then the owner FK (header 74, 148-150; fable
+S1(b), shape as she wrote it).** `alter table server_registrations alter column user_id set not
+null;` (gate = step 1). Then, in order:
+```
+alter table licenses add constraint licenses_id_user_id_key unique (id, user_id);
+-- additive; id is already the PK so it always holds
+```
+then, in a DO block that looks the 0031 FK up by `conrelid = 'server_registrations'::regclass and
+confrelid = 'licenses'::regclass and contype = 'f'` (0031 created it unnamed, so the default name
+`server_registrations_license_id_fkey` is expected but not assumed): drop it, notice the name it
+found, and add
+```
+alter table server_registrations
+  add constraint server_registrations_license_owner_fkey
+  foreign key (license_id, user_id) references licenses (id, user_id)
+  on delete set null (license_id);
+```
+Fable S1(b), verbatim: "MATCH SIMPLE (default) means a licence-less row (license_id NULL) is not
+checked, which is exactly B's row; `on delete set null (license_id)` nulls only the licence
+column, so user_id NOT NULL survives a licence delete (v1.49 5(b)'s reason). The column-list form
+of SET NULL needs Postgres >= 15 ... ON UPDATE stays NO ACTION: today the only writer of
+licenses.user_id is claimPendingLicense NULL->owner (v1.56), so a future licence-transfer path
+fails loudly at this FK". The constraint name is mine (0031's was unnamed); fable may rename in
+the hunk read. `unique (license_id)` kept as-is, plain (Source B: swap dropped; fable Q7 close:
+"v1.49 governs ... the swap is retired for good in v1.63"). No writer NULLs `license_id` in this
+file and none exists in code (section 7). Gate for the ADD = step 1's second count (0 rows where
+`sr.user_id is distinct from l.user_id`), so the FK cannot fail on data this file did not name.
 
 **8. `request_id` goes (Source C, header 78-79).** Guard, re-run immediately before: `count(*)
 where request_id is not null and access_request_id is null = 0` (step 2's gate, repeated so the
@@ -295,21 +399,22 @@ reader this spec missed; after step 8 the 0078 FK is gone and 0086 created none)
 have passed. Then `drop table feed_tier_requests;` (its two 0034 indexes go with it). Nothing else
 references it: `git grep` in `src` = 13 comment lines (line one, companion grep).
 
-**10. Summary SELECT and the ledger row.** One row: `sr_user_id_null` (0), `fs_no_server_live`
-(6 expected per section 12 R1; a notice, not a gate),
-`fs_no_server_lapsed_now` (step 5's UPDATE count), `fs_request_id_column_present` (false, from
-`information_schema.columns`), `ftr_table_present` (false, from `to_regclass`),
-`allowlist_carried` (section 5 count), `allowlist_open_total`, `access_requests_rows`,
-`legacy_no_envelope_rejected` (step 3's rejected count, dropped). Then `insert into
-schema_migrations (version, name) values ('0087', '0087_tighten.sql') on conflict do nothing;`
-`commit;`
+**10. Summary SELECT and the ledger row.** One row: `sr_user_id_null` (0), `sr_owner_mismatch`
+(0, step 1 second gate), `fs_no_server_live` (0, step 5 gate), `fs_no_server_lapsed_now` (step
+5's UPDATE count), `fs_lapsed_by_word` (step 2b(b) row count, 0 when the slot is empty),
+`fs_request_id_column_present` (false, from `information_schema.columns`), `ftr_table_present`
+(false, from `to_regclass`), `allowlist_carried` (section 5 count), `allowlist_open_total`,
+`access_requests_rows`, `legacy_no_envelope_rejected` (step 3's rejected count, dropped). Then
+`insert into schema_migrations (version, name) values ('0088', '0088_tighten.sql') on conflict do
+nothing;` `commit;`
 
 ---
 
-## 4. `db/migrations/0087_rollback.sql`
+## 4. `db/migrations/0088_rollback.sql`
 
 Same discipline as 0086_rollback.sql: written in the same commit, never run automatically, states
-what it cannot restore first. Reverse order of section 3.
+what it cannot restore first. Reverse order of section 3. Preflight: `schema_migrations` has
+`'0088'`, else abort (nothing to roll back).
 
 Cannot restore exactly, said up front:
 - `feed_tier_requests` rows. The rollback recreates the 0034 shape and repopulates it FROM the
@@ -329,13 +434,18 @@ Cannot restore exactly, said up front:
 Restores exactly: 0078 FK (`request_id references feed_tier_requests(id)`, after the table is
 back), 0079 index `feed_subscriptions_request_tier_uidx`, the 0081 index
 `feed_subscriptions_license_feed_tier_live_uidx` (preflight in the rollback: zero live `(license_id,
-feed_tier_id)` duplicate groups, else abort), then `drop index if exists
-feed_subscriptions_subscriber_feed_tier_live_noserver_uidx` (R3; no CHECK to drop, none was
-added), `user_id DROP NOT NULL`, FK back to `on delete cascade`, delete the carried allowlist rows (`told_at <
-'2026-09-12T17:30:00Z'`: `feed_allowlist_records` did not exist before the 0086 apply, so an
-earlier `told_at` can only be a carried row; guard = that count equals the summary's
-`allowlist_carried`, else abort), delete the `'0087'` ledger row. The step-5 lapse is NOT reverted
-(stored `lapsed` on a row whose `ends_at` is past is truthful either way); stated, not hidden.
+feed_tier_id)` duplicate groups, else abort), `alter table feed_subscriptions drop constraint if
+exists feed_subscriptions_server_or_lapsed_chk`, then the step-7 reverse in fable's S1 order:
+`alter table server_registrations drop constraint server_registrations_license_owner_fkey`,
+re-add `foreign key (license_id) references licenses(id) on delete cascade` (the 0031 shape; name
+noticed), `alter table licenses drop constraint licenses_id_user_id_key`, `user_id DROP NOT
+NULL`; delete the carried allowlist rows (`told_at < '2026-09-12T22:58:19Z'`, the phase-2 deploy
+instant, S3 + m49275: new-path records cannot predate the deploy, and a legacy row actioned in the
+17:30Z-22:58Z window carries a `told_at` inside that window, which the v1 bound 17:30Z missed;
+the literal sits under a comment naming its source; guard = that count equals the summary's
+`allowlist_carried`, else abort), delete the `'0088'` ledger row. The step-5 lapse is NOT reverted
+(stored `lapsed` on a row whose `ends_at` is past is truthful either way); the step-2b literals
+are NOT reverted (coxwell's decisions, dated); both stated, not hidden.
 
 ---
 
@@ -389,28 +499,27 @@ nothing` for the PK:
 ```
 insert into feed_allowlist_records (server_registration_id, feed_tier_id, ip, told_at)
 select c.server_registration_id, c.feed_tier_id, c.ip, c.told_at
-from tmp_0087_carry c
+from tmp_0088_carry c
 where not exists (select 1 from feed_allowlist_records r
                   where r.server_registration_id = c.server_registration_id
                     and r.feed_tier_id = c.feed_tier_id and r.ip = c.ip and r.revoked_at is null)
 on conflict (server_registration_id, feed_tier_id, told_at) do nothing;
 ```
-where `tmp_0087_carry` is the SELECT above. Post-gate: for every distinct (server, tier, ip) in
+where `tmp_0088_carry` is the SELECT above. Post-gate: for every distinct (server, tier, ip) in
 `tmp_0087_carry` an open record exists (count of misses = 0). Notice: rows enumerated, rows
 inserted, rows skipped because an open same-IP record already existed (a legacy grant that was
 ALSO re-approved through the new path since 22:58Z).
 
-PROPOSAL, flagged, not designed around: legacy rows with `status = 'approved'` that never reached
-`'provisioned'` get NO record. Source G(d) names the `'provisioned'` set only; whether an
-`'approved'`-only legacy row means "vendor told" is coxwell's, so section 11 asks for their count
-and list and this file carries none of them unless fable says otherwise.
+RULED (fable Q4): legacy rows with `status = 'approved'` that never reached `'provisioned'` get NO
+record by default. Her words: "'approved' is a decision; 'provisioned' is the vendor told; only
+the second is allowlist truth (v1.49 2(d)). Coxwell sees the approved-only list (section 11); if
+he says a listed row WAS told, it is carried by a literal in step 2b (S2) with his message id,
+expanding packages exactly as section 5 does. No default carry." Marcus's read (m49188, his):
+8 approved rows today.
 
-`told_by` (Source I, optional; 0086 spec 4(a) said "if fable wants it, it goes in the tighten
-file"): PROPOSAL = not added. Carried rows COULD set it (`actioned_by`), but the phase-2 writer does
-not write it and a column half the rows fill is the ledger section 1.5 shape the recut removed. One word from
-fable flips this: then `told_by uuid references users(id)` is added in step 9 before the INSERT,
-carried rows get `actioned_by`, and the section-8 cleanup passes `decided_by` from the approval
-path.
+`told_by` (Source I, optional): RULED (fable Q3) NOT ADDED. Her named cost, accepted: "carried
+rows can then be back-filled from nothing (actioned_by is gone with the table)". A later
+one-column migration plus a writer change if coxwell ever wants it; not this file.
 
 After this step the vendor record set is no longer PARTIAL (0086 spec section 9 interval
 statement; section 11 item 4): every grant the vendor was told about under the old flow and every
@@ -420,7 +529,23 @@ grant approved or directly granted under the new flow has an open record.
 
 ## 6. Item (3): the provider-panel unlock
 
-What I have, verbatim from `docs/specs/0086-phase2-code.md` section 9 (P2 interval statement):
+RULED (fable Q5): PERMISSION ONLY in this slice. "No UI file is opened in the 0087 job; section 6
+collapses to one sentence in the migration header's after-apply note: 'the vendor record set is
+complete after this file; a provider surface may present it as the truth of what the provider was
+told'." The Subscribers-page shape below is banked in the ledger as the spec of a separate
+provider-panel slice, Leo's files, sequenced by marcus after B-1. Kept here as the record of what
+was banked; nothing in it is built by this job.
+
+The ledger's section 9 paragraph, verbatim and whole (fable Q7, her text): "It does not authorise
+anything. It does not model entitlement, billing, or renewal. It does not touch the provider panel
+except to lock it. It does not automate anything. It does not change server_registrations. It
+gives coxwell a document to approve, amend, or reject, in place of five bus round-trips that
+nobody will read again." The lock is her section 1.7 fact made a rule: "Every provider-reachable
+surface ... goes through maskIdentity() or a pseudonym-only select. No IP column is selected
+anywhere on a provider path." She records my read (declared_ip on Subscribers/Revenue at 9e84f16
+:535, :540) as a change made since, in Leo's provider-panel work, unverified by her.
+
+What I had in v1, verbatim from `docs/specs/0086-phase2-code.md` section 9 (P2 interval statement):
 "between this deploy and the tighten, the vendor record set (`feed_allowlist_records`) is PARTIAL.
 It carries rows only for grants approved or directly granted through the new path; the
 `'provisioned'` carry of legacy grants is the tighten's (section 11 item 4). The provider panel is
@@ -435,9 +560,8 @@ pages read `listSubscribersForProvider` (:516-568), whose "server IP" column is
 `server_registrations.declared_ip` joined ON `s.license_id` (:535, :540), i.e. the client's CURRENT
 declared IP, not what the vendor was told.
 
-The unlock = the lock's negation: after 0087 applies, a provider surface MAY present the record set
-as the truth of what the provider has been told. PROPOSAL for what changes on `/feed/dashboard`
-(fable rules; the ledger's section 9 text is what I need to check this against):
+The unlock = the lock's negation: after 0088 applies, a provider surface MAY present the record set
+as the truth of what the provider has been told. The shape as banked (fable Q5; NOT built here):
 - Subscribers page (`/feed/dashboard/subscribers`), the one place the provider already sees an IP:
   the IP column reads the OPEN allowlist record for the row's (server, tier) --
   `left join feed_allowlist_records r on r.server_registration_id = s.server_registration_id and
@@ -453,37 +577,48 @@ as the truth of what the provider has been told. PROPOSAL for what changes on `/
 - Provider approve: unchanged (writes through the same path; C2).
 - Not in this job either way: the revoke write when a grant lapses and a list of open records
   whose subscription is no longer live (0086 spec 4(b), "a later slice").
-Ownership: those two files are in Leo's active area today (section 1); if ruled in, kai declares
-them again to marcus and does not open them until he rules. If fable rules the unlock is a
-statement of permission only (no surface changes in this slice), this section becomes one sentence
-in the migration header's "after apply" note and no UI file is touched.
+Ownership: those two files are Leo's (section 1); kai does not open them in this job. The
+migration header carries the one after-apply sentence quoted at the top of this section.
 
 ---
 
 ## 7. Item (4): the B-1 dependency
 
-As marcus relayed it in m49169 (fable's own sentence is not in my reads; asked for in section 11):
-"B-1 is one commit AFTER the tighten AND the phase-2 merge, and the licence-less-server 23502 guard
-ships with B-1, not here."
+Fable's sentence, verbatim (Q7, v1.61 (6)): "B-1 (12 files, ~450-550 lines, no migration) as ONE
+commit after the tighten AND after Kai's phase 2 is on main, because the 2c picker hunks in
+feeds/actions.ts would otherwise conflict twice." The guard, v1.60 (3): "a server with no licence
+REFUSES a feed request, a self-serve trial and a direct grant, until allocated ... Shape: one named
+error at the same entry points as SoftwareRequestsNotShippedError / the no-server refusal (C3),
+text 'Allocate a licence to this server first', and the 2c picker lists unallocated servers
+DISABLED with that reason rather than hiding them" and "the guard is unreachable until B and ships
+with B, not with phase-2". On "23502", v1.62 N2 as she quotes it: "LockedServerRegistration.licenseId
+nullable flows into NOT NULL feed_subscriptions.license_id = raw 23502 for a licence-less server,
+no such row before B-1, guard ships with B-1". So the 23502 is on `feed_subscriptions.license_id`
+(the approval INSERT), not on `server_registrations`; my v1 reading below is confirmed by her as
+"correct and complete".
 
 What that binds in this file:
 - Nothing here inserts or updates a `server_registrations` row with `license_id NULL`, and no code
   at 9e84f16 does either (server-registration.ts :180-195 always passes `licenseId`).
   `server_registrations.license_id` has been nullable since 0086 section 1, so the 23502 that B-1
-  guards against is not on that column; it is whatever `not_null_violation` a licence-less
-  registration trips on the write path B-1 introduces (I do not know B-1's write shape and do not
-  design for it). This file only makes the schema ready for B-1: `user_id NOT NULL` (the owner
-  survives a missing licence), FK `on delete set null` (a deleted licence no longer deletes the
-  server), `unique (license_id)` kept (NULLs distinct, so N licence-less servers do not collide).
-  The guard itself ships with B-1, not here.
-- The window rule (Source B) is NOT retired by this file. Its stated end is "until the tighten",
-  but `EFFECTIVE_STATUS_SQL` at 9e84f16 :144-146 still reads `licenses l where l.id = s.license_id`
-  (the flip (c) has not run, v1.47/v1.49: coxwell's separate word), so a `feed_subscriptions` row
-  with `license_id NULL` would compute `lapsed` today. Phase-2 writers keep writing `license_id`
-  from the server row (access-requests.ts :328-330; feed-subscriptions.ts :331) and this spec
-  changes no writer. Retiring the window rule is the flip's, or B-1's, to state. FLAG for fable:
-  the ledger sentence and the code disagree on when the window ends; I am following the code.
-- Order on main: phase-2 merge (3ded80d, done) -> this tighten (0087 applied, then the section-8
+  guards against is not on that column (see above: it is on `feed_subscriptions.license_id`, the
+  approval INSERT, and the application refusal in B-1 pre-empts it). This file only makes the
+  schema ready for B-1, CONFIRMED by fable with S1 added: `user_id NOT NULL` (the owner survives a
+  missing licence), the owner FK `on delete set null (license_id)` (a deleted licence no longer
+  deletes the server, and leaves the owner), `unique (license_id)` kept plain (NULLs distinct, so
+  N licence-less servers do not collide; "the swap is retired for good in v1.63"). The guard
+  itself ships with B-1, not here.
+- The window rule (Source B) is SPLIT by this file, RULED (fable Q6, v1.63). Her words: "The
+  server_registrations half ENDS with 0087: user_id is NOT NULL (the DB holds the rule), and 'no
+  writer NULLs license_id' on server rows is lifted because B-1's insert-new writes license_id
+  NULL by design (v1.60). The feed_subscriptions half SURVIVES 0087: server_registration_id is
+  enforced by the CHECK for every non-lapsed row, but license_id keeps being written until flip
+  (c) runs, because EFFECTIVE_STATUS_SQL still joins licenses on s.license_id (Kai's read
+  :144-146; v1.62 (e) confirmed untouched) and a NULL there computes lapsed." Phase-2 writers keep
+  writing `license_id` from the server row (access-requests.ts :328-330; feed-subscriptions.ts
+  :331) and this spec changes no writer. The section-8 comment rewrites cite v1.63 for the split,
+  not "the tighten" wholesale.
+- Order on main: phase-2 merge (3ded80d, done) -> this tighten (0088 applied, then the section-8
   cleanup commit) -> B-1. The cleanup commit is part of the tighten, not B-1.
 
 ---
@@ -493,16 +628,23 @@ What that binds in this file:
 - feed-subscriptions.ts :388-411 `assertNoLiveGrant`: the `if (args.licenseId)` second query
   (:403-410, keyed on `license_id`) and the REMOVAL POINT paragraph (:388-393) go; `licenseId`
   leaves the args type; the two callers (access-requests.ts batch create and approval,
-  feed-subscriptions.ts direct grant) drop the argument. R3 CHANGE (was "delete, new-key query
-  alone"): in its place a second query keyed on the subscriber, `where subscriber_user_id = $1
-  and feed_tier_id = $2 and server_registration_id is null and status in ('trial','active')`,
-  so a server-bound grant is refused while the same subscriber holds a live server-less row on
-  that tier (the cross-half pair step 6 says the two indexes do not forbid). `subscriberUserId`
-  is already in scope at both callers (it is written into the same INSERT). Behaviour: two
-  queries, one per half of the step-6 pair, mirroring the schema. PROPOSAL, marcus rules.
+  feed-subscriptions.ts direct grant) drop the argument. Behaviour after: the new-key query
+  alone (server, tier). No replacement query (the 6f2ada9 R3 subscriber-keyed rewrite is
+  withdrawn with R3: with the step-5 CHECK there is no live server-less row for a second half to
+  exist; fable m49231 per marcus m49385: "no assertNoLiveGrant rewrite").
 - feed-subscriptions.ts :37-45 and :1295-1302, access-requests.ts :323: comment text that says
   "until the tighten" / "or on the 0081 licence index" / "drops with the old table in the tighten"
-  is rewritten to the past tense with the 0087 reference. No behaviour.
+  is rewritten to the past tense with the 0088 reference. Q6 split wording (fable, v1.63), in the
+  comments where the window rule is named: "the server_registrations half of the v1.49 window
+  rule ended with 0088 (user_id NOT NULL; B-1 writes license_id NULL by design); the
+  feed_subscriptions half survives 0088: writers keep writing license_id until flip (c), because
+  EFFECTIVE_STATUS_SQL still joins licenses on s.license_id". `fs.license_id` stops being written
+  in flip (c)'s commit, not this one.
+- S1(ii) (fable m49231 per marcus m49385): no code path deletes a `users` row, so the owner FK's
+  `on delete set null (license_id)` is only ever exercised by a licence delete, which is itself
+  not a designed operation (fable N5); a user delete is not this file's and not this cleanup's.
+  Preflight for the record, my run at the branch working tree (src = 9e84f16):
+  `git grep -n -i "delete from users" -- src` = 0 lines. Expect zero; a hit is a stop, not a fix.
 - Nothing else: `request_id` has no reader to delete (line one), `feed_tier_requests` has no reader
   to delete (companion grep), `EFFECTIVE_STATUS_SQL` is untouched.
 - Not deployed before the migration: the second query is harmless with the index gone (plain
@@ -536,44 +678,52 @@ no-server live rows) is known BEFORE the dry-run, not discovered by it.
 **Prod, dry-run then apply, by marcus:**
 1. Dry-run: the file with `rollback;` in place of `commit;`. Every notice line pasted. Expected:
    step 1 UPDATE 0; step 2 INSERT 0 / 0 unless the window wrote requests (then N, named); step 2
-   gate `unmapped=0`; step 3 lists 31cd1813 (status decides: `rejected` = continue, `pending` =
-   abort here); step 4 UPDATE 0/0/0; step 5 warn count 6 (named, section 12 R1) and lapse count
-   = the dead no-server rows (named); no CHECK (R3); preflight D 0; step 6 no-server index
-   CREATE succeeds (fails = a live no-server (subscriber, tier) duplicate, which the added
-   section-11 read shows ahead: expected 0, the 6 R1 rows are 2 subscribers x 3 distinct tiers
-   per marcus's relayed read); step 7 FK name found; step 8 `request_id` rows with
-   a value = the 0086 apply's `with_request` count, unmapped 0; step 9 carry enumerated = the
-   `provisioned_to_map` count expanded by package membership, inserted = that minus same-IP
-   overlaps with new-path records, misses 0; drop guard 0; summary row.
+   gate `unmapped=0` (the v1.55 DISTINCT form, N3); step 1 owner gate 0 mismatches and 0
+   NULL-owner licences with server rows; step 2b literals applied (row counts, each named);
+   step 3 lists 31cd1813 as `rejected` via 2b(a) and continues (without the literal: `pending`,
+   abort here, as designed); step 4 UPDATE 0/0/0; step 5 BLOCK count 0 (without coxwell's
+   resolution of the 6 live no-server rows: 6, named, abort here, as designed) and lapse count =
+   the dead no-server rows (named; marcus m49188: 18 lapse-able + 3 stored-lapsed, his read);
+   CHECK added; preflight D 0; step 6 index dropped; step 7 FK name found, licences unique
+   added, composite FK added; step 8 `request_id` rows with a value = the 0086 apply's
+   `with_request` count, unmapped 0; step 9 carry enumerated = the `provisioned_to_map` count
+   expanded by package membership, inserted = that minus same-IP overlaps with new-path records,
+   misses 0; drop guard 0; summary row.
 2. Before-read (v1.47 gate shape, S5(b)): `select id, subscriber_user_id, feed_tier_id, status,
    ends_at, server_registration_id, <EFFECTIVE_STATUS_SQL> as computed from feed_subscriptions
    order by id` -- the same read marcus used for the 0086 dry-runs.
 3. Apply (`commit`). Paste every notice line; they must equal the dry-run's.
-4. After-read = before-read plus EXACTLY: stored `status` `active`->`lapsed` on the step-5 rows
-   (named ahead from the before-read: `server_registration_id is null and status in
-   ('trial','active') and ends_at <= now()`), `computed` unchanged on every row. Any other mover
-   means the file is wrong and the rollback runs.
-5. Schema reads: `information_schema.columns` has no `feed_subscriptions.request_id`;
-   `to_regclass('feed_tier_requests') is null`; `pg_indexes` has neither
-   `feed_subscriptions_request_tier_uidx` nor `feed_subscriptions_license_feed_tier_live_uidx`,
-   and HAS `feed_subscriptions_subscriber_feed_tier_live_noserver_uidx` with the step-6
-   predicate (R3); `pg_constraint` has NO `feed_subscriptions_server_or_lapsed_chk` (R3) and has
-   the new `server_registrations` FK with `confdeltype = 'n'`; `server_registrations.user_id` is
-   `is_nullable = 'NO'`; `'0087'` in `schema_migrations`.
+4. After-read = before-read plus EXACTLY: stored `status` -> `lapsed` on the step-5 rows (named
+   ahead from the before-read with the S4 predicate: `server_registration_id is null and status
+   <> 'lapsed' and ends_at <= now()`) plus the step-2b(b) rows if any literal is present,
+   `computed` unchanged on every row. Fable's S4 caveat, named, not a change: a `status =
+   'trial'` NULL-server row whose `ends_at` (from `feed_tier_trials`) is past but whose licence
+   is still live computes live today under the pre-flip licence join and would be a COMPUTED
+   mover when lapsed; on the known population (18 rows, all `active`, `ends_at` = licence
+   expiry, v1.52) that set is empty, so "computed unchanged on every row" stays the gate. Any
+   other mover means the file is wrong and the rollback runs.
+5. Schema reads: `information_schema.columns` for `feed_subscriptions` (fable Q2's SELECT,
+   section 11) has no `request_id` row and has `lapsed_at`; `to_regclass('feed_tier_requests')
+   is null`; `pg_indexes` has neither `feed_subscriptions_request_tier_uidx` nor
+   `feed_subscriptions_license_feed_tier_live_uidx`; `pg_constraint` HAS
+   `feed_subscriptions_server_or_lapsed_chk` (contype 'c'), HAS
+   `server_registrations_license_owner_fkey` with `confdeltype = 'n'` and a two-column `conkey`
+   (fable S1), HAS `licenses_id_user_id_key` (contype 'u'), and the 0031 single-column FK is
+   gone; `server_registrations.user_id` is `is_nullable = 'NO'`; `'0088'` in `schema_migrations`.
 6. Allowlist read: `select server_registration_id, feed_tier_id, ip, told_at from
-   feed_allowlist_records where told_at < '2026-09-12T17:30:00Z' order by told_at` = the carry
-   list from section 5, row for row; `select count(*) ... where revoked_at is null` = summary
-   `allowlist_open_total`.
+   feed_allowlist_records where told_at < '2026-09-12T22:58:19Z' order by told_at` (the phase-2
+   deploy instant, S3 + m49275; same literal as section 4) = the carry list from section 5, row
+   for row; `select count(*) ... where revoked_at is null` = summary `allowlist_open_total`.
 7. App smoke after apply, before the cleanup deploy: Request Access on a registered server and an
    admin approval both succeed (the window query still runs, now against no index: plain SELECT);
    the admin queue and the provider Overview render; `/feed/dashboard/subscribers` renders the same
    rows as before apply (no reader of the dropped objects).
 8. After the cleanup deploy: repeat 7; the duplicate-grant refusal still fires on a second approval
    of the same (server, tier) (`DuplicateTierGrantError` from the new-key query alone).
-9. If section 6 is ruled in and built: the Subscribers page IP cell shows the told IP and told_at
-   for every carried row and every new-path row; a row whose `declared_ip` differs shows both.
+9. No UI check: section 6 is permission only (fable Q5); nothing on `/feed/dashboard` changes in
+   this job.
 
-Rollback of the schema is `0087_rollback.sql` (section 4). Rollback of the cleanup commit is a
+Rollback of the schema is `0088_rollback.sql` (section 4). Rollback of the cleanup commit is a
 code revert; it re-adds a SELECT against a column that still exists, so it is safe in either
 order.
 
@@ -595,55 +745,57 @@ order.
 
 ## 11. Open questions for fable, and the prod reads marcus runs
 
-**For fable (rulings needed before the file is written):**
-- Q1 Scope: one file (recommended, section 2 note) or the three named statements split out.
-- Q2 `lapsed_at = coalesce(lapsed_at, ends_at)` on the step-5 dead rows, or `now()`, or leave NULL.
-- Q3 `told_by`: not added (proposal) or added with `actioned_by` / `decided_by`.
-- Q4 Legacy `status = 'approved'`-not-`'provisioned'` rows: no record (proposal) or carried.
-- Q5 Section 6: surface change on `/feed/dashboard/subscribers` in this slice, or permission only.
-- Q6 The window rule's end: section 7 flag (ledger says tighten, code says flip).
-- Q7 Your B-1 sentence verbatim, and the ledger's section 9 paragraph verbatim, so v2 of this
-  document quotes them instead of marcus's relay and the 0086 spec's citation.
-- Q8 (ADDED after your Q1-Q7 pass; marcus m49207 asked that it be marked for you explicitly
-  because it changes the header TARGET LIST, 0086:75-77 and :96-97). Section 12 R3: the
-  `server_or_lapsed` CHECK leaves the tighten (not `not valid`, not deferred: wrong under Arm B),
-  and the 0081 index drop gains a replacement in the same step,
-  `feed_subscriptions_subscriber_feed_tier_live_noserver_uidx` on (subscriber_user_id,
-  feed_tier_id) where server_registration_id is null and status <> 'lapsed'. Your Q1 ordering
-  ("CHECK before 0081 index drop") reads as "no-server index before 0081 index drop". Also the
-  cross-half pair in step 6 and the section-8 replacement query. Marcus ruled; you override.
+**For fable: Q1-Q7 RULED in m49199 (23:23Z), folded in above; nothing open.** Where each landed:
+Q1 one file (section 2 note). Q2 `coalesce(lapsed_at, ends_at)` for expiry lapses, `now()` for
+worded lapses (step 5, step 2b). Q3 `told_by` not added (section 5). Q4 approved-only rows: no
+default carry, literal in 2b(c) on coxwell's word (section 5). Q5 permission only (section 6).
+Q6 window rule split (section 7, section 8). Q7 verbatim quotes (sections 6, 7). Q8 of 6f2ada9
+is DROPPED with R3 (marcus m49385 item 2). Open for her in the hunk read only: the constraint
+name `server_registrations_license_owner_fkey` (mine) and the `is distinct from` operator
+(confirmed per marcus's relay of m49231; her own words not in my reads).
 
 **For marcus (read-only, prod, paste the outputs; none of these I can run):**
 ```
-select count(*) from feed_tier_requests;                                            -- legacy_rows
-select status, count(*) from feed_tier_requests group by status order by status;    -- incl. provisioned_to_map, approved-only
-select count(*) from feed_subscriptions where request_id is not null;               -- with_request
-select count(*) from feed_subscriptions where request_id is not null and access_request_id is null;  -- must be 0
-select count(*) from server_registrations where user_id is null;                    -- must be 0
-select count(*) from feed_subscriptions where server_registration_id is null;       -- fs_no_server (0086 named 6?)
-select count(*) from feed_subscriptions where server_registration_id is null and status in ('trial','active') and ends_at > now();   -- step-5 WARN count (RUN 23:24Z: 6, section 12 R1)
-select count(*) from feed_subscriptions where server_registration_id is null and status in ('trial','active') and ends_at <= now();  -- step-5 lapse count
-select subscriber_user_id, feed_tier_id, count(*) from feed_subscriptions where server_registration_id is null and status <> 'lapsed' and ends_at > now() group by 1, 2 having count(*) > 1;  -- R3: step-6 no-server index would fail on any row here; expect 0 rows
-select count(*) from feed_subscriptions fs where fs.server_registration_id is null and fs.status <> 'lapsed' and exists (select 1 from feed_subscriptions o where o.subscriber_user_id = fs.subscriber_user_id and o.feed_tier_id = fs.feed_tier_id and o.server_registration_id is not null and o.status <> 'lapsed');  -- R3: cross-half pairs the two indexes do not forbid; today's count
-select count(*) from feed_allowlist_records;                                        -- new-path records so far
-select conname, confdeltype from pg_constraint where conrelid = 'server_registrations'::regclass and contype = 'f';
-select count(*) from pg_constraint where confrelid = 'feed_tier_requests'::regclass;  -- expect 1 (the 0078 FK)
+select count(*) from feed_tier_requests;                                            -- legacy_rows (m49188: 13, his)
+select status, count(*) from feed_tier_requests group by status order by status;    -- incl. provisioned_to_map, approved-only (m49188: approved 8 / pending 5 / provisioned 0 / rejected 0)
+select count(*) from feed_subscriptions where request_id is not null;               -- with_request (m49188: 6)
+select count(*) from feed_subscriptions where request_id is not null and access_request_id is null;  -- must be 0 (m49188: 0)
+select count(*) from server_registrations where user_id is null;                    -- must be 0 (m49188: 0)
+select count(*) from server_registrations sr join licenses l on l.id = sr.license_id where sr.user_id is distinct from l.user_id;  -- S1 owner gate, must be 0 (EXPECTED 0: marcus 23:37Z NULL-safe read, m49385 (B))
+select count(*) from licenses l where l.user_id is null and exists (select 1 from server_registrations sr where sr.license_id = l.id);  -- S1 NULL-owner licences with server rows, must be 0 (EXPECTED 0: same read)
+show server_version;                                                                -- S1: composite FK set null (license_id) needs >= 15
+select column_name, is_nullable from information_schema.columns where table_name = 'feed_subscriptions' order by ordinal_position;  -- fable Q2: proves lapsed_at present, request_id present before / absent after
+select count(*) from feed_subscriptions where server_registration_id is null;       -- fs_no_server (m49188: 27 = 6 live + 18 lapse-able + 3 stored-lapsed)
+select count(*) from feed_subscriptions where server_registration_id is null and status <> 'lapsed' and (ends_at > now() or ends_at is null);  -- step-5 BLOCK count, S4 predicate (m49188 under the v1 predicate: 6; re-run under S4)
+select count(*) from feed_subscriptions where server_registration_id is null and status <> 'lapsed' and ends_at <= now();  -- step-5 lapse count, S4 predicate (m49188 under v1: 18)
+select id, subscriber_user_id, feed_tier_id, status, ends_at from feed_subscriptions where server_registration_id is null and status <> 'lapsed' and (ends_at > now() or ends_at is null) order by subscriber_user_id, feed_tier_id;  -- step-5 population by name (the rows coxwell resolves via 2b(b))
+select count(*) from feed_allowlist_records;                                        -- new-path records so far (m49188: 0)
+select conname, confdeltype from pg_constraint where conrelid = 'server_registrations'::regclass and contype = 'f';  -- (m49188: both CASCADE)
+select count(*) from pg_constraint where confrelid = 'feed_tier_requests'::regclass;  -- expect 1 (the 0078 FK) (m49188: 1)
 select count(*) from feed_tier_requests where status = 'provisioned' and actioned_at is null;  -- guard (b), must be 0
 ```
-plus the two listings: section 3 step 3 (no-envelope rows) and section 5 (the carry SELECT). The
-"6?" is my recollection of Q25's no-server London clients from the 0086 spec, not a read; the
-count is whatever the SELECT says.
+plus the two listings: section 3 step 3 (no-envelope rows) and section 5 (the carry SELECT;
+m49188: 0 rows, so Q4's 8 approved rows are the material list for coxwell). The m49188 figures
+are marcus's 23:22Z reads (his, relayed here as expected values, not mine); the two S1 zeros are
+his 23:37Z read in m49385 (B).
 
 Nothing in this document has been run against prod by kai. No file other than this one exists on
 the branch.
 
 ---
 
-## 12. Rulings ledger (rulings received after v1, with the read each cites)
+## 12. Rulings ledger -- HISTORY ONLY. The one live ruling here is R2 (0088 filename).
 
-**R1 -- step 5 live no-server rows: WARN + list, not BLOCK.** Ruled by marcus, m49194, 23:26Z,
-thread kai-tighten-0087-2026-09-12. Cited read (marcus, prod, SELECT only, 23:24Z; relayed, not my
-read):
+R1 and R3 were marcus's rulings of 23:26Z and 23:29Z, made before he had read fable's 23:23Z
+review, and WITHDRAWN by him in m49215_mtz0lxlf (23:27Z, "fable governs") and again in m49385
+(2026-09-13 11:00Z); fable's m49231 (23:30Z, per marcus's relay) confirms: CHECK stays, step 5
+stays BLOCK, no no-server partial index, no `assertNoLiveGrant` rewrite. The 7527d3c and 6f2ada9
+edits that applied R1 and R3 are reverted in this v3; nothing below R2 is in force. The text is
+kept so the thread's history reads without the bus.
+
+**R1 (WITHDRAWN m49215) -- step 5 live no-server rows: WARN + list, not BLOCK.** Ruled by marcus,
+m49194, 23:26Z, thread kai-tighten-0087-2026-09-12. Cited read (marcus, prod, SELECT only,
+23:24Z; relayed, not my read):
 - Subscriber A: LD Base x3 tiers (19cb2c39 / 21842a66 / a8538ab6), status active, $30, 09-04 to
   09-19, licence 176ca960 PAID expires 09-19, rows 82147257 / 4a0a7fb8 / 00f9e32c.
 - Subscriber B: LD Base x3 same tiers, status active, $0, 09-04 to 09-25, licence 6865647f TRIAL
@@ -656,33 +808,35 @@ yet" a legitimate post-tighten state. Both are 0081-cohort backfills from before
 Disposition: step 5 preflight = WARN + list; `server_registration_id` stays nullable; no lapse;
 no synthetic server row. Fable's Q1-Q7 pass overrides if it says otherwise; a conflict goes to
 marcus, not picked by kai.
-Consequence (flagged to marcus in the same reply, RESOLVED by R3 below): the header's CHECK
-`server_or_lapsed` cannot be added while these 6 rows are `active` with NULL server; R3 removes
-the CHECK from the tighten.
+Consequence flagged to marcus in the same reply: the header's CHECK `server_or_lapsed` cannot be
+added while these 6 rows are `active` with NULL server. Outcome after withdrawal: the CHECK stays
+and the 6 rows are coxwell's to resolve through step 2b(b) (a real server row, or a worded lapse).
 
-**Item 2 (31cd1813)**: separate SQL file from kai, lands before 0087, not folded in. In front of
-coxwell as of 23:19Z; open. **Item 1 (carry, Q4)**: wait for fable.
+**Item 2 (31cd1813)** as ruled with R1: separate SQL file from kai, before the tighten. WITHDRAWN
+with R1; fable closed it as a step-2b literal in this file (CONFLICT 2, marcus m49385 item 3).
+**Item 1 (carry, Q4)**: ruled by fable Q4 (section 5).
 
-**R2 -- migration number is 0088, not 0087.** Ruled by marcus, m49203_mtz0i4xj, 23:24Z, same
+**R2 (LIVE) -- migration number is 0088, not 0087.** Ruled by marcus, m49203_mtz0i4xj, 23:24Z, same
 thread. Leo's feed_tiers connection-fields migration took 0087 on branch
 `leo/feeds-connection-fields-2026-09-12` at 6b70486 (my read of that commit's tree:
 `db/migrations/0087_feed_tiers_connection_fields.sql` inserts `schema_migrations` version
 '0087' at :46; `db/migrations/0087_rollback.sql` deletes '0087' at :28). Not on origin/main as
-of 09f8352; it applies before the tighten, so the order holds. Consequences for this spec, applied
-when v2 is written (no other action now):
+of 09f8352; it applies before the tighten, so the order holds. Fable confirmed the reading (marcus
+m49385: the ledger records the SQL files as 0088, spec filename and thread stay 0087). Applied in
+this v3:
 - Section 3 file is `db/migrations/0088_tighten.sql`; section 4 file is
   `db/migrations/0088_rollback.sql`; section 1 table rows 2 and 3 rename accordingly.
 - Step 0 preflight becomes: `schema_migrations` has '0086' AND '0087', does not have '0088'.
 - Ledger insert becomes `('0088', '0088_tighten.sql')`; rollback deletes '0088'; section 9
   step 5 expects '0088' in `schema_migrations`.
 - Branch `kai/tighten-0087-2026-09-12`, thread `kai-tighten-0087-2026-09-12` and this file's
-  name stay as they are. Prose references to "0087" in sections 3-9 read as the tighten
-  migration, i.e. 0088, until v2 rewrites them.
+  name stay as they are.
 
-**R3 -- the `server_or_lapsed` CHECK leaves the tighten; the 0081 index drop gets a no-server
-replacement index.** Ruled by marcus, m49207_mtz0iz0q, 23:29Z, same thread. (Marcus's message
-says "record as R2"; R2 was already taken by m49203 above in eb5340b, so this is R3; numbering
-flagged in my reply.) Fable overrides (Q8 in section 11). Resolves the R1 open consequence.
+**R3 (WITHDRAWN m49215 / fable m49231) -- the `server_or_lapsed` CHECK leaves the tighten; the
+0081 index drop gets a no-server replacement index.** Ruled by marcus, m49207_mtz0iz0q, 23:29Z,
+same thread, retracted by him in m49215 before I had read the retraction; 6f2ada9 was built on
+it and is reverted here. The coverage analysis below was correct for the schema R3 described;
+with the CHECK in place its predicate set is empty and the cross-half question is moot.
 - Option (a), not (b): a `not valid` CHECK would still assert, for every future row, a rule
   that coxwell's 18:07Z Arm B (servers register freely, licence allocated to a server later)
   makes false. A licence-bound live subscription with no server yet is legitimate going forward,
@@ -702,6 +856,6 @@ flagged in my reply.) Fable overrides (Q8 in section 11). Resolves the R1 open c
   `assertNoLiveGrant` in place of the licence-keyed one (proposal). Section 11 gains two reads
   for marcus: the no-server duplicate groups (must be 0 or the CREATE fails) and today's
   cross-half count.
-- Applied in this document: section 2 scope-note (b), step 5 last bullet, step 6, section 4
+- Was applied in 6f2ada9 to: section 2 scope-note (b), step 5 last bullet, step 6, section 4
   rollback list, section 8 first bullet, section 9 dry-run item 1 and schema-read item 5,
-  section 11 Q8 and the two reads. Migration filename stays 0088 (R2). Nothing built.
+  section 11 Q8 and two reads. All of it reverted in v3; none of it is in force. Nothing built.
