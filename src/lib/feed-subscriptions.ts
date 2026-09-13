@@ -1489,8 +1489,9 @@ export async function getFeedTierForAssignment(tierKey: string): Promise<FeedTie
  * (e.g. a plan upgrade that should end the old tier) is two calls: assign the new tier, then
  * deactivateFeedTierSubscription the old one -- not this function's job to infer that intent.
  * Status is 'active' (not createSubscription's 'trial' default): this is a direct admin grant,
- * not the request/trial flow. Unlike upsertFeedSubscriptionForRequest above, this still upserts
- * on the business key -- now (licence, tier), per the licence-binding note below -- because
+ * not the request/trial flow. Unlike the approval path (upsertFeedSubscriptionForRequest, moved
+ * to lib/access-requests.ts -- note above), this still upserts on the business key -- (server,
+ * tier) since 0086 phase 2, NOT (licence, tier); see the SERVER GRAIN note below -- because
  * there is no request identity here to upsert on instead, and idempotent re-click-to-reactivate
  * is the desired admin UX, not an error condition.
  * Fable's "never upsert on a business key" targets the approval path specifically,
