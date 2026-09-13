@@ -253,6 +253,24 @@
 .feed-provider-v1 .scope-note { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--pfp-ink-hi); background: var(--pfp-bg-1); border: 1px solid var(--pfp-line-soft); border-radius: 9px; padding: 10px 13px; margin-top: 14px; }
 .feed-provider-v1 .scope-note .i { color: var(--pfp-info); }
 
+/* Overview Revenue card: the month summary under the live figure (coxwell 2026-09-13, "can feed
+   earning summary be also written to the overview?"). Deliberately NOT styled as a .tbl -- it sits
+   under a headline number in a half-width card, and a bordered table there would read as a second,
+   competing subject. The month's money takes the same cyan mono as Revenue's "Your 50%" column so
+   the same quantity looks the same on both pages; the client count stays in the quiet ink, since it
+   is the qualifier on the figure, not a second figure. */
+.feed-provider-v1 .mrev { margin-top: 18px; border-top: 1px solid var(--pfp-line-soft); padding-top: 14px; }
+.feed-provider-v1 .mrev .mhead { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-bottom: 9px; }
+.feed-provider-v1 .mrev .mhead b { font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pfp-ink-3); }
+.feed-provider-v1 .mrev .mhead span { font-size: 11px; color: var(--pfp-ink-hi); }
+.feed-provider-v1 .mrev .mrow { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--pfp-line-soft); }
+.feed-provider-v1 .mrev .mrow:last-of-type { border-bottom: 0; }
+.feed-provider-v1 .mrev .mrow .ml { font-size: 13px; font-weight: 600; color: var(--pfp-ink); }
+.feed-provider-v1 .mrev .mrow .mc { font-size: 11px; color: var(--pfp-ink-hi); }
+.feed-provider-v1 .mrev .mrow .mv { font-family: var(--pfp-mono); font-weight: 600; font-size: 14px; color: var(--pfp-cyan); }
+.feed-provider-v1 .mrev .mfoot { font-size: 11px; font-style: italic; color: var(--pfp-ink-hi); margin-top: 9px; }
+.feed-provider-v1 .mrev .mempty { font-size: 12px; color: var(--pfp-ink-hi); }
+
 /* activity feed */
 .feed-provider-v1 .act { display: flex; flex-direction: column; gap: 2px; }
 .feed-provider-v1 .act .ai { display: flex; align-items: center; gap: 13px; padding: 12px; border-radius: 10px; }

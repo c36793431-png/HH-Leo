@@ -6,12 +6,12 @@ import type { FeedTierRequestRow } from "@/lib/feed-tier-requests";
 import { formatRelative } from "@/lib/format-time";
 import { getBotLink } from "@/lib/telegram-bot-links";
 import { FEEDS_BOT_KEY } from "@/lib/telegram-feeds-bot";
-import { getActiveSubscriberCountForProvider, getProviderMonthlyShareCents } from "@/lib/feed-subscriptions";
-import { packageLabelForTierKey } from "@/lib/feed-provider-packages";
+import { getActiveSubscriberCountForProvider, getProviderRevenueSummary } from "@/lib/feed-subscriptions";
+import { packageLabelForTierKey, moneyOrUnpriced } from "@/lib/feed-provider-packages";
 
-function money(cents: number): string {
-  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
+/** How many months of History the card carries. Three is what fits without the card turning into
+ * a table; the Revenue page's History view is the full list and the card links to it. */
+const MONTHS_ON_CARD = 3;
 
 const TYPE_ICON: Record<string, string> = { pending: "🧪", approved: "✓", rejected: "✗", provisioned: "💳" };
 
@@ -38,16 +38,21 @@ export default async function FeedOverviewPage() {
   const session = await auth();
   const providerId = session!.user!.id!;
 
-  const [pending, trials, tiers, telegramLink, subscriberCount, monthlyShareCents] = await Promise.all([
+  const [pending, trials, tiers, telegramLink, subscriberCount, revenue] = await Promise.all([
     listPendingRequestsForProvider(providerId),
     listActiveTrialsForProvider(providerId),
     listTiersForProvider(providerId),
     getBotLink(providerId, FEEDS_BOT_KEY),
     getActiveSubscriberCountForProvider(providerId),
-    getProviderMonthlyShareCents(providerId),
+    getProviderRevenueSummary(providerId, new Date()),
   ]);
 
   const oldest = pending[pending.length - 1];
+  /** The three most recent months exactly as History orders them, newest first -- INCLUDING a
+   * month with no paying client, which renders "—" here as it does there. Dropping the empty ones
+   * would be a gate the canonical page does not have: a card whose top row was August would read
+   * as stale rather than as "September has no contracted client yet". */
+  const months = revenue.months.slice(0, MONTHS_ON_CARD);
 
   return (
     <>
@@ -188,16 +193,61 @@ export default async function FeedOverviewPage() {
               <span className="ic">▦</span>
               <h3>Revenue</h3>
             </div>
+            {/* TWO FIGURES, TWO DIFFERENT QUESTIONS, and each label says which (coxwell 13:58Z via
+                marcus). The card used to carry the live one alone under the word "Estimated
+                monthly" -- which reads like a month's total and is not one, so beside $60 of
+                September it would have looked like a contradiction rather than a different
+                question. "Right now" vs "in the month" is the whole distinction and it is in the
+                labels, not in a footnote. */}
             <div className="stat" style={{ padding: 0, background: "transparent", border: "none", borderRadius: 0 }}>
-              <div className="lab">Estimated monthly</div>
-              <div className="val">{money(monthlyShareCents)}</div>
-              <div className="sub">based on active subscriptions</div>
+              <div className="lab">Your 50% · right now</div>
+              <div className="val">{moneyOrUnpriced(revenue.liveShareCents, revenue.live.priced)}</div>
+              <div className="sub">
+                half of what clients who are active today are charged
+                {revenue.live.priced < revenue.live.subscribers && (
+                  <> · {revenue.live.priced} of {revenue.live.subscribers} priced</>
+                )}
+              </div>
             </div>
+
+            <div className="mrev">
+              <div className="mhead">
+                <b>Your 50% · by month</b>
+                <span>what was contracted in each month</span>
+              </div>
+              {months.length === 0 ? (
+                <div className="mempty">A month appears here once a client holds a paid subscription during it.</div>
+              ) : (
+                <>
+                  {months.map((m) => (
+                    <div className="mrow" key={m.monthKey}>
+                      <span className="ml">{m.label}</span>
+                      <span className="mc">
+                        {m.clients === 0
+                          ? "no paying client"
+                          : `${m.clients} paying client${m.clients === 1 ? "" : "s"}`}
+                      </span>
+                      <span className="mv">
+                        {m.clients === 0 ? "—" : moneyOrUnpriced(m.shareCents, m.pricedClients)}
+                      </span>
+                    </div>
+                  ))}
+                  {/* m49083's rule, carried onto the card with the figures it governs: a client on a
+                      one-month term must not read as three months of revenue. */}
+                  <div className="mfoot">Each month stands alone — these are never added together.</div>
+                </>
+              )}
+            </div>
+
             <div className="scope-note">
               <span className="i">ⓘ</span>
               <span>
-                No payout ledger exists yet — this is a list-price estimate, not money received. See{" "}
-                <Link href="/feed/dashboard/revenue">Revenue</Link> for the breakdown.
+                No payout ledger exists yet — both figures are list-price estimates, not money received.
+                The live figure is today&apos;s active clients; a month counts every client contracted at
+                any point in it, including ones who have since stopped, which is why the two rarely match.
+                Trials, and clients with no agreed price, add nothing to either. See{" "}
+                <Link href="/feed/dashboard/revenue?view=history">Revenue → History</Link> for the months in
+                full.
               </span>
             </div>
           </div>

@@ -752,8 +752,8 @@ function statusForPackageMembers(members: ProviderSubscriberRow[]): ProviderSubs
  * account instead of per provider -- Revenue groups every tier a provider sells, this groups
  * one client's own granted tiers, so a client holding all of LD Base's three tiers reads as
  * one group instead of three unrelated rows. A tier with no PACKAGES entry keeps its own row.
- * Shared by the Subscribers page (rendering) and getProviderMonthlyShareCents below (the
- * Overview/Revenue total) so both walk the exact same groups -- moved here from the
+ * Shared by the Subscribers page (rendering) and getProviderRevenueSummary below (the
+ * Overview card) so both walk the exact same groups -- moved here from the
  * Subscribers page 2026-09-06 (Job C follow-up, m46504) for that reason. */
 export function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): AccountRowGroup[] {
   const byAccount = new Map<string, ProviderSubscriberRow[]>();
@@ -789,6 +789,21 @@ export function groupAccountSubscriptions(rows: ProviderSubscriberRow[]): Accoun
  * from member rows, so a caller cannot apply a different predicate to the same group. */
 export function statusForGroup(group: AccountRowGroup): ProviderSubscriberRow["status"] {
   return group.kind === "package" ? group.status : group.row.status;
+}
+
+/** The groups a MONEY surface is allowed to walk: everything except a live trial client
+ * (marcus m49101, "Trial rows never appear on Revenue"). Extracted from the Revenue page
+ * 2026-09-13 when the Overview card grew a month summary off the same history: the filter is
+ * half of what "the same scope as Revenue" means, and a second surface re-typing the predicate
+ * is how the two come to disagree about who is a client.
+ *
+ * Only a LIVE trial is dropped. An EXPIRED trial licence reads "lapsed", not "trial", and
+ * survives this -- that client really did stop, and losing the departure would be worse than
+ * showing it. buildMonthlyHistory separately drops trial ROWS, which is a different cut (a
+ * client who trialled and then bought keeps their paid rows); both are needed, neither implies
+ * the other. */
+export function excludeTrialGroups(groups: AccountRowGroup[]): AccountRowGroup[] {
+  return groups.filter((g) => statusForGroup(g) !== "trial");
 }
 
 /** The region a group belongs to, for the Revenue page's region switch (coxwell 2026-09-12
@@ -1122,7 +1137,7 @@ export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): Month
  * leo-provider-subscribers-page-2026-09-06 (marcus, m46511/m46518: "is the summation also one
  * implementation, or does Subscribers' footer run its own reduce ... agreement at zero is not
  * agreement"). Subscribers' footer/header, the Overview Revenue card (via
- * getProviderMonthlyShareCents below), and the Revenue page's Total row all call THIS on
+ * getProviderRevenueSummary below), and the Revenue page's Total row all call THIS on
  * groups they derive from groupAccountSubscriptions -- never their own reduce over the same
  * shape -- so a lapsed row, a null price, or a second region can't make one surface disagree
  * with another. */
@@ -1166,13 +1181,51 @@ export function pricedGroupCounts(groups: AccountRowGroup[]): { priced: number; 
   return { priced, subscribers };
 }
 
-/** Fetch-and-sum wrapper around sumProviderShareCents for callers (Overview) that don't
- * already have the provider's groups in memory. Callers that do (Subscribers, Revenue) should
- * call sumProviderShareCents directly on their existing groups instead of re-querying. */
-export async function getProviderMonthlyShareCents(providerUserId: string): Promise<number> {
+/** Everything the Overview Revenue card renders, off ONE fetch and ONE grouping.
+ *
+ * coxwell 2026-09-13 13:58Z via marcus ("can feed earning summary be also written to the
+ * overview?"): the card already carried the live figure, and the month figures it now shows
+ * beside it are the Revenue page's History rows -- `buildMonthlyHistory`, on groups cut by
+ * `excludeTrialGroups`, which is exactly what /feed/dashboard/revenue does at region "All".
+ * marcus's standing requirement on this one (m49-overview-earnings (a)): if the two surfaces
+ * ever disagree it must be impossible by construction, not by discipline. So there is no second
+ * query and no second predicate here -- this calls the page's own functions on the page's own
+ * group set, and a change to either moves both surfaces together.
+ *
+ * Replaces getProviderMonthlyShareCents, which returned the live half alone. It was deliberately
+ * removed rather than left beside this: a still-exported entry point that computes only one of
+ * the two numbers is the divergence back again, one careless import later.
+ *
+ * ALL REGIONS, always. The Revenue page's region tabs filter its own groups; the Overview has no
+ * region control, so both of its figures describe the whole business and agree with that page
+ * when it sits on "All" -- the relationship the page's own Total-row comment already records.
+ *
+ * `now` is a parameter, not read here, for the same reason buildMonthlyHistory takes one: a
+ * month boundary must be reasonable about from a test. */
+export interface ProviderRevenueSummary {
+  /** The provider's 50% of what active clients are being charged RIGHT NOW -- the figure the
+   * card has always shown, unchanged, still sumProviderShareCents over every group. */
+  liveShareCents: number;
+  /** Of the clients behind `liveShareCents`, how many carry a real price (C3, m49063). Needed
+   * on the card for the same reason it is needed on Revenue: today this provider has 2 active
+   * clients and 1 priced, and "$15" against "2" invites a reader to halve it. */
+  live: { priced: number; subscribers: number };
+  /** Newest month first, as Revenue's History renders them. Never summed -- see
+   * buildMonthlyHistory (m49083): a one-month client must not read as three months of revenue. */
+  months: MonthlyHistoryEntry[];
+}
+
+export async function getProviderRevenueSummary(
+  providerUserId: string,
+  now: Date
+): Promise<ProviderRevenueSummary> {
   const subscribers = await listSubscribersForProvider(providerUserId);
   const groups = groupAccountSubscriptions(subscribers);
-  return sumProviderShareCents(groups);
+  return {
+    liveShareCents: sumProviderShareCents(groups),
+    live: pricedGroupCounts(groups),
+    months: buildMonthlyHistory(excludeTrialGroups(groups), now),
+  };
 }
 
 /** Overview panel's "Subscribers" stat -- distinct subscribers with a live, non-trial grant,

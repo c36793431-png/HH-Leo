@@ -13,6 +13,7 @@ import {
   startedAtForGroup,
   statusForGroup,
   buildMonthlyHistory,
+  excludeTrialGroups,
   countUnpseudonymedRowsForProvider,
   sumProviderShareCents,
   sumMonthlyGrossCents,
@@ -255,8 +256,11 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
    * a tab that would render empty. */
   /** Live trial clients are dropped here, once, before anything counts or renders (m49101) --
    * including out of `presentRegions`, so a region that holds nothing but trials never grows a tab
-   * on a money page. Expired trial licences are lapsed, not trial, and survive this. */
-  const revenueGroups = allGroups.filter((g) => statusForGroup(g) !== "trial");
+   * on a money page. Expired trial licences are lapsed, not trial, and survive this.
+   *
+   * The predicate lives in feed-subscriptions.ts as of 2026-09-13 because the Overview card's month
+   * summary must cut its groups the same way this page does; it is called here, not copied there. */
+  const revenueGroups = excludeTrialGroups(allGroups);
   const presentRegions = FEED_REGIONS.filter((r) => revenueGroups.some((g) => regionKeyForGroup(g) === r));
   const region: RegionFilter = sp.region && isFeedRegion(sp.region) && presentRegions.includes(sp.region) ? sp.region : "all";
   const groups = region === "all" ? revenueGroups : revenueGroups.filter((g) => regionKeyForGroup(g) === region);
@@ -283,8 +287,9 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
    * are the identical functions Subscribers' footer and the Overview card call, on the same
    * groups this page already grouped -- never a second reduce over the by-package or per-client
    * rows above, gross or split. They foot the CURRENTLY FILTERED region (m49032 item 3: "totals
-   * recompute per region"); the Overview tile keeps calling getProviderMonthlyShareCents, which
-   * is all regions, so the two agree exactly when this page is on All. */
+   * recompute per region"); the Overview card calls getProviderRevenueSummary, which is all
+   * regions and has no region control, so the two agree exactly when this page is on All. That
+   * now holds for the MONTH figures too -- the card renders this page's own History rows. */
   const totalMonthlyCents = sumMonthlyGrossCents(groups);
   const totalShareCents = sumProviderShareCents(groups);
   /** C3 (m49063): the same count qualifier the package rows carry, for the footer. Both views
