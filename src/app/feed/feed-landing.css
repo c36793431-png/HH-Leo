@@ -159,7 +159,7 @@
 .fl-tier .fl-tv { font-family: var(--fl-mono); font-size: 11px; color: var(--fl-ink); width: 36px; flex: 0 0 36px; text-align: right; }
 .fl-pc-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--fl-line-soft); display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: var(--fl-ink-3); font-family: var(--fl-mono); flex-wrap: wrap; }
 .fl-pc-foot .fl-lv { color: var(--fl-amber); }
-.fl-pc-foot .fl-measured { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--fl-ink-3); }
+.fl-pc-foot .fl-measured { display: inline-flex; align-items: center; gap: 6px; color: var(--fl-ink-3); }
 .fl-pc-foot .fl-measured .fl-mi { color: var(--fl-ok); }
 
 /* trust strip */

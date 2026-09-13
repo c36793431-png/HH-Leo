@@ -323,7 +323,7 @@ export default async function PartnerLandingPage({
                   <div className="pv-dt-head">
                     <span className="dd" />
                     <span className="dtt">horizonhft.com / partner</span>
-                    <span className="dtag">PREVIEW</span>
+                    <span className="dtag">EXAMPLE</span>
                   </div>
                   <div className="pv-dt-license">
                     <div className="pv-dt-ring">
@@ -608,18 +608,6 @@ export default async function PartnerLandingPage({
         {/* 6 · TRUST STRIP */}
         <section className="pv-trust pv-section">
           <div className="pv-trust-in">
-            <div className="pv-tcell">
-              <div className="tv">
-                99.99<span className="u">%</span>
-              </div>
-              <div className="tl">Feed uptime, trailing 12mo</div>
-            </div>
-            <div className="pv-tcell">
-              <div className="tv">
-                &lt;1<span className="u">µs</span>
-              </div>
-              <div className="tl">Median in-venue latency</div>
-            </div>
             <div className="pv-tcell">
               <div className="tv">
                 3<span className="u"> DCs</span>
