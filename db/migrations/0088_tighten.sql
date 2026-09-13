@@ -54,8 +54,9 @@
 --      marcus m49538 / m49852: giang2000ln 82147257 / 4a0a7fb8 / 00f9e32c, rasoolx55 a453d4c0 /
 --      2e7ad400 / 1161625a; neither client has ever registered a server, giang is the only
 --      paying feed client). Any live NULL-server row outside the six aborts with every such row
---      named (resolution is a real server row registered before the run, which step 4 re-keys,
---      or a worded lapse in 2b(b); no synthetic server row). Each of the six must EXIST in
+--      named (the fix is a real server row registered before the run, which step 4 re-keys;
+--      otherwise stop and take it to the thread, because the exempt list is not extended and
+--      2b(b) lapses only the six; no synthetic server row). Each of the six must EXIST in
 --      feed_subscriptions (typo guard), else abort naming it. How many of the six are still live
 --      is noticed and reported (summary fs_exempt_live); any count 0 to 6 passes, because every
 --      legitimate way one of the six clears before the run (server bound, expired, worded lapse)
@@ -116,8 +117,8 @@
 --   - Does not add a no-server unique index and does not drop the 0081 index: the only live
 --     rows with NULL server after step 5 are (at most) the six exempt ids, which 0081 keeps
 --     covering by (license_id, feed_tier_id) until db/migrations/0089_drop_server_or_lapsed_exception.sql
---     (applied once none of the six is live with a NULL server; it re-keys and lapses the six
---     itself first) re-adds the CHECK without the exception and drops 0081.
+--     (it re-keys the six, gates on none live with a NULL server, lapses the expired ones,
+--     re-adds the CHECK without the exception, drops 0081).
 --   - Does not pad the deploy-instant literal. A legacy row actioned at or after it would sit
 --     above the rollback's `told_at < literal` bound; the apply gates in spec section 11 (both
 --     expect 0, re-taken before the dry-run and before apply) keep that case empty.
@@ -385,10 +386,10 @@ create temp table tmp_0088_carry_by_word (
 --       set status = 'rejected', actioned_at = now(), reason = '<coxwell, message id, date>'
 --       where id = '31cd1813-5994-4946-bc3e-b5e1f3a52f64' and status = 'pending';
 --
--- (b) worded lapse of one of the six exempt rows while it is still live with no server. Only the
---     six qualify: step 5's subset gate (v1.75) aborts on any OTHER live NULL-server row, so a word
---     here cannot stand in for that abort; the fixed block below refuses a staged id outside the
---     six. lapsed_at = now(): a decision, dated when taken. The other resolution needs NO
+-- (b) worded lapse of one of the six exempt rows while it is still live with no server (no
+--     writer inserts a NULL-server row, Leo m49736; a live one outside the six aborts step 5, so
+--     the six are the only rows a word can lapse here). The fixed block below refuses a staged
+--     id outside the six. lapsed_at = now(): a decision, dated when taken. The other resolution needs NO
 --     literal: the client registers a real server row before the run and step 4 re-keys the
 --     rows. Shape:
 --       -- coxwell <message id>, <date>: lapse
@@ -607,9 +608,10 @@ end $$;
 -- tmp_0088_exempt (the six, fable v1.71 on marcus m49538_mtzt2uia) was created just before the
 -- 2b slot. One notice per NULL-server row, then the v1.75 gate (marcus m49852, fable verbatim):
 -- (i) SUBSET: every live NULL-server row (status <> 'lapsed' and (ends_at > now() or ends_at is
--- null); NULL ends_at = live) must be one of the six, else abort naming each (resolution
--- unchanged: a real server row registered before the run, or a worded lapse in 2b(b); no
--- synthetic server row). (ii) EXISTENCE: each of the six must exist in feed_subscriptions, else
+-- null); NULL ends_at = live) must be one of the six, else abort naming each (the fix is a real
+-- server row registered before the run, which step 4 re-keys; otherwise stop and take it to the
+-- thread, because the exempt list is not extended and 2b(b) lapses only the six; no synthetic
+-- server row). (ii) EXISTENCE: each of the six must exist in feed_subscriptions, else
 -- abort naming it (typo guard). (iii) The notice names which of the six are still live here;
 -- that count is summary fs_exempt_live and ANY value 0..6 passes: a server bound before the run
 -- (step 4 re-keyed it), an expiry (lapsed below) or a word in 2b(b) each shrink the set, and
@@ -675,7 +677,7 @@ begin
       raise notice 'step 5 BLOCK live no server (not exempt): id=% subscriber=% tier=% status=% ends_at=%',
         r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status, r.ends_at;
     end loop;
-    raise exception 'step 5: % live feed_subscriptions row(s) with no server row outside the exempt set (listed above); resolution is a real server row registered before the run, or a worded lapse in 2b(b); the exempt list is not extended', live_not_exempt;
+    raise exception 'step 5: % live feed_subscriptions row(s) with no server row outside the exempt set (listed above); the fix is a real server row registered before the run (step 4 re-keys it); otherwise stop and take it to the thread, because the exempt list is not extended and 2b(b) lapses only the six', live_not_exempt;
   end if;
 
   -- (ii) EXISTENCE: each of the six must be a feed_subscriptions row (typo guard on the fill-in).
@@ -810,8 +812,8 @@ end $$;
 -- (fable v1.71 item 3, v1.75 (iv)). Exempt rows still live have a NULL server, invisible to the
 -- 0086 server-keyed index, and 0081's (license_id, feed_tier_id) is their only uniqueness cover
 -- until they are bound or lapsed. db/migrations/0089_drop_server_or_lapsed_exception.sql re-keys
--- and lapses the six, gates on none live with NULL server, re-adds the CHECK without the
--- exception, then drops 0081. The window check at
+-- the six, gates on none live with a NULL server, lapses the expired ones, re-adds the CHECK
+-- without the exception, drops 0081. The window check at
 -- feed-subscriptions.ts:403-410 (REMOVAL POINT comment :392) therefore stays through 0088 and
 -- is deleted with 0089, not with this file. No replacement index. The 0078 provider_tier twin
 -- (feed_subscriptions_subscriber_provider_tier_live_uidx) is not touched.

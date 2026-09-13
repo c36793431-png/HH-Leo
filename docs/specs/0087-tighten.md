@@ -899,7 +899,24 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R4 (exempt six), R5 (subset gate, 0089 order) and R6 (the six uuids).
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R4 (exempt six), R5 (subset gate, 0089 order), R6 (the six uuids) and R8 (comment text).
+
+**R8 (LIVE, text only) -- a live NULL-server row outside the six has ONE fix; 0089's order is
+re-key, gate, lapse.** Fable m50023_mtzyhpob (2026-09-13 15:15Z, her R5 read, PASS-WITH-STRIKES
+Y1/Y2; X1-X4 and R-b CLEARED; 0089 step 2 stays in the NULL-server form as built). Y1: since
+2b(b) lapses only the six (her X2), "a worded lapse in 2b(b)" is no longer a resolution for a live
+NULL-server row OUTSIDE the six. Three places in 0088 (header step 5, the step-5 comment (i), the
+step-5 gate (i) raise exception) now say: the fix is a real server row registered before the run
+(step 4 re-keys it); otherwise stop and take it to the thread, because the exempt list is not
+extended and 2b(b) lapses only the six. The 2b(b) comment carries her sentence: no writer inserts
+a NULL-server row (Leo m49736); a live one outside the six aborts step 5, so the six are the only
+rows a word can lapse here. Contract (her answer to m49946): 2b(b)'s staged set is a subset of the
+six; a row lapsed by word drops out of step 5's live count and is never pruned from either list.
+Y2: the 0088 header does-not-do line and the step-6 "NOT dropped here" comment put 0089's lapse
+before its gate; both now read "re-keys the six, gates on none live with a NULL server, lapses
+the expired ones, re-adds the CHECK without the exception, drops 0081", the file's order. No SQL
+statement changed. Her two proof greps: `FILL-IN` in db = 0 (since R6); `fs_no_server_live_exempt`
+in db = 0, in docs = 2, both in this section's R4/R5 history records (left as history).
 
 **R6 (LIVE) -- the six full uuids are in; preflight D's NOT NULL server filter is accepted as fact;
 the last "step 5's BLOCK set" comment is gone.** Marcus m49945_mtzxrd14 (2026-09-13 14:55Z, his
