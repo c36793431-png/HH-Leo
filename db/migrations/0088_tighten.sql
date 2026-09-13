@@ -10,10 +10,10 @@
 -- with its counts. The operator dry-runs once with `rollback;` in place of `commit;` and pastes
 -- every notice line, then runs it for real; the two pastes must be equal.
 --
--- FILL IN BEFORE THE DRY-RUN: the six full uuids, twice: the tmp_0088_exempt INSERT (just before
--- the 2b slot; read by 2b(b) and step 5) and the CHECK in step 5. Marcus m49852 names them by
--- 8-char prefix only. Unfilled, the INSERT fails at the uuid cast (22P02) before 2b and nothing
--- after it runs.
+-- THE SIX FULL UUIDS ARE COMMITTED IN THIS FILE, twice: the tmp_0088_exempt INSERT (just before
+-- the 2b slot; read by 2b(b) and step 5) and the CHECK in step 5, copied from marcus's Neon read
+-- m49945_mtzxrd14. Not an operator fill-in. The step-5 read-back refuses the file if the two
+-- lists ever drift apart.
 --
 -- WHAT THIS DOES, IN ORDER (0086 header 93-97: re-run the section 1 / 3 / 4 backfills and gates,
 -- re-run preflight D over the completed mapping, then SET NOT NULL and the CHECK; then the three
@@ -371,7 +371,7 @@ insert into tmp_0088_exempt (id) values
 create temp table tmp_0088_lapse_by_word (id uuid primary key) on commit drop;
 
 create temp table tmp_0088_carry_by_word (
-  legacy_id uuid not null,
+  legacy_id uuid primary key,   -- one carry per legacy row; a repeat fails 23505 at staging (fable R-b)
   server_registration_id uuid,
   feed_tier_id uuid,
   ip text,
@@ -739,7 +739,7 @@ end $$;
 -- renewal would fail 23514, the same paying client cut by another route (fable 12:53Z). Added
 -- AFTER the lapse above, never before it (marcus m49852 item 3). The exception is removed by
 -- db/migrations/0089_drop_server_or_lapsed_exception.sql. The six literals MUST equal
--- tmp_0088_exempt above (fill in both together; never pruned). Expected: ALTER TABLE.
+-- tmp_0088_exempt above (both committed from m49945; never edited). Expected: ALTER TABLE.
 alter table feed_subscriptions
   add constraint feed_subscriptions_server_or_lapsed_chk
   check (status = 'lapsed' or server_registration_id is not null

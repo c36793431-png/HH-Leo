@@ -922,6 +922,14 @@ same order, per-row comments name the client only (the read gives no per-uuid ti
 earlier "LD Base tier N" labels are dropped as unverified); the 2b(b) comment that still read
 "under v1.71 step 5's BLOCK set is empty by construction" now states the subset gate and the fixed
 block's refusal of a staged id outside the six. No SQL statement other than the literals changed.
+R6 addendum (fable m49962_mtzxu44x, her R4 read, 14:57Z; X1-X4 were already at af071ca/ceeebbe):
+R-a accepted the preflight D NOT NULL filter; R-b KEEPS the 2b staging mechanism on three
+conditions, met as follows: both staging tables are `on commit drop` (0088:371, :379);
+`tmp_0088_lapse_by_word.id` was already `uuid primary key`, `tmp_0088_carry_by_word.legacy_id`
+was `uuid not null` and is now `uuid primary key` (a repeat legacy row fails 23505 at staging);
+the 2b(b) membership test reads `tmp_0088_exempt` (0088:428, :439). The four "FILL IN" comments
+(0088 header, 0088 CHECK comment, 0089 header, 0089 rollback header) now say the uuids are
+committed from m49945, since operator fill-in is no longer the mechanism.
 
 **R5 (LIVE) -- step 5 is SUBSET + EXISTENCE, not set-equality; the CHECK is added after the lapse;
 2b(b) asserts against the six; the 0089 stub re-keys, gates, LAPSES, re-adds the CHECK, drops

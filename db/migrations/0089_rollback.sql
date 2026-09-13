@@ -4,7 +4,7 @@
 --
 -- Reverses 0089 in the opposite order: the 0081 index back (preflight: zero live (license_id,
 -- feed_tier_id) duplicate groups, else abort), the CHECK back WITH the six-id exception (same
--- list as 0089 step 0; fill in the same uuids), the '0089' ledger row deleted.
+-- list as 0089 step 0, committed from marcus m49945_mtzxrd14), the '0089' ledger row deleted.
 --
 -- NOT reverted, stated up front (fable v1.76 via marcus m49852):
 --   - 0089 step 1, the re-key of the six: a 0086 column backfill, left as written, exactly as

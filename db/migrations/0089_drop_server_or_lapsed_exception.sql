@@ -13,8 +13,8 @@
 -- gate decides, not the calendar. Run whole as one transaction; dry-run once with `rollback;` in
 -- place of `commit;` and paste every notice line.
 --
--- FILL IN BEFORE THE DRY-RUN: the six full uuids, byte-identical to the ones 0088 was applied
--- with (step 0 reads the live constraint back and refuses a mismatch).
+-- The six full uuids are committed below, byte-identical to 0088's list (marcus m49945_mtzxrd14);
+-- step 0 reads the live constraint back and refuses a mismatch. Not an operator fill-in.
 --
 -- WHAT THIS DOES, IN ORDER:
 --   0. Ledger preflight: schema_migrations has '0088' and does not have '0089'. The live CHECK's
