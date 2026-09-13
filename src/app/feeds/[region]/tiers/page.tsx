@@ -105,6 +105,15 @@ type PackageCardState = TierRequestState | "mixed";
  * region actually renders, not expandTierKey()'s full list -- the card can only speak for the
  * tiers on it.
  *
+ * expandTierKey()'s list was the alternative and it lost (marcus R3, same thread). The two only
+ * differ when a member key has no feed_tiers row, so the region does not render it. Under
+ * expandTierKey() the card would read "2 of 3" forever: no envelope can key to a tier with no
+ * feed_tiers row, so the third can never resolve and the client has a support ticket with no
+ * answer. Under this list the card reads "2 of 2" and a third grant the client holds is
+ * invisible. Both are wrong in that state; neither over-claims access; a stuck card is worse
+ * than an under-reporting one. Do not "fix" this to expandTierKey() without reading that
+ * trade-off first.
+ *
  * QUANTIFIER, vs the other package rollup: feed-providers.ts:105 rolls a package up with
  * .some() and this rolls it up with every(). Deliberately opposite, deliberately NOT one
  * shared helper. :105 asks "is there live money here" -- a provider who owns ONE member of a
