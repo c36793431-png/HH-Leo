@@ -140,6 +140,44 @@ export default async function FeedOverviewPage() {
               </Link>
             </div>
           </div>
+          {/* THE ALL-MONTHS TOTAL, SIXTH TILE (coxwell's third ask, marcus m50098). APPENDED LAST
+              ON PURPOSE: .stats is repeat(4, 1fr) and the five tiles above fill row 1 and row 1 of
+              row 2, so a sixth lands in row 2 column 2 -- under Subscribers, the empty cell, with
+              no grid change. Inserting it anywhere earlier would push Feed health into that slot
+              and put this one under Tiers instead. Below the desktop breakpoint the grid is
+              1fr 1fr and "under Subscribers" stops being true; no copy here depends on position.
+
+              A TILE CANNOT CARRY THE REASONING, SO IT CARRIES THE WARNING AND A ROUTE TO IT. The
+              Revenue card further down this page renders the very month figures a reader would add
+              up, so the $105-vs-$120 gap is visible on THIS screen, not only on Revenue -- a bare
+              figure here would reproduce the exact failure the Revenue footer exists to prevent.
+              The .sub therefore carries the two things that stop a wrong reading (counted once; NOT
+              the months added up) and links to the page that explains why. The full mechanism does
+              not fit in a quarter-width tile and is not attempted here. */}
+          <div className="stat">
+            <div className="lab">
+              <span className="si">▦</span> Contracted · all months
+            </div>
+            <div className="val">
+              {revenue.contracted.agreements === 0
+                ? "—"
+                : moneyOrUnpriced(revenue.contracted.shareCents, revenue.contracted.agreements)}
+            </div>
+            <div className="sub">
+              {revenue.contracted.agreements === 0 ? (
+                <>nothing contracted yet · </>
+              ) : (
+                <>
+                  your 50% of {revenue.contracted.agreements} agreement
+                  {revenue.contracted.agreements === 1 ? "" : "s"}, each counted once — not the month rows added up ·
+                  list price, not money received ·{" "}
+                </>
+              )}
+              <Link href="/feed/dashboard/revenue?view=history" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
+                Why →
+              </Link>
+            </div>
+          </div>
         </div>
 
         {!telegramLink && (
@@ -233,8 +271,18 @@ export default async function FeedOverviewPage() {
                     </div>
                   ))}
                   {/* m49083's rule, carried onto the card with the figures it governs: a client on a
-                      one-month term must not read as three months of revenue. */}
-                  <div className="mfoot">Each month stands alone — these are never added together.</div>
+                      one-month term must not read as three months of revenue. m50098 adds the
+                      second clause, because a total now sits on the same screen and a line that
+                      only says "don't add" leaves the reader to guess whether that tile IS the sum.
+                      It isn't, and this is the nearest place to the rows to say so. */}
+                  {/* Phrased so it holds in every state: "not their sum" is true whether or not any
+                      agreement currently spans a month end, and true even once there are more
+                      months than MONTHS_ON_CARD and these rows stop being the whole set. Naming a
+                      direction ("smaller than these rows add to") would be false on both counts. */}
+                  <div className="mfoot">
+                    Each month stands alone — these are never added together. The all-months tile above is not their
+                    sum: it counts each agreement once, however many months it runs across.
+                  </div>
                 </>
               )}
             </div>
@@ -242,10 +290,11 @@ export default async function FeedOverviewPage() {
             <div className="scope-note">
               <span className="i">ⓘ</span>
               <span>
-                No payout ledger exists yet — both figures are list-price estimates, not money received.
-                The live figure is today&apos;s active clients; a month counts every client contracted at
-                any point in it, including ones who have since stopped, which is why the two rarely match.
-                Trials, and clients with no agreed price, add nothing to either. See{" "}
+                No payout ledger exists yet — every money figure on this page, here and in the all-months tile
+                above, is a list-price estimate, not money received. The live figure is today&apos;s active clients;
+                a month counts every client contracted at any point in it, including ones who have since stopped,
+                which is why the two rarely match. Trials, and clients with no agreed price, add nothing to any of
+                them. See{" "}
                 <Link href="/feed/dashboard/revenue?view=history">Revenue → History</Link> for the months in
                 full.
               </span>

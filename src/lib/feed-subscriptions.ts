@@ -1026,7 +1026,12 @@ function monthLabel(year: number, monthIndex: number): string {
  * WAS live, so the same shared calc applies -- there is no second halving anywhere in this file.
  *
  * NEVER SUMMED ACROSS MONTHS (m49083). A client on a one-month term must not read as three months
- * of revenue, so this returns per-month figures and no grand total, and the page renders none. */
+ * of revenue, so this returns per-month figures and no grand total, and no caller adds this array
+ * up. That rule is UNCHANGED by m50098's all-months total: sumContractedAgreements below counts
+ * each (client, package) agreement ONCE across the whole array rather than adding the months, which
+ * is why it is a different figure from the column sum and not a violation of this line. If a future
+ * caller wants "the total", it is that function -- adding `shareCents` down this array is still the
+ * error m49083 named. */
 export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): MonthlyHistoryEntry[] {
   /** HALF-OPEN AT DATE GRANULARITY, [start_date, end_date) -- marcus m49161, superseding the
    * instant-level rule of m49147. A term ending ON a calendar date covers up to that date and
@@ -1133,6 +1138,107 @@ export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): Month
   return entries.reverse();
 }
 
+export interface ContractedAgreementTotal {
+  /** Distinct (client, package) agreements behind the total -- the thing being counted once. */
+  agreements: number;
+  /** Distinct client pseudonyms across those agreements. Lower than `agreements` when one client
+   * holds two packages, which is why the total is never labelled with a client count. */
+  clients: number;
+  grossCents: number;
+  shareCents: number;
+  /** What a reader gets by ADDING the month column, share and gross. Derived here, from the same
+   * rows, precisely so the page can name the number the reader will compute for themselves rather
+   * than leave them to discover a discrepancy and resolve it against the page. */
+  monthSumShareCents: number;
+  monthSumGrossCents: number;
+  /** How many agreements are counted in more than one month bucket -- i.e. how many terms span a
+   * month end. Zero means the column sum and this total coincide, and the page says so instead of
+   * explaining a gap that isn't there. */
+  spanningAgreements: number;
+  /** How many agreements carry DIFFERENT prices in different months. Zero on prod tonight, and the
+   * page renders nothing for it -- but if it ever isn't, the newest-month rule below is silently
+   * choosing between two figures the History rows both show, so the page has to say which it took
+   * rather than let a reader reconcile it and fail. */
+  repricedAgreements: number;
+}
+
+/** The all-months contracted total, marcus m50098 (coxwell's third ask: "summary revenue made end
+ * of the line green"). ONE ROW PER (client, package) AGREEMENT, COUNTED ONCE however many month
+ * buckets it touches -- deliberately NOT the sum of the months.
+ *
+ * WHY IT IS NOT A SUM, AND WHY THAT IS NOT A CONTRADICTION OF m49083. buildMonthlyHistory's months
+ * are overlapping occupancy windows, not additive periods: a group counts in month M if it was live
+ * at any point in M, so a single one-month term that crosses a month end is correctly shown in two
+ * months. Adding those months charges that one agreement twice -- tonight HH21's single
+ * 2026-07-27 -> 2026-08-27 $30 term is the whole of the $120-vs-$105 gap. m49083 forbids the SUM,
+ * and still does; this is a different computation over the same rows, which is why it can exist
+ * without reopening that ruling.
+ *
+ * IT TAKES THE HISTORY ROWS, NOT THE GROUPS. marcus's requirement on m50098 was that the total and
+ * the History list can never disagree about what exists. Passing MonthlyHistoryEntry[] makes that
+ * structural rather than disciplinary: every cut History applies -- trials dropped per row, unpriced
+ * groups dropped out of the month whole (m49171), the half-open day-granularity overlap test
+ * (m49161) -- has already happened by the time these rows get here, and cannot be re-derived
+ * differently. A row the list does not show cannot reach this total, and vice versa.
+ *
+ * PRICE: THE NEWEST MONTH'S. `months` arrives newest-first, so the first sighting of a key wins.
+ * Nothing on prod exercises this today (every spanning agreement carries one price in every month
+ * it appears in), but a re-priced agreement has to resolve to something and "what it is contracted
+ * at most recently" is the only reading that doesn't need a rule nobody has made. FLAGGED, NOT
+ * RULED -- if coxwell wants a re-priced term to contribute its highest, earliest, or a weighted
+ * figure, this is the one line that changes.
+ *
+ * ALSO FLAGGED, NOT RULED (carried forward from m50077, GO'd in m50098): two genuinely separate
+ * terms months apart share one (client, package) key and collapse into one agreement here. That is
+ * what "one row per agreement" means as specified; it is not a bug this function is hiding. */
+export function sumContractedAgreements(months: MonthlyHistoryEntry[]): ContractedAgreementTotal {
+  const seen = new Map<string, MonthlyHistoryClient>();
+  const clients = new Set<string>();
+  const monthsSeenIn = new Map<string, number>();
+  const pricesSeen = new Map<string, Set<number | null>>();
+  let monthSumShareCents = 0;
+  let monthSumGrossCents = 0;
+
+  for (const month of months) {
+    monthSumShareCents += month.shareCents;
+    monthSumGrossCents += month.grossCents;
+    for (const row of month.rows) {
+      monthsSeenIn.set(row.key, (monthsSeenIn.get(row.key) ?? 0) + 1);
+      if (!seen.has(row.key)) seen.set(row.key, row);
+      clients.add(row.client);
+      const prices = pricesSeen.get(row.key) ?? new Set<number | null>();
+      prices.add(row.priceCents);
+      pricesSeen.set(row.key, prices);
+    }
+  }
+
+  let grossCents = 0;
+  let shareCents = 0;
+  for (const row of seen.values()) {
+    grossCents += row.priceCents ?? 0;
+    /** Halve per agreement and sum, exactly as the month rows do (line-by-line, never half of a
+     * summed gross), so the total and the column can only ever differ by the double count this
+     * function exists to remove -- never by a rounding rule. */
+    shareCents += providerShareCentsFor("active", row.priceCents) ?? 0;
+  }
+
+  let spanningAgreements = 0;
+  for (const count of monthsSeenIn.values()) if (count > 1) spanningAgreements += 1;
+  let repricedAgreements = 0;
+  for (const prices of pricesSeen.values()) if (prices.size > 1) repricedAgreements += 1;
+
+  return {
+    agreements: seen.size,
+    clients: clients.size,
+    grossCents,
+    shareCents,
+    monthSumShareCents,
+    monthSumGrossCents,
+    spanningAgreements,
+    repricedAgreements,
+  };
+}
+
 /** The one place that walks account groups and adds up the provider's 50% share, bus thread
  * leo-provider-subscribers-page-2026-09-06 (marcus, m46511/m46518: "is the summation also one
  * implementation, or does Subscribers' footer run its own reduce ... agreement at zero is not
@@ -1213,6 +1319,13 @@ export interface ProviderRevenueSummary {
   /** Newest month first, as Revenue's History renders them. Never summed -- see
    * buildMonthlyHistory (m49083): a one-month client must not read as three months of revenue. */
   months: MonthlyHistoryEntry[];
+  /** The all-months total, m50098 -- each (client, package) agreement counted ONCE, derived from
+   * `months` above rather than alongside it. Computed here, not on the page, for the same reason
+   * everything else on this interface is: the Overview tile and the Revenue page's History footer
+   * must be the same computation over the same rows, and the only way to guarantee that is for
+   * neither of them to do any arithmetic. The Revenue page calls sumContractedAgreements on its own
+   * region-filtered history; this one is all regions, same relationship as liveShareCents. */
+  contracted: ContractedAgreementTotal;
 }
 
 export async function getProviderRevenueSummary(
@@ -1221,10 +1334,12 @@ export async function getProviderRevenueSummary(
 ): Promise<ProviderRevenueSummary> {
   const subscribers = await listSubscribersForProvider(providerUserId);
   const groups = groupAccountSubscriptions(subscribers);
+  const months = buildMonthlyHistory(excludeTrialGroups(groups), now);
   return {
     liveShareCents: sumProviderShareCents(groups),
     live: pricedGroupCounts(groups),
-    months: buildMonthlyHistory(excludeTrialGroups(groups), now),
+    months,
+    contracted: sumContractedAgreements(months),
   };
 }
 

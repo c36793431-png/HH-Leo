@@ -271,6 +271,22 @@
 .feed-provider-v1 .mrev .mfoot { font-size: 11px; font-style: italic; color: var(--pfp-ink-hi); margin-top: 9px; }
 .feed-provider-v1 .mrev .mempty { font-size: 12px; color: var(--pfp-ink-hi); }
 
+/* Revenue → History: the all-months contracted total, under the table (marcus m50098). Sits
+   outside the <table> both in markup and in look: it is NOT the column's footer, and styling it
+   like .total-row would assert exactly the relationship the copy inside it spends three lines
+   denying. Hence the boxed, full-width treatment -- a separate statement about the same rows.
+   The figure keeps the cyan mono every "Your 50%" on this panel uses, because it IS that quantity;
+   only the row set it covers is different. The explanation deliberately reads at body size, not
+   footnote size: it is load-bearing, and a reader who skips it resolves a correct number against
+   their own addition and calls the page broken. */
+.feed-provider-v1 .ctot { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--pfp-card-line); border-radius: 12px; background: rgba(45, 226, 230, 0.035); }
+.feed-provider-v1 .ctot .ctot-line { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.feed-provider-v1 .ctot .ctot-lab b { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pfp-ink-3); }
+.feed-provider-v1 .ctot .ctot-lab span { display: block; font-size: 12px; color: var(--pfp-ink-hi); margin-top: 4px; }
+.feed-provider-v1 .ctot .ctot-val { font-family: var(--pfp-mono); font-weight: 700; font-size: 26px; line-height: 1; color: var(--pfp-cyan); }
+.feed-provider-v1 .ctot .ctot-why { font-size: 12px; line-height: 1.6; color: var(--pfp-ink-2); margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--pfp-line-soft); }
+.feed-provider-v1 .ctot .ctot-why b { color: var(--pfp-ink); font-weight: 600; }
+
 /* activity feed */
 .feed-provider-v1 .act { display: flex; flex-direction: column; gap: 2px; }
 .feed-provider-v1 .act .ai { display: flex; align-items: center; gap: 13px; padding: 12px; border-radius: 10px; }

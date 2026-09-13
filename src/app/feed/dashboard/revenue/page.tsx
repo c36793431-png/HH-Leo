@@ -13,6 +13,7 @@ import {
   startedAtForGroup,
   statusForGroup,
   buildMonthlyHistory,
+  sumContractedAgreements,
   excludeTrialGroups,
   countUnpseudonymedRowsForProvider,
   sumProviderShareCents,
@@ -283,6 +284,11 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
    * The status control is hidden on this view for the same reason. */
   const history = view === "history" ? buildMonthlyHistory(groups, new Date()) : [];
   const historyHasClients = history.some((m) => m.clients > 0);
+  /** m50098's all-months total, over the SAME rows the table below renders -- region filter
+   * included, so the footer and the column always describe one row set. Never a second walk of
+   * `groups`: if the total and the list could disagree about what exists, that is the defect
+   * marcus named, and the only way to rule it out is for the total to have no other input. */
+  const contracted = sumContractedAgreements(history);
   /** Per marcus's m46511/m46518/m46522 rulings (same summation everywhere): both totals below
    * are the identical functions Subscribers' footer and the Overview card call, on the same
    * groups this page already grouped -- never a second reduce over the by-package or per-client
@@ -377,8 +383,9 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
                 {region === "all" ? "All regions" : FEED_REGION_LABELS[region]} · <b>contracted periods</b>, not
                 payments received — there is no payout ledger, so a month shows what was agreed and live in it, from
                 each client&apos;s own price. Months are never added together: a client on a one-month term is one
-                month of revenue, not three. Software licence fees are not feed revenue and do not appear here, and
-                clients on a trial licence are excluded.
+                month of revenue, not three — the all-months total under the table counts each agreement once
+                instead. Software licence fees are not feed revenue and do not appear here, and clients on a trial
+                licence are excluded.
               </span>
             ) : (
               <span>
@@ -420,45 +427,104 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
                 </p>
               </div>
             ) : (
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Month</th>
-                    <th className="r">Paying clients</th>
-                    <th className="r">Monthly gross</th>
-                    <th className="r">Your 50%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="note-row">
-                    <td colSpan={4} className="r">
-                      Newest month first. A client counts in a month if their subscription was live at any point in
-                      it; the figures are that month&apos;s alone and are deliberately not totalled down the page.
-                    </td>
-                  </tr>
-                  {history.map((m) => (
-                    <MonthRevenueRow
-                      key={m.monthKey}
-                      label={m.label}
-                      clientCount={m.clients}
-                      pricedNote={pricedNote(m.pricedClients, m.clients)}
-                      grossLabel={m.clients === 0 ? "—" : moneyOrUnpriced(m.grossCents, m.pricedClients)}
-                      shareLabel={m.clients === 0 ? "—" : moneyOrUnpriced(m.shareCents, m.pricedClients)}
-                      clients={m.rows.map((r) => ({
-                        key: r.key,
-                        client: r.client,
-                        label: r.label,
-                        regionLabel:
-                          r.regionKey && isFeedRegion(r.regionKey) ? FEED_REGION_LABELS[r.regionKey] : "—",
-                        priceLabel: priceCell(r.priceCents),
-                        fromISO: r.fromISO,
-                        toISO: r.toISO,
-                        open: r.open,
-                      }))}
-                    />
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th className="r">Paying clients</th>
+                      <th className="r">Monthly gross</th>
+                      <th className="r">Your 50%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* m50098 amends this line rather than leaving it: "deliberately not totalled
+                        down the page" was written when nothing followed the table, and a figure now
+                        does. The column is STILL not totalled -- what changed is that the page says
+                        what the thing below it is, instead of letting the reader assume it's the sum
+                        and find it isn't. */}
+                    <tr className="note-row">
+                      <td colSpan={4} className="r">
+                        Newest month first. A client counts in a month if their subscription was live at any point in
+                        it; the figures are that month&apos;s alone and this column is deliberately never totalled — the
+                        figure below the table is not its sum.
+                      </td>
+                    </tr>
+                    {history.map((m) => (
+                      <MonthRevenueRow
+                        key={m.monthKey}
+                        label={m.label}
+                        clientCount={m.clients}
+                        pricedNote={pricedNote(m.pricedClients, m.clients)}
+                        grossLabel={m.clients === 0 ? "—" : moneyOrUnpriced(m.grossCents, m.pricedClients)}
+                        shareLabel={m.clients === 0 ? "—" : moneyOrUnpriced(m.shareCents, m.pricedClients)}
+                        clients={m.rows.map((r) => ({
+                          key: r.key,
+                          client: r.client,
+                          label: r.label,
+                          regionLabel:
+                            r.regionKey && isFeedRegion(r.regionKey) ? FEED_REGION_LABELS[r.regionKey] : "—",
+                          priceLabel: priceCell(r.priceCents),
+                          fromISO: r.fromISO,
+                          toISO: r.toISO,
+                          open: r.open,
+                        }))}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+                {/* THE TOTAL, AND THE REASON IT DISAGREES WITH THE COLUMN ABOVE IT (marcus m50098).
+                    It sits OUTSIDE the table on purpose: as a fifth <tr> it would inherit the
+                    "Paying clients" / "Monthly gross" / "Your 50%" headers, and its count is
+                    agreements -- one client holding two packages is two of these and one of those.
+                    A total row under a column it does not foot is the paired-metric split this page
+                    keeps being asked not to ship.
+
+                    The explanation is not a footnote here, it is the point. coxwell reads this
+                    column, adds it, and gets a bigger number; a total that silently disagreed with
+                    his own addition would convert a correct figure into an apparent bug, and he
+                    would resolve that in favour of the addition. So the gap is named, with the
+                    number he will compute, next to the column that produces it. */}
+                <div className="ctot">
+                  <div className="ctot-line">
+                    <div className="ctot-lab">
+                      <b>All months · contracted</b>
+                      <span>
+                        {contracted.agreements} client–package agreement{contracted.agreements === 1 ? "" : "s"} ·{" "}
+                        {money(contracted.grossCents)} gross
+                      </span>
+                    </div>
+                    <div className="ctot-val mono">{money(contracted.shareCents)}</div>
+                  </div>
+                  <div className="ctot-why">
+                    {contracted.spanningAgreements > 0 ? (
+                      <>
+                        {/* Says "once per month" rather than "twice": a term can touch three months
+                            as easily as two, and a copy line that hardcodes the arithmetic of
+                            tonight's single case would be wrong the first time one runs longer. */}
+                        <b>The months above overlap, so they cannot be added.</b>{" "}
+                        {contracted.spanningAgreements === 1
+                          ? "One of these agreements runs across a month end, so it is correctly shown in every month it was live in — and adding the Your 50% column counts it once per month, giving "
+                          : `${contracted.spanningAgreements} of these agreements run across a month end, so they are correctly shown in every month they were live in — and adding the Your 50% column counts each of them once per month, giving `}
+                        {money(contracted.monthSumShareCents)}. Here every agreement counts once.
+                      </>
+                    ) : (
+                      <>
+                        <b>This is not the column added up</b> — it counts each agreement once. No agreement here spans a
+                        month end today, so the two happen to match; they stop matching the moment one does.
+                      </>
+                    )}{" "}
+                    {contracted.repricedAgreements > 0 && (
+                      <>
+                        {contracted.repricedAgreements === 1
+                          ? "One agreement was re-priced and appears above at more than one price; it counts here at its most recent."
+                          : `${contracted.repricedAgreements} agreements were re-priced and appear above at more than one price; each counts here at its most recent.`}{" "}
+                      </>
+                    )}
+                    Agreed list price across every month — <b>not money received</b>, and not a payout.
+                  </div>
+                </div>
+              </>
             )
           ) : view === "clients" ? (
             clientRows.length === 0 ? (
