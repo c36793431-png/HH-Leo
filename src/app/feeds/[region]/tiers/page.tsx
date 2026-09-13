@@ -77,11 +77,56 @@ const PACKAGE_LABELS: Record<string, string> = {
 
 /** The tier_key a package's single Request access button submits under -- see the
  * ld-retail-package comment in feed-tier-catalogue.ts for why this is a pseudo-tier
- * rather than the three real member tier keys. */
+ * rather than the three real member tier keys. Submit-only: nothing ever READS a request
+ * back under this key (see packageCardState). */
 const PACKAGE_REQUEST_TIER_KEY: Record<string, string> = {
   retail: "ld-retail-package",
   "ny-retail": "ny-retail-package",
 };
+
+/** "mixed" is a package-card-only state: members disagree, so there is no single honest
+ * pill and no live button (marcus R2, kai-feed-entitlement-vs-request-visibility-2026-09-13).
+ * It is deliberately NOT a TierRequestState -- the control renders three states and takes
+ * no fourth; the mixed branch renders instead of the control, not through it. */
+type PackageCardState = TierRequestState | "mixed";
+
+/** A package card's state derives from its MEMBER tiers, never from the package pseudo-tier
+ * key (marcus R1, same thread). The card used to look its state up under
+ * PACKAGE_REQUEST_TIER_KEY, which no row has carried since 0086 phase 2: createFeedTierRequest
+ * expands the package key through expandTierKey() and writes one access_requests envelope per
+ * MEMBER tier, and listFeedTierRequests maps each envelope back to its member tier_key. So the
+ * lookup could only ever miss, and a client holding the whole bundle -- granted or pending --
+ * kept being shown a live "Request access" button that DuplicateTierGrantError /
+ * DuplicatePendingRequestError would reject on submit.
+ *
+ * Mixed (R2) has never occurred in prod: marcus's Neon read 2026-09-13 20:06Z found 12
+ * feed_tier batches, 2 multi-member, 0 with a rejection and 0 with mixed member statuses. This
+ * branch has to be correct the first time it executes, not pretty. Members are the ones this
+ * region actually renders, not expandTierKey()'s full list -- the card can only speak for the
+ * tiers on it.
+ *
+ * expandTierKey()'s list was the alternative and it lost (marcus R3, same thread). The two only
+ * differ when a member key has no feed_tiers row, so the region does not render it. Under
+ * expandTierKey() the card would read "2 of 3" forever: no envelope can key to a tier with no
+ * feed_tiers row, so the third can never resolve and the client has a support ticket with no
+ * answer. Under this list the card reads "2 of 2" and a third grant the client holds is
+ * invisible. Both are wrong in that state; neither over-claims access; a stuck card is worse
+ * than an under-reporting one. Do not "fix" this to expandTierKey() without reading that
+ * trade-off first.
+ *
+ * QUANTIFIER, vs the other package rollup: feed-providers.ts:112 rolls a package up with
+ * .some() and this rolls it up with every(). Deliberately opposite, deliberately NOT one
+ * shared helper. :112 asks "is there live money here" -- a provider who owns ONE member of a
+ * bundle must see and be paid for that request, so any overlap qualifies. This asks "does this
+ * client hold what the card promises" -- the card sells three feeds as one bundle, so anything
+ * short of all three must not render as granted. Generalising them would make one of the two
+ * wrong. Change one, read the other (marcus, same thread). */
+function packageCardState(memberStates: TierRequestState[]): PackageCardState {
+  if (memberStates.every((s) => s === "granted")) return "granted";
+  if (memberStates.every((s) => s === "pending")) return "pending";
+  if (memberStates.every((s) => s === "none")) return "none";
+  return "mixed";
+}
 
 /** Institutional ($10k+) vs retail segment split (marcus/coxwell,
  * leo-tiers-institutional-retail-labels-2026-08-21). feed_tiers has no price_cents
@@ -284,6 +329,8 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
         {tierGroups.map((group) => {
           if (group.members.length > 1) {
             const label = PACKAGE_LABELS[group.packageKey] ?? group.packageKey;
+            const memberStates = group.members.map((m) => requestStateFor(m.tierKey));
+            const cardState = packageCardState(memberStates);
             return (
               <div key={group.packageKey} className="card ftd-tier-card ftd-package">
                 {region === "london" && (
@@ -312,16 +359,32 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                     );
                   })}
                 </div>
-                <TierRequestControl
-                  region={region}
-                  tierKey={PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey}
-                  tierName={`${label} package`}
-                  requestState={requestStateFor(PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey)}
-                  servers={serverOptions}
-                  hasAnyRegisteredServer={hasAnyRegisteredServer}
-                  fallbackLicenseTail={licenseTail}
-                  variant="primary"
-                />
+                {cardState === "mixed" ? (
+                  /* No button, not even a disabled one: the submit path from here throws
+                     (access-requests.ts:205 asserts no live grant per member and rolls the whole
+                     batch back), and a control that can only throw must not render as actionable
+                     -- a greyed button still advertises an action. No pill and no per-member
+                     labels either: this is loud-and-stuck on purpose, NOT a designed state, and
+                     a real partial pill with a CTA for the remainder is Iris's later (marcus R2
+                     AMENDED, kai-feed-entitlement-vs-request-visibility-2026-09-13).
+                     The wording does NOT say "partly approved": "mixed" is any disagreement,
+                     including pending + none with nothing approved at all, so an approval claim
+                     would be false on that shape. "different stages" is true on every shape. */
+                  <p className="ftd-desc">
+                    Tiers in this bundle are at different stages, so it cannot be requested as one.
+                  </p>
+                ) : (
+                  <TierRequestControl
+                    region={region}
+                    tierKey={PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey}
+                    tierName={`${label} package`}
+                    requestState={cardState}
+                    servers={serverOptions}
+                    hasAnyRegisteredServer={hasAnyRegisteredServer}
+                    fallbackLicenseTail={licenseTail}
+                    variant="primary"
+                  />
+                )}
               </div>
             );
           }
