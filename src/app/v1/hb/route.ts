@@ -34,17 +34,17 @@ import { bufferBeat } from "@/lib/heartbeat-buffer";
  * pick here can change its behaviour.
  *
  * NO POSTGRES ON A BEAT (marcus's redesign ruling, 2026-09-11). A beat buffers into Upstash
- * and returns; /api/cron/flush-heartbeats drains the buffer every 30 minutes and does the
- * client_heartbeats upsert (migration 0085), the licence-key resolution and the connection-IP
- * capture. Neon autosuspends, and at the real cadence (~560 beats/hr, ~3 queries each) a beat
+ * and returns; /api/cron/flush-heartbeats drains the buffer on the schedule configured in
+ * vercel.json and does the client_heartbeats upsert (migration 0085), the licence-key
+ * resolution and the connection-IP capture. Neon autosuspends, and at the real cadence (~560 beats/hr, ~3 queries each) a beat
  * that touched the DB would hold the compute awake permanently — the endpoint's whole compute
  * allowance, spent on telemetry nothing reads in real time. The 429 caps below are unchanged;
  * they now bound Redis rather than Postgres.
  *
  * Writes still land in client_heartbeats (migration 0085), upserted one row per
- * (license_key, hwid) — see that file's header for the grain and null semantics. The 30-minute
- * delay is invisible in the row: last_seen and beat_count come from the buffered beats, not
- * from when the sweep happened to run.
+ * (license_key, hwid) — see that file's header for the grain and null semantics. The flush
+ * delay, at whatever cadence, is invisible in the row: last_seen and beat_count come from the
+ * buffered beats, not from when the sweep happened to run.
  */
 
 // lk/hid are opaque client-supplied identifiers; cap them so a hostile caller can't use

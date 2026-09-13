@@ -56,9 +56,9 @@ async function flushOne(beat: DrainedBeat): Promise<{ written: boolean; ipCaptur
   // Once per key per run, on the buffered IP, instead of once per beat. That is what closes
   // the residue I flagged: captureConnectionIp windows the IP-MISMATCH alert to 24h for
   // source "heartbeat", but notifyCountryChange has no such window, so a client flapping
-  // between two countries' egress addresses could re-alert every 180s. Evaluating geo at most
-  // 48 times a day per key caps both alerts by construction, without a new alert-log table
-  // (marcus: "your imprecision is acceptable").
+  // between two countries' egress addresses could re-alert every 180s. Evaluating geo once per
+  // key per scheduled run instead of once per beat caps both alerts by construction at any
+  // flush cadence, without a new alert-log table (marcus: "your imprecision is acceptable").
   let ipCaptured = false;
   if (resolved && beat.ip) {
     try {
@@ -84,7 +84,8 @@ async function flushOne(beat: DrainedBeat): Promise<{ written: boolean; ipCaptur
  *
  * Beats buffer in Upstash so that Postgres is off the request path entirely — Neon autosuspends
  * and ~560 beats/hr at ~3 queries each would keep the compute awake permanently. This sweep is
- * the only thing that writes the table: <= 48 runs/day, one upsert per active (key, hwid).
+ * the only thing that writes the table: one run per tick of the schedule configured in
+ * vercel.json, one upsert per active (key, hwid).
  *
  * SAFE TO RE-RUN, but not free to re-run blindly: beat_count ACCUMULATES, so a key must only be
  * flushed once per buffered window. That is why the counter is cleared per key immediately after

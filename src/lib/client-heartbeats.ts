@@ -8,8 +8,9 @@ import { pool } from "./db";
  *
  * NOTHING HERE RUNS ON A BEAT. Since marcus's redesign ruling (2026-09-11) the beat path is
  * Redis-only (src/lib/heartbeat-buffer.ts) and every function in this file is called from the
- * /api/cron/flush-heartbeats sweep, at most 48 times a day, so Neon's compute can suspend
- * between runs. Putting any of this back on the request path re-opens the compute gun.
+ * /api/cron/flush-heartbeats sweep, which runs on the schedule configured in vercel.json, so
+ * Neon's compute can suspend between runs. Putting any of this back on the request path
+ * re-opens the compute gun, at any cadence.
  */
 
 export interface HeartbeatRecord {
@@ -29,8 +30,10 @@ export interface HeartbeatRecord {
   raw: string | null;
   /** Beats buffered since the last flush. Added to beat_count, not assigned. */
   beats: number;
-  /** When the newest buffered beat arrived -- becomes last_seen. NOT now(): the row must
-   * date the beat, not the sweep that happened to drain it up to 30 minutes later. */
+  /** When the newest buffered beat arrived -- becomes last_seen. NOT now(): the row must date
+   * the beat, not the sweep that happened to drain it, however long after. This is the ONLY
+   * reason a row that was physically written hours ago still carries an accurate timestamp,
+   * and it is what makes the stored value independent of the flush cadence entirely. */
   lastSeen: Date;
   /** When this (key, hwid) first beat. Used only on insert; never overwrites an existing row. */
   firstSeen: Date;
@@ -67,8 +70,9 @@ export async function resolveLicenseKey(licenseKey: string): Promise<ResolvedLic
  * every beat, so "the latest beat" is exactly what the hash holds.
  *
  * beat_count accumulates (+= the buffered count) rather than incrementing by one, and
- * last_seen/first_seen come from the buffer rather than now(), so a 30-minute flush window is
- * invisible in the stored row apart from when it was physically written.
+ * last_seen/first_seen come from the buffer rather than now(), so the flush window -- whatever
+ * schedule vercel.json configures -- is invisible in the stored row apart from when it was
+ * physically written.
  */
 export async function upsertBufferedHeartbeat(hb: HeartbeatRecord): Promise<void> {
   await pool.query(

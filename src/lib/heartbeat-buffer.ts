@@ -10,10 +10,10 @@ import { getRedis } from "./rate-limit";
  * allowance, and it is not a rate-limit question: the 600/hr per-key and 3600/hr per-IP caps
  * in rate-limit.ts still apply, but after this change they bound Redis, not Postgres.
  *
- * A beat writes one hash and one set member and returns. A cron (every 30 min) drains the
- * dirty set and does ONE upsert per key into client_heartbeats. Projected DB touches for
- * heartbeats: <= 48 runs/day, a handful of statements each, so the compute suspends normally
- * in between.
+ * A beat writes one hash and one set member and returns. A cron drains the dirty set on the
+ * schedule configured in vercel.json and does ONE upsert per key into client_heartbeats. DB
+ * touches for heartbeats are one sweep's worth of statements per scheduled run — a handful
+ * each — so the compute suspends normally in between, whatever that schedule is.
  *
  * KEY SHAPE: hb:<lk>:<hid>, with the dirty set hb:dirty holding "<lk>:<hid>".
  *
