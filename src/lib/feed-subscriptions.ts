@@ -806,6 +806,31 @@ export function regionKeyForGroup(group: AccountRowGroup): string | null {
   return group.row.regionKey ?? null;
 }
 
+/** Every DISTINCT server a group's rows are registered against, in a fixed order, nulls dropped.
+ * Ruled by marcus (m49469 item 4) after the grain-asymmetry finding: the Subscribers page took
+ * `members[0].serverIp`, so one arbitrary member spoke for the whole group's server column.
+ *
+ * Two ways that is wrong, one of which fires TODAY. (a) A member with no registered server sorts
+ * first and the cell renders EMPTY even though the group has a known server -- live right now on
+ * HH20's LD Base, whose seven rows are three with no server row and four on 203.19.243.207.
+ * (b) A group spanning two servers prints one of them as if it covered both -- not reachable
+ * today (measured 2026-09-13: zero groups span more than one IP, no user holds more than one
+ * registered server) but manufactured by design the moment B-1 lets a client register servers
+ * freely, which is why marcus banked the fix as a B-1 precondition rather than a defect row.
+ *
+ * A list, not a count: the column exists to tell a provider WHICH box to allowlist, so collapsing
+ * it to "2 servers" would delete the only thing it is read for. The rows behind a group are few
+ * (max 7 today) and the distinct IPs fewer, so all of them fit the cell.
+ *
+ * Sorted rather than left in row order: the SQL's `order by p.seq, s.started_at, s.id` is total,
+ * so row order is already deterministic, but the IP list must not silently reshuffle if the
+ * grouping or the ORDER BY is ever changed underneath it. NULL is dropped, never rendered as a
+ * distinct "unknown server" -- an unregistered licence is a recording gap, not a second box. */
+export function serverIpsForGroup(group: AccountRowGroup): string[] {
+  const rows = group.kind === "package" ? group.members : [group.row];
+  return [...new Set(rows.map((r) => r.serverIp).filter((ip): ip is string => ip != null))].sort();
+}
+
 /** A group's start date: the earliest `started_at` among its rows, since a package group has no
  * started_at of its own (bus thread leo-provider-panel-package-labels-2026-09-04, marcus
  * follow-up B). Hoisted out of the Subscribers page 2026-09-12 so the Revenue page's Clients

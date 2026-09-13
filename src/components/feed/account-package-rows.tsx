@@ -23,7 +23,7 @@ export function AccountPackageRows({
   status,
   reason,
   share,
-  serverIp,
+  serverIps,
   sinceISO,
   members,
 }: {
@@ -34,7 +34,9 @@ export function AccountPackageRows({
    * what keeps the default roster looking exactly as it did (m49101). */
   reason: string | null;
   share: string | null;
-  serverIp: string | null;
+  /** EVERY distinct server behind the package, not one member's (serverIpsForGroup, m49469 item
+   * 4). Empty means no row in the group has a registered server. */
+  serverIps: string[];
   sinceISO: string;
   members: AccountPackageMember[];
 }) {
@@ -59,7 +61,11 @@ export function AccountPackageRows({
           {reason && <div className="sub muted">{reason}</div>}
         </td>
         <td className="r share">{share}</td>
-        <td className="mono">{serverIp ?? ""}</td>
+        <td className="mono">
+          {serverIps.map((ip) => (
+            <div key={ip}>{ip}</div>
+          ))}
+        </td>
         <td className="r mono">{sinceISO}</td>
       </tr>
       {open &&

@@ -12,6 +12,7 @@ import {
   statusEndedAtForGroup,
   startedAtForGroup,
   statusForGroup,
+  serverIpsForGroup,
   sumProviderShareCents,
   pricedGroupCounts,
   countUnpseudonymedRowsForProvider,
@@ -184,7 +185,7 @@ function groupRow(group: AccountRowGroup) {
         status={group.status}
         reason={reasonLine(group)}
         share={providerShareFor(group.status, resolvedPriceCentsFor(group))}
-        serverIp={group.members[0].serverIp ?? null}
+        serverIps={serverIpsForGroup(group)}
         sinceISO={startedAtForGroup(group).toISOString().slice(0, 10)}
         members={group.members.map((m) => ({
           subscriptionId: m.subscriptionId,
@@ -208,7 +209,13 @@ function groupRow(group: AccountRowGroup) {
         {reasonLine(group) && <div className="sub muted">{reasonLine(group)}</div>}
       </td>
       <td className="r share">{providerShareFor(group.row.status, resolvedPriceCentsFor(group))}</td>
-      <td className="mono">{group.row.serverIp ?? ""}</td>
+      {/* Same accessor as the package row above, so the one-tier and the packaged shape cannot
+          come to disagree about what "this group's server" means. A single row has at most one. */}
+      <td className="mono">
+        {serverIpsForGroup(group).map((ip) => (
+          <div key={ip}>{ip}</div>
+        ))}
+      </td>
       <td className="r mono">{group.row.startedAt.toISOString().slice(0, 10)}</td>
     </tr>
   );
