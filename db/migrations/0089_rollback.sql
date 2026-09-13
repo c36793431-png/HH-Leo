@@ -62,12 +62,12 @@ alter table feed_subscriptions
 alter table feed_subscriptions
   add constraint feed_subscriptions_server_or_lapsed_chk
   check (status = 'lapsed' or server_registration_id is not null
-         or id in ('82147257-FILL-IN-FULL-UUID',
-                   '4a0a7fb8-FILL-IN-FULL-UUID',
-                   '00f9e32c-FILL-IN-FULL-UUID',
-                   'a453d4c0-FILL-IN-FULL-UUID',
-                   '2e7ad400-FILL-IN-FULL-UUID',
-                   '1161625a-FILL-IN-FULL-UUID'));
+         or id in ('82147257-d90b-4ed9-a12e-68adeaf0b2d4',
+                   '4a0a7fb8-0ac2-49f4-b7a8-4007a7c92500',
+                   '00f9e32c-70e8-46f6-a74c-43317edf62c5',
+                   'a453d4c0-fcb0-4643-a244-ad6e14273164',
+                   '2e7ad400-9c26-440c-af09-44db1aa8d254',
+                   '1161625a-72bb-4472-9282-16062f0cad13'));
 
 -- ---------------------------------------------------------------------------------------
 -- ledger

@@ -74,15 +74,16 @@ begin
   raise notice 'step 0 ok: 0088 present, 0089 absent';
 end $$;
 
--- Same list as 0088 (as applied). Placeholders fail the uuid cast (22P02) on purpose.
+-- Same list as 0088 (as applied); uuids from marcus's Neon read of 2026-09-13 14:55Z
+-- (m49945_mtzxrd14). The read-back below aborts if the live CHECK carries a different list.
 create temp table tmp_0089_exempt (id uuid primary key) on commit drop;
 insert into tmp_0089_exempt (id) values
-  ('82147257-FILL-IN-FULL-UUID'),   -- giang2000ln, LD Base tier 1
-  ('4a0a7fb8-FILL-IN-FULL-UUID'),   -- giang2000ln, LD Base tier 2
-  ('00f9e32c-FILL-IN-FULL-UUID'),   -- giang2000ln, LD Base tier 3
-  ('a453d4c0-FILL-IN-FULL-UUID'),   -- rasoolx55, LD Base tier 1
-  ('2e7ad400-FILL-IN-FULL-UUID'),   -- rasoolx55, LD Base tier 2
-  ('1161625a-FILL-IN-FULL-UUID');   -- rasoolx55, LD Base tier 3
+  ('82147257-d90b-4ed9-a12e-68adeaf0b2d4'),   -- giang2000ln (paid, $30, ends 2026-09-19T17:12:35.462Z)
+  ('4a0a7fb8-0ac2-49f4-b7a8-4007a7c92500'),   -- giang2000ln
+  ('00f9e32c-70e8-46f6-a74c-43317edf62c5'),   -- giang2000ln
+  ('a453d4c0-fcb0-4643-a244-ad6e14273164'),   -- rasoolx55 (trial, $0, ends 2026-09-25T19:01:33.745Z)
+  ('2e7ad400-9c26-440c-af09-44db1aa8d254'),   -- rasoolx55
+  ('1161625a-72bb-4472-9282-16062f0cad13');   -- rasoolx55
 
 do $$
 declare

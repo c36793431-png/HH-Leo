@@ -352,18 +352,19 @@ end $$;
 -- read-only Neon read of 12:44Z, six live feed-tier rows with NULL server, giang2000ln x3 paid
 -- $30 ends 2026-09-19 17:12Z and rasoolx55 x3 trial $0 ends 2026-09-25 19:01Z, servers ever
 -- registered by either = 0). Created here, before the slot, because 2b(b) asserts against it
--- and step 5 gates on it. Full uuids are FILLED IN by the operator from marcus's read; the
--- placeholders below fail the uuid cast (22P02) on purpose. This list and the CHECK's list in
--- step 5 must be identical, six each, and are NOT pruned when one of the six clears before the
--- run: step 5 accepts any subset of them live (v1.75).
+-- and step 5 gates on it. Full uuids copied literally from marcus's read-only Neon read of
+-- 2026-09-13 14:55Z (m49945_mtzxrd14; predicate `server_registration_id is null and status <>
+-- 'lapsed' and (ends_at > now() or ends_at is null)`, exactly six rows). This list and the
+-- CHECK's list in step 5 must be identical, six each, and are NOT pruned when one of the six
+-- clears before the run: step 5 accepts any subset of them live (v1.75).
 create temp table tmp_0088_exempt (id uuid primary key) on commit drop;
 insert into tmp_0088_exempt (id) values
-  ('82147257-FILL-IN-FULL-UUID'),   -- giang2000ln, LD Base tier 1
-  ('4a0a7fb8-FILL-IN-FULL-UUID'),   -- giang2000ln, LD Base tier 2
-  ('00f9e32c-FILL-IN-FULL-UUID'),   -- giang2000ln, LD Base tier 3
-  ('a453d4c0-FILL-IN-FULL-UUID'),   -- rasoolx55, LD Base tier 1
-  ('2e7ad400-FILL-IN-FULL-UUID'),   -- rasoolx55, LD Base tier 2
-  ('1161625a-FILL-IN-FULL-UUID');   -- rasoolx55, LD Base tier 3
+  ('82147257-d90b-4ed9-a12e-68adeaf0b2d4'),   -- giang2000ln (paid, $30, ends 2026-09-19T17:12:35.462Z)
+  ('4a0a7fb8-0ac2-49f4-b7a8-4007a7c92500'),   -- giang2000ln
+  ('00f9e32c-70e8-46f6-a74c-43317edf62c5'),   -- giang2000ln
+  ('a453d4c0-fcb0-4643-a244-ad6e14273164'),   -- rasoolx55 (trial, $0, ends 2026-09-25T19:01:33.745Z)
+  ('2e7ad400-9c26-440c-af09-44db1aa8d254'),   -- rasoolx55
+  ('1161625a-72bb-4472-9282-16062f0cad13');   -- rasoolx55
 
 -- Staging for (b) and (c). Created on every run so the fixed blocks below and the summary can
 -- count 0 when the slot is empty.
@@ -384,9 +385,10 @@ create temp table tmp_0088_carry_by_word (
 --       set status = 'rejected', actioned_at = now(), reason = '<coxwell, message id, date>'
 --       where id = '31cd1813-5994-4946-bc3e-b5e1f3a52f64' and status = 'pending';
 --
--- (b) worded lapse of one of the six exempt rows while it is still live with no server (under
---     v1.71 step 5's BLOCK set is empty by construction, so the six are the only rows a word can
---     lapse here). lapsed_at = now(): a decision, dated when taken. The other resolution needs NO
+-- (b) worded lapse of one of the six exempt rows while it is still live with no server. Only the
+--     six qualify: step 5's subset gate (v1.75) aborts on any OTHER live NULL-server row, so a word
+--     here cannot stand in for that abort; the fixed block below refuses a staged id outside the
+--     six. lapsed_at = now(): a decision, dated when taken. The other resolution needs NO
 --     literal: the client registers a real server row before the run and step 4 re-keys the
 --     rows. Shape:
 --       -- coxwell <message id>, <date>: lapse
@@ -741,12 +743,12 @@ end $$;
 alter table feed_subscriptions
   add constraint feed_subscriptions_server_or_lapsed_chk
   check (status = 'lapsed' or server_registration_id is not null
-         or id in ('82147257-FILL-IN-FULL-UUID',
-                   '4a0a7fb8-FILL-IN-FULL-UUID',
-                   '00f9e32c-FILL-IN-FULL-UUID',
-                   'a453d4c0-FILL-IN-FULL-UUID',
-                   '2e7ad400-FILL-IN-FULL-UUID',
-                   '1161625a-FILL-IN-FULL-UUID'));
+         or id in ('82147257-d90b-4ed9-a12e-68adeaf0b2d4',
+                   '4a0a7fb8-0ac2-49f4-b7a8-4007a7c92500',
+                   '00f9e32c-70e8-46f6-a74c-43317edf62c5',
+                   'a453d4c0-fcb0-4643-a244-ad6e14273164',
+                   '2e7ad400-9c26-440c-af09-44db1aa8d254',
+                   '1161625a-72bb-4472-9282-16062f0cad13'));
 
 -- The two lists must agree: the CHECK's literal set read back from the catalog, one row per
 -- exempt id, must be exactly tmp_0088_exempt. Expected: notice 'step 5 CHECK ok: exempt=6'.

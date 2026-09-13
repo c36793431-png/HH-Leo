@@ -899,7 +899,29 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R4 (exempt six) and R5 (subset gate, 0089 order).
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R4 (exempt six), R5 (subset gate, 0089 order) and R6 (the six uuids).
+
+**R6 (LIVE) -- the six full uuids are in; preflight D's NOT NULL server filter is accepted as fact;
+the last "step 5's BLOCK set" comment is gone.** Marcus m49945_mtzxrd14 (2026-09-13 14:55Z, his
+read-only Neon read of the same instant, predicate `server_registration_id is null and status <>
+'lapsed' and (ends_at > now() or ends_at is null)`, exactly six rows; NOT my read):
+giang2000ln (paid, $30/tier, ends 2026-09-19T17:12:35.462Z) `82147257-d90b-4ed9-a12e-68adeaf0b2d4`,
+`4a0a7fb8-0ac2-49f4-b7a8-4007a7c92500`, `00f9e32c-70e8-46f6-a74c-43317edf62c5`; rasoolx55 (trial,
+$0, ends 2026-09-25T19:01:33.745Z) `a453d4c0-fcb0-4643-a244-ad6e14273164`,
+`2e7ad400-9c26-440c-af09-44db1aa8d254`, `1161625a-72bb-4472-9282-16062f0cad13`. The same read
+shows both clients hold the same three `feed_tier_id`s (`19cb2c39-...`, `21842a66-...`,
+`a8538ab6-...`), so a preflight D without `server_registration_id is not null` folds the six into
+three false (NULL, tier) duplicate groups of count 2: the unique index sees NULLs as distinct, the
+count query does not. Marcus accepted the filter on that basis. 0089 = confirmed next free number.
+Section 8 still waits on his apply confirmation. m49945 crossed with R5 (it predates af071ca by
+14 minutes): its items "step 5 to subset + existence" and "lapse into the 0089 stub" were already
+at af071ca and are not re-done here.
+Applied at this commit (diff against af071ca): the four FILL-IN lists (0088 `tmp_0088_exempt` and
+the CHECK, 0089 `tmp_0089_exempt`, 0089 rollback's CHECK) carry the six literals, each list in the
+same order, per-row comments name the client only (the read gives no per-uuid tier mapping, so the
+earlier "LD Base tier N" labels are dropped as unverified); the 2b(b) comment that still read
+"under v1.71 step 5's BLOCK set is empty by construction" now states the subset gate and the fixed
+block's refusal of a staged id outside the six. No SQL statement other than the literals changed.
 
 **R5 (LIVE) -- step 5 is SUBSET + EXISTENCE, not set-equality; the CHECK is added after the lapse;
 2b(b) asserts against the six; the 0089 stub re-keys, gates, LAPSES, re-adds the CHECK, drops
