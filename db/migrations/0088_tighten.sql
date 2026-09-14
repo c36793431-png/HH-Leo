@@ -10,10 +10,13 @@
 -- with its counts. The operator dry-runs once with `rollback;` in place of `commit;` and pastes
 -- every notice line, then runs it for real; the two pastes must be equal.
 --
--- THE SIX FULL UUIDS ARE COMMITTED IN THIS FILE, twice: the tmp_0088_exempt INSERT (just before
--- the 2b slot; read by 2b(b) and step 5) and the CHECK in step 5, copied from marcus's Neon read
--- m49945_mtzxrd14. Not an operator fill-in. The step-5 read-back refuses the file if the two
--- lists ever drift apart.
+-- NO CLIENT LIST IS COMMITTED IN THIS FILE. R4..R8 carried six full uuids (marcus's Neon read of
+-- 2026-09-13 14:55Z, m49945_mtzxrd14); two days later his read of 2026-09-14 08:41Z
+-- (m50350_mu0ztzip) returns a different population, and the committed list would have aborted
+-- step 5 on apply. Every set this file acts on is therefore computed from the data at run time,
+-- on the transaction's own now(): the lapse population (step 4b) and the CHECK's carve-out
+-- (step 5, materialised into the constraint text by `execute format`). Marcus's counts appear
+-- below only as EXPECTED values to compare a notice against, never inside a predicate.
 --
 -- WHAT THIS DOES, IN ORDER (0086 header 93-97: re-run the section 1 / 3 / 4 backfills and gates,
 -- re-run preflight D over the completed mapping, then SET NOT NULL and the CHECK; then the three
@@ -36,7 +39,8 @@
 --      at tier grain, gated: zero rows with request_id set and access_request_id NULL. That gate
 --      is the reader check for step 8.
 --   2b. Dispositions slot. Literals present only when the cited word is on the thread; a run
---      without the word aborts at step 3 / step 5 as designed. EMPTY BY DEFAULT. Three shapes
+--      without the word aborts at step 3 as designed (step 5 no longer refuses a live no-server
+--      row -- it carves that row out and 0089 settles it). EMPTY BY DEFAULT. Three shapes
 --      (see the slot): (a) reject of a no-envelope pending legacy row; (b) worded lapse of a
 --      live no-server subscription; (c) allowlist carry of an approved-only legacy row that WAS
 --      told, told_at = the legacy row's actioned_at, asserted not null. (b) and (c) literals
@@ -48,34 +52,43 @@
 --   4. 0086 section 4 re-run: server_registration_id via licence -> server row (gate left_null =
 --      no_server), ends_at re-seed for rows still NULL (non-trial from the licence, trial from
 --      feed_tier_trials), gate active rows with ends_at NULL = 0. Expected UPDATE 0 / 0 / 0.
---   5. Every feed_subscriptions row with server_registration_id NULL, one notice per row. Live =
---      `status <> 'lapsed' and (ends_at > now() or ends_at is null)`. The live set must be a
---      SUBSET of the six exempt ids (fable ruling 12:53Z ledger v1.71, gate wording v1.75, on
---      marcus m49538 / m49852: giang2000ln 82147257 / 4a0a7fb8 / 00f9e32c, rasoolx55 a453d4c0 /
---      2e7ad400 / 1161625a; neither client has ever registered a server, giang is the only
---      paying feed client). Any live NULL-server row outside the six aborts with every such row
---      named (the fix is a real server row registered before the run, which step 4 re-keys;
---      otherwise stop and take it to the thread, because the exempt list is not extended and
---      2b(b) lapses only the six; no synthetic server row). Each of the six must EXIST in
---      feed_subscriptions (typo guard), else abort naming it. How many of the six are still live
---      is noticed and reported (summary fs_exempt_live); any count 0 to 6 passes, because every
---      legitimate way one of the six clears before the run (server bound, expired, worded lapse)
---      shrinks the set, and only growth is dangerous. Set-equality (v1.71) is STRUCK for that
---      reason (marcus 13:31Z, fable 13:35Z). Then dead ones (`status <> 'lapsed' and ends_at <=
---      now()`) are stored lapsed inside the transaction, lapsed_at = coalesce(lapsed_at,
---      ends_at); THEN the CHECK, never before the lapse: marcus's prod read of ~13:37Z has 18
---      rows active with ends_at <= now() and a NULL server, all on licences with zero server
---      rows, so step 4 clears none of them and only the lapse does. Then
+--   4b. REFUSAL GATE, THEN THE PREDICATE LAPSE (marcus m50350_mu0ztzip, 2026-09-14). The gate
+--      first: every row the lapse is about to touch (`status <> 'lapsed' and ends_at < now()`)
+--      must ALREADY compute 'lapsed' under the read side's own CASE, transcribed below from
+--      EFFECTIVE_STATUS_SQL at src/lib/feed-subscriptions.ts:140-159 (blob 94fa705, branch head
+--      e1835fb) with s -> fs. If any does not, the file aborts and names each row with the branch
+--      that keeps it alive. That row is one a client can still see today, and flipping its stored
+--      status would take something away -- which is not what housekeeping does. The gate is here
+--      because a read proves the population safe on the day it is taken, not on the day the file
+--      is applied; this file has already sat unapplied for two days while its own committed
+--      population went stale. A migration that re-checks its own precondition cannot be overtaken
+--      by time. Then the lapse: `status = 'lapsed', lapsed_at = coalesce(lapsed_at, ends_at)`
+--      where `status <> 'lapsed' and ends_at < now()` -- ALL rows, not only NULL-server ones.
+--      Expected today 21 rows / 7 clients (marcus's prod read of 08:41Z, m50350_mu0ztzip; three
+--      of them, one client, HAVE a server row and so never reach step 5). lapsed_at is the seeded
+--      end, not now(): the truthful instant is when access actually stopped.
+--   5. Every feed_subscriptions row with server_registration_id NULL, one notice per row. What is
+--      still non-lapsed after 4b is the CARVE-OUT, computed here, never written down:
+--      `server_registration_id is null and status <> 'lapsed' and (ends_at > now() or ends_at is
+--      null)`. Expected today 6 rows / 2 clients (marcus m50350: Aylrn to 09-19, rasoolx55 to
+--      09-25) -- a notice to read, NOT a gate and NOT a list: the number shrinks to 3 on the 19th
+--      and to 0 after the 25th, and any number is legitimate. The old SUBSET / EXISTENCE gates on
+--      the six are STRUCK with the six (marcus m50350). One gate survives: a NULL-server
+--      non-lapsed row that the carve-out predicate does NOT cover (reachable only if its ends_at
+--      is exactly the transaction's now(), so neither `< now()` nor `> now()` holds) aborts
+--      named, rather than being left to fail ADD CONSTRAINT with 23514. Then the constraint,
+--      built by `execute format` over the computed ids:
 --        alter table feed_subscriptions add constraint feed_subscriptions_server_or_lapsed_chk
 --          check (status = 'lapsed' or server_registration_id is not null
---                 or id in (<the six literal uuids>));
---      Nothing can join the exempt set (id is the uuid primary key), every new NULL-server live
---      row is still refused, and the six rows' renewal UPDATEs pass. Column stays nullable (0086
---      header 80-82). Not `not valid`, and not because of taste: Postgres re-checks every
---      UPDATED row against a NOT VALID constraint, so giang's renewal would fail 23514 -- the
---      same paying client cut by another route (fable, 12:53Z). 0089 removes the exception.
+--                 or id in (<the carve-out ids, computed above>));
+--      Nothing can join the carve-out (id is the uuid primary key), every NEW NULL-server live
+--      row is still refused, and the carve-out rows' renewal UPDATEs pass. An EMPTY carve-out
+--      drops the `id in` clause entirely and leaves 0089 nothing to settle. Column stays nullable
+--      (0086 header 80-82). Not `not valid`, and not because of taste: Postgres re-checks every
+--      UPDATED row against a NOT VALID constraint, so a carve-out client's renewal would fail
+--      23514 -- a paying client cut by another route (fable, 12:53Z). 0089 removes the exception.
 --   6. Preflight D re-run on (server_registration_id, feed_tier_id) among live rows (must be 0).
---      The 0081 index drop MOVES OUT to 0089: the six exempt rows are live with NULL server and
+--      The 0081 index drop MOVES OUT to 0089: the carve-out rows are live with NULL server and
 --      the 0086 server-keyed index cannot see them; 0081's (license_id, feed_tier_id) is their
 --      only uniqueness cover until they are bound or lapsed. No replacement index. The 0078
 --      provider_tier twin is not touched.
@@ -115,10 +128,11 @@
 --   - Does not add told_by to feed_allowlist_records (ledger: not this file; carried rows are
 --     not back-fillable later, accepted).
 --   - Does not add a no-server unique index and does not drop the 0081 index: the only live
---     rows with NULL server after step 5 are (at most) the six exempt ids, which 0081 keeps
---     covering by (license_id, feed_tier_id) until db/migrations/0089_drop_server_or_lapsed_exception.sql
---     (it re-keys the six, gates on none live with a NULL server, lapses the expired ones,
---     re-adds the CHECK without the exception, drops 0081).
+--     rows with NULL server after step 5 are the carve-out ids, which 0081 keeps covering by
+--     (license_id, feed_tier_id) until db/migrations/0089_drop_server_or_lapsed_exception.sql
+--     (it reads the carve-out back out of the live CHECK, re-keys those rows, gates on none of
+--     them live with a NULL server, lapses the expired ones, re-adds the CHECK without the
+--     exception, drops 0081).
 --   - Does not pad the deploy-instant literal. A legacy row actioned at or after it would sit
 --     above the rollback's `told_at < literal` bound; the apply gates in spec section 11 (both
 --     expect 0, re-taken before the dry-run and before apply) keep that case empty.
@@ -349,23 +363,14 @@ end $$;
 --     date of the word. EMPTY BY DEFAULT. Nothing here loosens step 3 or step 5.
 -- ---------------------------------------------------------------------------------------
 
--- The exempt set (fable ruling 12:53Z, ledger v1.71 3800e9d, on marcus m49538_mtzt2uia: his
--- read-only Neon read of 12:44Z, six live feed-tier rows with NULL server, giang2000ln x3 paid
--- $30 ends 2026-09-19 17:12Z and rasoolx55 x3 trial $0 ends 2026-09-25 19:01Z, servers ever
--- registered by either = 0). Created here, before the slot, because 2b(b) asserts against it
--- and step 5 gates on it. Full uuids copied literally from marcus's read-only Neon read of
--- 2026-09-13 14:55Z (m49945_mtzxrd14; predicate `server_registration_id is null and status <>
--- 'lapsed' and (ends_at > now() or ends_at is null)`, exactly six rows). This list and the
--- CHECK's list in step 5 must be identical, six each, and are NOT pruned when one of the six
--- clears before the run: step 5 accepts any subset of them live (v1.75).
-create temp table tmp_0088_exempt (id uuid primary key) on commit drop;
-insert into tmp_0088_exempt (id) values
-  ('82147257-d90b-4ed9-a12e-68adeaf0b2d4'),   -- giang2000ln (paid, $30, ends 2026-09-19T17:12:35.462Z)
-  ('4a0a7fb8-0ac2-49f4-b7a8-4007a7c92500'),   -- giang2000ln
-  ('00f9e32c-70e8-46f6-a74c-43317edf62c5'),   -- giang2000ln
-  ('a453d4c0-fcb0-4643-a244-ad6e14273164'),   -- rasoolx55 (trial, $0, ends 2026-09-25T19:01:33.745Z)
-  ('2e7ad400-9c26-440c-af09-44db1aa8d254'),   -- rasoolx55
-  ('1161625a-72bb-4472-9282-16062f0cad13');   -- rasoolx55
+-- NO EXEMPT LIST HERE ANY MORE. R4..R8 created tmp_0088_exempt at this point with six committed
+-- uuids (fable ruling 12:53Z, ledger v1.71 3800e9d, on marcus m49538_mtzt2uia; full uuids from
+-- his read of 2026-09-13 14:55Z, m49945_mtzxrd14). Marcus's read of 2026-09-14 08:41Z
+-- (m50350_mu0ztzip) returns a different population two days later, so that list would have
+-- aborted the old step-5 SUBSET gate on apply. The carve-out is computed in step 5 instead, from
+-- the rows that are still non-lapsed with a NULL server after the step-4b lapse, and is
+-- materialised only inside the CHECK. Nothing before step 5 needs it: 2b(b) below asserts its
+-- staged ids against the live data directly.
 
 -- Staging for (b) and (c). Created on every run so the fixed blocks below and the summary can
 -- count 0 when the slot is empty.
@@ -386,12 +391,14 @@ create temp table tmp_0088_carry_by_word (
 --       set status = 'rejected', actioned_at = now(), reason = '<coxwell, message id, date>'
 --       where id = '31cd1813-5994-4946-bc3e-b5e1f3a52f64' and status = 'pending';
 --
--- (b) worded lapse of one of the six exempt rows while it is still live with no server (no
---     writer inserts a NULL-server row, Leo m49736; a live one outside the six aborts step 5, so
---     the six are the only rows a word can lapse here). The fixed block below refuses a staged
---     id outside the six. lapsed_at = now(): a decision, dated when taken. The other resolution needs NO
---     literal: the client registers a real server row before the run and step 4 re-keys the
---     rows. Shape:
+-- (b) worded lapse of a subscription that is live with no server right here (no writer inserts a
+--     NULL-server row, Leo m49736). Without a word such a row is CARVED OUT by step 5 and settled
+--     by 0089; a word ends it now instead. The fixed block below refuses a staged id that is not
+--     live with a NULL server at this point of the run -- a worded lapse of any other row is a
+--     mistake, not a disposition, and an expired row needs no word (step 4b lapses it on the
+--     predicate). lapsed_at = now(): a decision, dated when taken, unlike 4b's seeded end. The
+--     other resolution needs NO literal: the client registers a real server row before the run
+--     and step 4 re-keys the rows. Shape:
 --       -- coxwell <message id>, <date>: lapse
 --       insert into tmp_0088_lapse_by_word (id) values ('<row id>'), ('<row id>');
 --
@@ -411,9 +418,10 @@ create temp table tmp_0088_carry_by_word (
 
 -- (slot: no literals present)
 
--- Fixed: apply (b). Every staged id must be one of the six exempt ids AND a live no-server row
--- at this point of the run (fable v1.75 item (ii)), else abort naming it: a worded lapse of any
--- other row is a mistake, not a disposition. Expected on an empty slot: staged=0 lapsed=0.
+-- Fixed: apply (b). Every staged id must exist and be a live no-server row at this point of the
+-- run (fable v1.75 item (ii), with its "one of the six" conjunct struck by marcus m50350_mu0ztzip
+-- along with the list itself), else abort naming it: a worded lapse of any other row is a
+-- mistake, not a disposition. Expected on an empty slot: staged=0 lapsed=0.
 do $$
 declare
   r record;
@@ -426,27 +434,24 @@ begin
   from tmp_0088_lapse_by_word w
   left join feed_subscriptions fs on fs.id = w.id
   where fs.id is null
-     or not exists (select 1 from tmp_0088_exempt x where x.id = w.id)
      or fs.server_registration_id is not null
      or fs.status = 'lapsed'
      or not (fs.ends_at > now() or fs.ends_at is null);
   if bad != 0 then
     for r in
-      select w.id, exists (select 1 from tmp_0088_exempt x where x.id = w.id) as is_exempt,
-             fs.status, fs.server_registration_id, fs.ends_at
+      select w.id, fs.status, fs.server_registration_id, fs.ends_at
       from tmp_0088_lapse_by_word w
       left join feed_subscriptions fs on fs.id = w.id
       where fs.id is null
-         or not exists (select 1 from tmp_0088_exempt x where x.id = w.id)
          or fs.server_registration_id is not null
          or fs.status = 'lapsed'
          or not (fs.ends_at > now() or fs.ends_at is null)
       order by w.id
     loop
-      raise notice 'step 2b(b) not an exempt live no-server row: id=% is_exempt=% status=% server_registration_id=% ends_at=%',
-        r.id, r.is_exempt, r.status, r.server_registration_id, r.ends_at;
+      raise notice 'step 2b(b) not a live no-server row: id=% status=% server_registration_id=% ends_at=%',
+        r.id, r.status, r.server_registration_id, r.ends_at;
     end loop;
-    raise exception 'step 2b(b): % of % staged lapse id(s) are not exempt ids that are live with no server (listed above)', bad, staged;
+    raise exception 'step 2b(b): % of % staged lapse id(s) are not rows that exist and are live with no server (listed above)', bad, staged;
   end if;
 
   update feed_subscriptions fs
@@ -602,45 +607,172 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------------------
+-- 4b. REFUSAL GATE, THEN THE PREDICATE LAPSE (marcus m50350_mu0ztzip, 2026-09-14)
+-- ---------------------------------------------------------------------------------------
+
+-- The candidate set: every row the lapse is about to touch. Runs AFTER step 4's ends_at re-seed,
+-- so it reads the seeded value, not the NULL. `< now()`, not `<= now()`: word for word from
+-- marcus m50350_mu0ztzip ("Predicate lapse step -- `ends_at < now()`, as specified"). ALL rows,
+-- not only NULL-server ones -- a row with a server and a past ends_at is in the set (his read has
+-- one such client, 3 rows).
+--
+-- computed_status is EFFECTIVE_STATUS_SQL transcribed, s -> fs, from
+-- src/lib/feed-subscriptions.ts:140-159 as of blob 94fa705 (branch head e1835fb, 2026-09-14):
+--
+--     case
+--       when s.status = 'lapsed' then 'lapsed'
+--       when ft.region_key is null then s.status
+--       when <REGION_TO_FEED_TYPE_SQL, :114> is null then s.status
+--       when exists (select 1 from licenses l
+--                    where l.id = s.license_id and l.status = 'active' and l.expires_at > now())
+--         then s.status
+--       when exists (select 1 from feed_tier_trials ftt
+--                    where ftt.user_id = s.subscriber_user_id and ftt.tier_key = ft.tier_key
+--                      and ftt.trial_status = 'active' and ftt.trial_ends_at > now())
+--         then s.status
+--       else 'lapsed'
+--     end
+--
+-- and REGION_TO_FEED_TYPE_SQL (same file, line 114) is
+--     case ft.region_key when 'london' then 'london' when 'ny' then 'ny' when 'tokyo' then 'crypto' else null end
+--
+-- LEFT join feed_tiers, matching step 5's listing: a provider_tier row has feed_tier_id NULL and
+-- reaches the `region_key is null` branch, where the CASE returns its own status. Under the inner
+-- join some readers use, such a row would vanish from the gate instead of being named -- the
+-- conservative choice is the one that can still refuse. `reason` mirrors the same ladder for the
+-- operator and is diagnostic only; computed_status is what the gate decides on.
+-- LEFT join users, unlike the notice loops elsewhere in this file: this table decides what gets
+-- lapsed, so a row must not be able to fall out of the gate because its subscriber row is missing.
+create temp table tmp_0088_lapse_candidates on commit drop as
+select fs.id,
+       coalesce(u.email, u.display_name, fs.subscriber_user_id::text) as subscriber,
+       fs.subscriber_user_id,
+       ft.tier_key,
+       fs.status,
+       fs.server_registration_id,
+       fs.ends_at,
+       case
+         when fs.status = 'lapsed' then 'lapsed'
+         when ft.region_key is null then fs.status
+         when (case ft.region_key when 'london' then 'london' when 'ny' then 'ny'
+                                  when 'tokyo' then 'crypto' else null end) is null then fs.status
+         when exists (
+           select 1 from licenses l
+           where l.id = fs.license_id
+             and l.status = 'active' and l.expires_at > now()
+         ) then fs.status
+         when exists (
+           select 1 from feed_tier_trials ftt
+           where ftt.user_id = fs.subscriber_user_id
+             and ftt.tier_key = ft.tier_key
+             and ftt.trial_status = 'active'
+             and ftt.trial_ends_at > now()
+         ) then fs.status
+         else 'lapsed'
+       end as computed_status,
+       case
+         when ft.region_key is null then 'ungated: no region_key (provider_tier row or unregioned tier)'
+         when (case ft.region_key when 'london' then 'london' when 'ny' then 'ny'
+                                  when 'tokyo' then 'crypto' else null end) is null
+           then 'ungated: region maps to no FeedType (cme)'
+         when exists (
+           select 1 from licenses l
+           where l.id = fs.license_id
+             and l.status = 'active' and l.expires_at > now()
+         ) then 'licence bound to this row is active and unexpired (renewed in place?)'
+         when exists (
+           select 1 from feed_tier_trials ftt
+           where ftt.user_id = fs.subscriber_user_id
+             and ftt.tier_key = ft.tier_key
+             and ftt.trial_status = 'active'
+             and ftt.trial_ends_at > now()
+         ) then 'a live feed_tier_trial covers this tier_key'
+         else 'computes lapsed (no branch keeps it alive)'
+       end as reason
+from feed_subscriptions fs
+left join users u on u.id = fs.subscriber_user_id
+left join feed_tiers ft on ft.id = fs.feed_tier_id
+where fs.status <> 'lapsed' and fs.ends_at < now();
+
+-- THE REFUSAL GATE. A candidate that computes non-lapsed is a row a client can still see today;
+-- storing 'lapsed' on it would take access away, and this step is housekeeping -- stored status
+-- catching up with what the read side already says. Empty in marcus's read of 2026-09-14 08:41Z
+-- (m50350_mu0ztzip: 21 rows, effective_status 'lapsed' on every one), which is why the flip is
+-- housekeeping AT THAT INSTANT and says nothing about the instant this file is applied. This
+-- block re-takes that proof on the transaction's own now(), so the file cannot be overtaken by
+-- time the way its committed six-uuid list was. It does not abort on the count -- only on a row
+-- that would lose something. Expected today: candidates=21 clients=7 non_lapsed=0.
+do $$
+declare
+  r record;
+  candidates integer;
+  clients integer;
+  non_lapsed integer;
+  lapsed_now integer;
+begin
+  select count(*), count(distinct subscriber_user_id) into candidates, clients
+  from tmp_0088_lapse_candidates;
+
+  select count(*) into non_lapsed
+  from tmp_0088_lapse_candidates where computed_status <> 'lapsed';
+
+  if non_lapsed != 0 then
+    for r in
+      select id, subscriber, tier_key, status, server_registration_id, ends_at,
+             computed_status, reason
+      from tmp_0088_lapse_candidates
+      where computed_status <> 'lapsed'
+      order by subscriber, tier_key, id
+    loop
+      raise notice 'step 4b REFUSE (still live to the reader): id=% subscriber=% tier=% status=% server_registration_id=% ends_at=% computed=% because=%',
+        r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status,
+        r.server_registration_id, r.ends_at, r.computed_status, r.reason;
+    end loop;
+    raise exception 'step 4b: % of % row(s) with a past ends_at still compute non-lapsed under EFFECTIVE_STATUS_SQL (listed above); lapsing them would revoke access a client has today. Not housekeeping -- stop and take each row to the thread', non_lapsed, candidates;
+  end if;
+
+  -- The lapse. Restricted to the gated set by id, so the rows updated are exactly the rows the
+  -- gate cleared. lapsed_at = coalesce(lapsed_at, ends_at): the truthful instant is the seeded
+  -- end, not the run (2b(b)'s worded lapse is the one that dates itself now()).
+  update feed_subscriptions fs
+  set status = 'lapsed', lapsed_at = coalesce(fs.lapsed_at, fs.ends_at), updated_at = now()
+  from tmp_0088_lapse_candidates c
+  where fs.id = c.id and fs.status <> 'lapsed';
+  get diagnostics lapsed_now = row_count;
+
+  if lapsed_now != candidates then
+    raise exception 'step 4b: gate cleared % candidate(s) but the lapse updated %; the two must be equal', candidates, lapsed_now;
+  end if;
+
+  insert into tmp_0088_counts (k, v) values ('fs_predicate_lapsed', lapsed_now);
+  insert into tmp_0088_counts (k, v) values ('fs_predicate_lapsed_clients', clients);
+  raise notice 'step 4b ok: candidates=% clients=% computed_non_lapsed=0 lapsed=% (expected 21 / 7 / 0 / 21 on marcus m50350 08:41Z)',
+    candidates, clients, lapsed_now;
+end $$;
+
+-- ---------------------------------------------------------------------------------------
 -- 5. NULL-SERVER DISPOSITION, THEN THE CHECK (0086 header 80-86)
 -- ---------------------------------------------------------------------------------------
 
--- tmp_0088_exempt (the six, fable v1.71 on marcus m49538_mtzt2uia) was created just before the
--- 2b slot. One notice per NULL-server row, then the v1.75 gate (marcus m49852, fable verbatim):
--- (i) SUBSET: every live NULL-server row (status <> 'lapsed' and (ends_at > now() or ends_at is
--- null); NULL ends_at = live) must be one of the six, else abort naming each (the fix is a real
--- server row registered before the run, which step 4 re-keys; otherwise stop and take it to the
--- thread, because the exempt list is not extended and 2b(b) lapses only the six; no synthetic
--- server row). (ii) EXISTENCE: each of the six must exist in feed_subscriptions, else
--- abort naming it (typo guard). (iii) The notice names which of the six are still live here;
--- that count is summary fs_exempt_live and ANY value 0..6 passes: a server bound before the run
--- (step 4 re-keyed it), an expiry (lapsed below) or a word in 2b(b) each shrink the set, and
--- only growth is what (i) refuses. Set-equality (v1.71) is STRUCK (marcus 13:31Z, fable 13:35Z).
--- THEN the lapse, THEN the CHECK (never the other way round: marcus's ~13:37Z prod read has 18
--- active rows with ends_at <= now() and NULL server, all on licences with zero server rows, so
--- only this lapse converts them; the CHECK added first fails on them with 23514). Dead rows
--- (status <> 'lapsed' and ends_at <= now()) are stored lapsed, lapsed_at = coalesce(lapsed_at,
--- ends_at): the truthful instant is the seeded end. Their computed status does not move (they
--- already compute lapsed through the licence branch); stored now agrees with computed.
--- The operator pastes every 'step 5 no server:' and 'step 5 exempt:' line.
--- Expected today: listed=27, live=6 all exempt, exempt_live=6, lapsed_now=18 (marcus m49188 /
--- m49852 reads: 27 no-server rows = 6 live + 18 lapse-able + 3 stored-lapsed).
+-- The lapse now happens in step 4b, on the predicate and over every row, so this step no longer
+-- lapses anything: it names what is left with a NULL server and carries it. R4..R8 gated here
+-- against six committed uuids with a SUBSET gate, an EXISTENCE gate and a live-count notice;
+-- all three are STRUCK with the list (marcus m50350_mu0ztzip, 2026-09-14: "Rip out the six
+-- hardcoded uuids in 0088 R8's four lists and the step-5 gate", "Use it as a CHECK, never as a
+-- hardcoded list"). What is still NULL-server and non-lapsed after 4b IS the carve-out -- by
+-- construction, the exact set that would otherwise fail the constraint -- and it is read out of
+-- the data here, on the transaction's own now().
+--
+-- First one notice per NULL-server row whatever its status; the operator pastes every
+-- 'step 5 no server:' and 'step 5 carve-out:' line. Expected today listed=27: marcus's read of
+-- 08:41Z (m50350) has 24 NULL-server non-lapsed rows / 8 clients, of which 18 were just lapsed by
+-- 4b (4b's other 3 rows, one client, have a server and never appear here), plus the 3 already
+-- stored lapsed with a NULL server in his read of 2026-09-12 (m49188).
 do $$
 declare
   r record;
   listed integer := 0;
-  exempt integer;
-  live integer;
-  live_not_exempt integer;
-  exempt_missing integer;
-  exempt_live integer;
-  lapsed_now integer;
 begin
-  select count(*) into exempt from tmp_0088_exempt;
-  if exempt = 0 then
-    raise exception 'step 5: tmp_0088_exempt is empty; the exemption list is fable''s ruling (v1.71), not optional';
-  end if;
-
   for r in
     select fs.id, coalesce(u.email, u.display_name, u.id::text) as subscriber,
            ft.tier_key, fs.status, fs.ends_at,
@@ -655,127 +787,146 @@ begin
     raise notice 'step 5 no server: id=% subscriber=% tier=% status=% ends_at=% computed_live=%',
       r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status, r.ends_at, r.computed_live;
   end loop;
-
-  -- (i) SUBSET: live NULL-server rows outside the exempt set: BLOCK, each named.
-  select count(*) into live_not_exempt
-  from feed_subscriptions fs
-  where fs.server_registration_id is null and fs.status <> 'lapsed'
-    and (fs.ends_at > now() or fs.ends_at is null)
-    and not exists (select 1 from tmp_0088_exempt x where x.id = fs.id);
-  if live_not_exempt != 0 then
-    for r in
-      select fs.id, coalesce(u.email, u.display_name, u.id::text) as subscriber,
-             ft.tier_key, fs.status, fs.ends_at
-      from feed_subscriptions fs
-      join users u on u.id = fs.subscriber_user_id
-      left join feed_tiers ft on ft.id = fs.feed_tier_id
-      where fs.server_registration_id is null and fs.status <> 'lapsed'
-        and (fs.ends_at > now() or fs.ends_at is null)
-        and not exists (select 1 from tmp_0088_exempt x where x.id = fs.id)
-      order by subscriber, ft.tier_key, fs.id
-    loop
-      raise notice 'step 5 BLOCK live no server (not exempt): id=% subscriber=% tier=% status=% ends_at=%',
-        r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status, r.ends_at;
-    end loop;
-    raise exception 'step 5: % live feed_subscriptions row(s) with no server row outside the exempt set (listed above); the fix is a real server row registered before the run (step 4 re-keys it); otherwise stop and take it to the thread, because the exempt list is not extended and 2b(b) lapses only the six', live_not_exempt;
-  end if;
-
-  -- (ii) EXISTENCE: each of the six must be a feed_subscriptions row (typo guard on the fill-in).
-  select count(*) into exempt_missing
-  from tmp_0088_exempt x
-  where not exists (select 1 from feed_subscriptions fs where fs.id = x.id);
-  if exempt_missing != 0 then
-    for r in
-      select x.id from tmp_0088_exempt x
-      where not exists (select 1 from feed_subscriptions fs where fs.id = x.id)
-      order by x.id
-    loop
-      raise notice 'step 5 exempt id NOT FOUND in feed_subscriptions: id=%', r.id;
-    end loop;
-    raise exception 'step 5: % of % exempt id(s) do not exist in feed_subscriptions (listed above); check the fill-in against marcus''s read', exempt_missing, exempt;
-  end if;
-
-  -- (iii) Which of the six are still live with no server here. Any count 0..6 passes.
-  exempt_live := 0;
-  for r in
-    select x.id, fs.status, fs.server_registration_id, fs.ends_at,
-           (fs.server_registration_id is null and fs.status <> 'lapsed'
-            and (fs.ends_at > now() or fs.ends_at is null)) as live_no_server
-    from tmp_0088_exempt x
-    join feed_subscriptions fs on fs.id = x.id
-    order by x.id
-  loop
-    if r.live_no_server then
-      exempt_live := exempt_live + 1;
-    end if;
-    raise notice 'step 5 exempt: id=% status=% server_registration_id=% ends_at=% live_no_server=%',
-      r.id, r.status, r.server_registration_id, r.ends_at, r.live_no_server;
-  end loop;
-  insert into tmp_0088_counts (k, v) values ('fs_exempt_live', exempt_live);
-
-  select count(*) into live
-  from feed_subscriptions
-  where server_registration_id is null and status <> 'lapsed'
-    and (ends_at > now() or ends_at is null);
-  if live != exempt_live then
-    raise exception 'step 5: live NULL-server rows=% but exempt live=%; (i) passed so these must be equal', live, exempt_live;
-  end if;
-
-  -- The lapse. Predicate word for word (S4), on now(); BEFORE the CHECK.
-  update feed_subscriptions
-  set status = 'lapsed', lapsed_at = coalesce(lapsed_at, ends_at), updated_at = now()
-  where server_registration_id is null and status <> 'lapsed' and ends_at <= now();
-  get diagnostics lapsed_now = row_count;
-
-  insert into tmp_0088_counts (k, v) values ('fs_no_server_lapsed_now', lapsed_now);
-  raise notice 'step 5 ok: no-server rows listed=% live=% exempt_live=% (of % exempt ids; 0..6 passes) lapsed_now=%',
-    listed, live, exempt_live, exempt, lapsed_now;
+  insert into tmp_0088_counts (k, v) values ('fs_no_server_listed', listed);
+  raise notice 'step 5 listed: no-server rows=% (expected 27 on marcus m49188 + m50350)', listed;
 end $$;
 
--- Every non-lapsed row now has a server, except (at most) the exempt six. The CHECK carries
--- them by id (fable v1.71 on marcus m49538_mtzt2uia, his read-only prod read of 12:44Z; text
--- unchanged in v1.75, m49852). Nothing can join the set: id is the uuid primary key, so every
--- NEW live row with NULL server is refused, and the six rows' renewal UPDATEs pass. Column
--- stays nullable: a lapsed row may keep NULL server forever. Not `not valid`, and not because
--- of taste: Postgres re-checks every UPDATED row against a NOT VALID constraint, so giang's
--- renewal would fail 23514, the same paying client cut by another route (fable 12:53Z). Added
--- AFTER the lapse above, never before it (marcus m49852 item 3). The exception is removed by
--- db/migrations/0089_drop_server_or_lapsed_exception.sql. The six literals MUST equal
--- tmp_0088_exempt above (both committed from m49945; never edited). Expected: ALTER TABLE.
-alter table feed_subscriptions
-  add constraint feed_subscriptions_server_or_lapsed_chk
-  check (status = 'lapsed' or server_registration_id is not null
-         or id in ('82147257-d90b-4ed9-a12e-68adeaf0b2d4',
-                   '4a0a7fb8-0ac2-49f4-b7a8-4007a7c92500',
-                   '00f9e32c-70e8-46f6-a74c-43317edf62c5',
-                   'a453d4c0-fcb0-4643-a244-ad6e14273164',
-                   '2e7ad400-9c26-440c-af09-44db1aa8d254',
-                   '1161625a-72bb-4472-9282-16062f0cad13'));
+-- THE CARVE-OUT. Predicate word for word from marcus m50350_mu0ztzip ("NULL-server carve-out
+-- gated on `ends_at > now()`"), with `or ends_at is null` kept from the S4 liveness form (a NULL
+-- ends_at reads live; step 4's gate has already forced active rows with ends_at NULL to 0).
+-- Expected: SELECT 6 today (his read: Aylrn to 2026-09-19 x3, rasoolx55 to 2026-09-25 x3). That
+-- number is a CHECK to read against, never a bound: it becomes 3 after the 19th and 0 after the
+-- 25th, and 0 is a legitimate outcome that drops the exception clause entirely.
+create temp table tmp_0088_carve_out on commit drop as
+select fs.id
+from feed_subscriptions fs
+where fs.server_registration_id is null
+  and fs.status <> 'lapsed'
+  and (fs.ends_at > now() or fs.ends_at is null);
 
--- The two lists must agree: the CHECK's literal set read back from the catalog, one row per
--- exempt id, must be exactly tmp_0088_exempt. Expected: notice 'step 5 CHECK ok: exempt=6'.
+-- Name every carve-out row, then the one surviving gate: a NULL-server non-lapsed row the
+-- predicate does NOT cover would fail ADD CONSTRAINT with 23514 below. After 4b that is reachable
+-- only for a row whose ends_at is exactly this transaction's now() -- neither `< now()` (4b) nor
+-- `> now()` (here) holds. Aborting named beats an opaque 23514, and the fix is to re-run: the
+-- next transaction's now() has moved past it.
+do $$
+declare
+  r record;
+  carved integer;
+  clients integer;
+  uncovered integer;
+begin
+  select count(*) into carved from tmp_0088_carve_out;
+  select count(distinct fs.subscriber_user_id) into clients
+  from feed_subscriptions fs join tmp_0088_carve_out c on c.id = fs.id;
+
+  for r in
+    select fs.id, coalesce(u.email, u.display_name, fs.subscriber_user_id::text) as subscriber,
+           ft.tier_key, fs.status, fs.ends_at
+    from tmp_0088_carve_out c
+    join feed_subscriptions fs on fs.id = c.id
+    left join users u on u.id = fs.subscriber_user_id
+    left join feed_tiers ft on ft.id = fs.feed_tier_id
+    order by subscriber, ft.tier_key, fs.id
+  loop
+    raise notice 'step 5 carve-out: id=% subscriber=% tier=% status=% ends_at=%',
+      r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status, r.ends_at;
+  end loop;
+
+  select count(*) into uncovered
+  from feed_subscriptions fs
+  where fs.server_registration_id is null and fs.status <> 'lapsed'
+    and not exists (select 1 from tmp_0088_carve_out c where c.id = fs.id);
+  if uncovered != 0 then
+    for r in
+      select fs.id, coalesce(u.email, u.display_name, fs.subscriber_user_id::text) as subscriber,
+             ft.tier_key, fs.status, fs.ends_at
+      from feed_subscriptions fs
+      left join users u on u.id = fs.subscriber_user_id
+      left join feed_tiers ft on ft.id = fs.feed_tier_id
+      where fs.server_registration_id is null and fs.status <> 'lapsed'
+        and not exists (select 1 from tmp_0088_carve_out c where c.id = fs.id)
+      order by subscriber, ft.tier_key, fs.id
+    loop
+      raise notice 'step 5 UNCOVERED no-server non-lapsed row: id=% subscriber=% tier=% status=% ends_at=%',
+        r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status, r.ends_at;
+    end loop;
+    raise exception 'step 5: % no-server non-lapsed row(s) are in neither the 4b lapse nor the carve-out (listed above); their ends_at equals this transaction''s now() exactly. Re-run: the next now() is past them', uncovered;
+  end if;
+
+  insert into tmp_0088_counts (k, v) values ('fs_carve_out', carved);
+  insert into tmp_0088_counts (k, v) values ('fs_carve_out_clients', clients);
+  raise notice 'step 5 carve-out ok: rows=% clients=% uncovered=0 (expected 6 / 2 / 0 on marcus m50350 08:41Z; any count is legitimate, the expectation is a read not a gate)',
+    carved, clients;
+end $$;
+
+-- Every non-lapsed row now has a server, except the carve-out rows just named. The CHECK carries
+-- them BY ID, built by `execute format` over tmp_0088_carve_out rather than from a literal list
+-- written into this file (marcus m50350_mu0ztzip). By id because that is what cannot grow: id is
+-- the uuid primary key, so no NEW row can enter the exception, every new live NULL-server row is
+-- still refused, and the carried rows' own renewal UPDATEs pass. A predicate exception
+-- (`or ends_at > now()`) would have been the loose shape -- it would let any new NULL-server row
+-- in for as long as its ends_at is in the future, which is the thing 0086 header 80-86 asks this
+-- constraint to stop. Empty carve-out => the plain two-branch form, and 0089 has nothing to
+-- settle. Column stays nullable: a lapsed row may keep NULL server forever. Not `not valid`, and
+-- not because of taste: Postgres re-checks every UPDATED row against a NOT VALID constraint, so a
+-- carried client's renewal would fail 23514, a paying client cut by another route (fable 12:53Z).
+-- Added AFTER the lapse, never before it (marcus m49852 item 3; the lapse is 4b's now).
+-- The exception is removed by db/migrations/0089_drop_server_or_lapsed_exception.sql, which reads
+-- the list back out of this constraint instead of carrying its own copy. Expected: notice with
+-- the definition, and either 'carve-out ids=6' or 'NO exception' when the carve-out is empty.
+do $$
+declare
+  ids text;
+  carved integer;
+begin
+  select count(*) into carved from tmp_0088_carve_out;
+  if carved = 0 then
+    execute 'alter table feed_subscriptions'
+         || ' add constraint feed_subscriptions_server_or_lapsed_chk'
+         || ' check (status = ''lapsed'' or server_registration_id is not null)';
+    raise notice 'step 5 CHECK added with NO exception: the carve-out is empty (nothing left non-lapsed with a NULL server)';
+  else
+    select string_agg(format('%L', c.id::text), ', ' order by c.id) into ids from tmp_0088_carve_out c;
+    execute format('alter table feed_subscriptions'
+                || ' add constraint feed_subscriptions_server_or_lapsed_chk'
+                || ' check (status = ''lapsed'' or server_registration_id is not null'
+                || ' or id in (%s))', ids);
+    raise notice 'step 5 CHECK added with carve-out ids=%', carved;
+  end if;
+end $$;
+
+-- Read the constraint back out of the catalog and prove it carries exactly the carve-out: every
+-- carve-out id present in the text, and no uuid literal in the text that is not a carve-out id
+-- (count equality does the second half -- the ids came from this table, so equal counts plus
+-- total containment is set equality). Expected: notice 'step 5 CHECK ok: carve_out=6 literals=6'.
 do $$
 declare
   def text;
   missing integer;
   literals integer;
+  carved integer;
 begin
+  select count(*) into carved from tmp_0088_carve_out;
   select pg_get_constraintdef(c.oid) into def
   from pg_constraint c
   where c.conrelid = 'feed_subscriptions'::regclass
     and c.conname = 'feed_subscriptions_server_or_lapsed_chk';
+  if def is null then
+    raise exception 'step 5 CHECK: feed_subscriptions_server_or_lapsed_chk is not in the catalog after ADD CONSTRAINT';
+  end if;
   select count(*) into missing
-  from tmp_0088_exempt x
+  from tmp_0088_carve_out x
   where position(x.id::text in def) = 0;
   if missing != 0 then
-    raise exception 'step 5 CHECK: % exempt id(s) in tmp_0088_exempt are not in the constraint text; the two lists differ. Definition: %', missing, def;
+    raise exception 'step 5 CHECK: % carve-out id(s) are not in the constraint text. Definition: %', missing, def;
   end if;
   select count(*) into literals
   from regexp_matches(def, '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', 'g');
-  if literals != (select count(*) from tmp_0088_exempt) then
-    raise exception 'step 5 CHECK: constraint text carries % uuid literal(s) but tmp_0088_exempt has %; the two lists differ. Definition: %', literals, (select count(*) from tmp_0088_exempt), def;
+  if literals != carved then
+    raise exception 'step 5 CHECK: constraint text carries % uuid literal(s) but the carve-out has %. Definition: %', literals, carved, def;
   end if;
-  raise notice 'step 5 CHECK ok: exempt=% literals=% definition=%', (select count(*) from tmp_0088_exempt), literals, def;
+  raise notice 'step 5 CHECK ok: carve_out=% literals=% definition=%', carved, literals, def;
 end $$;
 
 -- ---------------------------------------------------------------------------------------
@@ -785,7 +936,7 @@ end $$;
 -- Live (server, tier) duplicate groups on the stored column (0086 D computed them through the
 -- mapping). Structurally 0 for rows WITH a server: feed_subscriptions_server_feed_tier_live_uidx
 -- (0086:657-659) has covered every live row with a NOT NULL server since 0086. Rows with NULL
--- server are excluded from the count on purpose: the exempt rows still live are two subscribers
+-- server are excluded from the count on purpose: the carve-out rows are (today) two subscribers
 -- on the same three tiers, and GROUP BY folds their NULL servers into one group per tier (count
 -- 2), a false duplicate the unique index itself never sees (NULLs are distinct there). 0086 D
 -- had no such rows to meet (it computed the key through the mapping).
@@ -805,15 +956,17 @@ begin
   if dup_groups != 0 then
     raise exception 'step 6 preflight D: % live (server, tier) duplicate groups', dup_groups;
   end if;
-  raise notice 'step 6 preflight D ok: live (server, tier) duplicate groups=0 (NULL-server rows excluded: the exempt six)';
+  raise notice 'step 6 preflight D ok: live (server, tier) duplicate groups=0 (NULL-server rows excluded: the carve-out)';
 end $$;
 
 -- NOT dropped here: the 0081 licence-keyed twin feed_subscriptions_license_feed_tier_live_uidx
--- (fable v1.71 item 3, v1.75 (iv)). Exempt rows still live have a NULL server, invisible to the
+-- (fable v1.71 item 3, v1.75 (iv)). Carve-out rows have a NULL server, invisible to the
 -- 0086 server-keyed index, and 0081's (license_id, feed_tier_id) is their only uniqueness cover
--- until they are bound or lapsed. db/migrations/0089_drop_server_or_lapsed_exception.sql re-keys
--- the six, gates on none live with a NULL server, lapses the expired ones, re-adds the CHECK
--- without the exception, drops 0081. The window check at
+-- until they are bound or lapsed. db/migrations/0089_drop_server_or_lapsed_exception.sql reads
+-- the carve-out back out of the live CHECK, re-keys those rows, gates on none of them live with a
+-- NULL server, lapses the expired ones, re-adds the CHECK without the exception, drops 0081. If
+-- the carve-out here is empty, 0089 finds no ids and does the constraint and index work alone.
+-- The window check at
 -- feed-subscriptions.ts:403-410 (REMOVAL POINT comment :392) therefore stays through 0088 and
 -- is deleted with 0089, not with this file. No replacement index. The 0078 provider_tier twin
 -- (feed_subscriptions_subscriber_provider_tier_live_uidx) is not touched.
@@ -1040,9 +1193,12 @@ drop table feed_tier_requests;
 -- 10. SUMMARY, THEN THE LEDGER ROW
 -- ---------------------------------------------------------------------------------------
 
--- Expected: one row. sr_user_id_null=0 sr_owner_mismatch=0 fs_no_server_live=fs_exempt_live
--- (equal by step 5; 6 today, any 0..6 passes) fs_request_id_column_present=false
--- ftr_table_present=false; the rest are counts to paste.
+-- Expected: one row. sr_user_id_null=0 sr_owner_mismatch=0 fs_no_server_live=fs_carve_out (equal
+-- by construction: the carve-out was read from exactly that predicate after the 4b lapse, and
+-- nothing between here and there writes feed_subscriptions) fs_request_id_column_present=false
+-- ftr_table_present=false; the rest are counts to paste. Today's expected counts, from marcus's
+-- prod read of 2026-09-14 08:41Z (m50350_mu0ztzip), are NOT gates: fs_predicate_lapsed=21,
+-- fs_predicate_lapsed_clients=7, fs_carve_out=6, fs_carve_out_clients=2, fs_no_server_listed=27.
 select
   (select count(*) from server_registrations where user_id is null) as sr_user_id_null,
   (select count(*) from server_registrations sr join licenses l on l.id = sr.license_id
@@ -1050,8 +1206,11 @@ select
   (select count(*) from feed_subscriptions
      where server_registration_id is null and status <> 'lapsed'
        and (ends_at > now() or ends_at is null)) as fs_no_server_live,
-  (select v from tmp_0088_counts where k = 'fs_exempt_live') as fs_exempt_live,
-  (select v from tmp_0088_counts where k = 'fs_no_server_lapsed_now') as fs_no_server_lapsed_now,
+  (select v from tmp_0088_counts where k = 'fs_no_server_listed') as fs_no_server_listed,
+  (select v from tmp_0088_counts where k = 'fs_carve_out') as fs_carve_out,
+  (select v from tmp_0088_counts where k = 'fs_carve_out_clients') as fs_carve_out_clients,
+  (select v from tmp_0088_counts where k = 'fs_predicate_lapsed') as fs_predicate_lapsed,
+  (select v from tmp_0088_counts where k = 'fs_predicate_lapsed_clients') as fs_predicate_lapsed_clients,
   (select v from tmp_0088_counts where k = 'fs_lapsed_by_word') as fs_lapsed_by_word,
   (select exists (select 1 from information_schema.columns
                   where table_name = 'feed_subscriptions' and column_name = 'request_id')) as fs_request_id_column_present,

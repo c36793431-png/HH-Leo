@@ -27,8 +27,10 @@
 --   - feed_subscriptions.request_id values: re-added nullable and backfilled as
 --     access_requests.legacy_feed_tier_request_id via access_request_id (exact for every row
 --     that had one, since 0088 step 2's gate proved the mapping total; NULL for new-path rows).
---   - The step-5 expiry lapses are NOT reverted: stored 'lapsed' on a row whose ends_at is past
---     is truthful either way.
+--   - The step-4b predicate lapses are NOT reverted: stored 'lapsed' on a row whose ends_at is
+--     past is truthful either way, and 4b's refusal gate proved every one of them already read
+--     'lapsed' to the client before the flip (the lapse moved from step 5 to 4b and from
+--     NULL-server rows to all rows in marcus m50350_mu0ztzip, 2026-09-14).
 --   - The 2b(a) reject and 2b(b) worded lapses are NOT reverted: dated decisions.
 --   - The 2b(c) carries ARE deleted with the step-9 carries: the pre-tighten record set had no
 --     legacy carries; the word stays in the ledger and in the 2b comment.
@@ -37,7 +39,7 @@
 --
 -- Restores exactly: the 0078 FK (request_id references feed_tier_requests(id)), the 0079 index
 -- feed_subscriptions_request_tier_uidx, the 0031 single-column FK on delete cascade; drops the
--- CHECK (with its six-id exception, fable v1.71 / v1.75), the composite FK, the licenses unique, and
+-- CHECK (whatever carve-out ids 0088 step 5 computed into it), the composite FK, the licenses unique, and
 -- NOT NULL on server_registrations.user_id; deletes the '0088' ledger row. The 0081 index
 -- feed_subscriptions_license_feed_tier_live_uidx is NOT recreated because 0088 no longer drops
 -- it (the drop is 0089's, with its own rollback); so no duplicate-group preflight here. If 0089

@@ -3,13 +3,22 @@
 -- Thread kai-tighten-0087-2026-09-12.
 --
 -- Reverses 0089 in the opposite order: the 0081 index back (preflight: zero live (license_id,
--- feed_tier_id) duplicate groups, else abort), the CHECK back WITH the six-id exception (same
--- list as 0089 step 0, committed from marcus m49945_mtzxrd14), the '0089' ledger row deleted.
+-- feed_tier_id) duplicate groups, else abort), the CHECK back with an exception RECOMPUTED from
+-- the data (marcus m50350_mu0ztzip, 2026-09-14: no client list is written down anywhere in this
+-- set of files), the '0089' ledger row deleted.
+--
+-- The original carried set is NOT recoverable and is not pretended to be: 0089 dropped the only
+-- record of it (the constraint text) and then settled every row in it. What this file restores is
+-- the 0088 step-5 SHAPE, rebuilt against the rows that need it NOW -- NULL-server non-lapsed rows
+-- at rollback time, by `execute format`, exactly as 0088 step 5 builds it. After a clean 0089 run
+-- that set is EMPTY and the restored constraint is textually what 0089 left; it is non-empty only
+-- if new NULL-server rows appeared since, and carrying those is the only way the ADD CONSTRAINT
+-- can succeed at all.
 --
 -- NOT reverted, stated up front (fable v1.76 via marcus m49852):
---   - 0089 step 1, the re-key of the six: a 0086 column backfill, left as written, exactly as
---     0088_rollback.sql treats 0088 step 4.
---   - 0089 step 3, the lapse of expired exempt rows: stored 'lapsed' on a row whose ends_at is
+--   - 0089 step 1, the re-key of the carried rows: a 0086 column backfill, left as written,
+--     exactly as 0088_rollback.sql treats 0088 step 4.
+--   - 0089 step 3, the lapse of expired carried rows: stored 'lapsed' on a row whose ends_at is
 --     past is truthful either way, exactly as 0088_rollback.sql keeps the step-5 lapse.
 -- Both are consistent with the restored CHECK (a bound row passes on its server, a lapsed row on
 -- its status), so the ADD CONSTRAINT below cannot fail on them.
@@ -53,21 +62,55 @@ create unique index if not exists feed_subscriptions_license_feed_tier_live_uidx
   where feed_tier_id is not null and status in ('trial', 'active');
 
 -- ---------------------------------------------------------------------------------------
--- 4 reverse: the CHECK back with the exception (0088 step 5 form). Steps 3 and 1: not reverted.
+-- 4 reverse: the CHECK back in the 0088 step-5 form, its exception recomputed from the data.
+-- Steps 3 and 1: not reverted. Expected after a clean 0089 run: carve-out 0, so the constraint
+-- comes back in its plain two-branch form and the notice says NO exception.
 -- ---------------------------------------------------------------------------------------
 
 alter table feed_subscriptions
   drop constraint if exists feed_subscriptions_server_or_lapsed_chk;
 
-alter table feed_subscriptions
-  add constraint feed_subscriptions_server_or_lapsed_chk
-  check (status = 'lapsed' or server_registration_id is not null
-         or id in ('82147257-d90b-4ed9-a12e-68adeaf0b2d4',
-                   '4a0a7fb8-0ac2-49f4-b7a8-4007a7c92500',
-                   '00f9e32c-70e8-46f6-a74c-43317edf62c5',
-                   'a453d4c0-fcb0-4643-a244-ad6e14273164',
-                   '2e7ad400-9c26-440c-af09-44db1aa8d254',
-                   '1161625a-72bb-4472-9282-16062f0cad13'));
+do $$
+declare
+  r record;
+  ids text;
+  carved integer;
+begin
+  create temp table tmp_0089_rb_carve_out on commit drop as
+  select fs.id
+  from feed_subscriptions fs
+  where fs.server_registration_id is null and fs.status <> 'lapsed';
+
+  select count(*) into carved from tmp_0089_rb_carve_out;
+  for r in
+    select fs.id, coalesce(u.email, u.display_name, fs.subscriber_user_id::text) as subscriber,
+           fs.status, fs.ends_at
+    from tmp_0089_rb_carve_out c
+    join feed_subscriptions fs on fs.id = c.id
+    left join users u on u.id = fs.subscriber_user_id
+    order by subscriber, fs.id
+  loop
+    raise notice 'rollback 0089 step 4 carrying: id=% subscriber=% status=% ends_at=%',
+      r.id, r.subscriber, r.status, r.ends_at;
+  end loop;
+
+  -- No ends_at predicate here, unlike 0088 step 5: a rollback must not also decide that an
+  -- expired row may keep a NULL server. Every row that would fail the constraint is carried,
+  -- named above, and left for a re-run of 0089 to settle.
+  if carved = 0 then
+    execute 'alter table feed_subscriptions'
+         || ' add constraint feed_subscriptions_server_or_lapsed_chk'
+         || ' check (status = ''lapsed'' or server_registration_id is not null)';
+    raise notice 'rollback 0089 step 4 ok: CHECK restored with NO exception (nothing left non-lapsed with a NULL server)';
+  else
+    select string_agg(format('%L', c.id::text), ', ' order by c.id) into ids from tmp_0089_rb_carve_out c;
+    execute format('alter table feed_subscriptions'
+                || ' add constraint feed_subscriptions_server_or_lapsed_chk'
+                || ' check (status = ''lapsed'' or server_registration_id is not null'
+                || ' or id in (%s))', ids);
+    raise notice 'rollback 0089 step 4 ok: CHECK restored carrying % id(s), listed above', carved;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------------------
 -- ledger
