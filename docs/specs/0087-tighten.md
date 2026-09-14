@@ -935,6 +935,39 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    figures :154 / :1274 are the pre-R14 anchors), so the default, the step-0 stamp and the
    summary column are three reads of one transaction's `now()`.
 
+   WHY PROPERTY 2 SAYS NON-NULL, AND HOW THE CHECK IS TO BE READ. ADDED at R19 (marcus
+   m50547_mu12nfmr item 5, 2026-09-14). The check on the carve-out side reads **later than the
+   run's `now()`, OR NULL** -- not "later than" alone. Fable's property 2 above already carries the
+   scope ("every non-NULL `ends_at`", m50538_mu12lmrx T4); the mechanism below is the reason, and
+   it is here because a scope without its mechanism is a rule an operator relaxes when it looks
+   over-cautious. A relative check written as "every carve-out `ends_at` is later than `run_now`"
+   would read a legitimate carve-out row as a FAILURE and stop a correct run. My reads of
+   `db/migrations/0088_tighten.sql` at this commit, four of them:
+   - The carve-out predicate ADMITS a NULL: `and (fs.ends_at > now() or fs.ends_at is null)`
+     (0088:879). The step 5 listing computes liveness the same way,
+     `(fs.ends_at > now() or fs.ends_at is null) as computed_live` (0088:853).
+   - Step 4's re-seed does not reach every such row. The trial re-seed is
+     `set ends_at = ftt.trial_ends_at` (0088:627) joined `on ftt.tier_key = ft.tier_key` (0088:629)
+     and `and ftt.user_id = fs.subscriber_user_id` (0088:631), so a `trial` row with no matching
+     `feed_tier_trials` row keeps its NULL `ends_at` through step 4.
+   - Step 4's gate does not STOP for it. Only the active count raises:
+     `where status = 'active' and ends_at is null` (0088:642) feeds
+     `raise exception 'step 4 gate: % active feed_subscriptions rows with ends_at NULL (expected 0)'` (0088:644).
+     The trial count is a NOTICE and nothing else:
+     `raise notice 'step 4 gate ok: active rows with ends_at NULL=0; trial rows with ends_at NULL=%'` (0088:649).
+     So a `trial` row with NULL `ends_at` is COUNTED, not gated, and passes step 4.
+   - 4b does not take it either. Its predicate is `fs.ends_at < now()` (0088:745), which is NULL for
+     that row, so it is not a 4b candidate. With `fs.server_registration_id is null` (0088:746, and
+     0088:877 for the carve-out) it lands instead on a
+     `step 5 carve-out: id=% subscriber=% tier=% status=% ends_at=%` line (0088:906) carrying its
+     NULL. How plpgsql renders that NULL in the notice text is NOT VERIFIED by me -- there is no
+     psql on this box -- so the check is on the row, not on a rendering.
+   The frozen file already scopes the gate the same way in its own words: the carve-out comment
+   reads `step 4's gate has already forced active rows with ends_at NULL to 0` (0088:870). The file
+   and the check agree; it was the check as stated on the bus that over-reached. No SQL changes
+   here -- the freeze at `adef2f0` holds and this is the check being written to match a predicate
+   that was already frozen and already reviewed.
+
    Across the two runs, one containment: every `step 4b candidate:` id in the apply is either a 4b
    candidate in the dry-run, or a dry-run `step 5 carve-out:` row whose `ends_at` falls between the
    two runs' `now()`. Both instants are in the pastes since R14, so that limb is arithmetic on two
@@ -982,8 +1015,11 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    the stamp a dry-run paste is anonymous (marcus m50517, reported to me by fable m50538_mu12lmrx;
    I have not read m50517 myself);
    (ii) it makes property 2 absolute: with the instant printed, "every 4b `ends_at` is earlier than
-   it and every non-NULL carve-out `ends_at` is later" is checkable against a value in the paste,
-   not only as an ordering between two sets (property 2 as amended above, and property 5).
+   it, and every carve-out `ends_at` is later than it, OR NULL" is checkable against a value in the
+   paste, not only as an ordering between two sets (property 2 as amended above, and property 5).
+   AMENDED at R19: the OR NULL limb is not a softening of the check, it is the carve-out
+   predicate's own second limb (0088:879), and a check that drops it stops a correct run -- the
+   mechanism is the ungated trial NULL, set out above under property 2.
    The file comments that still carry the m50485 reasoning and cite it -- 0088:172 (inside the
    step-0 stamp comment :170-176), 0088:459 (2b(b)), 0088:1282 (the summary column),
    0089:84 and 0089:346; my grep over the four SQL files at this commit, 5 hits, no other file --
@@ -1334,7 +1370,7 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person), R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last) and R17 (TEXT only: fable's R14 verdict -- T1-T4, the withdrawn m50485 provenance, property 5, rollback stamps ruled NO, the wrap-quote sweep) and R18 (TEXT only: marcus m50542_mu12mjm5 -- the sweep widened to every quoted span, 152 zero-hits enumerated, one name corrected). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person), R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last) and R17 (TEXT only: fable's R14 verdict -- T1-T4, the withdrawn m50485 provenance, property 5, rollback stamps ruled NO, the wrap-quote sweep) and R18 (TEXT only: marcus m50542_mu12mjm5 -- the sweep widened to every quoted span, 152 zero-hits enumerated, one name corrected) and R19 (TEXT only: marcus m50547_mu12nfmr item 5 -- the carve-out check reads "later than, OR NULL", and the ungated trial NULL is why). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
 
 **R9 (LIVE, supersedes R4 / R5 / R6 / R8 on everything about the six) -- the lapse becomes a
 predicate step with a refusal gate; the carve-out is computed, never written down.** Marcus
@@ -1502,6 +1538,34 @@ block (:44-70), section 1 table row 2 (:92), section 2 (:190), section 3 (:236, 
 section 5 (:622, :628), section 6 (:647-654), section 7 (:702-727), section 8 (:755, :766),
 section 9 step 4 (:910, :919-923), section 11 (:1098), and section 12 (Z1 :1219, Z5 head, Z6 two
 points, R8, R6 addendum, R4 scope line, the R1/R3 history text, and this entry).
+
+**R19 -- TEXT, no behaviour, this document only. The carve-out check reads "later than, OR NULL",
+and the reason it must is the ungated trial NULL.**
+Source: marcus m50547_mu12nfmr (2026-09-14 09:59:58Z) item 5, ruling on a hole I reported in the
+relative check as marcus had stated it on the bus. Marcus's words: "Both go in the spec: the check
+reads 'later than, OR NULL', and the reason is the ungated trial NULL." The same message closes the
+R14 revert question with NEITHER A NOR B, NO REVERT, on m50516 / m50525 / m50534 -- none of which I
+had read when I asked; R14 stands, the freeze at `adef2f0` stands, R16 stands, and item 3 is closed
+and drops nothing. Nothing in the four SQL files moves at this commit.
+What changed here, two places, both in section 9 step 3:
+(1) A new paragraph under the transcribed properties giving the mechanism -- the carve-out predicate
+admits a NULL (0088:879), step 4's trial re-seed can leave one (0088:626-633), step 4's gate raises
+only on `status = 'active'` and merely NOTICES the trial count (0088:640-649), and 4b's
+`fs.ends_at < now()` (0088:745) is NULL for such a row, so it reaches a `step 5 carve-out:` line
+(0088:906) carrying its NULL. All four are my own reads of the frozen file at this commit.
+(2) The restatement of the check in the two-jobs paragraph, limb (ii), now carries the OR NULL limb
+instead of the "non-NULL" filter it had, with a line saying the limb is the predicate's own second
+limb and not a softening.
+NOT changed, and this is the point of the entry: fable's property 2 as quoted is already correct --
+"every non-NULL `ends_at`" (m50538_mu12lmrx T4). The scope was hers; only the mechanism is new, and
+marcus's reason for wanting it in the file is that a scope without its mechanism is a rule people
+relax when it looks over-cautious. Her quoted block is untouched.
+One correction to marcus's wording, which does not change the ruling: the step 4 gate does not
+simply "bind only `status = 'active'`" -- the file counts the trial NULLs too, at 0088:646-648, and
+prints the count. What it does not do is RAISE on them: the exception is the active branch alone
+(0088:643-645). Counted, not gated, which is the same outcome for the check.
+NOT VERIFIED: no psql on this box, so the plpgsql is still unexecuted and I do not state how RAISE
+renders a NULL `ends_at` in the notice text. The check is written against the row, not a rendering.
 
 **R17 -- TEXT, no behaviour, this document only. fable's R14 verdict: T1-T4, the still-owed m50501
 items re-checked at HEAD, and the wrap-quote sweep.**
