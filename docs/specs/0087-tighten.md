@@ -217,10 +217,15 @@ The provenance labels in this list ("fable S2", "fable N3", "fable S3") are for 
 SQL header carries the texts without who-ruled (0084 rule, fable m49479 note). The step-2b comments
 that cite coxwell's message id stay: that is the ruled provenance form for a literal.
 
-**0. Ledger row preflight.** `schema_migrations` has `'0086'` and does not have `'0088'`; else
-abort. `'0087'` is neither required nor forbidden: Leo's feed_tiers connection-fields migration is
-PARKED (marcus m49474_mtzsh4hu: number reserved, not merged, not applied), touches only
-`feed_tiers`, and is independent of this file; the step-0 comment says so (fable T5).
+**0. The run's `now()`, then the ledger row preflight.** AMENDED by R14: the first notice of the
+run, before any check, is `raise notice 'run now()=%', now();` (0088:177). `now()`, not
+`clock_timestamp()` and not a literal, because it is the function every predicate in the file
+calls, so the stamp cannot disagree with what the predicates saw. It is printed before the ledger
+checks so that an aborting run still stamps itself. Then: `schema_migrations` has `'0086'` and does
+not have `'0088'`; else abort. `'0087'` is neither required nor forbidden: Leo's feed_tiers
+connection-fields migration is PARKED (marcus m49474_mtzsh4hu: number reserved, not merged, not
+applied), touches only `feed_tiers`, and is independent of this file; the step-0 comment says so
+(fable T5).
 
 **1. Section 1 re-run, then the owner gate (header 93-95; fable S1(a)).** `update
 server_registrations sr set user_id = l.user_id from licenses l where l.id = sr.license_id and
@@ -490,7 +495,13 @@ reader this spec missed; after step 8 the 0078 FK is gone and 0086 created none)
 have passed. Then `drop table feed_tier_requests;` (its two 0034 indexes go with it). Nothing else
 references it: `git grep` in `src` = 13 comment lines (line one, companion grep).
 
-**10. Summary SELECT and the ledger row.** AMENDED by R9: `fs_no_server_live` is no longer 0 -- it
+**10. Summary SELECT and the ledger row.** AMENDED by R14: the first column is `now() as run_now`
+(0088:1284), the same instant step 0 printed. It is in both places because the two carry different
+jobs: step 0 stamps the run before anything can abort it, and the summary column keeps the instant
+in the same row as the counts it dates, which a split paste cannot separate. It is also the only
+thing in either paste that says WHICH run it is -- the dry-run and the apply execute byte-identical
+SQL and differ only by their clock and the data (marcus m50485_mu11vkq7, 2026-09-14).
+AMENDED by R9: `fs_no_server_live` is no longer 0 -- it
 equals `fs_carve_out` by construction -- and `fs_exempt_live` / `fs_no_server_lapsed_now` are
 replaced by `fs_no_server_listed`, `fs_carve_out`, `fs_carve_out_clients`, `fs_predicate_lapsed`
 and `fs_predicate_lapsed_clients` (expected 27 / 6 / 2 / 18 / 6 on marcus's 08:41Z read as narrowed
@@ -884,17 +895,39 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    rasoolx55's across 09-25, and the step 4b / step 5 counts move with them (fable Z5,
    m50440_mu111ike, on the ends_at dates in marcus's 08:41Z read m50350_mu0ztzip).
 
-   Where each run's `now()` is visible in the paste: NOWHERE, in either run (my read of
-   `db/migrations/0088_tighten.sql` at 3102373). No notice prints it -- the 4b candidate, 4b REFUSE,
-   step 5 carve-out and step 5 listing notices print each row's `ends_at`, never the transaction's
-   clock -- and the summary row (:1246-1268) has no `now()` column. The ledger row does hold it,
-   `schema_migrations.applied_at` defaulting to `now()` (0003:19), but the INSERT (:1270-1272) has no
-   `returning`, so it is not pasted either, and after a dry-run it is rolled back and gone. So: the
-   apply's `now()` is recoverable after commit with `select applied_at from schema_migrations where
-   version = '0088'`; the dry-run's `now()` is not recoverable at all. What the operator does have is
-   the step-2 read's `read_at` on each side of each run, which brackets that run's `now()` but is a
-   different statement and a different clock. No SQL is changed for this: the dry-run target is
-   fixed, and the decision is fable's and marcus's.
+   Where each run's `now()` is visible in the paste. AMENDED by R14 (marcus m50485_mu11vkq7,
+   2026-09-14): in two places, and they are different jobs.
+   - `run now()=<instant>` (0088:177), the first notice of the run, before the step-0 ledger checks,
+     so a run that aborts still stamps itself.
+   - `run_now`, the first column of the step 10 summary row (0088:1284), so that the instant and the
+     counts it dates arrive in the same message when the paste is split.
+   Both are `now()`, the function the predicates call, not `clock_timestamp()` and not a literal: a
+   stamp the predicates could disagree with would be worth nothing. One transaction, one snapshot
+   clock, so the two print the same instant, and the second also names WHICH run a paste is -- the
+   dry-run and the apply execute byte-identical SQL and differ only by their clock and the data.
+
+   Until R14 this value was in the paste NOWHERE, in either run (my read of
+   `db/migrations/0088_tighten.sql` at 3102373), which is why it is recorded here: the properties in
+   the list above and marcus's two dry-run properties are all stated relative to the run's `now()`,
+   and an artefact that does not state that instant leaves the operator substituting a wall clock of
+   their own -- a property that cannot be evaluated from the artefact is not a check (marcus, same
+   message). No notice printed it -- the 4b candidate, 4b REFUSE, step 5 carve-out and step 5
+   listing notices print each row's `ends_at`, never the transaction's clock -- and the summary row
+   had no `now()` column. The ledger row does hold it, `schema_migrations.applied_at` defaulting to
+   `now()` (0003:19), but the INSERT (0088:1308-1310) has no `returning`, so it is not pasted either,
+   and after a dry-run it is rolled back and gone: the apply's `now()` was recoverable after commit
+   with `select applied_at from schema_migrations where version = '0088'`, the dry-run's was not
+   recoverable at all. The step-2 read's `read_at` on each side of each run brackets that run's
+   `now()`, but it is a different statement on a different clock and is not a substitute for it.
+
+   Same two sites in `0089_drop_server_or_lapsed_exception.sql` (:89 and :348). Marcus named the two
+   0088 sites; the property that selects them is "a pasted run whose gates are evaluated against
+   `now()`", and 0089's step 2, step 3 and step 4 gates all have it, so the file is in the set
+   (m50424 -- a named list of sites is a floor, derive the predicate and grep). The two rollback
+   files are NOT in it: neither has a `now()`-relative gate (`grep -c 'now()'`: `0088_rollback.sql` 1,
+   a `default now()` on a temp-table DDL, `0089_rollback.sql` 0) and neither has a step 0 or a
+   summary select to hang a stamp on. Whether they should gain one anyway, on the "which run is
+   this" limb alone, is open for fable.
 4. After-read = the step-2 select run again (it carries its own `read_at`). The two reads are NOT
    compared for equality either, and for the same reason as step 3. Every difference between them
    has one of three causes, and only a difference with none of them runs the rollback (fable Z6,
@@ -926,11 +959,18 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    `step 4b candidate:` lines of THE SAME RUN's notice paste, plus any `step 2b(b)` lines (fable Z2,
    m50391_mu10l45h). The before-read is a different `now()`, so a row whose `ends_at` falls between
    the two is a real mover it does not list -- Aylrn's 3 rows cross on 09-19 and would do exactly
-   that mid-run. One gap, stated not papered over: on its success path 2b(b) prints counts only
-   (`step 2b(b) ok: staged=% lapsed_by_word=%`, 0088:476), so there ARE no per-row `step 2b(b)`
-   lines unless the block aborts. When that slot is non-empty its ids are the literals in the file's
-   own `tmp_0088_lapse_by_word` INSERT, which is a read of the file rather than of the paste. Grep A
-   below; fable and marcus rule on whether that is enough or 2b(b) gains a per-row notice.
+   that mid-run. The gap this paragraph used to state is CLOSED by R14 (marcus m50485_mu11vkq7,
+   2026-09-14, applying fable's Z2 principle -- name every row the step is about to touch, not only
+   the ones it refuses): 2b(b) now prints `step 2b(b) candidate: id=% status=%
+   server_registration_id=% ends_at=%` once per staged id BEFORE its gate (0088:472), the same four
+   columns and the same order as its refusal notice (0088:494) and the same shape as
+   `step 4b candidate:`. Before R14 the success path printed counts only
+   (`step 2b(b) ok: staged=% lapsed_by_word=%`, 0088:507), so a non-empty slot's ids were readable
+   only from the file's own `tmp_0088_lapse_by_word` literals -- a read of the file, not of the run,
+   and 2b(b) is the one block that acts on a human word rather than on a predicate, which is where
+   an unnamed row is least defensible. The loop costs nothing on today's empty slot (staged=0, no
+   lines) and is the whole record on the run where the slot is used. A staged id with no
+   `feed_subscriptions` row prints NULLs here and then aborts at the gate.
 
    AMENDED by R9: fable's S4 caveat -- a row whose `ends_at` is past but which still computes live
    (trial licence, renewed licence, ungated region, `cme`) and would therefore be a COMPUTED mover
@@ -972,19 +1012,24 @@ it). Both are my own reads at 3102373, which touches no SQL and no `src`.**
 -> 7 hits. No `insert into` and no `delete from` among them: the file only UPDATEs these four
 tables, and it never writes `licenses` or `feed_tier_trials` at all.
 
+Line numbers below are RE-TAKEN at R14, which inserted lines into this file; the hit set and the
+SET columns are unchanged from the 3102373 reading, only the numbers and the 2b(b) verdict moved.
+
 | line | table | SET columns | per-row notice naming its rows |
 | --- | --- | --- | --- |
-| 183 | server_registrations | `user_id` (from `licenses.user_id`; `updated_at` deliberately untouched) | NO -- `step 1 ok: ... null=0 owner_mismatch=0 ...` (:230) is counts. Per-row `step 1 owner mismatch:` (:224) fires only on the abort path. Expected UPDATE 0. |
-| 350 | feed_subscriptions | `access_request_id` | NO -- `step 2 gate ok: ... with request_id=% unmapped=0` (:370) is counts. Expected UPDATE 0. |
-| 469 | feed_subscriptions | `status='lapsed'`, `lapsed_at=now()`, `updated_at=now()` (2b(b), worded slot) | NO on the success path -- `step 2b(b) ok: staged=% lapsed_by_word=%` (:476) is counts; per-row `step 2b(b) not a live no-server row:` (:463) fires only on the abort path. Ids are the file's own `tmp_0088_lapse_by_word` literals. Slot EMPTY by default. |
-| 566 | feed_subscriptions | `server_registration_id`, `updated_at=now()` | NO -- `step 4 ok: ... null rows=%` (:585) is counts. Expected UPDATE 0. |
-| 588 | feed_subscriptions | `ends_at` (= `licenses.expires_at`), `updated_at=now()` | NO -- `step 4 gate ok:` (:618) is counts. Expected UPDATE 0. |
-| 595 | feed_subscriptions | `ends_at` (= `feed_tier_trials.trial_ends_at`), `updated_at=now()` | NO -- same notice. Expected UPDATE 0. |
-| 778 | feed_subscriptions | `status='lapsed'`, `lapsed_at=coalesce(lapsed_at, ends_at)`, `updated_at=now()` (4b predicate lapse) | YES -- `step 4b candidate:` (:752) prints one line per candidate BEFORE the gate, and the lapse is restricted to that gated set by id. |
+| 194 | server_registrations | `user_id` (from `licenses.user_id`; `updated_at` deliberately untouched) | NO -- `step 1 ok: ... null=0 owner_mismatch=0 ...` (:241) is counts. Per-row `step 1 owner mismatch:` (:235) fires only on the abort path. Expected UPDATE 0. |
+| 361 | feed_subscriptions | `access_request_id` | NO -- `step 2 gate ok: ... with request_id=% unmapped=0` (:381) is counts. Expected UPDATE 0. |
+| 500 | feed_subscriptions | `status='lapsed'`, `lapsed_at=now()`, `updated_at=now()` (2b(b), worded slot) | YES since R14 -- `step 2b(b) candidate:` (:472) prints one line per staged id BEFORE the gate. `step 2b(b) ok: staged=% lapsed_by_word=%` (:507) is still counts and `step 2b(b) not a live no-server row:` (:494) still fires only on the abort path. Slot EMPTY by default (staged=0, no candidate lines). |
+| 597 | feed_subscriptions | `server_registration_id`, `updated_at=now()` | NO -- `step 4 ok: ... null rows=%` (:616) is counts. Expected UPDATE 0. |
+| 619 | feed_subscriptions | `ends_at` (= `licenses.expires_at`), `updated_at=now()` | NO -- `step 4 gate ok:` (:649) is counts. Expected UPDATE 0. |
+| 626 | feed_subscriptions | `ends_at` (= `feed_tier_trials.trial_ends_at`), `updated_at=now()` | NO -- same notice. Expected UPDATE 0. |
+| 809 | feed_subscriptions | `status='lapsed'`, `lapsed_at=coalesce(lapsed_at, ends_at)`, `updated_at=now()` (4b predicate lapse) | YES -- `step 4b candidate:` (:783) prints one line per candidate BEFORE the gate, and the lapse is restricted to that gated set by id. |
 
-So exactly one of the seven writes, the 4b lapse, names its rows in the paste. Five of the other
-six are expected to move 0 rows, and if any of them moves a row it is a finding in its own right;
-2b(b) is the one that is designed to move rows without naming them. Stated for a ruling, per Z6.
+AMENDED by R14: two of the seven writes now name their rows in the paste -- the 4b lapse and the
+2b(b) worded lapse -- and they are exactly the two that are designed to move rows. The other five
+are expected to move 0 rows, and if any of them moves a row it is a finding in its own right. Before
+R14 only the 4b lapse named its rows; 2b(b) moved rows without naming them, which was stated here
+for a ruling and ruled by marcus m50485_mu11vkq7.
 
 **Grep B -- what the APP writes.** `git grep -nEi '<the same regex>' -- src` -> 29 hits in 24
 functions across 8 files (feed_subscriptions 6/5, licenses 13/11, feed_tier_trials 5/5,
@@ -1154,7 +1199,7 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) and R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) and R14 (the run's now() printed twice; 2b(b) names its staged rows). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
 
 **R9 (LIVE, supersedes R4 / R5 / R6 / R8 on everything about the six) -- the lapse becomes a
 predicate step with a refusal gate; the carve-out is computed, never written down.** Marcus
@@ -1322,6 +1367,55 @@ block (:44-70), section 1 table row 2 (:92), section 2 (:190), section 3 (:236, 
 section 5 (:622, :628), section 6 (:647-654), section 7 (:702-727), section 8 (:755, :766),
 section 9 step 4 (:910, :919-923), section 11 (:1098), and section 12 (Z1 :1219, Z5 head, Z6 two
 points, R8, R6 addendum, R4 scope line, the R1/R3 history text, and this entry).
+
+**R14 -- LIVE. The run's `now()` is printed, twice and for two different reasons; step 2b(b) names
+every row it is about to touch. marcus m50485_mu11vkq7 (2026-09-14 09:38Z), his rulings (1) and (2)
+on the three items R12 left open. Behaviour is his ask, the TEXT is fable's: she rules on all of it
+and her strike stands over his without returning to him (his routing, same message).**
+Ruling (1). Both dry-run properties the paste is checked against are stated relative to the run's
+`now()` -- every 4b candidate's `ends_at` before it, every carve-out row's after it -- and no notice
+and no summary column in the file carried that instant, so the operator would have had to substitute
+a wall clock of their own. His words for why that is not a small thing: a property you cannot
+evaluate from the artefact is not a check. He verified the absence himself against the copy of the
+file he holds before ruling. BUILT in the two places he named, which are two different jobs: the
+first notice of the run, before the step-0 ledger checks so that an aborting run still stamps itself
+(0088:177), and the first column of the step 10 summary row, `now() as run_now` (0088:1284), because
+a paste gets split and the instant must not travel in a different message from the counts it dates.
+The second is also what names WHICH run a paste is: the dry-run and the apply execute byte-identical
+SQL and differ only by their clock and the data. `now()` in both, not `clock_timestamp()` and not a
+literal, because it is the function the predicates call -- a stamp the predicates could disagree
+with would be worth nothing.
+Extended, and flagged as an extension: `0089_drop_server_or_lapsed_exception.sql` gets the same two
+(:89, :348). Marcus named two sites in 0088; under m50424 a named list of sites is a floor and the
+predicate is what selects the set, and the predicate here is "a pasted run whose gates are evaluated
+against `now()`" -- 0089's step 2, step 3 and step 4 gates all are. The two rollback files are NOT
+in the set and did not get it: `grep -c 'now()'` returns 1 for `0088_rollback.sql` (a `default now()`
+on temp-table DDL) and 0 for `0089_rollback.sql`, neither has a `now()`-relative gate, and neither
+has a step 0 or a summary select to hang a stamp on. Whether they should gain one on the "which run
+is this" limb alone is left open for fable rather than invented here.
+Ruling (2). 2b(b) prints one `step 2b(b) candidate:` line per staged id BEFORE its gate (0088:472),
+the same four columns and order as its refusal notice (0088:494) and the same shape as
+`step 4b candidate:`. Marcus's reason, and he attributes the principle to fable's Z2 rather than to
+himself: name every row the step is about to touch, not only the ones it refuses; 2b(b) is the one
+block that acts on a human word rather than on a predicate, so it is where an unnamed row is least
+defensible. Costs nothing on today's empty slot (staged=0, no lines) and is the entire record on the
+run where the slot is used.
+Item (3) is NOT ruled: he could not find the select and would not rule on a guess. It is not in the
+SQL at all, which is why his `lapsed_at` grep over the file returned only 4b and 2b(b) lines -- the
+step-2 select is this document's, section 9 step 2, the fenced block at :844-862 with its column
+list at :845-849, and the caveat that names the gap is at :1089-1091 (also :1341). Cited to him in
+the reply carrying this commit.
+Applied at this commit: `db/migrations/0088_tighten.sql` 41 insertions / 3 deletions (header step 0
+and step 10 lines, the step-0 stamp, the 2b(b) candidate loop and its block comment, the summary
+column and its comment); `db/migrations/0089_drop_server_or_lapsed_exception.sql` 14 / 2 (header
+step 0 and step 6 lines, the step-0 stamp, the summary column); this document 118 / 33 (section 3
+step 0 and step 10, section 9 step 3 and step 4, the grep A table and the paragraph under it, the
+section 12 heading, and this entry). The grep A table's line numbers and the `0088:` anchors in
+sections 3, 9 and 12 are RE-TAKEN at this commit, because the SQL edits moved them; the section 12
+entries for R4 / R5 / R6 / R8 keep their own anchors, which describe the commits they were written
+about and are not renumbered.
+NOT VERIFIED, unchanged: no psql or postgres on this box, so none of this plpgsql has been executed
+anywhere; `tsc` and lint say nothing about it.
 
 Noted, not struck, and NOT mine: R9 no longer refuses carve-out GROWTH (marcus struck the step-5
 SUBSET gate in m50350). He has taken that guard into his apply procedure explicitly (m50396):

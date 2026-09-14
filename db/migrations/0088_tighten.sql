@@ -21,7 +21,8 @@
 -- WHAT THIS DOES, IN ORDER (0086 header 93-97: re-run the section 1 / 3 / 4 backfills and gates,
 -- re-run preflight D over the completed mapping, then SET NOT NULL and the CHECK; then the three
 -- statements the old table's retirement needs. The 0081 index drop is 0089's, see step 6):
---   0. Ledger preflight: schema_migrations has '0086' and does not have '0088'.
+--   0. The run's now(), printed as the first notice of the run; then ledger preflight:
+--      schema_migrations has '0086' and does not have '0088'.
 --   1. 0086 section 1 re-run: server_registrations.user_id from licenses.user_id where NULL;
 --      gate null = 0; owner gate `sr.user_id is distinct from l.user_id` = 0 (rows named), plus
 --      the count of licences with user_id NULL that have a server row (must be 0, named as the
@@ -127,7 +128,8 @@
 --      (`count(*) from pg_constraint where confrelid = 'feed_tier_requests'::regclass` = 0) and
 --      `drop table feed_tier_requests` (its two 0034 indexes go with it). `git grep -n
 --      feed_tier_requests -- src` at 9e84f16 = 13 comment lines, zero code.
---  10. Summary row, then the schema_migrations row ('0088').
+--  10. Summary row, carrying the run's now() again as its own column, then the
+--      schema_migrations row ('0088').
 --
 -- AFTER THIS FILE: the vendor record set is complete after this file; a provider surface may
 -- present it as the truth of what the provider was told.
@@ -164,6 +166,15 @@ create temp table tmp_0088_counts (k text primary key, v integer not null) on co
 -- connection-fields migration holds that number, is parked, and is independent of this file.
 do $$
 begin
+  -- The run's own clock, before anything else. Every gate below that says "expired" or "still
+  -- live", and both dry-run properties the paste is checked against, are stated relative to THIS
+  -- instant; until now no notice and no summary column carried it, so the operator had to
+  -- substitute a wall clock of their own to evaluate them (marcus m50485_mu11vkq7, 2026-09-14).
+  -- now(), not clock_timestamp() and not a literal: it is the same function every predicate in
+  -- this file calls, so the stamp cannot disagree with what the predicates saw. Printed again as
+  -- a column of the step 10 summary, because a paste gets split and the instant must not travel
+  -- in a different message from the counts it dates.
+  raise notice 'run now()=%', now();
   if not exists (select 1 from schema_migrations where version = '0086') then
     raise exception 'step 0: schema_migrations has no 0086 row; 0086_marketplace_recut.sql must be applied first';
   end if;
@@ -433,7 +444,8 @@ create temp table tmp_0088_carry_by_word (
 -- Fixed: apply (b). Every staged id must exist and be a live no-server row at this point of the
 -- run (fable v1.75 item (ii), with its "one of the six" conjunct struck by marcus m50350_mu0ztzip
 -- along with the list itself), else abort naming it: a worded lapse of any other row is a
--- mistake, not a disposition. Expected on an empty slot: staged=0 lapsed=0.
+-- mistake, not a disposition. Every staged id is named by a notice first, before the gate.
+-- Expected on an empty slot: no candidate lines, staged=0 lapsed=0.
 do $$
 declare
   r record;
@@ -442,6 +454,25 @@ declare
   lapsed integer;
 begin
   select count(*) into staged from tmp_0088_lapse_by_word;
+
+  -- Name every row this block is about to touch, before the gate, not only the ones the gate
+  -- refuses (fable's Z2 principle, m50391_mu10l45h, applied here on marcus m50485_mu11vkq7,
+  -- 2026-09-14). 2b(b) is the one block that acts on a human word rather than on a predicate, so
+  -- its ids have to be readable from the paste; without this loop they were readable only from
+  -- this file's own tmp_0088_lapse_by_word literals, which is a read of the file, not of the run.
+  -- Same four columns and same order as the refusal notice below, same shape as
+  -- 'step 4b candidate:'. A staged id with no row prints NULLs here and aborts at the gate.
+  -- Empty slot (today): no lines.
+  for r in
+    select w.id, fs.status, fs.server_registration_id, fs.ends_at
+    from tmp_0088_lapse_by_word w
+    left join feed_subscriptions fs on fs.id = w.id
+    order by w.id
+  loop
+    raise notice 'step 2b(b) candidate: id=% status=% server_registration_id=% ends_at=%',
+      r.id, r.status, r.server_registration_id, r.ends_at;
+  end loop;
+
   select count(*) into bad
   from tmp_0088_lapse_by_word w
   left join feed_subscriptions fs on fs.id = w.id
@@ -1243,7 +1274,14 @@ drop table feed_tier_requests;
 -- prod read of 2026-09-14 08:41Z (m50350_mu0ztzip) narrowed by his Z1 ruling (m50396_mu10majx),
 -- are NOT gates: fs_predicate_lapsed=18, fs_predicate_lapsed_clients=6, fs_carve_out=6,
 -- fs_carve_out_clients=2, fs_no_server_listed=27.
+-- run_now is the same now() the step 0 notice printed and the same one every predicate in this
+-- file evaluated (one transaction, one snapshot clock). It is here as well as in step 0 because
+-- the notices and this row are pasted in pieces: in the summary the instant and the counts it
+-- dates cannot be separated, and it is also what names WHICH run a paste is -- the dry-run and
+-- the apply run byte-identical SQL and differ only by their clock and the data (marcus
+-- m50485_mu11vkq7, 2026-09-14).
 select
+  now() as run_now,
   (select count(*) from server_registrations where user_id is null) as sr_user_id_null,
   (select count(*) from server_registrations sr join licenses l on l.id = sr.license_id
      where sr.user_id is distinct from l.user_id) as sr_owner_mismatch,

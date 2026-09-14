@@ -20,7 +20,8 @@
 -- re-adds the same constraint text the catalog already has.
 --
 -- WHAT THIS DOES, IN ORDER:
---   0. Ledger preflight: schema_migrations has '0088' and does not have '0089'. Then the carried
+--   0. The run's now(), printed as the first notice of the run; then ledger preflight:
+--      schema_migrations has '0088' and does not have '0089'. Then the carried
 --      set: every uuid literal in pg_get_constraintdef of feed_subscriptions_server_or_lapsed_chk,
 --      into tmp_0089_carried. Zero literals is legitimate and noticed as such.
 --   1. RE-KEY: 0088 step 4's licence -> server backfill, same predicate, restricted to the carried
@@ -56,7 +57,8 @@
 --        drop index if exists feed_subscriptions_license_feed_tier_live_uidx;   -- 0081
 --      No replacement index: feed_subscriptions_server_feed_tier_live_uidx (0086) covers every
 --      live row once every live row has a server. The 0078 provider_tier twin is not touched.
---   6. Summary row, then the ledger row ('0089', '0089_drop_server_or_lapsed_exception.sql').
+--   6. Summary row, carrying the run's now() again as its own column, then the ledger row
+--      ('0089', '0089_drop_server_or_lapsed_exception.sql').
 --
 -- After this file: the window check at src/lib/feed-subscriptions.ts:403-410 (REMOVAL POINT
 -- comment :392, re-pointed to this file by the 0088 cleanup commit) is deleted, and `licenseId`
@@ -78,6 +80,13 @@ create temp table tmp_0089_counts (k text primary key, v integer not null) on co
 
 do $$
 begin
+  -- The run's own clock, before anything else, and repeated as a column of the step 6 summary.
+  -- Same reasoning as 0088_tighten.sql step 0 (marcus m50485_mu11vkq7, 2026-09-14): this file's
+  -- step 2 liveness gate, step 3 refusal gate and step 4 no-server gate are all stated relative
+  -- to THIS instant, and its paste is compared with 0088's. His two sites were named for 0088;
+  -- the property that selects them is "a pasted run whose gates are evaluated against now()",
+  -- and this file has it too. now(), not clock_timestamp() and not a literal.
+  raise notice 'run now()=%', now();
   if not exists (select 1 from schema_migrations where version = '0088') then
     raise exception 'step 0: schema_migrations has no 0088 row; 0088_tighten.sql must be applied first';
   end if;
@@ -333,7 +342,10 @@ drop index if exists feed_subscriptions_license_feed_tier_live_uidx;
 
 -- Expected: one row. carried_rekeyed + carried_lapsed_now + carried_already_settled = carried_ids
 -- (whatever 0088 left; 0 is legitimate); fs_no_server_live=0; index_0081_present=false.
+-- run_now: the same now() the step 0 notice printed, carried here so the instant and the counts
+-- it dates cannot be split across two messages of a paste (marcus m50485_mu11vkq7, 2026-09-14).
 select
+  now() as run_now,
   (select count(*) from tmp_0089_carried) as carried_ids,
   (select v from tmp_0089_counts where k = 'carried_rekeyed') as carried_rekeyed,
   (select v from tmp_0089_counts where k = 'carried_lapsed_now') as carried_lapsed_now,
