@@ -28,6 +28,7 @@ import { DownloadButton } from "@/components/download-button";
 import { LicenseStatusCard } from "@/components/license-status-card";
 import { RecentAlertsPanel } from "@/components/recent-alerts-panel";
 import { PortalShell } from "@/components/portal/portal-shell";
+import { MarketplacePromoCard } from "@/components/portal/marketplace-promo-card";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { humanizeTimeUntil } from "@/lib/format-time";
 import { getRecentAlertsForUser, countDistinctAlertLicenses } from "@/lib/trading-alerts";
@@ -244,6 +245,27 @@ export default async function DashboardPage() {
             <Image src="/hero-terminal-2x.png" alt="Horizon HFT terminal" width={340} height={210} priority />
           </div>
         </div>
+      )}
+
+      {/* The paid account's route to the Marketplace. coxwell via marcus, m50840 (2026-09-14):
+          "paid users should have also marketplace image in front upper area." The hero directly
+          above carries that route for a free account and is gated !paid && !isAdmin, so before
+          this block a paying account had no marketplace entry point on this page at all.
+
+          GATED ON `paid`, NOT ON `unlocked`. The rest of this page uses `unlocked`
+          (= paid || isAdmin, :160) to bypass the licence gate for admins, and that is the wrong
+          predicate here twice over: coxwell's words are "paid users", and an admin never reaches
+          this page anyway -- :42 redirects an admin account to /admin/dashboard before any of
+          this renders, exactly as /marketplace does at its own :44. Using `unlocked` would add a
+          branch no account can take and imply admins are a case this card handles.
+
+          THE IMAGE IS A PROP AND THIS VALUE IS A PLACEHOLDER, not a choice. marcus, m50840:
+          "the IMAGE is not chosen ... coxwell has not answered simple-graphic vs real-asset ...
+          ship it with whatever placeholder the codebase already uses -- do not invent art".
+          /hero-terminal-2x.png is the only dashboard art in public/, and it is already on this
+          page one block up. Swapping it is this call site, not the component. */}
+      {paid && (
+        <MarketplacePromoCard imageSrc="/hero-terminal-2x.png" imageAlt="Horizon HFT terminal" />
       )}
 
       <div className="grid">
