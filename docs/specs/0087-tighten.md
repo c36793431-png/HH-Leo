@@ -500,7 +500,8 @@ references it: `git grep` in `src` = 13 comment lines (line one, companion grep)
 jobs: step 0 stamps the run before anything can abort it, and the summary column keeps the instant
 in the same row as the counts it dates, which a split paste cannot separate. It is also the only
 thing in either paste that says WHICH run it is -- the dry-run and the apply execute byte-identical
-SQL and differ only by their clock and the data (marcus m50485_mu11vkq7, 2026-09-14).
+SQL and differ only by their clock and the data (marcus m50485_mu11vkq7, 2026-09-14 -- WITHDRAWN in
+full, R14 kept on m50516 / m50517; provenance in section 12 R14, and section 9 step 3 governs).
 AMENDED by R9: `fs_no_server_live` is no longer 0 -- it
 equals `fs_carve_out` by construction -- and `fs_exempt_live` / `fs_no_server_lapsed_now` are
 replaced by `fs_no_server_listed`, `fs_carve_out`, `fs_carve_out_clients`, `fs_predicate_lapsed`
@@ -512,8 +513,11 @@ by the Z1 ruling, section 12 R10, as reads, not gates). Pre-R9 text follows. One
 (false, from `to_regclass`), `allowlist_carried` (section 5 count), `allowlist_carried_by_word`
 (step 2b(c) INSERT count, 0 when the slot is empty; fable T6), `allowlist_open_total`,
 `access_requests_rows`, `legacy_no_envelope_rejected` (step 3's rejected count, dropped). Then
-`insert into schema_migrations (version, name) values ('0088', '0088_tighten.sql') on conflict do
-nothing;` `commit;`
+`insert into schema_migrations (version, name) values` `('0088', '0088_tighten.sql')`
+`on conflict (version) do nothing;` `commit;` -- the three INSERT lines are quoted one line each, as
+0088:1308-1310 writes them. CORRECTED at R17 by the wrap-quote sweep (fable m50538_mu12lmrx): this
+sentence read `... on conflict do nothing;` across a line break, dropping the `(version)` the file
+carries. The statement is unchanged; only this document's quote of it was wrong.
 
 ---
 
@@ -903,22 +907,39 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    > 1. Every `step 4b candidate:` line has `server_registration_id` NULL and `computed=lapsed` (the
    >    refusal gate enforces the second).
    > 2. Every non-NULL `ends_at` on a `step 5 carve-out:` line is later than every `ends_at` on a
-   >    `step 4b candidate:` line. The file's predicates put the run's `now()` between the two sets;
-   >    the paste does not print it.
+   >    `step 4b candidate:` line. [Last sentence AMENDED at R17 by its own author, fable
+   >    m50538_mu12lmrx T4, now that the file stamps itself; the m50501 text it replaces read: "The
+   >    file's predicates put the run's now() between the two sets; the paste does not print it."]
+   >    The paste prints the run's `now()` twice (`run now()=` at step 0, `run_now` in the summary):
+   >    every `step 4b candidate:` ends_at is earlier than it, and every non-NULL
+   >    `step 5 carve-out:` ends_at is later. The predicates are strict: 4b `fs.ends_at < now()`
+   >    (0088:745), carve-out `fs.ends_at > now() or fs.ends_at is null` (0088:879).
    > 3. `step 5 listed` = 4b candidates + carve-out + the NULL-server rows already stored lapsed
    >    (18 + 6 + 3 = 27 on marcus's 08:41Z read; the uncovered gate enforces it).
    > 4. jorgbuteijn and abdulkareem appear on no `step 4b` or `step 5` line. If either does, stop.
    > (Revised from m50436: 1 and 2 no longer need the run's `now()`, and 4 is scoped to the lines it
    > was about, because step 9 carry lines name requesters.)
 
-   One correction to property 2's last clause, which was written without R14 in hand (R14 d7725f6
-   landed after m50501 was sent): the paste DOES print the run's `now()` since R14, twice, per the
-   two sites below. The property holds as stated either way -- it is checkable from the `ends_at`
-   values alone -- and the printed instant is now a second, independent check on it.
+   ADDED at R17, fable m50538_mu12lmrx T4, fable's words, a fifth property of the same list:
+   > 5. The step-0 `run now()=` value equals the summary `run_now` exactly. If they differ, the
+   >    paste was spliced from two runs: stop. Apply only, after commit: `applied_at` of the '0088'
+   >    row equals the apply's `run_now`. The INSERT gives only (version, name), so `applied_at`
+   >    takes its `now()` default (0003:19) inside the same transaction. If they differ, the paste
+   >    isn't the committed run.
+
+   My reads behind property 5 at this commit, since it is checkable from the files: the INSERT is
+   `insert into schema_migrations (version, name) values` / `('0088', '0088_tighten.sql')` /
+   `on conflict (version) do nothing;` (0088:1308-1310) and names no `applied_at`; the column is
+   `applied_at timestamptz not null default now()` (`db/migrations/0003_schema_migrations_ledger.sql`
+   :19); `begin;` is 0088:156 and `commit;` 0088:1312 (re-taken at this commit; fable's m50538
+   figures :154 / :1274 are the pre-R14 anchors), so the default, the step-0 stamp and the
+   summary column are three reads of one transaction's `now()`.
 
    Across the two runs, one containment: every `step 4b candidate:` id in the apply is either a 4b
    candidate in the dry-run, or a dry-run `step 5 carve-out:` row whose `ends_at` falls between the
-   two runs' `now()` (both instants are in the pastes since R14). Second reading of that same limb,
+   two runs' `now()`. Both instants are in the pastes since R14, so that limb is arithmetic on two
+   printed values (fable m50538_mu12lmrx T4): a crossed row also satisfies dry-run `run_now` < its
+   `ends_at` < apply `run_now`. Second reading of that same limb,
    which needs neither stamp (fable m50501_mu124d6c ruling A): the row carries the same id AND the
    same printed `ends_at` in both runs' notices. The dry-run carve-out predicate
    (`fs.ends_at > now() or fs.ends_at is null`, 0088:879) puts that `ends_at` after the dry-run's
@@ -937,8 +958,10 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    rasoolx55's across 09-25, and the step 4b / step 5 counts move with them (fable Z5,
    m50440_mu111ike, on the ends_at dates in marcus's 08:41Z read m50350_mu0ztzip).
 
-   Where each run's `now()` is visible in the paste. AMENDED by R14 (marcus m50485_mu11vkq7,
-   2026-09-14): in two places, and they are different jobs.
+   Where each run's `now()` is visible in the paste. AMENDED by R14 (built on marcus
+   m50485_mu11vkq7, 2026-09-14, which marcus then WITHDREW IN FULL; R14 stands on marcus m50516 /
+   m50517 instead -- the provenance is in section 12 R14 and it governs this step): in two places,
+   and they are different jobs.
    - `run now()=<instant>` (0088:177), the first notice of the run, before the step-0 ledger checks,
      so a run that aborts still stamps itself.
    - `run_now`, the first column of the step 10 summary row (0088:1284), so that the instant and the
@@ -948,12 +971,27 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    clock, so the two print the same instant, and the second also names WHICH run a paste is -- the
    dry-run and the apply execute byte-identical SQL and differ only by their clock and the data.
 
-   Until R14 this value was in the paste NOWHERE, in either run (my read of
-   `db/migrations/0088_tighten.sql` at 3102373), which is why it is recorded here: the properties in
-   the list above and marcus's two dry-run properties are all stated relative to the run's `now()`,
-   and an artefact that does not state that instant leaves the operator substituting a wall clock of
-   their own -- a property that cannot be evaluated from the artefact is not a check (marcus, same
-   message). No notice printed it -- the 4b candidate, 4b REFUSE, step 5 carve-out and step 5
+   Why the stamp is here, REPLACED at R17 (fable m50538_mu12lmrx T3). The reason this paragraph
+   used to give was m50485's premise -- that the properties are all stated relative to the run's
+   `now()`, so an artefact that does not print that instant leaves the operator substituting a wall
+   clock of their own. Marcus dropped that premise when m50485 was withdrawn, and it is not true of
+   the governing list anyway: the four properties are the ones transcribed above (fable
+   m50501_mu124d6c item 8), and properties 1-2 are an ordering INSIDE one paste, so they never
+   needed the value. The stamp does two jobs, and only these two:
+   (i) it names the run -- the dry-run rolls back and leaves no `schema_migrations` row, so without
+   the stamp a dry-run paste is anonymous (marcus m50517, reported to me by fable m50538_mu12lmrx;
+   I have not read m50517 myself);
+   (ii) it makes property 2 absolute: with the instant printed, "every 4b `ends_at` is earlier than
+   it and every non-NULL carve-out `ends_at` is later" is checkable against a value in the paste,
+   not only as an ordering between two sets (property 2 as amended above, and property 5).
+   The file comments that still carry the m50485 reasoning and cite it -- 0088:172 (inside the
+   step-0 stamp comment :170-176), 0088:459 (2b(b)), 0088:1282 (the summary column),
+   0089:84 and 0089:346; my grep over the four SQL files at this commit, 5 hits, no other file --
+   are FROZEN and not behavioural; they are left as written, and THIS document governs.
+
+   Until R14 the value was in the paste NOWHERE, in either run (my read of
+   `db/migrations/0088_tighten.sql` at 3102373). No notice printed it -- the 4b candidate, 4b
+   REFUSE, step 5 carve-out and step 5
    listing notices print each row's `ends_at`, never the transaction's clock -- and the summary row
    had no `now()` column. The ledger row does hold it, `schema_migrations.applied_at` defaulting to
    `now()` (0003:19), but the INSERT (0088:1308-1310) has no `returning`, so it is not pasted either,
@@ -972,8 +1010,10 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    (m50424 -- a named list of sites is a floor, derive the predicate and grep). The two rollback
    files are NOT in it: neither has a `now()`-relative gate (`grep -c 'now()'`: `0088_rollback.sql` 1,
    a `default now()` on a temp-table DDL, `0089_rollback.sql` 0) and neither has a step 0 or a
-   summary select to hang a stamp on. Whether they should gain one anyway, on the "which run is
-   this" limb alone, is open for fable.
+   summary select to hang a stamp on. RULED NO (fable m50538_mu12lmrx): both rollback files stay as
+   they are. The stamp does two jobs, and neither rollback has a `now()`-relative gate, so only the
+   naming job would apply -- which alone does not justify unfreezing two files. The operator names a
+   rollback paste when posting it.
 4. After-read = the step-2 select run again (it carries its own `read_at`). The two reads are NOT
    compared for equality either, and for the same reason as step 3. Every difference between them
    has one of three causes, and only a difference with none of them runs the rollback (fable Z6,
@@ -1007,7 +1047,8 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    the two is a real mover it does not list -- Aylrn's 3 rows cross on 09-19 and would do exactly
    that mid-run. The gap this paragraph used to state is CLOSED by R14 (marcus m50485_mu11vkq7,
    2026-09-14, applying fable's Z2 principle -- name every row the step is about to touch, not only
-   the ones it refuses): 2b(b) now prints `step 2b(b) candidate: id=% status=%
+   the ones it refuses; m50485 was later WITHDRAWN in full and R14 kept on m50516 / m50517, section
+   12 R14): 2b(b) now prints `step 2b(b) candidate: id=% status=%
    server_registration_id=% ends_at=%` once per staged id BEFORE its gate (0088:472), the same four
    columns and the same order as its refusal notice (0088:494) and the same shape as
    `step 4b candidate:`. Before R14 the success path printed counts only
@@ -1060,22 +1101,29 @@ tables, and it never writes `licenses` or `feed_tier_trials` at all.
 
 Line numbers below are RE-TAKEN at R14, which inserted lines into this file; the hit set and the
 SET columns are unchanged from the 3102373 reading, only the numbers and the 2b(b) verdict moved.
+AMENDED at R17 (fable m50538_mu12lmrx, the wrap-quote sweep): the SET column now carries each
+statement's `set` line as the file writes it, aliases included, instead of the unspaced shorthand
+(`status='lapsed'`, `updated_at=now()`) it used before. The shorthand was a paraphrase and failed a
+whole-span `grep -F` against 0088; these seven spans each hit one line of it. Nothing about the
+write set changed -- my re-read of 0088:194-196, :361-363, :500-501, :597-599, :619-621, :626-628
+and :809-810 at this commit.
 
 | line | table | SET columns | per-row notice naming its rows |
 | --- | --- | --- | --- |
-| 194 | server_registrations | `user_id` (from `licenses.user_id`; `updated_at` deliberately untouched) | NO -- `step 1 ok: ... null=0 owner_mismatch=0 ...` (:241) is counts. Per-row `step 1 owner mismatch:` (:235) fires only on the abort path. Expected UPDATE 0. |
-| 361 | feed_subscriptions | `access_request_id` | NO -- `step 2 gate ok: ... with request_id=% unmapped=0` (:381) is counts. Expected UPDATE 0. |
-| 500 | feed_subscriptions | `status='lapsed'`, `lapsed_at=now()`, `updated_at=now()` (2b(b), worded slot) | YES since R14 -- `step 2b(b) candidate:` (:472) prints one line per staged id BEFORE the gate. `step 2b(b) ok: staged=% lapsed_by_word=%` (:507) is still counts and `step 2b(b) not a live no-server row:` (:494) still fires only on the abort path. Slot EMPTY by default (staged=0, no candidate lines). |
-| 597 | feed_subscriptions | `server_registration_id`, `updated_at=now()` | NO -- `step 4 ok: ... null rows=%` (:616) is counts. Expected UPDATE 0. |
-| 619 | feed_subscriptions | `ends_at` (= `licenses.expires_at`), `updated_at=now()` | NO -- `step 4 gate ok:` (:649) is counts. Expected UPDATE 0. |
-| 626 | feed_subscriptions | `ends_at` (= `feed_tier_trials.trial_ends_at`), `updated_at=now()` | NO -- same notice. Expected UPDATE 0. |
-| 809 | feed_subscriptions | `status='lapsed'`, `lapsed_at=coalesce(lapsed_at, ends_at)`, `updated_at=now()` (4b predicate lapse) | YES -- `step 4b candidate:` (:783) prints one line per candidate BEFORE the gate, and the lapse is restricted to that gated set by id. |
+| 194 | server_registrations | `set user_id = l.user_id` (from `licenses`; `updated_at` deliberately untouched) | NO -- `step 1 ok: ... null=0 owner_mismatch=0 ...` (:241) is counts. Per-row `step 1 owner mismatch:` (:235) fires only on the abort path. Expected UPDATE 0. |
+| 361 | feed_subscriptions | `set access_request_id = a.id` | NO -- `step 2 gate ok: ... with request_id=% unmapped=0` (:381) is counts. Expected UPDATE 0. |
+| 500 | feed_subscriptions | `set status = 'lapsed', lapsed_at = now(), updated_at = now()` (2b(b), worded slot) | YES since R14 -- `step 2b(b) candidate:` (:472) prints one line per staged id BEFORE the gate. `step 2b(b) ok: staged=% lapsed_by_word=%` (:507) is still counts and `step 2b(b) not a live no-server row:` (:494) still fires only on the abort path. Slot EMPTY by default (staged=0, no candidate lines). |
+| 597 | feed_subscriptions | `set server_registration_id = sr.id, updated_at = now()` | NO -- `step 4 ok: ... null rows=%` (:616) is counts. Expected UPDATE 0. |
+| 619 | feed_subscriptions | `set ends_at = l.expires_at, updated_at = now()` (`l` = `licenses`) | NO -- `step 4 gate ok:` (:649) is counts. Expected UPDATE 0. |
+| 626 | feed_subscriptions | `set ends_at = ftt.trial_ends_at, updated_at = now()` (`ftt` = `feed_tier_trials`) | NO -- same notice. Expected UPDATE 0. |
+| 809 | feed_subscriptions | `set status = 'lapsed', lapsed_at = coalesce(fs.lapsed_at, fs.ends_at), updated_at = now()` (4b predicate lapse) | YES -- `step 4b candidate:` (:783) prints one line per candidate BEFORE the gate, and the lapse is restricted to that gated set by id. |
 
 AMENDED by R14: two of the seven writes now name their rows in the paste -- the 4b lapse and the
 2b(b) worded lapse -- and they are exactly the two that are designed to move rows. The other five
 are expected to move 0 rows, and if any of them moves a row it is a finding in its own right. Before
 R14 only the 4b lapse named its rows; 2b(b) moved rows without naming them, which was stated here
-for a ruling and ruled by marcus m50485_mu11vkq7.
+for a ruling and ruled by marcus m50485_mu11vkq7 (WITHDRAWN in full; R14 kept on m50516 / m50517,
+section 12 R14).
 
 ADDED at R16 (fable m50501_mu124d6c strike 4): **the five expected-0 writes print a command tag, and
 the tags are part of the paste.** 0088:194, :361, :597, :619 and :626 are top-level statements --
@@ -1286,7 +1334,7 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person) and R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person), R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last) and R17 (TEXT only: fable's R14 verdict -- T1-T4, the withdrawn m50485 provenance, property 5, rollback stamps ruled NO, the wrap-quote sweep). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
 
 **R9 (LIVE, supersedes R4 / R5 / R6 / R8 on everything about the six) -- the lapse becomes a
 predicate step with a refusal gate; the carve-out is computed, never written down.** Marcus
@@ -1455,13 +1503,73 @@ section 5 (:622, :628), section 6 (:647-654), section 7 (:702-727), section 8 (:
 section 9 step 4 (:910, :919-923), section 11 (:1098), and section 12 (Z1 :1219, Z5 head, Z6 two
 points, R8, R6 addendum, R4 scope line, the R1/R3 history text, and this entry).
 
+**R17 -- TEXT, no behaviour, this document only. fable's R14 verdict: T1-T4, the still-owed m50501
+items re-checked at HEAD, and the wrap-quote sweep.**
+Source: fable m50538_mu12lmrx (2026-09-14 09:58:34Z), fable's whole read of R13 `e6e4ead` and R14
+`d7725f6`: R13 PASS with no strikes; R14 SQL PASS with no behavioural strike, so marcus's freeze at
+`adef2f0` stands and NOTHING in the four SQL files moves at this commit; R14 spec
+PASS-WITH-STRIKES, text only.
+T1: the R14 entry's own figure for this document was 118 / 33 and is 127 / 33; corrected in place,
+re-taken with `git diff --numstat e6e4ead d7725f6` at this commit.
+T2: provenance. marcus withdrew m50485 IN FULL (m50507 to me, m50508 to fable) and then KEPT R14 on
+a new reason (m50516 / m50517): a dry-run rolls back and leaves no `schema_migrations` row, so
+without the stamp the dry-run paste is anonymous. Recorded in the R14 entry above and in section 9
+step 3, and every m50485 cite in this document now carries the withdrawal (7 sites, my grep at this
+commit: section 3 step 10, section 9 step 3 twice and step 4, the grep A paragraph, and R16 / R14 in
+this section). The five m50485 cites in the SQL (0088:172, :459, :1282; 0089:84, :346) are FROZEN
+and untouched; this document governs.
+T3: the reason paragraph in section 9 step 3 restated m50485's premise and is REPLACED by the
+stamp's two jobs -- it names the run, and it makes property 2 absolute. The properties that govern
+are the four transcribed from m50501 item 8, and 1-2 are an ordering inside one paste, so they never
+needed the value.
+T4: property 2's last sentence is amended inside the transcribed block, in brackets naming its
+author and quoting the m50501 text it replaces -- which supersedes R16's choice to keep the
+correction beneath the quote rather than inside it (the R16 entry below is left as the record of
+`db59d82`); property 5 is ADDED in fable's words, with my own reads of the INSERT (0088:1308-1310), `applied_at` (0003:19) and the transaction bounds
+(0088:156 / :1312) under it; the cross-run limb now states `run_now` < `ends_at` < `run_now`
+explicitly. m50501 ruling B's expected paste already said no `step 2b(b) candidate:` line prints on
+today's empty slot (section 9 step 1, R16) -- re-read at this commit, no edit needed.
+Still owed from m50501, re-checked at HEAD, not re-done: A, B and C and items 4-9 all landed at R16
+(entry below). The five expected-0 writes are 0088:194, :361, :597, :619, :626 and the other two
+:500 and :809 -- my `sed -n` of each at this commit, unchanged since `d7725f6` because R15 rewrote
+comment text only. Item 9 is raw grep output, not an edit.
+Rollback stamps: fable RULED NO. Both rollback files stay as they are. The open question is closed
+in section 9 step 3 and in the R14 entry.
+The wrap-quote sweep (marcus m50526 via fable m50538). Method, derived because a wrap inserts
+whitespace and so only a span with whitespace in it can be wrap-assembled (m50424 -- a list of sites
+is a floor, derive the predicate): strip the fenced blocks and the one unbalanced backtick inside
+the line-one paste (the TS template literal at :19), join the file with a marker for the newline,
+take every backticked span whole, keep the ones carrying a newline, collapse the whitespace and
+`grep -F` each WHOLE against the four SQL files concatenated. At this commit: 1,018 spans, 527
+unique, 263 of the 527 hit; 48 are assembled across a wrap, of which 13 hit and 35 miss. ONE defect
+in the 35, fixed at this commit: section 3 step 10 quoted the ledger INSERT as `on conflict do nothing;` across a line break, and 0088:1310 is
+`on conflict (version) do nothing;` -- the quote is now the file's three lines, one span each. The
+other 34 misses are all spans that quote something other than these four files (a `git grep`
+command, `src` predicates, 0086 text, this document's own operator queries) or carry an explicit
+`...` / `<six>` placeholder, or are one statement the file itself wraps over two lines
+(`alter table server_registrations` / `alter column user_id set not null;` at 0088:1054-1055,
+`alter table feed_subscriptions` / `drop constraint if exists feed_subscriptions_server_or_lapsed_chk;`
+in the rollbacks). The raw 35 go to the thread with this commit.
+Also from the sweep, fable's own miss: the grep A table's SET shorthand (`status='lapsed'`,
+`updated_at=now()`) was unspaced and aliasless. Rather than mark it a paraphrase, all seven cells
+now quote the file's `set` line verbatim, so each hits one line of 0088.
+NOT VERIFIED, unchanged: no psql on this box; the plpgsql is still unexecuted anywhere. No SQL
+changes at this commit, so marcus's dry-run does not wait on it.
+Applied at this commit: this document only, 161 insertions / 38 deletions, 19 hunks at -U0 --
+section 3 step 10 (the m50485 cite, the ledger INSERT quote), section 9 step 3 (property 2, property
+5 and my reads under it, the cross-run limb, the two-jobs paragraph, the rollback ruling) and step 4
+(the m50485 cite), the grep A block (the SET cells, the amendment note, the m50485 cite), and
+section 12 (the heading, this entry, and the R14 / R16 entries' provenance and T1 figure).
+
 **R16 -- TEXT, no behaviour. fable's R12 verdict, applied on `adef2f0` and not on `ac67c34`.**
 Source: fable m50501_mu124d6c (2026-09-14 09:45:09Z), fable's whole read of R12 `ac67c34`:
 PASS-WITH-STRIKES, spec text only, rulings A-C on the three gaps R12 stated plus strikes 4-9.
 SEQUENCING, stated first because it changes what the verdict asks for: m50501 was written before
 R13, R14 and R15 existed and asks for "R13 = one commit on `ac67c34`". By then `e6e4ead` (R13),
 `d7725f6` (R14) and `adef2f0` (R15) were on the branch, so this is R16 on `adef2f0`; rewinding to
-`ac67c34` would drop marcus's two m50485 rulings. Two consequences for the verdict's own text: its
+`ac67c34` would drop marcus's two m50485 rulings (that message was WITHDRAWN in full afterwards and
+R14 kept on m50516 / m50517; the rewind argument is unaffected -- R14 is on the branch either way).
+Two consequences for the verdict's own text: its
 line anchors are `d172be2`'s and are RE-TAKEN here against this commit (`0088_tighten.sql` is 1312
 lines now, not the 1274 of the paste whose md5 `4844a7c6...` marcus verified -- R14 and R15 both
 moved it), and rulings A and B were reasoned from a file that did not yet print the run's `now()`.
@@ -1486,7 +1594,8 @@ thread with this commit, raw.
 NOT applied as written, both flagged for a strike rather than done quietly, both in ruling A. (a) A
 replaces the containment's second limb ("`ends_at` between the two runs' `now()`") with an identity
 on the printed `ends_at`, on the stated ground that the paste does not print each run's `now()`.
-Since R14 it does (0088:177 and the step 10 summary at :1284, marcus m50485_mu11vkq7), so the limb
+Since R14 it does (0088:177 and the step 10 summary at :1284; m50485_mu11vkq7 was WITHDRAWN after
+this entry was written, and the build stands on m50516 / m50517 -- R14 above), so the limb
 is checkable as it stood; both readings are now in the text, fable's added as the one that needs no
 stamp, together with its new stop rule (same id, different printed `ends_at` -> stop). (b) A replaces
 the last sentence of the facts paragraph; that sentence states why the step-2 `read_at` is not a
@@ -1533,10 +1642,20 @@ through R13 `e6e4ead`, restated in m50496) had already moved at R14; it moves ag
 NOT VERIFIED, unchanged: no psql on this box; the plpgsql is still unexecuted anywhere.
 
 **R14 -- LIVE. The run's `now()` is printed, twice and for two different reasons; step 2b(b) names
-every row it is about to touch. marcus m50485_mu11vkq7 (2026-09-14 09:38Z), rulings (1) and (2)
-on the three items R12 left open. Behaviour is marcus's ask, the TEXT is fable's: fable rules on all
-of it and a fable strike stands over a marcus ruling without returning to marcus (marcus's routing,
-same message).**
+every row it is about to touch. Built on marcus m50485_mu11vkq7 (2026-09-14 09:38Z), rulings (1) and
+(2) on the three items R12 left open. Behaviour is marcus's ask, the TEXT is fable's: fable rules on
+all of it and a fable strike stands over a marcus ruling without returning to marcus (marcus's
+routing, same message).**
+PROVENANCE, ADDED at R17 (fable m50538_mu12lmrx T2), because a reader who fetches m50485's thread
+finds the source withdrawn: marcus WITHDREW m50485 IN FULL (m50507 to me, m50508 to fable). R14 was
+already built and merged into the branch by then, and marcus KEPT it (m50516 / m50517) on a
+different and narrower reason: the dry-run rolls back and leaves no `schema_migrations` row, so
+without the stamp a dry-run paste is anonymous. Both facts are recorded here and in section 9 step
+3, which governs. What this does NOT change: no SQL moves (the four files are frozen at adef2f0,
+marcus m50526 via fable m50538), and the m50485 reasoning still stands in five frozen file comments
+(0088:172, :459, :1282; 0089:84, :346 -- my grep at this commit). Rule 8: m50507, m50508, m50516 and
+m50517 are cited as fable reported them in m50538_mu12lmrx; the bus list endpoint is refused on this
+box, so I have not read any of the four myself, and the short ids are the ones fable gave.
 Ruling (1). Both dry-run properties the paste is checked against are stated relative to the run's
 `now()` -- every 4b candidate's `ends_at` before it, every carve-out row's after it -- and no notice
 and no summary column in the file carried that instant, so the operator would have had to substitute
@@ -1557,7 +1676,9 @@ against `now()`" -- 0089's step 2, step 3 and step 4 gates all are. The two roll
 in the set and did not get it: `grep -c 'now()'` returns 1 for `0088_rollback.sql` (a `default now()`
 on temp-table DDL) and 0 for `0089_rollback.sql`, neither has a `now()`-relative gate, and neither
 has a step 0 or a summary select to hang a stamp on. Whether they should gain one on the "which run
-is this" limb alone is left open for fable rather than invented here.
+is this" limb alone was left open for fable rather than invented here; RULED NO at R17 (fable
+m50538_mu12lmrx): only the naming job would apply to a rollback, and that alone does not justify
+unfreezing two files -- the operator names a rollback paste when posting it.
 Ruling (2). 2b(b) prints one `step 2b(b) candidate:` line per staged id BEFORE its gate (0088:472),
 the same four columns and order as its refusal notice (0088:494) and the same shape as
 `step 4b candidate:`. Marcus's reason, which attributes the principle to fable's Z2 rather than to
@@ -1573,7 +1694,9 @@ the reply carrying this commit.
 Applied at this commit: `db/migrations/0088_tighten.sql` 41 insertions / 3 deletions (header step 0
 and step 10 lines, the step-0 stamp, the 2b(b) candidate loop and its block comment, the summary
 column and its comment); `db/migrations/0089_drop_server_or_lapsed_exception.sql` 14 / 2 (header
-step 0 and step 6 lines, the step-0 stamp, the summary column); this document 118 / 33 (section 3
+step 0 and step 6 lines, the step-0 stamp, the summary column); this document 127 / 33 (CORRECTED
+at R17, fable m50538_mu12lmrx T1: this entry said 118 / 33, and `git diff --numstat e6e4ead
+d7725f6` at R17 returns 127 / 33 for it, which is also what R14's own hunk headers net) (section 3
 step 0 and step 10, section 9 step 3 and step 4, the grep A table and the paragraph under it, the
 section 12 heading, and this entry). The grep A table's line numbers and the `0088:` anchors in
 sections 3, 9 and 12 are RE-TAKEN at this commit, because the SQL edits moved them; the section 12
