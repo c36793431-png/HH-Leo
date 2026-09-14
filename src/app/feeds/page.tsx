@@ -105,7 +105,12 @@ export default async function FeedsPage() {
               </div>
               <h3 className="fp-name">{entry.name}</h3>
               <p className="fp-desc">{entry.description}</p>
-              <span className="fp-latency">{entry.latencyBand}</span>
+              {/* A latency band is a claim about how fast the service performs, so it can't sit
+                  under a card that says there is no service to perform (marcus, ruling #2 on
+                  m50726 — same class as the invented uptime figures). Suppressed rather than
+                  reworded: the band is a catalogue fact and stays true for when the feed returns.
+                  Only maintenance is cut; coming-soon cards carry their own band deliberately. */}
+              {status !== "maintenance" && <span className="fp-latency">{entry.latencyBand}</span>}
 
               {(status === "active" || status === "trial") && grantingLicense && (
                 <span className="fp-expiry">
