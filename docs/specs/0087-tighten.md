@@ -828,7 +828,13 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
 1. Dry-run: the file with `rollback;` in place of `commit;`. Every notice line pasted. Expected:
    step 1 UPDATE 0; step 2 INSERT 0 / 0 unless the window wrote requests (then N, named); step 2
    gate `unmapped=0` (the v1.55 DISTINCT form, N3); step 1 owner gate 0 mismatches and 0
-   NULL-owner licences with server rows; step 2b literals applied (row counts, each named);
+   NULL-owner licences with server rows; step 2b literals applied (row counts, each named), and for
+   2b(b) in particular `step 2b(b) ok: staged=0 lapsed_by_word=0` with summary `fs_lapsed_by_word=0`
+   -- the worded-lapse slot is EMPTY at this commit, the only `insert into tmp_0088_lapse_by_word` in
+   the file being the commented template at 0088:426 (my grep at this commit), so no
+   `step 2b(b) candidate:` line prints either; any re-cut that fills the slot names its rows in the
+   same commit (fable m50501_mu124d6c ruling B -- R14 put the per-row `step 2b(b) candidate:` notice
+   in ahead of the gate at 0088:472, which covers every staged id on the success path as well);
    step 3 lists 31cd1813 as `rejected` via 2b(a) and continues (without the literal: `pending`,
    abort here, as designed); step 4 UPDATE 0/0/0; step 5 BLOCK count 0 (without coxwell's
    resolution of the 6 live no-server rows: 6, named, abort here, as designed) and lapse count =
@@ -843,7 +849,7 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
 
    ```sql
    select now() as read_at, s.id, s.subscriber_user_id, s.feed_tier_id, s.status, s.ends_at,
-          s.server_registration_id,
+          s.lapsed_at, s.server_registration_id,
           l.status as licence_status, l.expires_at as licence_expires_at,
           tr.trial_status, tr.trial_ends_at,
           <EFFECTIVE_STATUS_SQL> as computed
@@ -854,8 +860,8 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
        select ftt.trial_status, ftt.trial_ends_at
          from feed_tier_trials ftt
         where ftt.user_id = s.subscriber_user_id and ftt.tier_key = ft.tier_key
-        order by (ftt.trial_status = 'active' and ftt.trial_ends_at > now()) desc,
-                 ftt.trial_ends_at desc
+        order by (ftt.trial_status = 'active' and ftt.trial_ends_at > now()) desc nulls last,
+                 ftt.trial_ends_at desc nulls last
         limit 1
      ) tr on true
     order by s.id
@@ -865,11 +871,19 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    shape (my read of `src/lib/feed-subscriptions.ts` :140-159 at 3102373, which this commit does not
    touch): the CASE is written against the aliases `s` and `ft`, so `feed_subscriptions s` +
    `left join feed_tiers ft` let it drop in unmodified; `left`, because a `provider_tier_id` row has
-   no `feed_tiers` row and the CASE's first gate is `ft.region_key is null`. `l` at the top level
-   shadows the `l` of the CASE's own licence `exists` (:146), which is self-contained and unaffected
-   -- that exact pairing is already shipped in the provider reader at :534-544. The lateral returns
+   no `feed_tiers` row and the CASE's first gate is `ft.region_key is null`. The two `l` aliases nest
+   the other way round from what R12 wrote (corrected by fable m50501_mu124d6c strike 5): inside the
+   CASE's own licence `exists` (:146) the inner `l` shadows this select's top-level `l`, not the
+   reverse, which is how Postgres resolves an inner FROM item. The CASE is unaffected either way --
+   that exact pairing is already shipped in the provider reader at :534-544. The lateral returns
    the trial row the CASE's `exists` would match when there is one and otherwise the nearest, so a
-   row that FAILS the trial branch still shows why. The after-read (step 4) is this same select, so
+   row that FAILS the trial branch still shows why; both of its order keys carry `nulls last`
+   (fable m50501_mu124d6c strike 5), because Postgres sorts NULLs FIRST under DESC, so a NULL
+   `trial_ends_at` -- and the NULL the boolean first key takes with it -- would outrank the very
+   trial row the CASE matches and the lateral would hand the paste the wrong row. `s.lapsed_at` is
+   selected because step 4's cause (i) cannot otherwise tell `deactivateFeedTierSubscription`'s
+   lapse from the file's (fable m50501_mu124d6c ruling C; the CAVEAT it replaces is struck below).
+   The after-read (step 4) is this same select, so
    it carries its own `now()` too, and both instants are pasted: steps 3 and 4 compare results taken
    at two different clocks, and without the two instants the operator cannot tell a clock mover from
    a file mover (fable Z5, m50440_mu111ike).
@@ -880,11 +894,39 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    dry-run and the apply run the byte-identical file, so a difference between them can only come
    from the data or the clock, never from the file.
 
-   Each run's notices are checked on their own against the four properties (fable m50436_mu110c5u,
-   adopted by marcus m50442_mu111sw2 -- named here by cite: I have not read m50436 and this document
-   does not yet transcribe it). Across the two runs, one containment: every `step 4b candidate:` id
-   in the apply is either a 4b candidate in the dry-run, or a dry-run `step 5 carve-out:` row whose
-   `ends_at` falls between the two runs' `now()`. If an apply 4b id is neither, stop: the file lapsed
+   Each run's notices are checked on their own against the four properties. TRANSCRIBED at R16, no
+   longer carried by cite (fable m50501_mu124d6c strike 8: the bus keeps only the newest 2,000
+   messages, about 2.7 days, so the cited message is evicted around 09-16/17, possibly before the
+   apply). Source: fable m50436_mu110c5u, as revised in fable's R12 verdict (m50501_mu124d6c,
+   2026-09-14 09:45Z), adopted by marcus m50442_mu111sw2; the words below are fable's, quoted from
+   that verdict, and all four hold WITHIN ONE RUN:
+   > 1. Every `step 4b candidate:` line has `server_registration_id` NULL and `computed=lapsed` (the
+   >    refusal gate enforces the second).
+   > 2. Every non-NULL `ends_at` on a `step 5 carve-out:` line is later than every `ends_at` on a
+   >    `step 4b candidate:` line. The file's predicates put the run's `now()` between the two sets;
+   >    the paste does not print it.
+   > 3. `step 5 listed` = 4b candidates + carve-out + the NULL-server rows already stored lapsed
+   >    (18 + 6 + 3 = 27 on marcus's 08:41Z read; the uncovered gate enforces it).
+   > 4. jorgbuteijn and abdulkareem appear on no `step 4b` or `step 5` line. If either does, stop.
+   > (Revised from m50436: 1 and 2 no longer need the run's `now()`, and 4 is scoped to the lines it
+   > was about, because step 9 carry lines name requesters.)
+
+   One correction to property 2's last clause, which was written without R14 in hand (R14 d7725f6
+   landed after m50501 was sent): the paste DOES print the run's `now()` since R14, twice, per the
+   two sites below. The property holds as stated either way -- it is checkable from the `ends_at`
+   values alone -- and the printed instant is now a second, independent check on it.
+
+   Across the two runs, one containment: every `step 4b candidate:` id in the apply is either a 4b
+   candidate in the dry-run, or a dry-run `step 5 carve-out:` row whose `ends_at` falls between the
+   two runs' `now()` (both instants are in the pastes since R14). Second reading of that same limb,
+   which needs neither stamp (fable m50501_mu124d6c ruling A): the row carries the same id AND the
+   same printed `ends_at` in both runs' notices. The dry-run carve-out predicate
+   (`fs.ends_at > now() or fs.ends_at is null`, 0088:879) puts that `ends_at` after the dry-run's
+   `now()`, and the apply's 4b predicate (`fs.ends_at < now()`, 0088:745) puts it before the apply's,
+   so the two notices prove the crossing on their own. A same id whose printed `ends_at` DIFFERS
+   between the runs is not this limb: stop. (Grep B (iii) below: no app writer can change a
+   NULL-server row's `ends_at` -- the one `ends_at` writer is the re-activation path, which selects
+   on `server_registration_id = $1`.) If an apply 4b id is neither, stop: the file lapsed
    a row the dry-run review never showed. Any other difference is an app write between the runs: a
    new carve-out row, a row gone from the listing or from the 4b set, or a changed `ends_at` /
    `status` / `server_registration_id` on the same id. Name each one in the paste; none of them is a
@@ -919,6 +961,10 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    with `select applied_at from schema_migrations where version = '0088'`, the dry-run's was not
    recoverable at all. The step-2 read's `read_at` on each side of each run brackets that run's
    `now()`, but it is a different statement on a different clock and is not a substitute for it.
+   Standing step, from the same ruling (fable m50501_mu124d6c ruling A): after the apply commits,
+   paste `select applied_at from schema_migrations where version = '0088'` for the record. That is
+   the ledger's own stamp of the apply, independent of the two notices R14 added, and it is the only
+   one of the three that survives the session.
 
    Same two sites in `0089_drop_server_or_lapsed_exception.sql` (:89 and :348). Marcus named the two
    0088 sites; the property that selects them is "a pasted run whose gates are evaluated against
@@ -1031,6 +1077,18 @@ are expected to move 0 rows, and if any of them moves a row it is a finding in i
 R14 only the 4b lapse named its rows; 2b(b) moved rows without naming them, which was stated here
 for a ruling and ruled by marcus m50485_mu11vkq7.
 
+ADDED at R16 (fable m50501_mu124d6c strike 4): **the five expected-0 writes print a command tag, and
+the tags are part of the paste.** 0088:194, :361, :597, :619 and :626 are top-level statements --
+each sits in a gap between an `end $$;` and the next `do $$` (my read of the block boundaries at this
+commit: 186/205, 355/369, 590/603, 617/635) -- so they are outside every DO block and psql prints
+`UPDATE n` for each. Steps 1 and 3 therefore paste psql's command tags as well as the notices: the
+run is NOT made with `psql -q`. A dry-run `n != 0` on any of the five: stop before the apply and take
+it to the thread, because the file's own expectation (`Expected: UPDATE 0` at 0088:192 and :360,
+`Expected: UPDATE 0 / 0 / 0` at :596) is then wrong and the cause has to be found first. An apply
+`n != 0` on one of them: named in the paste, not a rollback. None of the five writes `status` or
+`lapsed_at` -- the SET columns are in the table above -- so none of them can do the one-way harm the
+rollback exists for.
+
 **Grep B -- what the APP writes.** `git grep -nEi '<the same regex>' -- src` -> 29 hits in 24
 functions across 8 files (feed_subscriptions 6/5, licenses 13/11, feed_tier_trials 5/5,
 server_registrations 5/3), plus my
@@ -1038,6 +1096,21 @@ checks for the two shapes the regex would miss: a line-wrapped `insert into` / `
 (0 hits in `src`) and a delete on any of the four tables (0 hits in `src`; the only ones in the repo
 are `db/migrations/0081_rollback.sql:25` and `scripts/seed_multi_license_test_user.sql:25`). So the
 app never deletes from these four tables.
+
+ADDED at R16, the third shape the first regex would miss -- a schema-qualified or double-quoted table
+name -- run together with the one function name the `EFFECTIVE_STATUS_SQL` comment calls a
+`feed_subscriptions` writer (fable m50501_mu124d6c strike 9):
+`git grep -nEi 'upsertFeedSubscriptionForRequest|public\.(feed_subscriptions|licenses|feed_tier_trials|server_registrations)|"(feed_subscriptions|licenses|feed_tier_trials|server_registrations)"' -- src`
+-> 16 hits at this commit, no live writer among them, so grep B misses no writer through either
+shape. `public.` qualification: 0 hits anywhere in `src`. `upsertFeedSubscriptionForRequest`: 4 hits,
+every one a comment line (`src/lib/feed-subscriptions.ts` :40, :117, :1296, :1316), and :1296 is the
+doc comment of the function that REPLACED it ("the approval-path write (formerly
+upsertFeedSubscriptionForRequest here"), so the name has no definition and no call site left in
+`src`. The other 12 are the quoted literal `"licenses"` passed to `licenseNumberSql` /
+`licenseStatusCaseSql` at `src/lib/licenses.ts` :153, :227, :570, :588, :609, :762, :937, :971,
+:1117, :1118 -- :153 and :227 are the `returning` clauses of the two INSERTs grep B already lists
+(`issueLicense` :151, `issueAdditionalLicense` :225) and the other eight are SELECTs -- plus two
+sidebar/topbar route labels (`src/components/portal/sidebar.tsx:81`, `topbar.tsx:13`).
 
 `feed_subscriptions` (6 hits / 5 functions):
 
@@ -1084,11 +1157,16 @@ Z6's three questions:
   names as the one-way ratchet. How step 4 tells it apart from (F): by id and by `lapsed_at`. It is
   keyed on `(subscriber_user_id, tier_key)` and sets `lapsed_at = now()`, whereas 4b sets
   `lapsed_at = coalesce(lapsed_at, ends_at)` on exactly the ids its `step 4b candidate:` notices
-  name. So a stored lapse on an id that no notice names is (A) only if `lapsed_at` is inside the
-  window between the two `read_at`; if it equals the row's `ends_at` instead, it came from the file
-  and the rollback runs. CAVEAT, stated because the step-2 select does not yet carry it: `lapsed_at`
-  is NOT one of its columns. The paste can only make this distinction if `lapsed_at` is added to the
-  read, or if marcus accepts "no notice names it" alone. Fable and marcus rule; no SQL touched here.
+  name. RULED by fable m50501_mu124d6c ruling C at R16, replacing the R12 caveat: a stored ->
+  `lapsed` on an id that no notice names is (A) only if its `lapsed_at` falls STRICTLY BETWEEN the
+  two `read_at` AND DIFFERS from that row's `ends_at`; otherwise the rollback runs. Both clauses are
+  load-bearing, because 4b stamps `lapsed_at = coalesce(lapsed_at, ends_at)` (0088:809) and a row
+  that crosses mid-window has its own `ends_at` inside that window too -- the time test alone would
+  read the file's own lapse as an app write. The caveat this replaces (the step-2 select did not
+  carry `lapsed_at`) is closed by the same ruling: `s.lapsed_at` is now a column of that select,
+  section 9 step 2, so both clauses are checkable from the two pastes and no operator has to run a
+  third query. No SQL touched here either way -- the step-2 select is this document's text, not the
+  migration's.
 - **(ii) Can any of them leave a non-lapsed `feed_subscriptions` row with `server_registration_id`
   NULL?** NO, on all three routes.
   - Insert: both inserts write the column, and neither can pass NULL --
@@ -1104,9 +1182,18 @@ Z6's three questions:
     server_registrations(id)`, `0086_marketplace_recut.sql:576` -- so its action is the default NO
     ACTION. A delete of a referenced server row raises 23503; it never NULLs the child column.
   - No `update ... set server_registration_id` exists anywhere in `src` (0 hits).
-  So the list marcus wants for the post-commit 23514 risk is EMPTY on today's code: after the CHECK
-  lands, no app path can produce a non-lapsed NULL-server row, and the carve-out ids being fixed at
-  apply costs nothing until the B-1 guard.
+  And the FK route stays shut AFTER the commit, not only before it (fable m50501_mu124d6c strike 7):
+  0088 never touches the `feed_subscriptions.server_registration_id -> server_registrations` FK at
+  all. Its only FK work is on `server_registrations` -- drop the unnamed 0031 single-column FK by
+  lookup (0088:1076) and add `server_registrations (license_id, user_id) -> licenses (id, user_id)
+  on delete set null (license_id)` (0088:1088-1091); those four lines are the complete output of my
+  `foreign key|references|add constraint|drop constraint` grep over the file at this commit, outside
+  the header comment. So `0086_marketplace_recut.sql:576`'s NO ACTION is the post-apply action too,
+  and the user-delete cascade into `server_registrations` (section 8 S1(ii), T4) meets NO ACTION and
+  raises 23503; it never SET NULLs the child column.
+  So the list marcus wants for the post-commit 23514 risk is EMPTY, before the commit and after it:
+  after the CHECK lands, no app path can produce a non-lapsed NULL-server row, and the carve-out ids
+  being fixed at apply costs nothing until the B-1 guard.
 - **(iii) Can any of them change `fs.ends_at` or `fs.server_registration_id` on an existing row?**
   `ends_at`: YES -- `assignFeedTierSubscription` :1386 / :1395 write `ends_at = license.expiresAt`
   when re-activating an existing row. That is an (A) difference in step 4 and, per step 3, a
@@ -1199,7 +1286,7 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows) and R15 (TEXT only: no unsourced pronoun for a person). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person) and R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
 
 **R9 (LIVE, supersedes R4 / R5 / R6 / R8 on everything about the six) -- the lapse becomes a
 predicate step with a refusal gate; the carve-out is computed, never written down.** Marcus
@@ -1367,6 +1454,55 @@ block (:44-70), section 1 table row 2 (:92), section 2 (:190), section 3 (:236, 
 section 5 (:622, :628), section 6 (:647-654), section 7 (:702-727), section 8 (:755, :766),
 section 9 step 4 (:910, :919-923), section 11 (:1098), and section 12 (Z1 :1219, Z5 head, Z6 two
 points, R8, R6 addendum, R4 scope line, the R1/R3 history text, and this entry).
+
+**R16 -- TEXT, no behaviour. fable's R12 verdict, applied on `adef2f0` and not on `ac67c34`.**
+Source: fable m50501_mu124d6c (2026-09-14 09:45:09Z), fable's whole read of R12 `ac67c34`:
+PASS-WITH-STRIKES, spec text only, rulings A-C on the three gaps R12 stated plus strikes 4-9.
+SEQUENCING, stated first because it changes what the verdict asks for: m50501 was written before
+R13, R14 and R15 existed and asks for "R13 = one commit on `ac67c34`". By then `e6e4ead` (R13),
+`d7725f6` (R14) and `adef2f0` (R15) were on the branch, so this is R16 on `adef2f0`; rewinding to
+`ac67c34` would drop marcus's two m50485 rulings. Two consequences for the verdict's own text: its
+line anchors are `d172be2`'s and are RE-TAKEN here against this commit (`0088_tighten.sql` is 1312
+lines now, not the 1274 of the paste whose md5 `4844a7c6...` marcus verified -- R14 and R15 both
+moved it), and rulings A and B were reasoned from a file that did not yet print the run's `now()`.
+Applied as asked: ruling C (`s.lapsed_at` joins the step-2 select; the R12 CAVEAT in grep B (i) is
+replaced by the two-clause rule -- `lapsed_at` strictly inside the `read_at` window AND different
+from the row's `ends_at`, because 4b stamps `coalesce(lapsed_at, ends_at)`); strike 4 (the five
+expected-0 writes are top-level, psql prints their command tags, no `psql -q`, dry-run n != 0 stops
+before the apply); strike 5 (`nulls last` on both lateral order keys, and the shadowing sentence
+turned the right way round); strike 7 (the FK route is shut after the commit too, with the file's
+complete FK work named); strike 8 (the four properties TRANSCRIBED into section 9 step 3 from the
+verdict's revised text, cited as "fable m50436_mu110c5u, as revised in fable's R12 verdict", against
+the 2,000-message bus window); strike 9 (the schema-qualified / quoted grep, 16 hits, run at this
+commit -- `upsertFeedSubscriptionForRequest` is comment-only, so grep B missed no writer).
+Already closed before this commit, no edit made: strike 6 -- the possessive R12 used for fable in the
+(C) bullet of section 9 step 4 went at R13 and the whole class at R15, so the site now reads
+"correcting fable's own Z5 text" and the struck string is not quoted here, on R13's rule that the
+grep must stay clean over this document. Also closed: the m50468
+leftovers -- item 4's pronoun grep (R13; re-run at this commit, 0 lines), item 5's Z5 head
+"(SUPERSEDED in part by R12, kept as the record of 3102373)" with the Z6 entry naming what replaced
+it (R13), and `m50417_mu10scek` at both sites (R13). The `grep -n 'section 11'` output goes to the
+thread with this commit, raw.
+NOT applied as written, both flagged for a strike rather than done quietly, both in ruling A. (a) A
+replaces the containment's second limb ("`ends_at` between the two runs' `now()`") with an identity
+on the printed `ends_at`, on the stated ground that the paste does not print each run's `now()`.
+Since R14 it does (0088:177 and the step 10 summary at :1284, marcus m50485_mu11vkq7), so the limb
+is checkable as it stood; both readings are now in the text, fable's added as the one that needs no
+stamp, together with its new stop rule (same id, different printed `ends_at` -> stop). (b) A replaces
+the last sentence of the facts paragraph; that sentence states why the step-2 `read_at` is not a
+substitute for the run's `now()`, which is still true, so the `select applied_at from
+schema_migrations where version = '0088'` step is ADDED after it instead of over it. One correction
+carried in the same place: property 2's closing clause "the paste does not print it" is the only
+line of the transcribed four that R14 falsified; the property itself holds either way and is
+transcribed verbatim, with the correction beneath it and not inside fable's words.
+NOT VERIFIED, unchanged: no psql on this box; the plpgsql is still unexecuted anywhere. No SQL
+changes at this commit, so marcus's dry-run of `d172be2` does not wait on it.
+Applied at this commit: this document only, 158 insertions / 22 deletions, 13 hunks at -U0 --
+section 9 step 1 (the 2b(b) dry-run expectation), step 2 (the select gains `s.lapsed_at` and two
+`nulls last`, plus the shadowing correction and the two rationales), step 3 (the four properties
+transcribed, the correction under them, the second containment limb, the `applied_at` step), the
+grep A block (the command-tag paragraph), the grep B block (the strike-9 grep, and (i) and (ii)
+rewritten), and section 12 (the heading and this entry).
 
 **R15 -- TEXT, no behaviour. No unsourced pronoun for a person survives in these five files.**
 marcus m50496_mu11ykul (2026-09-14 09:40:39Z), standing and applied without a per-round ask on its
