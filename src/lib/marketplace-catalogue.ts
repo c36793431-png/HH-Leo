@@ -14,8 +14,10 @@ import { FEED_REGION_LABELS, PACKAGE_DISPLAY_LABELS, PACKAGE_TIER_KEYS } from ".
  * the wrong moment (marcus, m50717).
  *
  * THIS FILE IS THE ONLY SOURCE OF A LISTING'S AVAILABILITY. /feeds reads it too — see
- * feeds-catalogue.ts computeFeedCardStatus — so the two surfaces cannot disagree about whether
- * a product is live. The disagreement, not the state, is the defect (marcus, m50717 #5).
+ * feeds-catalogue.ts computeFeedCardStatus — and so does /feeds/[region]/tiers, which asks
+ * tierAvailability() below whether a tier card may carry a request control. The three surfaces
+ * cannot disagree about whether a product is live. The disagreement, not the state, is the
+ * defect (marcus, m50717 #5, m50788).
  *
  * DELIBERATELY NOT HERE:
  * - PRICES. No buyer surface Horizon ships renders a feed price: /feeds, /feeds/[region]/tiers
@@ -108,6 +110,44 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     ctaLabel: "See tiers →",
   },
   {
+    // COMING SOON, and therefore NOT REQUESTABLE ANYWHERE (coxwell "Alpha Coming Soon" via
+    // marcus, m50788, read with his morning "listed not requested"). Promoted out of the old
+    // MARKETPLACE_LISTINGS_HELD block once that predicate could be met: the tiers page reads
+    // tierAvailability() below and renders these two without a request control, the trial path
+    // is closed in feed-tier-catalogue.ts, and the submit action refuses the key. Both rows
+    // also carry a NULL price_cents and a NULL provider_user_id in feed_tiers, so neither could
+    // be sold today even by someone who clicked.
+    //
+    // BLURB IS DELIBERATELY BARE, and this is not an oversight. coxwell ruled the STATE, not
+    // the copy, and neither tier has ever had buyer-facing catalogue copy. feed_tiers.description
+    // holds a real buyer-facing paragraph for each (rendered on the tiers page), but copying it
+    // here would be a denormalised duplicate of a DB column with no writer to re-sync it — the
+    // card would keep the old claim the day someone edits the row. The comparison score beneath
+    // the title is the substance of this card; product copy is coxwell's to supply.
+    key: "ld-alpha",
+    title: `${FEED_REGION_LABELS.london} · Alpha`,
+    category: "feeds",
+    availability: "coming-soon",
+    tierKeys: ["ld-alpha-85"],
+    feedSlug: null,
+    blurb: "London · LD4 co-lo.",
+    ctaHref: null,
+    ctaLabel: null,
+  },
+  {
+    // Same shape and same ruling as Alpha above. marcus's instruction names Alpha, but its
+    // reason is the contradiction rather than the name, and he ruled both by name in m50788.
+    key: "ld-ultra",
+    title: `${FEED_REGION_LABELS.london} · Ultra`,
+    category: "feeds",
+    availability: "coming-soon",
+    tierKeys: ["ld-ultra"],
+    feedSlug: null,
+    blurb: "London · LD4 co-lo.",
+    ctaHref: null,
+    ctaLabel: null,
+  },
+  {
     key: "ny-base",
     title: `${FEED_REGION_LABELS.ny} · ${PACKAGE_DISPLAY_LABELS["ny-retail"]}`,
     category: "feeds",
@@ -151,55 +191,29 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
 ];
 
 /**
- * HELD FROM RENDER — declared here so nobody rebuilds them, NOT rendered by /marketplace.
+ * MARKETPLACE_LISTINGS_HELD IS GONE, and the predicate that held it is the thing to keep.
  *
- * Both are real feed_tiers rows that coxwell/marcus have stated as COMING SOON (m50711 table),
- * and a coming-soon listing renders with no request action. The block is marcus's merge gate
- * (m50723), as a predicate rather than a date: DO NOT ship a listing as coming-soon while
- * another surface still offers it. Today three surfaces do — /feeds/london/tiers renders each
- * of these as a card with a live TierRequestControl, /dashboard counts them inside London's
- * "5 TIERS" badge and deep-links there, and both are trial-eligible. "Losing one card beats
- * publishing three surfaces that disagree" (marcus).
- *
- * WHAT UNBLOCKS EACH:
- * - Alpha: coxwell's answer on whether the live "Request access" CTA comes off
- *   /feeds/london/tiers. marcus put it to him 2026-09-14 with the deciding fact that Alpha has
- *   a NULL price_cents and no provider_user_id, so it cannot be sold today even by someone who
- *   clicks. When he answers, this entry moves into MARKETPLACE_LISTINGS.
- * - Ultra: the identical shape, and marcus has NOT ruled on it by name — it is a feed_tiers row
- *   rendered on /feeds/london/tiers with a live request control, trial-eligible, NULL price and
- *   no provider, counted in the same badge. His ruling names Alpha, but its reason is the
- *   contradiction, not the name. Flagged to him in the build reply; do not promote this one on
- *   the Alpha answer alone.
- *
- * Their blurbs below are place-holding region context only — neither has ever had buyer-facing
- * catalogue copy, and writing some would be inventing product claims. Whoever promotes these
- * needs coxwell's wording, not this line.
+ * Alpha and Ultra used to live in a second array that /marketplace did not render, because
+ * marcus's merge gate (m50723) was a predicate, not a date: DO NOT ship a listing as
+ * coming-soon while another surface still offers it. Three surfaces did — the tiers page
+ * rendered a live TierRequestControl on each, both were trial-eligible, and /dashboard counted
+ * them in London's badge. coxwell resolved it the other way round (m50788): make the surfaces
+ * agree by removing requestability, not by hiding the product. The predicate still governs —
+ * anything added here as coming-soon must already be unrequestable everywhere first.
  */
-export const MARKETPLACE_LISTINGS_HELD: MarketplaceListing[] = [
-  {
-    key: "ld-alpha",
-    title: `${FEED_REGION_LABELS.london} · Alpha`,
-    category: "feeds",
-    availability: "coming-soon",
-    tierKeys: ["ld-alpha-85"],
-    feedSlug: null,
-    blurb: "London · LD4 co-lo.",
-    ctaHref: null,
-    ctaLabel: null,
-  },
-  {
-    key: "ld-ultra",
-    title: `${FEED_REGION_LABELS.london} · Ultra`,
-    category: "feeds",
-    availability: "coming-soon",
-    tierKeys: ["ld-ultra"],
-    feedSlug: null,
-    blurb: "London · LD4 co-lo.",
-    ctaHref: null,
-    ctaLabel: null,
-  },
-];
+
+/**
+ * The declared availability of one feed_tiers.tier_key, or null when no listing covers it.
+ *
+ * Read by /feeds/[region]/tiers so a tier card cannot offer a control for a product this file
+ * says is not on sale. NULL MEANS "NOT DECLARED HERE", NOT "BLOCKED": a tier_key with no
+ * listing leaves that page's behaviour exactly as it was, so adding a feed_tiers row cannot
+ * silently make it unrequestable by omission. Same shape as feedCardAvailability below, keyed
+ * by tier instead of by /feeds slug.
+ */
+export function tierAvailability(tierKey: string): MarketplaceAvailability | null {
+  return MARKETPLACE_LISTINGS.find((listing) => listing.tierKeys.includes(tierKey))?.availability ?? null;
+}
 
 /**
  * Availability of the /feeds card for a feeds-catalogue slug, or null when no listing speaks

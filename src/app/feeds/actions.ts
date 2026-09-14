@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createFeedRequest } from "@/lib/feed-requests";
 import { createFeedTierRequest, startSelfServeFeedTierTrial } from "@/lib/feed-tier-requests";
-import { feedTierMeta, isFeedRegion } from "@/lib/feed-tier-catalogue";
+import { expandTierKey, feedTierMeta, isFeedRegion } from "@/lib/feed-tier-catalogue";
+import { tierAvailability } from "@/lib/marketplace-catalogue";
 import { getActiveLicenseForUser, getActiveLicensesForUser } from "@/lib/licenses";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { cancelFeedTierTrial, getFeedTierTrial } from "@/lib/feed-tier-trials";
@@ -48,6 +49,19 @@ export async function submitFeedTierRequestAction(
     if (!isFeedRegion(region)) throw new Error("Invalid region");
     const tier = feedTierMeta(tierKey);
     if (!tier || tier.region !== region) throw new Error("Invalid tier");
+    // "Not requestable ANYWHERE" (coxwell via marcus, m50788) has to include this endpoint:
+    // removing the button stops the click, not the POST, and a server action is reachable
+    // without one. Checked per MEMBER tier because a package key submits the whole bundle --
+    // expandTierKey is the same expansion createFeedTierRequest writes envelopes for, so the
+    // refusal cannot cover fewer tiers than the request would create. Refusal only: no write
+    // path is altered, this runs before one is entered.
+    const unavailable = expandTierKey(tierKey).find((key) => {
+      const declared = tierAvailability(key);
+      // null is "not declared in the catalogue", which leaves the tier requestable exactly as
+      // before -- only a stated non-available product is refused.
+      return declared != null && declared !== "available";
+    });
+    if (unavailable) throw new Error(`${feedTierMeta(unavailable)?.name ?? unavailable} isn't available to request yet`);
     if (!licenseId) throw new Error("Select a server");
 
     const licenses = await getActiveLicensesForUser(session.user.id);

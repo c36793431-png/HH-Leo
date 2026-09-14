@@ -96,8 +96,32 @@ export const PACKAGE_DISPLAY_LABELS: Record<string, string> = {
 
 /** Only the entry tier and the flagship get a trial CTA (coxwell, trial feature add-on,
  * horizon-portal-v2051-polish-2026-08-13) -- middle tiers stay paid-only. NY has no middle
- * tier (2 tiers total), so both are trial-eligible (coxwell, leo-ny-feed-trial-option-2026-08-15). */
-export const TRIAL_ELIGIBLE_TIER_KEYS: readonly string[] = ["ld-alpha-85", "ld-ultra", "ny-normal", "ny-fast"];
+ * tier (2 tiers total), so both are trial-eligible (coxwell, leo-ny-feed-trial-option-2026-08-15).
+ *
+ * LONDON'S TWO ARE GONE, AND THE REASON IS A PRODUCT STATE, NOT A TRIAL POLICY. ld-alpha-85 and
+ * ld-ultra were here under that same coxwell ruling until he made both COMING SOON (via marcus,
+ * m50788). A coming-soon product cannot be trialled: a trial is access, and it would have been
+ * the one path still handing out a product every other surface now says is not on sale.
+ *
+ * WHAT MOVED WHEN THEY LEFT, measured against prod 2026-09-14 rather than assumed:
+ * - The Telegram approve card and the provider panel carry no decision input, so they may only
+ *   approve a TRIAL-ELIGIBLE tier (feed-tier-requests.ts approveFeedTierRequest). The four
+ *   pending Alpha/Ultra envelopes now refuse there with PaidApprovalNeedsQueueError, whose
+ *   message is the admin's instruction to use the queue. They are redirected, not stranded --
+ *   the admin queue passes an explicit decision and is untouched.
+ * - No client lost access: zero feed_subscriptions rows on either tier, and all six historic
+ *   feed_tier_trials rows are already expired or cancelled.
+ * - An admin who explicitly picks decision='trial' in the queue can still grant one. The
+ *   envelope's own ends_at still expires it, but no feed_tier_trials row is written (the
+ *   mirror the expire-cron and the provider Trials tab read), so it renders as a plain
+ *   approval. Guarding an admin's deliberate choice is a change to an admin tool, not to a
+ *   buyer surface, and was not this errand's to make -- reported to marcus, m50788.
+ *
+ * NOT DERIVED FROM marketplace-catalogue.ts, which is where availability otherwise has its one
+ * home: that module imports this one, so reading it back here would be an import cycle. This
+ * literal is the copy, and this comment is the pointer -- a tier listed coming-soon there has
+ * to be taken out here by hand. */
+export const TRIAL_ELIGIBLE_TIER_KEYS: readonly string[] = ["ny-normal", "ny-fast"];
 
 export function isTrialEligibleTier(tierKey: string): boolean {
   return TRIAL_ELIGIBLE_TIER_KEYS.includes(tierKey);

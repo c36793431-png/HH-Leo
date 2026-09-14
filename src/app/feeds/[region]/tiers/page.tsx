@@ -8,6 +8,11 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { isFeedRegion, FEED_REGION_TYPE, PACKAGE_DISPLAY_LABELS } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { isScoreRegion, formatTierLatency, tierFigureHeading } from "@/lib/feed-provider-packages";
+import {
+  tierAvailability,
+  MARKETPLACE_AVAILABILITY_LABELS,
+  type MarketplaceAvailability,
+} from "@/lib/marketplace-catalogue";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 import {
   TierRequestControl,
@@ -131,6 +136,29 @@ function packageCardState(memberStates: TierRequestState[]): PackageCardState {
   if (memberStates.every((s) => s === "pending")) return "pending";
   if (memberStates.every((s) => s === "none")) return "none";
   return "mixed";
+}
+
+/** The declared state that must SUPPRESS a card's request control, or null when the card keeps
+ * the behaviour it had. Driven from marketplace-catalogue.ts so this page cannot disagree with
+ * /marketplace and /feeds about whether a product is on sale — coxwell ruled Alpha and Ultra
+ * "coming soon, listed, not requested" (m50788), and a fourth surface spelling that state for
+ * itself is how the three drifted in the first place.
+ *
+ * ANY member blocks the WHOLE card, deliberately, and that matters on a package: the Base card
+ * sells three feeds as one bundle at one price, so a bundle containing something not on sale
+ * cannot be offered whole. No shipped package is in that state today (all three Base members
+ * are available) — this is the same rule as tierFigureHeading's, that a card may only claim
+ * what is true of every tier beneath it, and it forecloses the next instance rather than
+ * describing the current one.
+ *
+ * Returns the first blocking state so the pill names it: a maintenance product and a
+ * coming-soon one are different promises to a buyer and must not collapse into one word. */
+function blockingAvailability(members: FeedTierDetail[]): MarketplaceAvailability | null {
+  for (const m of members) {
+    const declared = tierAvailability(m.tierKey);
+    if (declared === "coming-soon" || declared === "maintenance") return declared;
+  }
+  return null;
 }
 
 /** Institutional ($10k+) vs retail segment split (marcus/coxwell,
@@ -341,8 +369,12 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             const label = PACKAGE_LABELS[group.packageKey] ?? group.packageKey;
             const memberStates = group.members.map((m) => requestStateFor(m.tierKey));
             const cardState = packageCardState(memberStates);
+            const blocked = blockingAvailability(group.members);
             return (
-              <div key={group.packageKey} className="card ftd-tier-card ftd-package">
+              <div
+                key={group.packageKey}
+                className={`card ftd-tier-card ftd-package${blocked ? " ftd-unavailable" : ""}`}
+              >
                 {region === "london" && (
                   <>
                     <span className="ftd-rank-badge">#{group.rank}</span>
@@ -381,7 +413,13 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                     );
                   })}
                 </div>
-                {cardState === "mixed" ? (
+                {blocked ? (
+                  /* Availability outranks request state: a product that is not on sale offers
+                     nothing, whatever this client has previously asked for. */
+                  <span className={`mkt-pill mkt-pill-${blocked} ftd-availability-pill`}>
+                    {MARKETPLACE_AVAILABILITY_LABELS[blocked]}
+                  </span>
+                ) : cardState === "mixed" ? (
                   /* No button, not even a disabled one: the submit path from here throws
                      (access-requests.ts:205 asserts no live grant per member and rolls the whole
                      batch back), and a control that can only throw must not render as actionable
@@ -414,10 +452,11 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
           const t = group.members[0];
           const isInstitutional = region === "london" && INSTITUTIONAL_TIER_KEYS.has(t.tierKey);
           const londonScore = region === "london" ? londonScoreDisplay(t.tierKey) : null;
+          const blocked = blockingAvailability(group.members);
           return (
           <div
             key={t.tierKey}
-            className={`card ftd-tier-card${t.isFlagship ? " ftd-flagship" : ""}${isInstitutional ? " ftd-institutional" : ""}`}
+            className={`card ftd-tier-card${t.isFlagship ? " ftd-flagship" : ""}${isInstitutional ? " ftd-institutional" : ""}${blocked ? " ftd-unavailable" : ""}`}
           >
             {region === "london" && LONDON_TIER_RANK[t.tierKey] != null && (
               <span className={`ftd-rank-badge${isInstitutional ? " ftd-rank-amber" : ""}`}>
@@ -452,16 +491,27 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               )}
             </div>
             <p className="ftd-desc">{t.description}</p>
-            <TierRequestControl
-              region={region}
-              tierKey={t.tierKey}
-              tierName={t.name}
-              requestState={requestStateFor(t.tierKey)}
-              servers={serverOptions}
-              hasAnyRegisteredServer={hasAnyRegisteredServer}
-              fallbackLicenseTail={licenseTail}
-              variant={isInstitutional ? "amber" : "primary"}
-            />
+            {blocked ? (
+              /* Alpha and Ultra land here (coxwell via marcus, m50788): the card stays, the
+                 action goes. Not a disabled button — "can be listed not requested" means the
+                 control is ABSENT, and a greyed button still advertises an action. The pill is
+                 /marketplace's own, from the same class and the same label map, so the two
+                 surfaces cannot spell one state two ways. */
+              <span className={`mkt-pill mkt-pill-${blocked} ftd-availability-pill`}>
+                {MARKETPLACE_AVAILABILITY_LABELS[blocked]}
+              </span>
+            ) : (
+              <TierRequestControl
+                region={region}
+                tierKey={t.tierKey}
+                tierName={t.name}
+                requestState={requestStateFor(t.tierKey)}
+                servers={serverOptions}
+                hasAnyRegisteredServer={hasAnyRegisteredServer}
+                fallbackLicenseTail={licenseTail}
+                variant={isInstitutional ? "amber" : "primary"}
+              />
+            )}
           </div>
           );
         })}

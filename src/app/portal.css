@@ -860,6 +860,12 @@
   color: var(--hz-warn); background: rgba(255, 194, 75, 0.08); border-color: rgba(255, 194, 75, 0.5);
 }
 
+/* A tier card for a product that is not on sale (coxwell via marcus, m50788). The pill is the
+   marketplace's own .mkt-pill-* -- one state, one spelling, on both surfaces -- so only the
+   placement and the card's dimming live here. Same 0.75 as .mkt-card.mkt-coming-soon. */
+.portal-shell .ftd-tier-card.ftd-unavailable { opacity: 0.75; }
+.portal-shell .ftd-availability-pill { align-self: flex-start; margin-top: 8px; }
+
 /* Onyx/platinum lockup for the Black flagship card (Iris mock, black-trial-signup.png) */
 .portal-shell .ftd-tier-card.ftd-black {
   border-color: rgba(255, 194, 75, 0.35);
