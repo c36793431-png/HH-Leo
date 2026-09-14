@@ -83,8 +83,9 @@ export function TierProposalForm({
         <span className="hint">
           Comma-separated. On a tier&rsquo;s first round, endpoint, protocol, and coverage are optional — leave
           blank if you&apos;d rather confirm them with Horizon directly. Once a tier is live, a blank box
-          does <b>not</b> clear that detail: the round is <b>refused</b> and tells you what is currently set,
-          so re-enter what you want to keep. Removing a live detail is Horizon&rsquo;s to do — ask them.
+          does <b>not</b> clear that detail: the round is <b>refused</b>{" "}
+          and tells you what is currently set, so re-enter what you want to keep. Removing a live
+          detail is Horizon&rsquo;s to do — ask them.
         </span>
       </div>
 
