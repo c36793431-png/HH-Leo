@@ -629,7 +629,7 @@ where not exists (select 1 from feed_allowlist_records r
 on conflict (server_registration_id, feed_tier_id, told_at) do nothing;
 ```
 where `tmp_0088_carry` is the SELECT above. Post-gate: for every distinct (server, tier, ip) in
-`tmp_0087_carry` an open record exists (count of misses = 0). Notice: rows enumerated, rows
+`tmp_0088_carry` an open record exists (count of misses = 0). Notice: rows enumerated, rows
 inserted, rows skipped because an open same-IP record already existed (a legacy grant that was
 ALSO re-approved through the new path since 22:58Z).
 
@@ -1334,7 +1334,7 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person), R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last) and R17 (TEXT only: fable's R14 verdict -- T1-T4, the withdrawn m50485 provenance, property 5, rollback stamps ruled NO, the wrap-quote sweep). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person), R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last) and R17 (TEXT only: fable's R14 verdict -- T1-T4, the withdrawn m50485 provenance, property 5, rollback stamps ruled NO, the wrap-quote sweep) and R18 (TEXT only: marcus m50542_mu12mjm5 -- the sweep widened to every quoted span, 152 zero-hits enumerated, one name corrected). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
 
 **R9 (LIVE, supersedes R4 / R5 / R6 / R8 on everything about the six) -- the lapse becomes a
 predicate step with a refusal gate; the carve-out is computed, never written down.** Marcus
@@ -1550,6 +1550,37 @@ command, `src` predicates, 0086 text, this document's own operator queries) or c
 (`alter table server_registrations` / `alter column user_id set not null;` at 0088:1054-1055,
 `alter table feed_subscriptions` / `drop constraint if exists feed_subscriptions_server_or_lapsed_chk;`
 in the rollbacks). The raw 35 go to the thread with this commit.
+R18 widens that sweep to marcus's predicate (m50542_mu12mjm5 item 2: EVERY quoted span, not only the
+wrap-assembled ones; "a class found by accident has an unknown population until someone enumerates
+it"). Method, and every figure below is measured on this file at 2530e7d, this commit's PARENT,
+because the paragraph you are reading adds spans of its own: `grep -o` every backticked span out of
+the file -- 2,157 backtick
+characters, 1,011 in-line spans, 135 unpaired backticks of which 40 are the third backtick of a
+fenced-block delimiter line and the remaining 95 are 47 wrap-crossing spans plus the one literal
+backtick at :19 inside the line-one paste -- dedupe to 498 unique, then `grep -F` all 498 against
+`git grep -- src db` and subtract the hits. A multi-pattern `grep -o` reports only non-overlapping
+matches, so a short span nested in a longer one reads as a false miss; the miss set was therefore
+re-grepped on its own until it stopped shrinking (164 -> 152 -> 152, a fixed point). Result: 250 of
+the 498 appear verbatim in the four frozen SQL files, 346 appear somewhere in `src` or `db`, 152
+appear nowhere. All 152 go to the thread raw with this commit.
+ONE new defect in the 152, fixed at this commit: section 5's carry post-gate named the temp table
+`tmp_0087_carry` one line after naming it `tmp_0088_carry` for the same SELECT. The file defines
+`create temp table tmp_0088_carry on commit drop as` at 0088_tighten.sql:1129 and there is no
+`tmp_0087_` table in any of the four files.
+FLAGGED, not changed, because rewriting a history entry needs a ruling: three entries name a
+`tmp_0089_exempt` that the frozen 0089 does not have --
+0089_drop_server_or_lapsed_exception.sql:104 creates `tmp_0089_carried`. Two are in the R9 and R6
+records (:1366, :1750). The third, :1815, also attributes the clause to "0088 step 4's UPDATE" when
+the live clause is `and fs.id in (select id from tmp_0089_carried);` at 0089:143. All three describe
+superseded drafts, so they are reported here rather than edited.
+The other 151 fall in four groups, none of them a claim about these files: spans that quote nothing
+(shas, message ids, file PATHS, `npm run lint`, `npx tsc --noEmit`, `grep -F`, `psql -q`); spans
+carrying an explicit placeholder (`<six>`, `id in (...)`, `FILL-IN`, `19cb2c39-...`); prose
+fragments and notice format strings that a wrap split mid-sentence; and names from superseded drafts
+inside the history sections (`exempt_rekeyed`, `fs_no_server_live_exempt`, `tmp_0087_carry`'s
+neighbours). Two dotted forms the file never writes but whose parts exist --
+`tmp_0088_lapse_by_word.id` (0088:400) and `tmp_0088_carry_by_word.legacy_id` (0088:402-403) -- are
+spec shorthand and are left as they are.
 Also from the sweep, fable's own miss: the grep A table's SET shorthand (`status='lapsed'`,
 `updated_at=now()`) was unspaced and aliasless. Rather than mark it a paraphrase, all seven cells
 now quote the file's `set` line verbatim, so each hits one line of 0088.
