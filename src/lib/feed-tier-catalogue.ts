@@ -111,11 +111,12 @@ export const PACKAGE_DISPLAY_LABELS: Record<string, string> = {
  *   the admin queue passes an explicit decision and is untouched.
  * - No client lost access: zero feed_subscriptions rows on either tier, and all six historic
  *   feed_tier_trials rows are already expired or cancelled.
- * - An admin who explicitly picks decision='trial' in the queue can still grant one. The
- *   envelope's own ends_at still expires it, but no feed_tier_trials row is written (the
- *   mirror the expire-cron and the provider Trials tab read), so it renders as a plain
- *   approval. Guarding an admin's deliberate choice is a change to an admin tool, not to a
- *   buyer surface, and was not this errand's to make -- reported to marcus, m50788.
+ * - An admin who explicitly picks decision='trial' in the queue USED TO be able to grant one
+ *   with no feed_tier_trials row behind it (invisible to the expire-cron and the provider
+ *   Trials tab). Closed since marcus m50841: approveOnClient refuses a trial decision that
+ *   would write no mirror row (UntrackableTrialError, access-requests.ts). A PAID approval on
+ *   a coming-soon tier is still permitted -- coming soon governs the buyer surface, not the
+ *   admin's discretion.
  *
  * NOT DERIVED FROM marketplace-catalogue.ts, which is where availability otherwise has its one
  * home: that module imports this one, so reading it back here would be an import cycle. This

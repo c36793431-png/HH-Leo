@@ -20,6 +20,7 @@ import {
   PaidApprovalNeedsQueueError,
   rejectAccessRequest,
   startSelfServeTrial,
+  trialRowWouldBeWritten,
   type AccessDecision,
   type AccessRequestRow,
 } from "./access-requests";
@@ -179,7 +180,7 @@ async function notifyClient(row: FeedTierRequestRow, text: string): Promise<void
  * within the after-commit gap (S4). A failure here (already claimed, race, etc.) must never
  * fail the approve action itself. */
 async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string): Promise<void> {
-  if (!isTrialEligibleTier(row.tierKey) || !row.licenseId) return;
+  if (!trialRowWouldBeWritten(row.tierKey, row.licenseId)) return;
   try {
     const trial = await insertFeedTierTrial({
       userId: row.userId,

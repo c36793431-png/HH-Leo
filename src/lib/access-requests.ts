@@ -93,6 +93,27 @@ export class PaidApprovalNeedsQueueError extends Error {
   }
 }
 
+/** The invariant behind UntrackableTrialError, stated once so the guard and the writer cannot
+ * drift: a trial leaves a trace only if activateTrialIfEligible (feed-tier-requests.ts) writes
+ * its feed_tier_trials row, and that needs a trial-eligible tier AND the server row's licence.
+ * Narrows licenseId for the writer, which needs it non-null. Only the TRUE branch is sound:
+ * false also covers "licence present, tier not trial-eligible", so licenseId is not really null
+ * there -- neither call site reads it after a false. */
+export function trialRowWouldBeWritten(tierKey: string, licenseId: string | null): licenseId is string {
+  return isTrialEligibleTier(tierKey) && !!licenseId;
+}
+
+/** A trial decision the mirror would not record -- the tier is not trial-eligible (Alpha and
+ * Ultra since m50788 made them coming soon), or the server row carries no licence -- would grant
+ * access that the expire-trials cron and the provider Trials tab cannot see. It refuses instead.
+ * Only the trial decision: a PAID approval on the same tier is coxwell's to make (m50841). */
+export class UntrackableTrialError extends Error {
+  constructor(tierName: string) {
+    super(`${tierName} cannot be approved as a trial: no trial record would be written for it. Approve it as paid, with an end date and invoice ref.`);
+    this.name = "UntrackableTrialError";
+  }
+}
+
 /** Section 4(c): a legacy feed_tier_requests id that 0086 section 3 copied as N envelopes (a
  * package) cannot be decided by one button; each line is decided in the queue (Source F). */
 export class PackageNeedsQueueError extends Error {
@@ -314,6 +335,9 @@ async function approveOnClient(client: PoolClient, input: ApproveAccessRequestIn
       const tier = await feedTierById(client, detail.rows[0].feed_tier_id);
       if (!tier.providerUserId) throw new FeedTierNotAssignedError(tier.name, tier.regionKey);
       tierKey = tier.tierKey;
+      if (input.decision === "trial" && !trialRowWouldBeWritten(tier.tierKey, sr.licenseId)) {
+        throw new UntrackableTrialError(tier.name);
+      }
 
       await assignPseudonymSeq(client, tier.providerUserId, envelope.user_id);
       try {
