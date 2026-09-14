@@ -36,6 +36,7 @@ import {
   Handshake,
   UserPlus,
   ClipboardCheck,
+  Store,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,6 +51,9 @@ const PORTAL_LINKS = [
   { href: "/downloads", label: "Downloads", icon: Download, paidOnly: true, color: "#7BE06A" },
   { href: "/community", label: "Community", icon: Users, color: "#2DE2E6" },
   { href: "/feeds", label: "Feeds", icon: Rss, paidOnly: true, lockedStaysOnPage: true, color: "#17D0B0" },
+  // Not paidOnly, deliberately: a catalogue of what we sell has to be visible to a free account
+  // (marcus, m50717 #3). Sits under Feeds because every feed listing on it links back there.
+  { href: "/marketplace", label: "Marketplace", icon: Store, color: "#A78BFA" },
   { href: "/account/servers", label: "Servers", icon: HardDrive, paidOnly: true, lockedStaysOnPage: true, color: "#189FC9" },
   { href: "/alerts", label: "Trading", icon: CandlestickChart, paidOnly: true, lockedStaysOnPage: true, color: "#FFC24B", isNew: true },
   { href: "/strategies", label: "Strategies", icon: Zap, paidOnly: true, lockedStaysOnPage: true, color: "#37F5A0" },

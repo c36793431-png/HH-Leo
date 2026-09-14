@@ -739,6 +739,10 @@
 .portal-shell .fp-pill-included { background: rgba(76, 141, 255, 0.14); color: var(--hz-blue-bright); border-color: rgba(76, 141, 255, 0.4); }
 .portal-shell .fp-pill-locked { background: rgba(255, 92, 122, 0.14); color: var(--hz-bad); border-color: rgba(255, 92, 122, 0.4); }
 .portal-shell .fp-pill-coming_soon { background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); border-color: rgba(138, 155, 160, 0.35); }
+/* Maintenance is amber, not the coming-soon grey: a product that exists and is temporarily
+   down must not read as one that has never shipped. Same state as /marketplace's amber
+   maintenance pill — one state, one colour, two surfaces. */
+.portal-shell .fp-pill-maintenance { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: var(--hz-amber-line); }
 .portal-shell .fp-name { font-family: var(--hz-disp); font-weight: 700; font-size: 17px; }
 .portal-shell .fp-desc { font-size: 12px; color: var(--hz-ink-3); line-height: 1.5; min-height: 34px; }
 .portal-shell .fp-latency { font-family: var(--hz-mono); font-size: 11px; color: var(--hz-ink-2); }
@@ -748,6 +752,7 @@
 .portal-shell .fp-note { font-size: 11px; color: var(--hz-ink-3); }
 .portal-shell .fp-cta { align-self: flex-start; margin-top: 6px; }
 .portal-shell .fp-card.fp-coming_soon { opacity: 0.7; }
+.portal-shell .fp-card.fp-maintenance { opacity: 0.75; }
 .portal-shell .fp-footnote { font-size: 12px; color: var(--hz-ink-3); margin-top: 18px; max-width: 640px; }
 .portal-shell .fp-section { margin-top: 32px; }
 .portal-shell .fp-section-title { font-family: var(--hz-disp); font-size: 15px; font-weight: 700; color: var(--hz-ink-2); margin-bottom: 12px; }
@@ -979,6 +984,34 @@
 }
 .portal-shell .act-count { font-family: var(--hz-disp); font-weight: 700; font-size: 24px; color: var(--hz-ink); display: block; }
 .portal-shell .act-count-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--hz-ink-3); }
+
+/* ---- MARKETPLACE (/marketplace) ----
+   Deliberately the /feeds card language (fp-*) at one size up, not a new one: the marketplace
+   lists the same products those cards do, and a catalogue that looks like a different product
+   from the pages it links to is its own kind of disagreement. */
+.portal-shell .mkt-section { margin-top: 26px; }
+.portal-shell .mkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.portal-shell .mkt-card { display: flex; flex-direction: column; gap: 6px; }
+.portal-shell .mkt-top { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 2px; }
+.portal-shell .mkt-pill {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 9px;
+  border-radius: 999px; border: 1px solid transparent;
+}
+.portal-shell .mkt-pill-available { background: var(--hz-ok); color: #04170f; border-color: var(--hz-ok); }
+.portal-shell .mkt-pill-coming-soon { background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); border-color: rgba(138, 155, 160, 0.35); }
+.portal-shell .mkt-pill-maintenance { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: var(--hz-amber-line); }
+.portal-shell .mkt-name { font-family: var(--hz-disp); font-weight: 700; font-size: 17px; }
+.portal-shell .mkt-desc { font-size: 12px; color: var(--hz-ink-3); line-height: 1.5; min-height: 34px; }
+.portal-shell .mkt-card.mkt-coming-soon, .portal-shell .mkt-card.mkt-maintenance { opacity: 0.75; }
+.portal-shell .mkt-members {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 8px;
+  border-top: 1px solid var(--hz-line-soft);
+}
+.portal-shell .mkt-members-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--hz-ink-3); }
+.portal-shell .mkt-member { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.portal-shell .mkt-member-name { font-size: 12px; font-weight: 600; color: var(--hz-ink-2); }
+.portal-shell .mkt-member-figure { font-family: var(--hz-mono); font-size: 13px; font-weight: 700; color: var(--hz-ink); }
+.portal-shell .mkt-cta { align-self: flex-start; margin-top: 10px; }
 
 @media (max-width: 768px) {
   .portal-shell .app { grid-template-columns: 1fr; }

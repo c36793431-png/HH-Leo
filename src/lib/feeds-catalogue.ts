@@ -1,4 +1,5 @@
 import { FEED_TYPE_META, type FeedType } from "@/lib/licenses";
+import { feedCardAvailability } from "@/lib/marketplace-catalogue";
 
 export interface FeedCatalogueEntry {
   slug: string;
@@ -73,7 +74,7 @@ export const COMING_SOON_CATALOGUE: FeedCatalogueEntry[] = [
   },
 ];
 
-export type FeedCardStatus = "active" | "trial" | "included" | "locked" | "coming_soon";
+export type FeedCardStatus = "active" | "trial" | "included" | "locked" | "coming_soon" | "maintenance";
 
 export function computeFeedCardStatus(
   entry: FeedCatalogueEntry,
@@ -83,6 +84,17 @@ export function computeFeedCardStatus(
     isAdmin,
   }: { activeFeeds: FeedType[]; licenseTier: string | null; isAdmin: boolean }
 ): FeedCardStatus {
+  // A product's availability has ONE home: marketplace-catalogue.ts. This card would otherwise
+  // keep rendering CME Futures as a live feed (isLive: true) while /marketplace calls it
+  // maintenance, and two surfaces disagreeing about a product is the defect itself, not a
+  // cosmetic mismatch (marcus, m50717 #5 -- "both surfaces move together"). The override runs
+  // BEFORE the entitlement branches deliberately: a feed that is down is down for the clients
+  // who hold it too, not just for the ones who don't. Blast radius when it landed: zero rows in
+  // licenses carry `futures` and there are no CME tiers to have granted, so no client's card
+  // changed. Restoring the feed is a one-word edit in that file, and it moves both surfaces.
+  const declared = feedCardAvailability(entry.slug);
+  if (declared === "maintenance") return "maintenance";
+  if (declared === "coming-soon") return "coming_soon";
   if (!entry.isLive || !entry.feedType) return "coming_soon";
   if (activeFeeds.includes(entry.feedType)) return licenseTier === "trial" ? "trial" : "active";
   if (isAdmin) return "included";

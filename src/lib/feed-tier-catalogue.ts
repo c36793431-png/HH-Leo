@@ -82,6 +82,18 @@ export function expandTierKey(tierKey: string): string[] {
   return PACKAGE_TIER_KEYS[tierKey] ?? [tierKey];
 }
 
+/** The BUYER-FACING name of a package, keyed by tiers/page.tsx's TIER_PACKAGE_KEY grouping key
+ * ("retail"/"ny-retail" -- the pseudo-tier keys' stems, kept as-is per the ld-retail-package
+ * note above). Hoisted out of tiers/page.tsx 2026-09-14 when /marketplace became a second
+ * surface naming the same bundle: both regions' bundles are called "Base", and a rename by
+ * coxwell has to move both surfaces or they misname the same product at each other
+ * (marcus, m50723 #4). Deliberately NOT feed-provider-packages.ts's PACKAGES[].label
+ * ("LD Base"/"NY Base") -- that is the PROVIDER-side label and no buyer sees it. */
+export const PACKAGE_DISPLAY_LABELS: Record<string, string> = {
+  retail: "Base",
+  "ny-retail": "Base",
+};
+
 /** Only the entry tier and the flagship get a trial CTA (coxwell, trial feature add-on,
  * horizon-portal-v2051-polish-2026-08-13) -- middle tiers stay paid-only. NY has no middle
  * tier (2 tiers total), so both are trial-eligible (coxwell, leo-ny-feed-trial-option-2026-08-15). */

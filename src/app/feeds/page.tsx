@@ -29,6 +29,7 @@ const STATUS_LABEL: Record<FeedCardStatus, string> = {
   included: "Included",
   locked: "Locked",
   coming_soon: "Coming soon",
+  maintenance: "Maintenance",
 };
 
 export default async function FeedsPage() {
@@ -135,6 +136,10 @@ export default async function FeedsPage() {
                 </a>
               )}
               {status === "coming_soon" && <span className="fp-note">Planned — not live yet</span>}
+              {/* Distinct wording from coming-soon on purpose: this feed exists and is
+                  temporarily down, which is not the same claim as "not built yet". State comes
+                  from marketplace-catalogue.ts so this card and /marketplace cannot disagree. */}
+              {status === "maintenance" && <span className="fp-note">Temporarily unavailable — maintenance</span>}
 
               {!isActiveOrTrial && seeTiersLink}
             </div>

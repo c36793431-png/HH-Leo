@@ -5,7 +5,7 @@ import { getReachablePanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { isFeedRegion, FEED_REGION_TYPE } from "@/lib/feed-tier-catalogue";
+import { isFeedRegion, FEED_REGION_TYPE, PACKAGE_DISPLAY_LABELS } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { isScoreRegion } from "@/lib/feed-provider-packages";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
@@ -70,10 +70,10 @@ const TIER_PACKAGE_KEY: Record<string, string> = {
   "ny-fast": "ny-retail",
   "ny-normal": "ny-retail",
 };
-const PACKAGE_LABELS: Record<string, string> = {
-  retail: "Base",
-  "ny-retail": "Base",
-};
+/** Buyer-facing package names moved to feed-tier-catalogue.ts (PACKAGE_DISPLAY_LABELS) when
+ * /marketplace became a second surface rendering the same bundle name -- one source so a
+ * rename cannot land on one surface only (marcus, m50723 #4). Same values, same keys. */
+const PACKAGE_LABELS = PACKAGE_DISPLAY_LABELS;
 
 /** The tier_key a package's single Request access button submits under -- see the
  * ld-retail-package comment in feed-tier-catalogue.ts for why this is a pseudo-tier
