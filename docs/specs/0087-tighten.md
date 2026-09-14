@@ -329,23 +329,36 @@ still NULL, non-trial from the licence and trial from `feed_tier_trials` (0086:6
 writers set all three columns; 0086 spec section 10 step 7 is the post-deploy invariant).
 
 **4b. Refusal gate, then the predicate lapse (NEW in R9, section 12; marcus m50350_mu0ztzip
-2026-09-14).** The lapse leaves step 5 and becomes its own step, on the predicate
-`status <> 'lapsed' and ends_at < now()` over EVERY row, not only NULL-server ones. `<` not `<=`:
-marcus's wording, and the knife-edge it leaves (`ends_at` exactly equal to the transaction's
-`now()`) is closed by a named abort in step 5 rather than by a 23514 out of ADD CONSTRAINT.
-Before the UPDATE, the gate: every candidate row must ALREADY compute `lapsed` under
+2026-09-14, narrowed by his Z1 ruling m50396_mu10majx the same day).** The lapse leaves step 5 and
+becomes its own step, on the predicate `status <> 'lapsed' and ends_at < now() and
+server_registration_id is null`. `<` not `<=`: marcus's wording, and the knife-edge it leaves
+(`ends_at` exactly equal to the transaction's `now()`) is closed by a named abort in step 5 rather
+than by a 23514 out of ADD CONSTRAINT. The `server_registration_id is null` conjunct is his Z1
+ruling, option (a), on fable's strike (m50391_mu10l45h Z1): R9 as first built dropped it and so
+lapsed 3 rows of a client who HAS a server row and was never in the no-server blocker table
+coxwell ruled on -- "it exceeds the authorisation", and "a step that alters client records without
+advancing its own purpose should not run", since the CHECK the lapse exists to unblock only looks
+at NULL-server rows. His general rule from the same message: "a literal can under-reach; a
+predicate can over-reach. Neither is safe by category -- the test is whether the set it selects is
+the set that was authorised."
+Before the UPDATE, one notice per candidate (`step 4b candidate:` -- id, subscriber, tier,
+`server_registration_id`, `ends_at`, computed status, reason), fable's Z2 in m50391_mu10l45h, so
+the operator's list of movers comes from the same run's `now()` as the move. Then the gate: every
+candidate row must ALREADY compute `lapsed` under
 `EFFECTIVE_STATUS_SQL` (`src/lib/feed-subscriptions.ts:140-159`, blob `94fa705` at branch head
 `e1835fb`, with `REGION_TO_FEED_TYPE_SQL` from :114), transcribed into the migration with
 `s -> fs` and a LEFT join to `feed_tiers` so a `provider_tier` row is named rather than dropped.
 A candidate that computes non-lapsed is a row a client can still see; the file aborts and names
 each with the branch keeping it alive (live licence / live trial / ungated region / cme). Marcus's
 prod read of 2026-09-14 08:41Z (m50350_mu0ztzip, HIS read, not mine): 21 rows / 7 clients match
-the predicate and `effective_status = 'lapsed'` on every one, so the gate is empty TODAY -- which
+the un-narrowed predicate and `effective_status = 'lapsed'` on every one; after the Z1 conjunct
+the candidate set is the 18 rows / 6 clients of those that have no server row, and the gate is
+empty TODAY on either reading -- which
 is exactly why it is in the file. His read proves the flip safe on the day it was taken and says
 nothing about the day the file is applied; this file has already sat unapplied for two days while
 its own committed six-uuid list went stale underneath it. A migration that re-checks its own
 precondition cannot be overtaken by time. Counts `fs_predicate_lapsed` /
-`fs_predicate_lapsed_clients` into the summary; expected 21 / 7, as a read, not a gate.
+`fs_predicate_lapsed_clients` into the summary; expected 18 / 6 (Z1), as a read, not a gate.
 
 **5. NULL-server disposition, then the CHECK (header 80-86).** Listing, one notice per row, of
 every `feed_subscriptions` row with `server_registration_id is null`: `id, subscriber, tier,
@@ -480,8 +493,8 @@ references it: `git grep` in `src` = 13 comment lines (line one, companion grep)
 **10. Summary SELECT and the ledger row.** AMENDED by R9: `fs_no_server_live` is no longer 0 -- it
 equals `fs_carve_out` by construction -- and `fs_exempt_live` / `fs_no_server_lapsed_now` are
 replaced by `fs_no_server_listed`, `fs_carve_out`, `fs_carve_out_clients`, `fs_predicate_lapsed`
-and `fs_predicate_lapsed_clients` (expected 27 / 6 / 2 / 21 / 7 on marcus's 08:41Z read, as reads,
-not gates). Pre-R9 text follows. One row: `sr_user_id_null` (0), `sr_owner_mismatch`
+and `fs_predicate_lapsed_clients` (expected 27 / 6 / 2 / 18 / 6 on marcus's 08:41Z read as narrowed
+by his Z1 ruling, section 12 R10, as reads, not gates). Pre-R9 text follows. One row: `sr_user_id_null` (0), `sr_owner_mismatch`
 (0, step 1 second gate), `fs_no_server_live` (0, step 5 gate), `fs_no_server_lapsed_now` (step
 5's UPDATE count), `fs_lapsed_by_word` (step 2b(b) row count, 0 when the slot is empty),
 `fs_request_id_column_present` (false, from `information_schema.columns`), `ftr_table_present`
@@ -818,16 +831,20 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    ends_at, server_registration_id, <EFFECTIVE_STATUS_SQL> as computed from feed_subscriptions
    order by id` -- the same read marcus used for the 0086 dry-runs.
 3. Apply (`commit`). Paste every notice line; they must equal the dry-run's.
-4. After-read = before-read plus EXACTLY: stored `status` -> `lapsed` on the step-4b rows (named
-   ahead from the before-read with the R9 predicate: `status <> 'lapsed' and ends_at < now()`,
-   which unlike the pre-R9 form includes rows that HAVE a server) plus the step-2b(b) rows if any
-   literal is present, `computed` unchanged on every row. AMENDED by R9: fable's S4 caveat -- a
+4. After-read = before-read plus EXACTLY: stored `status` -> `lapsed` on the step-4b rows plus the
+   step-2b(b) rows if any literal is present, `computed` unchanged on every row. The expected
+   movers are NOT named ahead from the before-read: they are the `step 4b candidate:` lines of THE
+   SAME RUN's notice paste, plus any `step 2b(b)` lines (fable Z2, m50391_mu10l45h). The
+   before-read is a different `now()`, so a row whose `ends_at` falls between the two is a real
+   mover it does not list -- Aylrn's 3 rows cross on 09-19 and would do exactly that mid-run.
+   AMENDED by R9: fable's S4 caveat -- a
    row whose `ends_at` is past but which still computes live (trial licence, renewed licence,
    ungated region, `cme`) and would therefore be a COMPUTED mover when lapsed -- is no longer
    left to the population being lucky. Step 4b's refusal gate re-takes that check inside the
    transaction and aborts naming each such row, so "computed unchanged on every row" is enforced
    by the file, not just expected of it. Marcus's read of 2026-09-14 08:41Z has 0 such rows in
-   the 21. Any other mover means the file is wrong and the rollback runs.
+   the 21 (so 0 in the 18 the Z1 conjunct leaves). Any other mover means the file is wrong and the
+   rollback runs.
 5. Schema reads: `information_schema.columns` for `feed_subscriptions` (fable Q2's SELECT,
    section 11) has no `request_id` row and has `lapsed_at`; `to_regclass('feed_tier_requests')
    is null`; `pg_indexes` has neither `feed_subscriptions_request_tier_uidx` nor
@@ -939,7 +956,7 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename) and R9 (predicate lapse, refusal gate, computed carve-out). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) and R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
 
 **R9 (LIVE, supersedes R4 / R5 / R6 / R8 on everything about the six) -- the lapse becomes a
 predicate step with a refusal gate; the carve-out is computed, never written down.** Marcus
@@ -964,6 +981,9 @@ the lapse set. Expected state after 4b: 6 no-server live rows, 2 clients (to 09-
 
 The four rulings:
 1. **Predicate lapse step**, `ends_at < now()`, over every row. New spec step 4b; leaves step 5.
+   **AMENDED by Z1 below (marcus m50396_mu10majx, the same day): the predicate gains
+   `and server_registration_id is null`, so it is NOT over every row and the expected count is
+   18 rows / 6 clients, not 21 / 7.** Read ruling 1 only together with Z1.
 2. **The six hardcoded uuids are ripped out of all four lists** (0088 `tmp_0088_exempt`, 0088's
    CHECK, 0089 `tmp_0089_exempt`, 0089 rollback's CHECK) **and out of the step-5 gate.** Required
    regardless of the rest: the population marcus read on 09-13 14:55Z is not the population he
@@ -986,6 +1006,49 @@ Scope: medium, unchanged -- Q4 came back clean, so there is no per-client access
 Applied at this commit: 0088 header + steps 2b / 4b / 5 / 6 / 10, 0088_rollback comments, 0089
 header + steps 0-4 + summary, 0089_rollback section 4, and this document (sections 2 table row 6,
 4b, 5, 6, 12).
+
+**R10 (LIVE, amends R9) -- Z1 narrows the 4b predicate to NULL-server rows; Z2 names every
+candidate in the paste; Z4 states the 0089 rollback's empty carve-out as construction, not luck.**
+Fable's R9 read m50391_mu10l45h (2026-09-14 09:02Z, PASS-WITH-STRIKES Z1-Z4) and marcus's ruling
+m50396_mu10majx (09:03Z). Z3 was answered separately as m50397_mu10mcpp (the raw
+`EFFECTIVE_STATUS_SQL` source lines) and needed no file change.
+
+**Z1 -- RULED (a), the conjunct is added; expected count 18 rows / 6 clients.** R9's predicate
+`status <> 'lapsed' and ends_at < now()` selected population (b) of R9's own table, which is not
+the population coxwell ruled on: one client's 3 rows are past `ends_at` but HAVE a server
+registration, so they were never in the no-server blocker table he was shown. Marcus's three
+reasons, in his order of weight: (1) "it exceeds the authorisation" -- "his rows were about to be
+lapsed on a ruling that never mentioned him"; (2) it buys nothing -- the lapse exists to unblock
+the CHECK, "and the CHECK only cares about no-server rows... a step that alters client records
+without advancing its own purpose should not run"; (3) fable's renewal point -- a stored `lapsed`
+matches the read CASE's first branch, so on a renewed-in-place licence the rows would stay lapsed
+until an admin re-grant, where today they would read live again. His rule for the future: "a
+literal can under-reach; a predicate can over-reach. Neither is safe by category -- the test is
+whether the set it selects is the set that was authorised." The refusal gate is unchanged; it now
+runs over the 18. Text follows in 0088 header 4b, the step-4b comment, step 5's listing comment,
+0088_rollback's not-reverted note, and this document (4b, section 11 step 4, R9 ruling 1).
+
+**Z2 -- BUILT.** 4b raises one `step 4b candidate:` notice per candidate BEFORE the gate (id,
+subscriber, tier, `server_registration_id`, `ends_at`, computed status, reason), so the run names
+every row it is about to touch and not only the refused ones. Section 11 step 4 is corrected with
+it: the expected movers are those lines from THE SAME RUN's paste plus any 2b(b) lines, NOT rows
+named ahead from the before-read -- the before-read is a different `now()`, and Aylrn's 3 rows
+cross on 09-19, mid-run.
+
+**Z4 -- TEXT.** 0089_rollback's header and step-4 comment now say the recomputed carve-out is
+EMPTY BY CONSTRUCTION after a committed 0089: the exception-less CHECK 0089 leaves is in force
+until the rollback's own DROP in the same transaction, so no non-lapsed NULL-server row can exist
+to be found. The carrying branch is kept as a GUARD against the constraint not having been in
+force, not described as "non-empty only if new NULL-server rows appeared".
+
+Noted, not struck, and NOT mine: R9 no longer refuses carve-out GROWTH (marcus struck the step-5
+SUBSET gate in m50350). He has taken that guard into his apply procedure explicitly (m50396):
+read the step-5 carve-out notice, compare it to the expected set, abort if it does not match, same
+paste compared between dry-run and apply.
+
+Applied at this commit: 0088 header 4b + step 4b (predicate, candidate notices, comments, expected
+counts) + step 5 listing comment, 0088_rollback not-reverted note, 0089_rollback header + section
+4 comments, and this document (4b, section 11 step 4, section 12 R9 ruling 1 + this entry).
 
 **R8 (SUPERSEDED by R9, kept as history; text only) -- a live NULL-server row outside the six has ONE fix; 0089's order is
 re-key, gate, lapse.** Fable m50023_mtzyhpob (2026-09-13 15:15Z, her R5 read, PASS-WITH-STRIKES

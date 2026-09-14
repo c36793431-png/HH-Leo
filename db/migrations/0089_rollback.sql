@@ -10,10 +10,17 @@
 -- The original carried set is NOT recoverable and is not pretended to be: 0089 dropped the only
 -- record of it (the constraint text) and then settled every row in it. What this file restores is
 -- the 0088 step-5 SHAPE, rebuilt against the rows that need it NOW -- NULL-server non-lapsed rows
--- at rollback time, by `execute format`, exactly as 0088 step 5 builds it. After a clean 0089 run
--- that set is EMPTY and the restored constraint is textually what 0089 left; it is non-empty only
--- if new NULL-server rows appeared since, and carrying those is the only way the ADD CONSTRAINT
--- can succeed at all.
+-- at rollback time, by `execute format`, exactly as 0088 step 5 builds it.
+--
+-- After a committed 0089 that set is EMPTY BY CONSTRUCTION, not merely empty in practice (fable
+-- Z4, m50391_mu10l45h, 2026-09-14): 0089 leaves the CHECK in force with no exception, and it stays
+-- in force until this file's own DROP a few lines below, in this same transaction. No row can be
+-- non-lapsed with a NULL server while it holds, and nothing can insert one between the DROP and
+-- the recompute. So the restored constraint is textually what 0089 left. The carrying branch is
+-- kept as a GUARD, not as an expected path -- if it ever fires, the constraint was not in force
+-- when this file ran (0089 rolled back already, applied outside a transaction, or the constraint
+-- dropped by hand), and carrying those rows is then the only way the ADD CONSTRAINT can succeed
+-- at all.
 --
 -- NOT reverted, stated up front (fable v1.76 via marcus m49852):
 --   - 0089 step 1, the re-key of the carried rows: a 0086 column backfill, left as written,
@@ -63,8 +70,12 @@ create unique index if not exists feed_subscriptions_license_feed_tier_live_uidx
 
 -- ---------------------------------------------------------------------------------------
 -- 4 reverse: the CHECK back in the 0088 step-5 form, its exception recomputed from the data.
--- Steps 3 and 1: not reverted. Expected after a clean 0089 run: carve-out 0, so the constraint
--- comes back in its plain two-branch form and the notice says NO exception.
+-- Steps 3 and 1: not reverted. After a committed 0089 the recomputed set is EMPTY BY CONSTRUCTION
+-- (fable Z4, m50391_mu10l45h): the exception-less CHECK 0089 added is in force right up to the
+-- DROP below, in this transaction, so no non-lapsed NULL-server row can exist to be found. The
+-- constraint therefore comes back in its plain two-branch form and the notice says NO exception.
+-- The carrying branch below is a guard against the constraint NOT having been in force (a 0089
+-- already rolled back, or a hand-dropped constraint), not an expected outcome.
 -- ---------------------------------------------------------------------------------------
 
 alter table feed_subscriptions
@@ -96,7 +107,8 @@ begin
 
   -- No ends_at predicate here, unlike 0088 step 5: a rollback must not also decide that an
   -- expired row may keep a NULL server. Every row that would fail the constraint is carried,
-  -- named above, and left for a re-run of 0089 to settle.
+  -- named above, and left for a re-run of 0089 to settle. Expected count after a committed 0089:
+  -- 0, by construction (see the header) -- the else branch is a guard, not a path.
   if carved = 0 then
     execute 'alter table feed_subscriptions'
          || ' add constraint feed_subscriptions_server_or_lapsed_chk'

@@ -29,8 +29,10 @@
 --     that had one, since 0088 step 2's gate proved the mapping total; NULL for new-path rows).
 --   - The step-4b predicate lapses are NOT reverted: stored 'lapsed' on a row whose ends_at is
 --     past is truthful either way, and 4b's refusal gate proved every one of them already read
---     'lapsed' to the client before the flip (the lapse moved from step 5 to 4b and from
---     NULL-server rows to all rows in marcus m50350_mu0ztzip, 2026-09-14).
+--     'lapsed' to the client before the flip (the lapse moved from step 5 to 4b in marcus
+--     m50350_mu0ztzip, 2026-09-14, and stays on NULL-server rows only: his Z1 ruling
+--     m50396_mu10majx the same day restored the `server_registration_id is null` conjunct that
+--     m50350's predicate had dropped, so no row with a server row is touched).
 --   - The 2b(a) reject and 2b(b) worded lapses are NOT reverted: dated decisions.
 --   - The 2b(c) carries ARE deleted with the step-9 carries: the pre-tighten record set had no
 --     legacy carries; the word stays in the ledger and in the 2b comment.

@@ -52,9 +52,12 @@
 --   4. 0086 section 4 re-run: server_registration_id via licence -> server row (gate left_null =
 --      no_server), ends_at re-seed for rows still NULL (non-trial from the licence, trial from
 --      feed_tier_trials), gate active rows with ends_at NULL = 0. Expected UPDATE 0 / 0 / 0.
---   4b. REFUSAL GATE, THEN THE PREDICATE LAPSE (marcus m50350_mu0ztzip, 2026-09-14). The gate
---      first: every row the lapse is about to touch (`status <> 'lapsed' and ends_at < now()`)
---      must ALREADY compute 'lapsed' under the read side's own CASE, transcribed below from
+--   4b. REFUSAL GATE, THEN THE PREDICATE LAPSE (marcus m50350_mu0ztzip, 2026-09-14; narrowed to
+--      NULL-server rows by his Z1 ruling m50396_mu10majx, 2026-09-14). One notice per candidate
+--      first ('step 4b candidate:', fable Z2 in m50391_mu10l45h), so the paste names every row
+--      the step is about to touch, not only the refused ones. Then the gate: every row the lapse
+--      is about to touch (`status <> 'lapsed' and ends_at < now() and server_registration_id is
+--      null`) must ALREADY compute 'lapsed' under the read side's own CASE, transcribed below from
 --      EFFECTIVE_STATUS_SQL at src/lib/feed-subscriptions.ts:140-159 (blob 94fa705, branch head
 --      e1835fb) with s -> fs. If any does not, the file aborts and names each row with the branch
 --      that keeps it alive. That row is one a client can still see today, and flipping its stored
@@ -63,10 +66,19 @@
 --      is applied; this file has already sat unapplied for two days while its own committed
 --      population went stale. A migration that re-checks its own precondition cannot be overtaken
 --      by time. Then the lapse: `status = 'lapsed', lapsed_at = coalesce(lapsed_at, ends_at)`
---      where `status <> 'lapsed' and ends_at < now()` -- ALL rows, not only NULL-server ones.
---      Expected today 21 rows / 7 clients (marcus's prod read of 08:41Z, m50350_mu0ztzip; three
---      of them, one client, HAVE a server row and so never reach step 5). lapsed_at is the seeded
---      end, not now(): the truthful instant is when access actually stopped.
+--      where `status <> 'lapsed' and ends_at < now() and server_registration_id is null` --
+--      NULL-server rows only. The `server_registration_id is null` conjunct is marcus's Z1 ruling
+--      (m50396_mu10majx, 2026-09-14, option (a)), in his words: the lapse "exceeds the
+--      authorisation" without it, because coxwell ruled on the six clients in the no-server
+--      blocker table and a client with a server row "was not in that table"; and "a step that
+--      alters client records without advancing its own purpose should not run" -- the CHECK this
+--      lapse exists to unblock only looks at NULL-server rows. A stored 'lapsed' also matches the
+--      read CASE's first branch, so on a renewed-in-place licence such a row would stay lapsed
+--      until an admin re-grant where today it reads live again (fable, m50391_mu10l45h Z1).
+--      Expected today 18 rows / 6 clients (marcus's prod read of 08:41Z, m50350_mu0ztzip, minus
+--      the three rows / one client that HAVE a server row; count restated in his Z1 ruling).
+--      lapsed_at is the seeded end, not now(): the truthful instant is when access actually
+--      stopped.
 --   5. Every feed_subscriptions row with server_registration_id NULL, one notice per row. What is
 --      still non-lapsed after 4b is the CARVE-OUT, computed here, never written down:
 --      `server_registration_id is null and status <> 'lapsed' and (ends_at > now() or ends_at is
@@ -607,14 +619,20 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------------------
--- 4b. REFUSAL GATE, THEN THE PREDICATE LAPSE (marcus m50350_mu0ztzip, 2026-09-14)
+-- 4b. REFUSAL GATE, THEN THE PREDICATE LAPSE (marcus m50350_mu0ztzip + Z1 ruling m50396_mu10majx)
 -- ---------------------------------------------------------------------------------------
 
 -- The candidate set: every row the lapse is about to touch. Runs AFTER step 4's ends_at re-seed,
 -- so it reads the seeded value, not the NULL. `< now()`, not `<= now()`: word for word from
--- marcus m50350_mu0ztzip ("Predicate lapse step -- `ends_at < now()`, as specified"). ALL rows,
--- not only NULL-server ones -- a row with a server and a past ends_at is in the set (his read has
--- one such client, 3 rows).
+-- marcus m50350_mu0ztzip ("Predicate lapse step -- `ends_at < now()`, as specified").
+-- NULL-server rows ONLY: `and fs.server_registration_id is null` is marcus's Z1 ruling
+-- (m50396_mu10majx, 2026-09-14, option (a), on fable's strike m50391_mu10l45h Z1). Without it the
+-- set is population (b) (`status <> 'lapsed' and ends_at < now()`, 21 rows / 7 clients in his
+-- 08:41Z read) rather than population (b) intersected with the no-server population (a) that
+-- coxwell was actually shown, and it would lapse 3 rows of one client who HAS a server row and
+-- was never in the blocker table. His words: "a literal can under-reach; a predicate can
+-- over-reach. Neither is safe by category -- the test is whether the set it selects is the set
+-- that was authorised."
 --
 -- computed_status is EFFECTIVE_STATUS_SQL transcribed, s -> fs, from
 -- src/lib/feed-subscriptions.ts:140-159 as of blob 94fa705 (branch head e1835fb, 2026-09-14):
@@ -692,16 +710,28 @@ select fs.id,
 from feed_subscriptions fs
 left join users u on u.id = fs.subscriber_user_id
 left join feed_tiers ft on ft.id = fs.feed_tier_id
-where fs.status <> 'lapsed' and fs.ends_at < now();
+where fs.status <> 'lapsed'
+  and fs.ends_at < now()
+  and fs.server_registration_id is null;
 
--- THE REFUSAL GATE. A candidate that computes non-lapsed is a row a client can still see today;
--- storing 'lapsed' on it would take access away, and this step is housekeeping -- stored status
--- catching up with what the read side already says. Empty in marcus's read of 2026-09-14 08:41Z
--- (m50350_mu0ztzip: 21 rows, effective_status 'lapsed' on every one), which is why the flip is
--- housekeeping AT THAT INSTANT and says nothing about the instant this file is applied. This
--- block re-takes that proof on the transaction's own now(), so the file cannot be overtaken by
--- time the way its committed six-uuid list was. It does not abort on the count -- only on a row
--- that would lose something. Expected today: candidates=21 clients=7 non_lapsed=0.
+-- ONE NOTICE PER CANDIDATE, THEN THE REFUSAL GATE.
+--
+-- The candidate notices are fable's Z2 (m50391_mu10l45h, 2026-09-14): every row this step is
+-- about to touch is named in the paste, not only the refused ones, so the operator's record of
+-- what moved comes from the SAME run's now() as the move. The before-read cannot serve that
+-- purpose -- it is a different now(), and a row whose ends_at falls between the two reads is a
+-- mover the before-read does not list (Aylrn's 3 rows cross on 09-19).
+--
+-- The gate: a candidate that computes non-lapsed is a row a client can still see today; storing
+-- 'lapsed' on it would take access away, and this step is housekeeping -- stored status catching
+-- up with what the read side already says. Empty in marcus's read of 2026-09-14 08:41Z
+-- (m50350_mu0ztzip: 21 rows over both populations, effective_status 'lapsed' on every one),
+-- which is why the flip is housekeeping AT THAT INSTANT and says nothing about the instant this
+-- file is applied. This block re-takes that proof on the transaction's own now(), so the file
+-- cannot be overtaken by time the way its committed six-uuid list was. It does not abort on the
+-- count -- only on a row that would lose something. Expected today: candidates=18 clients=6
+-- non_lapsed=0 (18 / 6 is marcus's Z1 ruling m50396_mu10majx; the other 3 rows of his 21 have a
+-- server row and are no longer candidates).
 do $$
 declare
   r record;
@@ -712,6 +742,17 @@ declare
 begin
   select count(*), count(distinct subscriber_user_id) into candidates, clients
   from tmp_0088_lapse_candidates;
+
+  for r in
+    select id, subscriber, tier_key, status, server_registration_id, ends_at,
+           computed_status, reason
+    from tmp_0088_lapse_candidates
+    order by subscriber, tier_key, id
+  loop
+    raise notice 'step 4b candidate: id=% subscriber=% tier=% status=% server_registration_id=% ends_at=% computed=% because=%',
+      r.id, r.subscriber, coalesce(r.tier_key, '(provider_tier)'), r.status,
+      r.server_registration_id, r.ends_at, r.computed_status, r.reason;
+  end loop;
 
   select count(*) into non_lapsed
   from tmp_0088_lapse_candidates where computed_status <> 'lapsed';
@@ -746,7 +787,7 @@ begin
 
   insert into tmp_0088_counts (k, v) values ('fs_predicate_lapsed', lapsed_now);
   insert into tmp_0088_counts (k, v) values ('fs_predicate_lapsed_clients', clients);
-  raise notice 'step 4b ok: candidates=% clients=% computed_non_lapsed=0 lapsed=% (expected 21 / 7 / 0 / 21 on marcus m50350 08:41Z)',
+  raise notice 'step 4b ok: candidates=% clients=% computed_non_lapsed=0 lapsed=% (expected 18 / 6 / 0 / 18: marcus m50350 08:41Z read narrowed to NULL-server rows by his Z1 ruling m50396)',
     candidates, clients, lapsed_now;
 end $$;
 
@@ -754,8 +795,8 @@ end $$;
 -- 5. NULL-SERVER DISPOSITION, THEN THE CHECK (0086 header 80-86)
 -- ---------------------------------------------------------------------------------------
 
--- The lapse now happens in step 4b, on the predicate and over every row, so this step no longer
--- lapses anything: it names what is left with a NULL server and carries it. R4..R8 gated here
+-- The lapse now happens in step 4b, on the predicate and over every NULL-server row, so this step
+-- no longer lapses anything: it names what is left with a NULL server and carries it. R4..R8 gated here
 -- against six committed uuids with a SUBSET gate, an EXISTENCE gate and a live-count notice;
 -- all three are STRUCK with the list (marcus m50350_mu0ztzip, 2026-09-14: "Rip out the six
 -- hardcoded uuids in 0088 R8's four lists and the step-5 gate", "Use it as a CHECK, never as a
@@ -766,8 +807,10 @@ end $$;
 -- First one notice per NULL-server row whatever its status; the operator pastes every
 -- 'step 5 no server:' and 'step 5 carve-out:' line. Expected today listed=27: marcus's read of
 -- 08:41Z (m50350) has 24 NULL-server non-lapsed rows / 8 clients, of which 18 were just lapsed by
--- 4b (4b's other 3 rows, one client, have a server and never appear here), plus the 3 already
--- stored lapsed with a NULL server in his read of 2026-09-12 (m49188).
+-- 4b -- since his Z1 ruling (m50396_mu10majx) every 4b candidate is a NULL-server row, so 4b's
+-- population and this listing's non-lapsed half are the same 18 rows / 6 clients -- plus the 3
+-- already stored lapsed with a NULL server in his read of 2026-09-12 (m49188), and the 6 / 2 that
+-- are still live and become the carve-out.
 do $$
 declare
   r record;
@@ -1197,8 +1240,9 @@ drop table feed_tier_requests;
 -- by construction: the carve-out was read from exactly that predicate after the 4b lapse, and
 -- nothing between here and there writes feed_subscriptions) fs_request_id_column_present=false
 -- ftr_table_present=false; the rest are counts to paste. Today's expected counts, from marcus's
--- prod read of 2026-09-14 08:41Z (m50350_mu0ztzip), are NOT gates: fs_predicate_lapsed=21,
--- fs_predicate_lapsed_clients=7, fs_carve_out=6, fs_carve_out_clients=2, fs_no_server_listed=27.
+-- prod read of 2026-09-14 08:41Z (m50350_mu0ztzip) narrowed by his Z1 ruling (m50396_mu10majx),
+-- are NOT gates: fs_predicate_lapsed=18, fs_predicate_lapsed_clients=6, fs_carve_out=6,
+-- fs_carve_out_clients=2, fs_no_server_listed=27.
 select
   (select count(*) from server_registrations where user_id is null) as sr_user_id_null,
   (select count(*) from server_registrations sr join licenses l on l.id = sr.license_id
