@@ -827,41 +827,118 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    `with_request` count, unmapped 0; step 9 carry enumerated = the `provisioned_to_map` count
    expanded by package membership, inserted = that minus same-IP overlaps with new-path records,
    misses 0; drop guard 0; summary row.
-2. Before-read (v1.47 gate shape, S5(b)): `select now() as read_at, id, subscriber_user_id,
-   feed_tier_id, status, ends_at, server_registration_id, <EFFECTIVE_STATUS_SQL> as computed
-   from feed_subscriptions order by id` -- the read marcus used for the 0086 dry-runs, plus
-   `now()`. The after-read (step 4) is this same select, so it carries its own `now()` too, and
-   both instants are pasted: steps 3 and 4 compare results taken at two different clocks, and
-   without the two instants the operator cannot tell a clock mover from a file mover (fable Z5,
-   m50440_mu111ike).
-3. Apply (`commit`). Paste every notice line; they must equal the dry-run's, EXCEPT a row whose
-   `ends_at` falls between the two runs' `now()`: it moves from `step 5 carve-out:` to `step 4b
-   candidate:`, and the step 4b / step 5 counts move with it. Aylrn's 3 rows do this if the two
-   runs fall either side of 09-19 and rasoolx55's across 09-25 (fable Z5, m50440_mu111ike, on the
-   ends_at dates in marcus's 08:41Z read m50350_mu0ztzip). Any other difference: stop.
-4. After-read = the step-2 select run again (it carries its own `now()`), and it equals the
-   before-read plus EXACTLY: stored `status` -> `lapsed` on the step-4b rows plus the
-   step-2b(b) rows if any literal is present, and `computed` unchanged on every row EXCEPT
-   live -> lapsed on a row whose own `ends_at`, or the licence or trial end the CASE reads, falls
-   between the before-read's `now()` and the after-read's -- there the clock moved the row, not
-   the file (fable Z5, m50440_mu111ike). Her live case, from marcus m50417 as relayed in that
-   message and NOT my read: abdulkareem.almansoori's rows and licence end at
-   2026-09-14T09:01:12.638Z; he has a server row, so he is in neither the 4b candidates nor the
-   carve-out, and a before-read before that instant with an after-read after it moves his
-   `computed` with nothing in the file touching him. The expected
-   movers are NOT named ahead from the before-read: they are the `step 4b candidate:` lines of THE
-   SAME RUN's notice paste, plus any `step 2b(b)` lines (fable Z2, m50391_mu10l45h). The
-   before-read is a different `now()`, so a row whose `ends_at` falls between the two is a real
-   mover it does not list -- Aylrn's 3 rows cross on 09-19 and would do exactly that mid-run.
-   AMENDED by R9: fable's S4 caveat -- a
-   row whose `ends_at` is past but which still computes live (trial licence, renewed licence,
-   ungated region, `cme`) and would therefore be a COMPUTED mover when lapsed -- is no longer
-   left to the population being lucky. Step 4b's refusal gate re-takes that check inside the
-   transaction and aborts naming each such row, so "computed unchanged" is enforced by the file on
-   every row it touches, not just expected of it (the Z5 clock exception above is about rows it
-   does not touch). Marcus's read of 2026-09-14 08:41Z has 0 such rows in
-   the 21 (so 0 in the 18 the Z1 conjunct leaves). Any other computed mover, and any stored-status
-   mover outside that list, means the file is wrong and the rollback runs.
+2. Before-read (v1.47 gate shape, S5(b)), carrying the inputs the CASE's two clocks read -- without
+   them nobody can check step 4's cause (C) (fable Z6 fix 2, m50452_mu11gweq):
+
+   ```sql
+   select now() as read_at, s.id, s.subscriber_user_id, s.feed_tier_id, s.status, s.ends_at,
+          s.server_registration_id,
+          l.status as licence_status, l.expires_at as licence_expires_at,
+          tr.trial_status, tr.trial_ends_at,
+          <EFFECTIVE_STATUS_SQL> as computed
+     from feed_subscriptions s
+     left join feed_tiers ft on ft.id = s.feed_tier_id
+     left join licenses l on l.id = s.license_id
+     left join lateral (
+       select ftt.trial_status, ftt.trial_ends_at
+         from feed_tier_trials ftt
+        where ftt.user_id = s.subscriber_user_id and ftt.tier_key = ft.tier_key
+        order by (ftt.trial_status = 'active' and ftt.trial_ends_at > now()) desc,
+                 ftt.trial_ends_at desc
+        limit 1
+     ) tr on true
+    order by s.id
+   ```
+
+   That is the read marcus used for the 0086 dry-runs plus `now()` and the CASE's inputs. Why this
+   shape (my read of `src/lib/feed-subscriptions.ts` :140-159 at 3102373, which this commit does not
+   touch): the CASE is written against the aliases `s` and `ft`, so `feed_subscriptions s` +
+   `left join feed_tiers ft` let it drop in unmodified; `left`, because a `provider_tier_id` row has
+   no `feed_tiers` row and the CASE's first gate is `ft.region_key is null`. `l` at the top level
+   shadows the `l` of the CASE's own licence `exists` (:146), which is self-contained and unaffected
+   -- that exact pairing is already shipped in the provider reader at :534-544. The lateral returns
+   the trial row the CASE's `exists` would match when there is one and otherwise the nearest, so a
+   row that FAILS the trial branch still shows why. The after-read (step 4) is this same select, so
+   it carries its own `now()` too, and both instants are pasted: steps 3 and 4 compare results taken
+   at two different clocks, and without the two instants the operator cannot tell a clock mover from
+   a file mover (fable Z5, m50440_mu111ike).
+3. Apply (`commit`). Paste every notice line. The two runs are NOT compared for equality: prod takes
+   app writes at any instant, there is no maintenance mode, and there is one `NEON_DATABASE_URL`
+   (marcus m50442_mu111sw2, VERIFIED by him, not by me), so an ordinary renewal, new subscription,
+   admin deactivation or server registration between the two runs would stop a correct apply. The
+   dry-run and the apply run the byte-identical file, so a difference between them can only come
+   from the data or the clock, never from the file.
+
+   Each run's notices are checked on their own against the four properties (fable m50436_mu110c5u,
+   adopted by marcus m50442_mu111sw2 -- named here by cite: I have not read m50436 and this document
+   does not yet transcribe it). Across the two runs, one containment: every `step 4b candidate:` id
+   in the apply is either a 4b candidate in the dry-run, or a dry-run `step 5 carve-out:` row whose
+   `ends_at` falls between the two runs' `now()`. If an apply 4b id is neither, stop: the file lapsed
+   a row the dry-run review never showed. Any other difference is an app write between the runs: a
+   new carve-out row, a row gone from the listing or from the 4b set, or a changed `ends_at` /
+   `status` / `server_registration_id` on the same id. Name each one in the paste; none of them is a
+   stop. (fable Z6, m50452_mu11gweq.)
+
+   The second limb of the containment is the ordinary clock case: Aylrn's 3 rows move from
+   `step 5 carve-out:` to `step 4b candidate:` if the two runs fall either side of 09-19 and
+   rasoolx55's across 09-25, and the step 4b / step 5 counts move with them (fable Z5,
+   m50440_mu111ike, on the ends_at dates in marcus's 08:41Z read m50350_mu0ztzip).
+
+   Where each run's `now()` is visible in the paste: NOWHERE, in either run (my read of
+   `db/migrations/0088_tighten.sql` at 3102373). No notice prints it -- the 4b candidate, 4b REFUSE,
+   step 5 carve-out and step 5 listing notices print each row's `ends_at`, never the transaction's
+   clock -- and the summary row (:1246-1268) has no `now()` column. The ledger row does hold it,
+   `schema_migrations.applied_at` defaulting to `now()` (0003:19), but the INSERT (:1270-1272) has no
+   `returning`, so it is not pasted either, and after a dry-run it is rolled back and gone. So: the
+   apply's `now()` is recoverable after commit with `select applied_at from schema_migrations where
+   version = '0088'`; the dry-run's `now()` is not recoverable at all. What the operator does have is
+   the step-2 read's `read_at` on each side of each run, which brackets that run's `now()` but is a
+   different statement and a different clock. No SQL is changed for this: the dry-run target is
+   fixed, and the decision is fable's and marcus's.
+4. After-read = the step-2 select run again (it carries its own `read_at`). The two reads are NOT
+   compared for equality either, and for the same reason as step 3. Every difference between them
+   has one of three causes, and only a difference with none of them runs the rollback (fable Z6,
+   m50452_mu11gweq):
+   - **(F) The file.** Stored `status` -> `lapsed` on every id named in this run's
+     `step 4b candidate:` / `step 2b(b)` lines, with `computed` unchanged; plus each other file
+     write that grep A lists, on the ids its notice names. If a listed id is not stored-lapsed in
+     the after-read: rollback.
+   - **(C) The clock.** `computed` live -> lapsed where `l.expires_at` or the trial end falls
+     between the two `read_at`. Those two are the CASE's only clocks, and step 2 now selects both
+     so the operator can check this without a second query. NOT `fs.ends_at`: the CASE never reads
+     it (`src/lib/feed-subscriptions.ts` :140-159, my read at 3102373). `fs.ends_at` moves 0088's
+     sets in step 3, and never `computed` (fable Z6 fix 1, m50452_mu11gweq, correcting her own Z5
+     text).
+   - **(A) The app.** A new or missing id; a changed column that the file does not write (per grep
+     A); any `computed` move that follows from one of those; a stored lapse by a grep-B writer,
+     told apart from (F) as B(i) says. Name each one in the paste.
+
+   Anything else, above all a stored -> `lapsed` on an id that no notice names and no (A) writer
+   explains: the file is wrong, and the rollback runs.
+
+   The live case for (C), from marcus m50417 as relayed in fable m50440_mu111ike and NOT my read:
+   abdulkareem.almansoori's rows and licence end at 2026-09-14T09:01:12.638Z; he has a server row,
+   so he is in neither the 4b candidates nor the carve-out, and a before-read before that instant
+   with an after-read after it moves his `computed` with nothing in the file touching him. He moves
+   through his licence's `expires_at`, which is what the CASE reads.
+
+   Under (F), the expected movers are NOT named ahead from the before-read: they are the
+   `step 4b candidate:` lines of THE SAME RUN's notice paste, plus any `step 2b(b)` lines (fable Z2,
+   m50391_mu10l45h). The before-read is a different `now()`, so a row whose `ends_at` falls between
+   the two is a real mover it does not list -- Aylrn's 3 rows cross on 09-19 and would do exactly
+   that mid-run. One gap, stated not papered over: on its success path 2b(b) prints counts only
+   (`step 2b(b) ok: staged=% lapsed_by_word=%`, 0088:476), so there ARE no per-row `step 2b(b)`
+   lines unless the block aborts. When that slot is non-empty its ids are the literals in the file's
+   own `tmp_0088_lapse_by_word` INSERT, which is a read of the file rather than of the paste. Grep A
+   below; fable and marcus rule on whether that is enough or 2b(b) gains a per-row notice.
+
+   AMENDED by R9: fable's S4 caveat -- a row whose `ends_at` is past but which still computes live
+   (trial licence, renewed licence, ungated region, `cme`) and would therefore be a COMPUTED mover
+   when lapsed -- is no longer left to the population being lucky. Step 4b's refusal gate re-takes
+   that check inside the transaction and aborts naming each such row, so "computed unchanged" is
+   enforced by the file on every row it touches, not just expected of it (causes (C) and (A) are
+   about rows it does not touch). Marcus's read of 2026-09-14 08:41Z has 0 such rows in the 21 (so 0
+   in the 18 the Z1 conjunct leaves).
 5. Schema reads: `information_schema.columns` for `feed_subscriptions` (fable Q2's SELECT,
    section 11) has no `request_id` row and has `lapsed_at`; `to_regclass('feed_tier_requests')
    is null`; `pg_indexes` has neither `feed_subscriptions_request_tier_uidx` nor
@@ -886,6 +963,110 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    of the same (server, tier) (`DuplicateTierGrantError` from the new-key query alone).
 9. No UI check: section 6 is permission only (fable Q5); nothing on `/feed/dashboard` changes in
    this job.
+
+**The two write sets step 4 attributes against (fable Z6, m50452_mu11gweq; marcus asked for B inside
+it). Both are my own reads at 3102373, which touches no SQL and no `src`.**
+
+**Grep A -- what the FILE writes.**
+`grep -niE '(update|insert into|delete from)[[:space:]]+(feed_subscriptions|licenses|feed_tier_trials|server_registrations)' db/migrations/0088_tighten.sql`
+-> 7 hits. No `insert into` and no `delete from` among them: the file only UPDATEs these four
+tables, and it never writes `licenses` or `feed_tier_trials` at all.
+
+| line | table | SET columns | per-row notice naming its rows |
+| --- | --- | --- | --- |
+| 183 | server_registrations | `user_id` (from `licenses.user_id`; `updated_at` deliberately untouched) | NO -- `step 1 ok: ... null=0 owner_mismatch=0 ...` (:230) is counts. Per-row `step 1 owner mismatch:` (:224) fires only on the abort path. Expected UPDATE 0. |
+| 350 | feed_subscriptions | `access_request_id` | NO -- `step 2 gate ok: ... with request_id=% unmapped=0` (:370) is counts. Expected UPDATE 0. |
+| 469 | feed_subscriptions | `status='lapsed'`, `lapsed_at=now()`, `updated_at=now()` (2b(b), worded slot) | NO on the success path -- `step 2b(b) ok: staged=% lapsed_by_word=%` (:476) is counts; per-row `step 2b(b) not a live no-server row:` (:463) fires only on the abort path. Ids are the file's own `tmp_0088_lapse_by_word` literals. Slot EMPTY by default. |
+| 566 | feed_subscriptions | `server_registration_id`, `updated_at=now()` | NO -- `step 4 ok: ... null rows=%` (:585) is counts. Expected UPDATE 0. |
+| 588 | feed_subscriptions | `ends_at` (= `licenses.expires_at`), `updated_at=now()` | NO -- `step 4 gate ok:` (:618) is counts. Expected UPDATE 0. |
+| 595 | feed_subscriptions | `ends_at` (= `feed_tier_trials.trial_ends_at`), `updated_at=now()` | NO -- same notice. Expected UPDATE 0. |
+| 778 | feed_subscriptions | `status='lapsed'`, `lapsed_at=coalesce(lapsed_at, ends_at)`, `updated_at=now()` (4b predicate lapse) | YES -- `step 4b candidate:` (:752) prints one line per candidate BEFORE the gate, and the lapse is restricted to that gated set by id. |
+
+So exactly one of the seven writes, the 4b lapse, names its rows in the paste. Five of the other
+six are expected to move 0 rows, and if any of them moves a row it is a finding in its own right;
+2b(b) is the one that is designed to move rows without naming them. Stated for a ruling, per Z6.
+
+**Grep B -- what the APP writes.** `git grep -nEi '<the same regex>' -- src` -> 29 hits in 24
+functions across 8 files (feed_subscriptions 6/5, licenses 13/11, feed_tier_trials 5/5,
+server_registrations 5/3), plus my
+checks for the two shapes the regex would miss: a line-wrapped `insert into` / `delete from`
+(0 hits in `src`) and a delete on any of the four tables (0 hits in `src`; the only ones in the repo
+are `db/migrations/0081_rollback.sql:25` and `scripts/seed_multi_license_test_user.sql:25`). So the
+app never deletes from these four tables.
+
+`feed_subscriptions` (6 hits / 5 functions):
+
+| line | function | columns |
+| --- | --- | --- |
+| `access-requests.ts:326` | `approveOnClient` (feed_tier branch) | INSERT: provider_user_id, subscriber_user_id, license_id, server_registration_id, feed_tier_id, `status='active'`, access_request_id, ends_at |
+| `feed-subscriptions.ts:329` | `createSubscription` | INSERT: same column list plus provider_tier_id |
+| `feed-subscriptions.ts:1386` | `assignFeedTierSubscription` (re-activate) | `status='active'`, `lapsed_at=null`, `ends_at`, `updated_at` |
+| `feed-subscriptions.ts:1395` | `assignFeedTierSubscription` (re-activate, provider changed) | `provider_user_id`, `status='active'`, `lapsed_at=null`, `ends_at`, `updated_at` |
+| `feed-subscriptions.ts:1461` | `deactivateFeedTierSubscription` | `status='lapsed'`, `lapsed_at=now()`, `updated_at` |
+| `feed-subscriptions.ts:1492` | `setFeedSubscriptionPriceForPackage` | `price_cents`, `updated_at` |
+
+`licenses` (13 hits / 11 functions): `issueLicense` :151 and `issueAdditionalLicense` :225 (INSERT
+user_id, license_key, status, expires_at, notes, feed_types, tier, and :151 also claim_email /
+claim_telegram_user_id); `extendLicense` :372 (`expires_at`, `lifecycle_state`); `expireLicenseNow`
+:379 (`expires_at=now()`, `lifecycle_state=null`); `revokeLicense` :394 and :404
+(`status='revoked'`, `lifecycle_state`); `setLicenseTier` :438 (`tier`); `verifyLicenseKey` :659
+(`last_verified_at`); `setLicenseFeedTypes` :1346 (`feed_types`); `claimPendingLicense` :1386 /
+:1393 (`user_id`, `claim_email` / `claim_telegram_user_id`); `expire-licenses/route.ts:111` GET
+(`lifecycle_state='expired_processed'`); `admin/users/actions.ts:70` `expireNowAction`
+(`expires_at=now()`). Of these, the CASE reads only `status` and `expires_at`, so the computed
+movers are `extendLicense`, `expireLicenseNow`, `expireNowAction` and `revokeLicense`. The
+`lifecycle_state`-only cron at :111 moves nothing the CASE reads.
+
+`feed_tier_trials` (5 hits / 5 functions): `insertFeedTierTrial` :130 (INSERT user_id, license_id, region,
+tier_key, `trial_ends_at = now() + interval`; `trial_status` NOT written, so it takes the column
+default `'active'`, 0036:20); `cancelFeedTierTrial` :241 (`trial_status='cancelled'`);
+`markFeedTierTrialConverted` :255 (`trial_status='converted'`); `expire-trials/route.ts:36`
+`sendReminders` (`reminder_sent_at`); `expire-trials/route.ts:68` `expireTrials`
+(`trial_status='expired'`, `ended_notified_at`). All but `sendReminders` move the CASE's trial
+branch -- and `insertFeedTierTrial` moves it UPWARDS, lapsed -> live, on an existing row.
+
+`server_registrations` (5 hits / 3 functions): `saveServerRegistration` :195 / :211 (INSERT ... `on conflict
+(license_id) do update`: license_id, user_id, server_name, vps_provider, vps_provider_other,
+server_location, location, declared_ip, updated_at); `updateServerRegistrationById` :272 / :284
+(same minus license_id and user_id, by row id + owner); `setMultipleIpsOk` :317 (`multiple_ips_ok`,
+`updated_at`).
+
+Z6's three questions:
+
+- **(i) Does any of them write `status='lapsed'` to `feed_subscriptions`?** YES, exactly one:
+  `deactivateFeedTierSubscription` (`feed-subscriptions.ts:1459-1469`), the admin's
+  `deactivateFeedSubscriptionAction`, which the EFFECTIVE_STATUS_SQL comment at :111-112 already
+  names as the one-way ratchet. How step 4 tells it apart from (F): by id and by `lapsed_at`. It is
+  keyed on `(subscriber_user_id, tier_key)` and sets `lapsed_at = now()`, whereas 4b sets
+  `lapsed_at = coalesce(lapsed_at, ends_at)` on exactly the ids its `step 4b candidate:` notices
+  name. So a stored lapse on an id that no notice names is (A) only if `lapsed_at` is inside the
+  window between the two `read_at`; if it equals the row's `ends_at` instead, it came from the file
+  and the rollback runs. CAVEAT, stated because the step-2 select does not yet carry it: `lapsed_at`
+  is NOT one of its columns. The paste can only make this distinction if `lapsed_at` is added to the
+  read, or if marcus accepts "no notice names it" alone. Fable and marcus rule; no SQL touched here.
+- **(ii) Can any of them leave a non-lapsed `feed_subscriptions` row with `server_registration_id`
+  NULL?** NO, on all three routes.
+  - Insert: both inserts write the column, and neither can pass NULL --
+    `CreateSubscriptionInput.serverRegistrationId` is typed `string` (not `string | null`,
+    `feed-subscriptions.ts:47`) and its one caller passes the locked `sr.id`; `approveOnClient`
+    passes `sr.id` from `lockServerRegistration` and throws if the server row is gone
+    (`access-requests.ts:312-313`).
+  - Re-activation: :1386 / :1395 update a row selected by `where server_registration_id = $1 and
+    feed_tier_id = $2` (:1376), which a NULL-server row can never match, and neither statement
+    writes the column. So the re-activation path cannot lift a NULL-server row to `active`.
+  - Through the FK: the app has no delete on `server_registrations` (0 hits above), and the
+    pre-apply FK carries NO `on delete` clause -- `server_registration_id uuid references
+    server_registrations(id)`, `0086_marketplace_recut.sql:576` -- so its action is the default NO
+    ACTION. A delete of a referenced server row raises 23503; it never NULLs the child column.
+  - No `update ... set server_registration_id` exists anywhere in `src` (0 hits).
+  So the list marcus wants for the post-commit 23514 risk is EMPTY on today's code: after the CHECK
+  lands, no app path can produce a non-lapsed NULL-server row, and the carve-out ids being fixed at
+  apply costs nothing until the B-1 guard.
+- **(iii) Can any of them change `fs.ends_at` or `fs.server_registration_id` on an existing row?**
+  `ends_at`: YES -- `assignFeedTierSubscription` :1386 / :1395 write `ends_at = license.expiresAt`
+  when re-activating an existing row. That is an (A) difference in step 4 and, per step 3, a
+  legitimate cross-run change in `ends_at` that can also move a row between the 4b set and the
+  carve-out. `server_registration_id`: NO -- no app statement writes it after the insert.
 
 Rollback of the schema is `0088_rollback.sql` (section 4). Rollback of the cleanup commit is a
 code revert; it re-adds a SELECT against a column that still exists, so it is safe in either
@@ -1077,6 +1258,35 @@ section 9 step 4 (R10 Z1, R10 Z2, R10 applied-list) are corrected here -- they a
 fable's read to section 11. No SQL changes; marcus's dry-run does not wait on this.
 Applied at this commit: this document only (section 9 steps 2-4, section 12 R10 Z1 + Z2 +
 applied-list + this entry).
+
+**Z6 -- TEXT (R12); the app writes during the window. fable m50452_mu11gweq, carrying marcus
+m50442_mu111sw2, who VERIFIED prod takes app writes at any instant, has no maintenance mode, and
+has one `NEON_DATABASE_URL`; he dispatched nothing on it himself.** Z5 left section 9 steps 3 and 4
+comparing two instants for EQUALITY ("any other difference: stop"; "plus EXACTLY ... any
+stored-status mover outside that list"), so an ordinary renewal, new subscription, admin
+deactivation or server registration between the two reads would have stopped a correct apply. Both
+equalities are struck. Step 3 now checks each run's notices on their own against the four
+properties (fable m50436_mu110c5u, adopted by marcus m50442 -- carried here by cite only, since I
+have not read m50436) and compares the two runs by ONE containment: an apply `step 4b candidate:`
+id must be a dry-run 4b candidate or a dry-run carve-out row whose `ends_at` fell between the two
+runs' `now()`; everything else is an app write, named in the paste, not a stop. Step 4 replaces its
+equality with attribution to three causes -- (F) the file, (C) the clock, (A) the app -- and runs
+the rollback only for a difference with none of them. Also in this commit, fable's three R11 fixes:
+(1) step 4's clock exception drops `fs.ends_at`, because `EFFECTIVE_STATUS_SQL` never reads it (my
+read, `src/lib/feed-subscriptions.ts` :140-159) -- its only clocks are `licenses.expires_at` beside
+`l.status` and `feed_tier_trials.trial_ends_at` beside `trial_status`; (2) the step-2 select now
+returns those inputs (`l.status`, `l.expires_at`, and the trial status and end the CASE's trial
+branch reads for the row, via a lateral on subscriber + `tier_key`), so (C) is checkable from the
+paste; (3) "Her live case" -> "The live case". Greps A (the file's write set) and B (the app's
+writers, with Z6's three questions answered) are recorded in section 9 after the numbered list.
+Three things are stated for a ruling rather than papered over: each run's `now()` is visible NOWHERE
+in the paste (the apply's is recoverable post-commit from `schema_migrations.applied_at`, the
+dry-run's is not recoverable at all); 2b(b) has no per-row notice on its success path, so its ids
+are readable only from the file's own literals; and telling `deactivateFeedTierSubscription` apart
+from the file's lapse by `lapsed_at` needs `lapsed_at` added to the step-2 select, which is not
+there today. No SQL changes: the dry-run target is fixed, and the file is unchanged since d172be2.
+Applied at this commit: this document only (section 9 steps 2-4 + the new grep A / grep B block,
+section 12 this entry).
 
 Noted, not struck, and NOT mine: R9 no longer refuses carve-out GROWTH (marcus struck the step-5
 SUBSET gate in m50350). He has taken that guard into his apply procedure explicitly (m50396):
