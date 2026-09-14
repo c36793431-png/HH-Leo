@@ -66,6 +66,34 @@ export function formatTierLatency(
   return t.latencyUs == null ? t.speedDisplay : `${t.speedDisplay}µs`;
 }
 
+export type TierFigureHeading = { label: string; note: string | null };
+
+/** The heading for a group of figures rendered by formatTierLatency above, plus the direction
+ * note that has to travel with it. RENDER BOTH: the note is the half that stops the number
+ * being read backwards.
+ *
+ * A score region's figure is FOC13's comparison score, which runs the OPPOSITE way to a
+ * latency -- Black 94.8 is the best feed we sell and Delta 6.0 the worst of London's three
+ * retail feeds, where a lower latency would be the better one. So a heading reading "latency"
+ * over a score inverts the buying signal on the exact number a customer compares. That shipped
+ * on /marketplace (666e7aa) and had been live longer in the tiers page comparison table
+ * (marcus, m50770, 2026-09-14). The heading lives next to the formatter rather than in each
+ * page because the formatter's NAME carries "latency" into every call site -- a page that
+ * spells its own label can silently label one thing and render another.
+ *
+ * Takes the region of EVERY figure under the heading, not one row's: a heading is only true if
+ * every value beneath it is the same kind, and reading it off whichever member sorted first
+ * would label a whole group from an arbitrary row. Returns null for an empty or mixed group --
+ * no shipped surface is mixed (each tier-backed listing draws from one region's
+ * PACKAGE_TIER_KEYS), and a heading that cannot be true of every value under it must not be
+ * guessed at. */
+export function tierFigureHeading(regions: string[]): TierFigureHeading | null {
+  if (regions.length === 0) return null;
+  if (regions.every((r) => isScoreRegion(r))) return { label: "Comparison score", note: "higher is better" };
+  if (regions.every((r) => !isScoreRegion(r))) return { label: "Feed latency", note: null };
+  return null;
+}
+
 export function groupTiers(tiers: ProviderTierRow[]): TierGroup[] {
   const used = new Set<string>();
   const groups: TierGroup[] = [];

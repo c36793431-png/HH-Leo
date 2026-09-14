@@ -7,7 +7,7 @@ import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { FEED_REGIONS } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, type FeedTierDetail } from "@/lib/feed-tiers";
-import { formatTierLatency } from "@/lib/feed-provider-packages";
+import { formatTierLatency, tierFigureHeading } from "@/lib/feed-provider-packages";
 import {
   MARKETPLACE_LISTINGS,
   MARKETPLACE_CATEGORY_ORDER,
@@ -31,6 +31,11 @@ import {
  * NY, whose latency_us is null, renders its bare "—" with no unit. Reusing the query is not by
  * itself enough to keep two surfaces agreeing, because the display rules live in the page, not
  * the lib — so this page reuses the rule too rather than restating it.
+ *
+ * That reuse did not extend to the HEADING, and the first cut shipped the figures under a
+ * hand-written "Feed latency" — a score read as a latency, which reverses which feed looks best
+ * (marcus, m50770). The heading now comes from tierFigureHeading in the same lib, so a surface
+ * cannot label one thing and render another.
  */
 export default async function MarketplacePage() {
   const session = await auth();
@@ -75,7 +80,16 @@ export default async function MarketplacePage() {
           <div key={category} className="fp-section mkt-section">
             <h2 className="fp-section-title">{MARKETPLACE_CATEGORY_LABELS[category]}</h2>
             <div className="mkt-grid">
-              {items.map(({ listing, members }) => (
+              {items.map(({ listing, members }) => {
+                // Heading comes from the same lib as the figure beneath it. London's number is a
+                // comparison score, not a latency, and the two run in opposite directions -- this
+                // card headed the score "Feed latency", which told a buyer that Delta 6.0 was the
+                // fastest of the bundle when it is the slowest (marcus, m50770). A null heading
+                // means the group's figures aren't all one kind, which no shipped listing is;
+                // the figures are dropped rather than shown under a guessed label, because
+                // unlabelled numbers are the same defect in a quieter form.
+                const heading = tierFigureHeading(members.map((m) => m.regionKey));
+                return (
                 <div key={listing.key} className={`card mkt-card mkt-${listing.availability}`}>
                   <div className="mkt-top">
                     <span className={`mkt-pill mkt-pill-${listing.availability}`}>
@@ -85,9 +99,14 @@ export default async function MarketplacePage() {
                   <h3 className="mkt-name">{listing.title}</h3>
                   <p className="mkt-desc">{listing.blurb}</p>
 
-                  {members.length > 0 && (
+                  {members.length > 0 && heading && (
                     <div className="mkt-members">
-                      <span className="mkt-members-label">Feed latency</span>
+                      <span className="mkt-members-label">
+                        {heading.label}
+                        {heading.note && (
+                          <span className="figure-direction-note">{` · ${heading.note}`}</span>
+                        )}
+                      </span>
                       {members.map((m) => (
                         <div key={m.tierKey} className="mkt-member">
                           <span className="mkt-member-name">{m.name}</span>
@@ -105,7 +124,8 @@ export default async function MarketplacePage() {
                     </Link>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         );

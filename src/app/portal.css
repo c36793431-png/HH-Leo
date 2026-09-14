@@ -808,6 +808,7 @@
 .portal-shell .ftd-contact-pricing { font-size: 12px; font-weight: 600; color: var(--hz-ink-3); margin-top: 6px; }
 .portal-shell .ftd-unlock { margin-top: 4px; }
 .portal-shell .ftd-submitted { font-size: 12px; color: var(--hz-ok); margin-top: 4px; }
+.portal-shell .ftd-pkg-members-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--hz-ink-3); margin-top: 6px; }
 .portal-shell .ftd-pkg-members { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
 .portal-shell .ftd-pkg-member { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hz-line-soft); }
 .portal-shell .ftd-pkg-member:first-child { border-top: none; padding-top: 0; }
@@ -1008,6 +1009,11 @@
   border-top: 1px solid var(--hz-line-soft);
 }
 .portal-shell .mkt-members-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--hz-ink-3); }
+/* Direction half of a comparison-score heading (tierFigureHeading, feed-provider-packages.ts).
+   One class on every surface that renders one, so the note cannot be styled out of existence on
+   one of them and leave a bare "Comparison score" a reader can still take the wrong way round.
+   text-transform:none keeps it legible under the uppercased labels it sits inside. */
+.portal-shell .figure-direction-note { font-weight: 600; letter-spacing: 0.02em; text-transform: none; color: var(--hz-ink-3); opacity: 0.9; }
 .portal-shell .mkt-member { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .portal-shell .mkt-member-name { font-size: 12px; font-weight: 600; color: var(--hz-ink-2); }
 .portal-shell .mkt-member-figure { font-family: var(--hz-mono); font-size: 13px; font-weight: 700; color: var(--hz-ink); }

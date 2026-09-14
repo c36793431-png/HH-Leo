@@ -7,7 +7,7 @@ import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { isFeedRegion, FEED_REGION_TYPE, PACKAGE_DISPLAY_LABELS } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
-import { isScoreRegion } from "@/lib/feed-provider-packages";
+import { isScoreRegion, formatTierLatency, tierFigureHeading } from "@/lib/feed-provider-packages";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
 import {
   TierRequestControl,
@@ -23,6 +23,11 @@ import { scoreForTierKey } from "@/lib/feed-comparison-scores";
 import { SectionPills } from "@/components/shared/section-pills";
 import type { FeedTierDetail } from "@/lib/feed-tiers";
 
+/** The latency row's label is NOT this literal on a score region — it comes from
+ * tierFigureHeading (feed-provider-packages.ts), because for London the cell holds FOC13's
+ * comparison score and "Feed latency" over a score reverses which feed reads as best (marcus,
+ * m50770). The literal here is the non-score fallback, and is what NY and every µs region
+ * renders. */
 const COMPARE_ROWS = [
   { key: "latency", label: "Feed latency" },
   { key: "redundancy", label: "Path redundancy" },
@@ -172,6 +177,11 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
   ]);
   if (tiers.length < 2) notFound();
+
+  // One heading for every figure this page renders through formatTierLatency, from the same lib
+  // as the figure itself (marcus, m50770). Every tier on the page is this region's, and the
+  // Black column only renders for london, so one region key answers for the whole page.
+  const figureHeading = tierFigureHeading([region]);
 
   await isPaidUser(session.user.id).catch(() => false);
   const isAdmin = isAdminUser(session.user);
@@ -343,6 +353,18 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                 <p className="ftd-desc">
                   {group.members.length} feeds from one provider, sold as a single bundle at one price.
                 </p>
+                {/* The per-member figures below carried no heading of their own, directly under a
+                    RETAIL LATENCY segment badge — the same three London scores that /marketplace
+                    was reading as latencies (marcus, m50770). The badge names the market segment,
+                    not the number; this names the number. */}
+                {figureHeading && (
+                  <span className="ftd-pkg-members-label">
+                    {figureHeading.label}
+                    {figureHeading.note && (
+                      <span className="figure-direction-note">{` · ${figureHeading.note}`}</span>
+                    )}
+                  </span>
+                )}
                 <div className="ftd-pkg-members">
                   {group.members.map((m) => {
                     const londonScore = region === "london" ? londonScoreDisplay(m.tierKey) : null;
@@ -462,25 +484,28 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
           <tbody>
             {COMPARE_ROWS.map((row) => (
               <tr key={row.key}>
-                <td>{row.label}</td>
-                {tiers.map((t) => {
-                  const londonScore = region === "london" ? londonScoreDisplay(t.tierKey) : null;
-                  return (
-                    <td key={t.tierKey}>
-                      {row.key === "latency" &&
-                        (londonScore != null
-                          ? `${londonScore}/100 score`
-                          : t.latencyUs != null
-                            ? `${t.speedDisplay}µs`
-                            : t.speedDisplay)}
-                      {row.key === "redundancy" && t.pathRedundancy}
-                      {row.key === "support" && t.supportLevel}
-                    </td>
-                  );
-                })}
+                <td>
+                  {row.key === "latency" && figureHeading ? (
+                    <>
+                      {figureHeading.label}
+                      {figureHeading.note && (
+                        <span className="figure-direction-note">{` · ${figureHeading.note}`}</span>
+                      )}
+                    </>
+                  ) : (
+                    row.label
+                  )}
+                </td>
+                {tiers.map((t) => (
+                  <td key={t.tierKey}>
+                    {row.key === "latency" && formatTierLatency(region, t)}
+                    {row.key === "redundancy" && t.pathRedundancy}
+                    {row.key === "support" && t.supportLevel}
+                  </td>
+                ))}
                 {region === "london" && (
                   <td key={BLACK_TIER.tierKey}>
-                    {row.key === "latency" && BLACK_TIER.speedDisplay}
+                    {row.key === "latency" && formatTierLatency(BLACK_TIER.regionKey, BLACK_TIER)}
                     {row.key === "redundancy" && BLACK_TIER.pathRedundancy}
                     {row.key === "support" && BLACK_TIER.supportLevel}
                   </td>
