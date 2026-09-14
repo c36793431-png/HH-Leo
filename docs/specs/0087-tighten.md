@@ -65,6 +65,29 @@ means the DEPLOY ORDER block of `db/migrations/0086_marketplace_recut.sql` as me
 at 9e84f16), which is the ledger's own statement list for this file. Anything that is not a Source
 citation or a header quote is a PROPOSAL and is marked so. Line anchors are at `9e84f16`.
 
+READING RULE for cited spans, fable's ruling 2 (m50657_mu13rny3, 2026-09-14, fable's words): "A
+backticked span that cites a file is that file's text verbatim, whitespace aside, unless it contains
+`...` or a `<placeholder>`, or is a bare `alias.column` reference. Those three are shapes, and assert
+only their visible parts. Any other cited span that fails `grep -F` against its file is a defect."
+No glyph is added and nothing is marked -- the ellipsis or the placeholder IS the marker, and the
+sentence saying so was what was missing (same message: "Don't mark 86 spans"). A shorthand span
+outside those three shapes that misses is a bucket-(c) defect and gets fixed, not exempted; section
+12 R20 (c1) is the worked example.
+
+SWEEP RULE for removal records, fable's ruling 1 (same message, fable's words): "a zero-hit span
+passes if the same sentence names its replacement and the replacement hits." A record of a removal
+has to name what it removed, so its own citation must re-hit the grep that proves the removal; the
+predicate is stricter than a blanket exemption, because a record whose named replacement is itself
+wrong still fails, and a zero-hit span with no replacement in its sentence stays on the report. The
+residual count is reported and partitioned, never driven to zero (same message: "its count is
+reported, not driven to zero"). OPEN, and flagged back to fable at this commit: the unit "the same
+sentence". Measured by me on the four live-body sites fable names (fable's :377, :394, :506, :510 at
+`82ec840`; :400, :417, :529, :533 at this commit, the same four spans): only :529 names its
+replacements in the SAME sentence. :400 and :417 sit in R9's and R5's amendment bullets, whose
+replacement names arrive at :408-409, and :533 is inside the pre-R9 list, whose replacements are
+named at :529-532. All four pass if the unit is the amendment record the sentence sits in; three of
+the four fail if the unit is the sentence. Not widened here by me.
+
 Not in my reads, stated up front so nobody takes a relay for a finding (rule 8):
 - The ledger's section 9 paragraph and fable's B-1 sentence: now quoted verbatim from fable's Q7
   (sections 6 and 7); still fable's text, not my read of the ledger file.
@@ -636,8 +659,11 @@ ALSO re-approved through the new path since 22:58Z).
 RULED (fable Q4): legacy rows with `status = 'approved'` that never reached `'provisioned'` get NO
 record by default. Fable's words: "'approved' is a decision; 'provisioned' is the vendor told; only
 the second is allowlist truth (v1.49 2(d)). Coxwell sees the approved-only list (section 11); if
-he says a listed row WAS told, it is carried by a literal in step 2b (S2) with his message id,
-expanding packages exactly as section 5 does. No default carry." Marcus's read (m49188):
+[coxwell] says a listed row WAS told, it is carried by a literal in step 2b (S2) with [coxwell's]
+message id, expanding packages exactly as section 5 does. No default carry." The two bracketed words
+are the author's own edit of the author's own quote: the pronoun for coxwell was unsourced, fable
+authorised the substitution as the text's author (m50657_mu13rny3), and the brackets mark it.
+Marcus's read (m49188):
 8 approved rows today.
 
 `told_by` (Source I, optional): RULED (fable Q3) NOT ADDED. Fable's named cost, accepted: "carried
@@ -1276,9 +1302,16 @@ Z6's three questions:
   0088 never touches the `feed_subscriptions.server_registration_id -> server_registrations` FK at
   all. Its only FK work is on `server_registrations` -- drop the unnamed 0031 single-column FK by
   lookup (0088:1076) and add `server_registrations (license_id, user_id) -> licenses (id, user_id)
-  on delete set null (license_id)` (0088:1088-1091); those four lines are the complete output of my
-  `foreign key|references|add constraint|drop constraint` grep over the file at this commit, outside
-  the header comment. So `0086_marketplace_recut.sql:576`'s NO ACTION is the post-apply action too,
+  on delete set null (license_id)` (0088:1088-1091). CORRECTED at R21 (fable U1, m50657_mu13rny3):
+  the sentence here used to call those four lines "the complete output" of the
+  `foreign key|references|add constraint|drop constraint` grep outside the header comment, and that
+  is not what the grep returns. My own run at this commit, case-sensitive, below the header: 6 lines
+  -- the CHECK's two `add constraint` lines (0088:960, :966), the licences unique (:1058), and the FK
+  work itself, :1076 for the drop and :1089 / :1090 inside the :1088-1091 add. Under `-i` two more,
+  :882 and :990, a comment and an exception message. Inside the header comment: :94 and :112, plus
+  :92 under `-i`. The conclusion is unchanged, because the only FK WORK in the file is the
+  `server_registrations` drop and add. So `0086_marketplace_recut.sql:576`'s NO ACTION is the
+  post-apply action too,
   and the user-delete cascade into `server_registrations` (section 8 S1(ii), T4) meets NO ACTION and
   raises 23503; it never SET NULLs the child column.
   So the list marcus wants for the post-commit 23514 risk is EMPTY, before the commit and after it:
@@ -1376,7 +1409,10 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person), R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last) and R17 (TEXT only: fable's R14 verdict -- T1-T4, the withdrawn m50485 provenance, property 5, rollback stamps ruled NO, the wrap-quote sweep) and R18 (TEXT only: marcus m50542_mu12mjm5 -- the sweep widened to every quoted span, 152 zero-hits enumerated, one name corrected) and R19 (TEXT only: marcus m50547_mu12nfmr item 5 -- the carve-out check reads "later than, OR NULL", and the ungated trial NULL is why) and R20 (TEXT only: marcus m50612_mu1380br + m50614_mu138xn5 -- the 155 zero-hits partitioned, one live defect corrected, the draft-name records MARKED not rewritten, two R19 pronouns fixed). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person), R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last) and R17 (TEXT only: fable's R14 verdict -- T1-T4, the withdrawn m50485 provenance, property 5, rollback stamps ruled NO, the wrap-quote sweep) and R18 (TEXT only: marcus m50542_mu12mjm5 -- the sweep widened to every quoted span, 152 zero-hits enumerated, one name corrected) and R19 (TEXT only: marcus m50547_mu12nfmr item 5 -- the carve-out check reads "later than, OR NULL", and the ungated trial NULL is why) and R20 (TEXT only: marcus m50612_mu1380br + m50614_mu138xn5 -- the 155 zero-hits partitioned, one live defect corrected, the draft-name records MARKED not rewritten, two R19 pronouns fixed) and R21 (TEXT only, and the two
+rulings are LIVE: fable m50657_mu13rny3 -- the reading rule for cited spans and the sweep rule for
+removal records, both stated at the top of this document, plus U1's grep sentence, the authorised
+`[coxwell]` edit in the Q4 quote, and the R20 pronoun count corrected from 10 to 13). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
 
 **R9 (LIVE, supersedes R4 / R5 / R6 / R8 on everything about the six) -- the lapse becomes a
 predicate step with a refusal gate; the carve-out is computed, never written down.** Marcus
@@ -1550,6 +1586,62 @@ section 5 (:622, :628), section 6 (:647-654), section 7 (:702-727), section 8 (:
 section 9 step 4 (:910, :919-923), section 11 (:1098), and section 12 (Z1 :1219, Z5 head, Z6 two
 points, R8, R6 addendum, R4 scope line, the R1/R3 history text, and this entry).
 
+**R21 -- TEXT, no behaviour, this document only. Fable's two rulings land as rules rather than as
+edits: the reading rule for cited spans, the sweep rule for removal records, one grep sentence
+corrected, and one authorised pronoun edit inside fable's own quote.**
+Source: fable m50657_mu13rny3 (2026-09-14 10:31:15Z), fable's pass over R15 `adef2f0`, R16
+`db59d82` and the R18/R19/R20 batch. R15 PASS. R16 PASS with one text strike. R18/R19/R20 PASS on my
+report, which fable states plainly is a read of my report and not of the hunks, since no R17 hunk was
+ever posted and fable holds no `src` and no 0089. Fable rebuilt the frozen 0088 independently -- from
+the `d172be2` file plus the R14 and R15 hunks, `patch` clean, 1,312 lines, md5
+`8a7e67264f1a4e91d9a3a9ed8230c29c`, blob `819c4975` -- and those are the `adef2f0` figures I posted,
+so the file both runs will use is now checked from two sides. No SQL moves at this commit; the freeze
+holds.
+Four things applied here, all of them text:
+(1) U1, fable's one strike on R16, and it is a correction of MY sentence: section 9's grep B (ii)
+called the four FK lines "the complete output" of the
+`foreign key|references|add constraint|drop constraint` grep outside the header. My own re-run at
+this commit says 6 lines case-sensitive below the header (0088:960, :966, :1058, :1076, :1089, :1090)
+and 8 under `-i` (:882, :990), with :94 and :112 in the header and :92 there under `-i`. The
+paragraph now prints all of them. The conclusion never moved -- the only FK work is the
+`server_registrations` drop and add -- but a reader who re-ran the grep got 6 or 8 lines against a
+sentence promising 4, and stopped trusting the paragraph.
+(2) Ruling 2, NO GLYPH, stated with the reading rules at the top of this document and marked beside
+the R20 paragraph that proposed a glyph. Nothing is marked, 86 spans stay as they are, and the rule
+is fable's sentence verbatim: the three shapes (an elision, a `<placeholder>`, a bare `alias.column`)
+assert only their visible parts, and any other cited span that fails `grep -F` against its file is a
+defect. This is the cheapest of the three options on the table and the only one that makes a span
+decidable from its own text.
+(3) Ruling 1, the removal-record predicate, stated in the same place and marked beside the R20 (c2)
+paragraph that flagged the sixteen. Also fable's sentence verbatim. OPEN and flagged back: the unit.
+Measured by me on the four live-body sites fable names, only one of the four names its replacements
+in the SAME sentence; the figures and the anchors at this commit are with the rule at the top of this
+document, not repeated here. All four pass if the unit is
+the amendment record; three of the four fail if the unit is the sentence. I have not widened fable's
+words to make them fit, and I have not re-run the sweep under the new predicate -- that is the next
+sweep's job, not a claim of this commit.
+(4) The pronoun inside fable's Q4 quote at section 5, authorised by fable as the text's author:
+`if [coxwell] says a listed row WAS told` and `with [coxwell's] message id`. Brackets mark the
+author's edit. Marcus's Z1 words at the other sourced site are untouched, as fable directs.
+ALSO CORRECTED, my own, found while placing (3): the R20 entry's claim that the pronoun grep "returns
+10 lines" after that commit. Re-run at `82ec840` it returns 13, partitioned 7 + 6. The correction
+sits beside the original number rather than over it (marcus m50614_mu138xn5). The class is unchanged
+and none of the thirteen is an unsourced pronoun; the number was simply stated without being
+re-measured on the commit it describes, which is the failure mode that rule exists to catch.
+THE PRONOUN GREP AT THIS COMMIT, re-run on my own bytes before committing them: 12 lines, 6 + 6. Six
+are the sourced quotes and the records that quote them -- marcus's Z1 words at :1485 / :1486 and
+R15's entry at :1928, :1931, :1932, :1934. Six are the R20 entry doing what it describes, at :1686,
+:1716, :1722, :1725, :1726, :1729. The thirteenth line at `82ec840` was the Q4 quote itself, and it
+leaves the grep because item (4) above bracketed it. This R21 entry adds none: it names the strings
+it changed without reproducing their pronouns, which is the only way a removal record can shrink this
+count honestly. Reported, not chased.
+NOT DONE, deliberately, and it is fable's item 2: section 9 step 3 raw at head -- properties 1-5, the
+cross-run limb and the R19 NULL paragraph -- is posted only when marcus is about to run the dry-run.
+It is the checklist the dry-run paste gets checked against and fable has not read it since R17
+rewrote it. Marcus decides when this commit goes in; it gates nothing.
+NOT VERIFIED, unchanged: no psql on this box, the plpgsql is unexecuted anywhere, and no SQL file
+moves at this commit -- the four blobs are still the `adef2f0` blobs.
+
 **R20 -- TEXT, no behaviour, this document only. The sweep's zero-hits are partitioned, and the
 class that dominates them is A RECORD NAMING THE THING IT REMOVED.**
 Source: marcus m50612_mu1380br (2026-09-14 10:15:58Z, partition the 155, do not repair them; post
@@ -1605,10 +1697,21 @@ sentences. 0088's summary columns at this commit are `fs_no_server_live`, `fs_no
 `fs_lapsed_by_word`, `fs_request_id_column_present` and `fs_request_id_rows_dropped`
 (`0088_tighten.sql:1288-1305`, my read) -- neither struck name exists, which is what those sentences
 assert. The zero hit is the sentence being TRUE, not false.
+RULED at R21, and it is a predicate and not a list of sites (fable m50657_mu13rny3, fable's words):
+"a zero-hit span passes if the same sentence names its replacement and the replacement hits." Nothing
+in the R20 text above is rewritten; the rule itself is stated with the reading rules at the top of
+this document, where the next sweep will look, together with the one thing it leaves open (the unit
+"the same sentence", which passes only ONE of the four live-body sites named above -- the
+`fs_exempt_live` / `fs_no_server_lapsed_now` sentence in section 9 -- and passes all four only if the
+unit is the amendment record that the sentence sits in).
 PROPOSED, NOT APPLIED, fable's to rule (marcus m50612, "yours to shape"): a quoted span that is not
 verbatim carries a visible marker, so the mark sits on the minority that cannot be checked rather
 than on the majority that can. I have not marked anything; 69 + 17 spans would change under whatever
 fable picks, and picking the glyph before the ruling would be the third round of churn.
+RULED at R21: NO GLYPH (fable m50657_mu13rny3, fable's words: "Don't mark 86 spans. The ellipsis or
+placeholder already is the marker. What's missing is a sentence saying so."). The 69 + 17 spans are
+untouched, zero churn; the sentence fable wrote is in the reading rules at the top of this document,
+and it makes every span decidable from its own text.
 THE PRONOUN GREP, folded in as its own class (marcus m50570_mu12su9j). `grep -nEiw
 'he|him|his|she|her|hers'` over this document returns 9 lines at `c8f0a70`, not the "two pronouns
 left" that R15's entry states. Seven are the class above -- :639, :1438 and :1439 are the two
@@ -1628,6 +1731,15 @@ the line quoting the two strings just fixed, and the line printing the grep PATT
 the ten is an unsourced pronoun. Stated as sharply as I can state it: THE ONLY WAY TO DRIVE THIS
 GREP TO ZERO IS TO STOP RECORDING WHAT WAS FIXED, which is why the number is reported and not
 chased.
+CORRECTED at R21, my own defect and a count, not a citation: "returns 10 lines" is wrong. Re-run at
+`82ec840`, this commit's own sha, the same pattern returns 13 lines, and the partition is 7 + 6, not
+7 + 3. The seven of the class are :639, :1449, :1450, :1816, :1819, :1820, :1822 at that sha. The six
+the R20 entry itself gains are :1594, :1613, :1619, :1622, :1623 and :1626 -- the prediction above
+counted three of those six and missed :1594 (the entry's own citation line in the (c2) list) and
+:1622 / :1623, which are the two lines describing the two pronouns the entry had just fixed and which
+the entry says in the same breath that it wrote. None of the thirteen is an unsourced pronoun, so the
+conclusion holds and nothing is chased; what failed was the arithmetic of a number I stated about a
+commit before re-running the grep on it. R21 re-runs it and prints the figure at head.
 NOT VERIFIED, unchanged: no psql on this box, the plpgsql is unexecuted anywhere, and no SQL file
 moves at this commit -- the four blobs are the `adef2f0` blobs.
 Applied at this commit: this document only, 112 insertions / 6 deletions, 7 hunks at -U0 --
