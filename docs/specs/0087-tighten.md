@@ -1238,8 +1238,14 @@ Z6's three questions:
 - **(i) Does any of them write `status='lapsed'` to `feed_subscriptions`?** YES, exactly one:
   `deactivateFeedTierSubscription` (`feed-subscriptions.ts:1459-1469`), the admin's
   `deactivateFeedSubscriptionAction`, which the EFFECTIVE_STATUS_SQL comment at :111-112 already
-  names as the one-way ratchet. How step 4 tells it apart from (F): by id and by `lapsed_at`. It is
-  keyed on `(subscriber_user_id, tier_key)` and sets `lapsed_at = now()`, whereas 4b sets
+  names as the one-way ratchet. How step 4 tells it apart from (F): by id and by `lapsed_at`.
+  CORRECTED at R20 (the sweep's bucket (c), section 12): this sentence used to say the write is
+  "keyed on `(subscriber_user_id, tier_key)`", which reads as a conflict target and is not what the
+  statement is. It is an UPDATE ... FROM with no `on conflict` at all, matched on
+  `s.subscriber_user_id = $1` and `ft.tier_key = $2` and `s.status != 'lapsed'`
+  (`feed-subscriptions.ts:1465-1467`, my read at this commit); `tier_key` is a `feed_tiers` column
+  reached through the join at :1463-1464, not a `feed_subscriptions` column, so the pair was never a
+  key on the table step 4 reads. It sets `lapsed_at = now()` (:1462), whereas 4b sets
   `lapsed_at = coalesce(lapsed_at, ends_at)` on exactly the ids its `step 4b candidate:` notices
   name. RULED by fable m50501_mu124d6c ruling C at R16, replacing the R12 caveat: a stored ->
   `lapsed` on an id that no notice names is (A) only if its `lapsed_at` falls STRICTLY BETWEEN the
@@ -1370,7 +1376,7 @@ the branch.
 
 ---
 
-## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person), R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last) and R17 (TEXT only: fable's R14 verdict -- T1-T4, the withdrawn m50485 provenance, property 5, rollback stamps ruled NO, the wrap-quote sweep) and R18 (TEXT only: marcus m50542_mu12mjm5 -- the sweep widened to every quoted span, 152 zero-hits enumerated, one name corrected) and R19 (TEXT only: marcus m50547_mu12nfmr item 5 -- the carve-out check reads "later than, OR NULL", and the ungated trial NULL is why). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
+## 12. Rulings ledger -- HISTORY, plus the live rulings R2 (0088 filename), R9 (predicate lapse, refusal gate, computed carve-out) R10 (Z1 narrows the lapse to NULL-server rows; Z2 candidate notices; Z4 rollback text) R14 (the run's now() printed twice; 2b(b) names its staged rows), R15 (TEXT only: no unsourced pronoun for a person), R16 (TEXT only: fable's R12 verdict -- lapsed_at in the step-2 select, the four properties transcribed, command tags, nulls last) and R17 (TEXT only: fable's R14 verdict -- T1-T4, the withdrawn m50485 provenance, property 5, rollback stamps ruled NO, the wrap-quote sweep) and R18 (TEXT only: marcus m50542_mu12mjm5 -- the sweep widened to every quoted span, 152 zero-hits enumerated, one name corrected) and R19 (TEXT only: marcus m50547_mu12nfmr item 5 -- the carve-out check reads "later than, OR NULL", and the ungated trial NULL is why) and R20 (TEXT only: marcus m50612_mu1380br + m50614_mu138xn5 -- the 155 zero-hits partitioned, one live defect corrected, the draft-name records MARKED not rewritten, two R19 pronouns fixed). R4 / R5 / R6 / R8 were the exempt-six line and are SUPERSEDED by R9, kept as history.
 
 **R9 (LIVE, supersedes R4 / R5 / R6 / R8 on everything about the six) -- the lapse becomes a
 predicate step with a refusal gate; the carve-out is computed, never written down.** Marcus
@@ -1403,6 +1409,11 @@ The four rulings:
    regardless of the rest: the population marcus read on 09-13 14:55Z is not the population of the
    09-14 08:41Z read, and R6's committed list would have aborted step 5's SUBSET gate on apply.
    That is the concrete instance of the failure R9's gate exists to prevent.
+   MARKER ADDED at R20, text above unchanged (marcus m50614_mu138xn5: a dated record keeps the name
+   the draft used and gains a line; rewriting it destroys the evidence of what was decided). The
+   frozen 0089 has no `tmp_0089_exempt`: it creates `tmp_0089_carried (id uuid primary key)` at
+   `0089_drop_server_or_lapsed_exception.sql:104`, my read at this commit. The list this ruling
+   struck is the draft's.
 3. **NULL-server carve-out gated on `ends_at > now()`**, computed in step 5 and materialised into
    the constraint text; 0089 re-arms by reading that text back instead of carrying its own copy.
    The exception stays keyed by id: a predicate exception in the constraint would admit every
@@ -1539,6 +1550,90 @@ section 5 (:622, :628), section 6 (:647-654), section 7 (:702-727), section 8 (:
 section 9 step 4 (:910, :919-923), section 11 (:1098), and section 12 (Z1 :1219, Z5 head, Z6 two
 points, R8, R6 addendum, R4 scope line, the R1/R3 history text, and this entry).
 
+**R20 -- TEXT, no behaviour, this document only. The sweep's zero-hits are partitioned, and the
+class that dominates them is A RECORD NAMING THE THING IT REMOVED.**
+Source: marcus m50612_mu1380br (2026-09-14 10:15:58Z, partition the 155, do not repair them; post
+bucket (c) only, (a) and (b) as counts) and m50614_mu138xn5 (10:16:42Z, the three `tmp_0089_exempt`
+sites: MARK a dated record, CORRECT a present-tense claim, and where a present-tense claim sits
+inside a dated record keep the old attribution and put the correction beside it).
+THE SWEEP RE-RUN AT THE PARENT `c8f0a70`, my own pipeline, every figure measured before this
+commit's own text existed: 518 unique backticked spans (up from 498 at `2530e7d`), `grep -F` all of
+them against `git grep -- src db`, then re-grep the miss set alone to a fixed point --
+169 -> 155 -> 155, the third pass returning 0 new hits. 155 zero-hits, not 152; the 3 new ones are
+spans R18 and R19 added. The nesting trap from R18 still bites and is still the reason the re-grep
+is not optional (m50424: a list of sites is a floor, derive the predicate).
+BUCKET (b), NOT FILE CONTENT AT ALL -- commands, file paths, line citations, shas, bus ids, one
+regex: 55 spans. Zero hits is the CORRECT result for every one and no action is owed, ever.
+BUCKET (a), UNVERIFIABLE BY CONSTRUCTION -- a span carrying an elision, a placeholder or a
+table-qualified shorthand cannot match a line even when the claim behind it is true: 69 spans.
+Marcus's rule, and it is worth more than the sweep: AN ELLIPSIS OR A PLACEHOLDER INSIDE QUOTE MARKS
+CONVERTS A CITATION INTO AN ASSERTION, AND NOTHING IN THE TEXT SAYS SO (m50612). `step 1 ok: ...
+null=0 owner_mismatch=0 ...` reads exactly like a verbatim line and can never be checked against
+one; :1302 was the same failure with a line wrap instead of an ellipsis.
+EXTRACTION ARTEFACTS, a class the earlier counts hid: 14 of the 155 are not spans at all. A span
+that opens on one line and closes on the next leaves an unpaired backtick, and a line-oriented
+`grep -o` then pairs that backtick with the next one along, so the text BETWEEN two real spans is
+harvested as if it were quoted (` -- marcus's predicate, with `, ` = 0 lines; `). They are an
+artefact of my method, they are counted here rather than quietly dropped, and they are why the
+gross figure moves between rounds.
+BUCKET (c), A CLAIM ABOUT WHAT A FILE SAYS THAT THE FILE DOES NOT SAY: 17 spans, and only ONE of
+them is a live defect.
+(c1) THE ONE LIVE DEFECT, CORRECTED at this commit: section 9's Z6 answer (i) at `c8f0a70` :1242
+said `deactivateFeedTierSubscription` is "keyed on `(subscriber_user_id, tier_key)`". That pair
+appears nowhere in `src` or `db`. The statement is an UPDATE ... FROM with no `on conflict` target
+at all, matched on `s.subscriber_user_id = $1` and `ft.tier_key = $2` and `s.status != 'lapsed'`
+(`src/lib/feed-subscriptions.ts:1465-1467`), and `tier_key` is a `feed_tiers` column reached by the
+join at :1463-1464, not a column of the table step 4 reads. The substance was right -- it does set
+`lapsed_at = now()` at :1462 -- and only the word "keyed" was wrong, which is exactly why a grep
+caught it and four readings did not.
+(c2) THE OTHER SIXTEEN ARE ONE CLASS, AND IT IS A PROPERTY OF RECORDS, NOT A DEFECT IN THEM:
+A RECORD THAT NAMES THE STRING IT REMOVED WILL ALWAYS FAIL THE CHECK THAT PROVES THE REMOVAL.
+Marcus's words for the instance marcus spotted (m50570_mu12su9j): "the record re-hitting its own
+grep".
+Flagged, per that ruling, NOT silently exempted; fable rules whether these entries keep their
+citations. Measured at `c8f0a70`: R15's entry quoting the pronoun strings it fixed (:1721 `HIS read,
+not mine` and `MARCUS'S read, not mine`, :1724, :1725); R17's entry quoting the ledger INSERT it
+fixed (:1609 `on conflict do nothing;`); R18's entry quoting the temp-table name it fixed (:1631,
+:1633 `tmp_0087_carry`, `tmp_0087_`); the R9, R6 and R5 records naming the struck draft lists
+(:1402, :1845, :1910 `tmp_0089_exempt` and the clause at :1910, :1899 `not exists
+(tmp_0088_exempt)`, and the draft count names `exempt_rekeyed` / `exempt_lapsed_now` /
+`exempt_already_settled` / `fs_no_server_live_exempt` at :1644, :1826, :1903, :1911-1914, :1953).
+THE SAME CLASS REACHES THE LIVE BODY, which is the part worth fable's attention: :377, :394, :506
+and :510 name `fs_exempt_live` and `fs_no_server_lapsed_now` inside R9's own "AMENDED / replaced by"
+sentences. 0088's summary columns at this commit are `fs_no_server_live`, `fs_no_server_listed`,
+`fs_carve_out`, `fs_carve_out_clients`, `fs_predicate_lapsed`, `fs_predicate_lapsed_clients`,
+`fs_lapsed_by_word`, `fs_request_id_column_present` and `fs_request_id_rows_dropped`
+(`0088_tighten.sql:1288-1305`, my read) -- neither struck name exists, which is what those sentences
+assert. The zero hit is the sentence being TRUE, not false.
+PROPOSED, NOT APPLIED, fable's to rule (marcus m50612, "yours to shape"): a quoted span that is not
+verbatim carries a visible marker, so the mark sits on the minority that cannot be checked rather
+than on the majority that can. I have not marked anything; 69 + 17 spans would change under whatever
+fable picks, and picking the glyph before the ruling would be the third round of churn.
+THE PRONOUN GREP, folded in as its own class (marcus m50570_mu12su9j). `grep -nEiw
+'he|him|his|she|her|hers'` over this document returns 9 lines at `c8f0a70`, not the "two pronouns
+left" that R15's entry states. Seven are the class above -- :639, :1438 and :1439 are the two
+sourced, quoted pronouns R15 deliberately left, and :1721, :1724, :1725, :1727 are R15's entry
+quoting them and the strings it replaced. R15's "two" counted instances it had a right to leave; the
+grep counts lines, and the record's own citations are four of them.
+THE OTHER TWO WERE A REAL REGRESSION, MINE, AND ARE FIXED at this commit: R19's entry at :1560 and
+:1562 put two unsourced pronouns for fable back into this document ("The scope was hers", "Her
+quoted block is untouched"), the same defect R14 committed and R13/R15 removed. Fixed to the name
+under the standing rule, which is applied without a per-round ask (marcus m50496_mu11ykul). Writing
+the paragraph above, I put two more unsourced pronouns in -- "the instance he spotted" and "whatever
+she picks", in the entry whose subject is that defect -- and caught them only by re-running the grep
+on my own commit; both are fixed here, and the lesson is that this class is not caught by intent.
+After this commit the grep returns 10 lines, not 7. Seven are the class already described. The
+three it gains are this entry doing the same thing once more: the line quoting `HIS read, not mine`,
+the line quoting the two strings just fixed, and the line printing the grep PATTERN itself. None of
+the ten is an unsourced pronoun. Stated as sharply as I can state it: THE ONLY WAY TO DRIVE THIS
+GREP TO ZERO IS TO STOP RECORDING WHAT WAS FIXED, which is why the number is reported and not
+chased.
+NOT VERIFIED, unchanged: no psql on this box, the plpgsql is unexecuted anywhere, and no SQL file
+moves at this commit -- the four blobs are the `adef2f0` blobs.
+Applied at this commit: this document only, 112 insertions / 6 deletions, 7 hunks at -U0 --
+section 9's Z6 answer (i), the section 12 heading, the R9 ruling-2 marker, the R6 marker, the R5
+correction-beside-the-record, the two pronouns in the R19 entry, and this entry.
+
 **R19 -- TEXT, no behaviour, this document only. The carve-out check reads "later than, OR NULL",
 and the reason it must is the ungated trial NULL.**
 Source: marcus m50547_mu12nfmr (2026-09-14 09:59:58Z) item 5, ruling on a hole I reported in the
@@ -1557,9 +1652,9 @@ only on `status = 'active'` and merely NOTICES the trial count (0088:640-649), a
 instead of the "non-NULL" filter it had, with a line saying the limb is the predicate's own second
 limb and not a softening.
 NOT changed, and this is the point of the entry: fable's property 2 as quoted is already correct --
-"every non-NULL `ends_at`" (m50538_mu12lmrx T4). The scope was hers; only the mechanism is new, and
-marcus's reason for wanting it in the file is that a scope without its mechanism is a rule people
-relax when it looks over-cautious. Her quoted block is untouched.
+"every non-NULL `ends_at`" (m50538_mu12lmrx T4). The scope was fable's; only the mechanism is new,
+and marcus's reason for wanting it in the file is that a scope without its mechanism is a rule people
+relax when it looks over-cautious. Fable's quoted block is untouched.
 One correction to marcus's wording, which does not change the ruling: the step 4 gate does not
 simply "bind only `status = 'active'`" -- the file counts the trial NULLs too, at 0088:646-648, and
 prints the count. What it does not do is RAISE on them: the exception is the active branch alone
@@ -1847,6 +1942,9 @@ same order, per-row comments name the client only (the read gives no per-uuid ti
 earlier "LD Base tier N" labels are dropped as unverified); the 2b(b) comment that still read
 "under v1.71 step 5's BLOCK set is empty by construction" now states the subset gate and the fixed
 block's refusal of a staged id outside the six. No SQL statement other than the literals changed.
+MARKER ADDED at R20, text above unchanged (marcus m50614_mu138xn5). The four lists this entry
+records are the draft's; R9 struck them, and the frozen 0089 creates `tmp_0089_carried` at
+`0089_drop_server_or_lapsed_exception.sql:104` and has no `tmp_0089_exempt` anywhere.
 R6 addendum (fable m49962_mtzxu44x, fable's R4 read, 14:57Z; X1-X4 were already at af071ca/ceeebbe):
 R-a accepted the preflight D NOT NULL filter; R-b KEEPS the 2b staging mechanism on three
 conditions, met as follows: both staging tables are `on commit drop` (0088:371, :379);
@@ -1914,6 +2012,14 @@ Applied at this commit (diff against f5fc622, files 2, 3, 6, 7 of section 1):
   row (`exempt_rekeyed`, `exempt_lapsed_now`, `exempt_already_settled`, `fs_no_server_live`,
   `index_0081_present`) then the ledger row. Header states the rollback does not revert steps 1
   and 3 and why.
+  CORRECTION BESIDE THE RECORD, added at R20 (marcus m50614_mu138xn5; the bullet above is the v1.76
+  draft's shape and its names are kept as history). In the frozen 0089, my reads at this commit:
+  step 1's clause is `and fs.id in (select id from tmp_0089_carried);` at
+  `0089_drop_server_or_lapsed_exception.sql:143`, the temp table is `tmp_0089_carried` (:104), and
+  the count is `carried_rekeyed` (:145), not `exempt_rekeyed`. The attribution to 0088 step 4 is NOT
+  a defect and is not corrected: the frozen file's own step-1 header at :130 reads
+  `-- 1. RE-KEY THE CARRIED ROWS (0088 step 4's predicate, restricted to the carried set)`, so the
+  record and the file agree on where the predicate comes from; only the draft's names moved.
 - 0089 rollback: header states the two non-reverts; step labels renumbered (5 reverse, 4 reverse).
 - Not touched: T1-T6 hunks, 2b(a), 2b(c), the two extra summary columns, the rollback fill-in,
   the 0087 notice, step 6's body (still preflight D with the NOT NULL server filter, no drop).
