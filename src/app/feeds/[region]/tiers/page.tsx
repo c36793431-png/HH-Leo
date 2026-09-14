@@ -406,7 +406,17 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                           <span className="ftd-pkg-member-name">{m.name}</span>
                           <span className="ftd-pkg-member-score">
                             {londonScore ?? m.speedDisplay}
-                            <span className="ftd-speed-unit">{isScoreRegion(region) ? "/100" : "µs"}</span>
+                            {/* The unit is only printed when there IS a figure of that kind.
+                                NY's members have a null latency_us, so speedDisplay is a bare
+                                "—" and this printed "—µs" — a unit asserting a kind the value
+                                does not have, the quiet form of the m50770 defect, and a second
+                                spelling of the unknown the comparison row already writes as a
+                                bare "—". Take the bare "—": it claims nothing, which is what we
+                                want where we have nothing (marcus, m50802 residue 2). Same
+                                guard the single-tier card below already carried. */}
+                            {(londonScore != null || m.latencyUs != null) && (
+                              <span className="ftd-speed-unit">{isScoreRegion(region) ? "/100" : "µs"}</span>
+                            )}
                           </span>
                         </div>
                       </div>
