@@ -269,6 +269,12 @@
 .portal-shell .hero p { color: var(--hz-ink-2); font-size: 14px; max-width: 560px; line-height: 1.5; }
 .portal-shell .hero .row { display: flex; align-items: center; gap: 14px; margin-top: 18px; flex-wrap: wrap; }
 .portal-shell .hero .note { font-family: var(--hz-mono); font-size: 12px; color: var(--hz-ink-3); }
+/* The Telegram route, demoted under the Marketplace CTA (coxwell via marcus, m50779) -- a text
+   link, not a third button competing with the primary. The second .row tightens up so the two
+   read as one block rather than two separate action bars. */
+.portal-shell .hero .row + .row { margin-top: 10px; }
+.portal-shell .hero .hero-contact { font-size: 13px; color: var(--hz-cyan); text-decoration: none; }
+.portal-shell .hero .hero-contact:hover { text-decoration: underline; }
 .portal-shell .hero .hero-image {
   position: relative; z-index: 1; flex: none; width: 340px; height: 210px; border-radius: 12px; overflow: hidden;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);

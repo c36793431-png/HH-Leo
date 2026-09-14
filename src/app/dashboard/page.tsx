@@ -201,19 +201,42 @@ export default async function DashboardPage() {
         </div>
       )}
 
+      {/* The free tier's hero. Its primary CTA is the MARKETPLACE, not Telegram (coxwell via
+          marcus, m50779: "should be Marketplace button instead ... Unlock Horizon HFT Services").
+          THE HEADING MOVED WITH THE BUTTON and that is not cosmetic: it promised "the full
+          Horizon HFT terminal", and the destination is a shelf carrying feeds AND software, so
+          the terminal is now one listing on it. A services button under a terminal heading is
+          the card contradicting itself.
+
+          THE TELEGRAM ROUTE SURVIVES, DEMOTED. It was this button, and /marketplace does not
+          replace it: no listing there sells a licence -- the Horizon Terminal card links to
+          /dashboard#downloads, which for a free account is this same page -- so dropping it
+          would leave a free account a catalogue and no way to buy from it.
+
+          THE MANUAL-ISSUE NOTE MOVED TO SIT WITH THAT LINK, deliberately. It is a turnaround
+          promise about getting a licence issued, and under a button that opens a catalogue it
+          would be read as a promise about the catalogue. It is kept rather than dropped because
+          the destination does NOT carry the same fact in other words: the marketplace's terminal
+          listing reads "included with an active licence" and says nothing about how or how fast
+          one is issued. */}
       {!paid && !isAdmin && (
         <div className="hero">
           <div className="hero-content">
             <div className="eyebrow">Free tier</div>
-            <h2>Unlock the full Horizon HFT terminal</h2>
+            <h2>Everything Horizon HFT sells — feeds and software</h2>
             <p>{config.pricingDisplay}</p>
             <div className="row">
-              <a className="btn primary" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
-                ⚡ Upgrade to Paid
-              </a>
+              <Link className="btn primary" href="/marketplace">
+                Unlock Horizon HFT Services
+              </Link>
               <Link className="btn ghost" href="/whats-included">
                 See what&apos;s included
               </Link>
+            </div>
+            <div className="row">
+              <a className="hero-contact" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
+                Talk to us on Telegram →
+              </a>
               <span className="note">Licenses are issued manually · typically &lt; 1h</span>
             </div>
           </div>
