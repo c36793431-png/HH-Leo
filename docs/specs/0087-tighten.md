@@ -827,12 +827,28 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    `with_request` count, unmapped 0; step 9 carry enumerated = the `provisioned_to_map` count
    expanded by package membership, inserted = that minus same-IP overlaps with new-path records,
    misses 0; drop guard 0; summary row.
-2. Before-read (v1.47 gate shape, S5(b)): `select id, subscriber_user_id, feed_tier_id, status,
-   ends_at, server_registration_id, <EFFECTIVE_STATUS_SQL> as computed from feed_subscriptions
-   order by id` -- the same read marcus used for the 0086 dry-runs.
-3. Apply (`commit`). Paste every notice line; they must equal the dry-run's.
-4. After-read = before-read plus EXACTLY: stored `status` -> `lapsed` on the step-4b rows plus the
-   step-2b(b) rows if any literal is present, `computed` unchanged on every row. The expected
+2. Before-read (v1.47 gate shape, S5(b)): `select now() as read_at, id, subscriber_user_id,
+   feed_tier_id, status, ends_at, server_registration_id, <EFFECTIVE_STATUS_SQL> as computed
+   from feed_subscriptions order by id` -- the read marcus used for the 0086 dry-runs, plus
+   `now()`. The after-read (step 4) is this same select, so it carries its own `now()` too, and
+   both instants are pasted: steps 3 and 4 compare results taken at two different clocks, and
+   without the two instants the operator cannot tell a clock mover from a file mover (fable Z5,
+   m50440_mu111ike).
+3. Apply (`commit`). Paste every notice line; they must equal the dry-run's, EXCEPT a row whose
+   `ends_at` falls between the two runs' `now()`: it moves from `step 5 carve-out:` to `step 4b
+   candidate:`, and the step 4b / step 5 counts move with it. Aylrn's 3 rows do this if the two
+   runs fall either side of 09-19 and rasoolx55's across 09-25 (fable Z5, m50440_mu111ike, on the
+   ends_at dates in marcus's 08:41Z read m50350_mu0ztzip). Any other difference: stop.
+4. After-read = the step-2 select run again (it carries its own `now()`), and it equals the
+   before-read plus EXACTLY: stored `status` -> `lapsed` on the step-4b rows plus the
+   step-2b(b) rows if any literal is present, and `computed` unchanged on every row EXCEPT
+   live -> lapsed on a row whose own `ends_at`, or the licence or trial end the CASE reads, falls
+   between the before-read's `now()` and the after-read's -- there the clock moved the row, not
+   the file (fable Z5, m50440_mu111ike). Her live case, from marcus m50417 as relayed in that
+   message and NOT my read: abdulkareem.almansoori's rows and licence end at
+   2026-09-14T09:01:12.638Z; he has a server row, so he is in neither the 4b candidates nor the
+   carve-out, and a before-read before that instant with an after-read after it moves his
+   `computed` with nothing in the file touching him. The expected
    movers are NOT named ahead from the before-read: they are the `step 4b candidate:` lines of THE
    SAME RUN's notice paste, plus any `step 2b(b)` lines (fable Z2, m50391_mu10l45h). The
    before-read is a different `now()`, so a row whose `ends_at` falls between the two is a real
@@ -841,10 +857,11 @@ S3 reads re-taken as above; marcus's dry-run paste. Nothing dispatched by fable.
    row whose `ends_at` is past but which still computes live (trial licence, renewed licence,
    ungated region, `cme`) and would therefore be a COMPUTED mover when lapsed -- is no longer
    left to the population being lucky. Step 4b's refusal gate re-takes that check inside the
-   transaction and aborts naming each such row, so "computed unchanged on every row" is enforced
-   by the file, not just expected of it. Marcus's read of 2026-09-14 08:41Z has 0 such rows in
-   the 21 (so 0 in the 18 the Z1 conjunct leaves). Any other mover means the file is wrong and the
-   rollback runs.
+   transaction and aborts naming each such row, so "computed unchanged" is enforced by the file on
+   every row it touches, not just expected of it (the Z5 clock exception above is about rows it
+   does not touch). Marcus's read of 2026-09-14 08:41Z has 0 such rows in
+   the 21 (so 0 in the 18 the Z1 conjunct leaves). Any other computed mover, and any stored-status
+   mover outside that list, means the file is wrong and the rollback runs.
 5. Schema reads: `information_schema.columns` for `feed_subscriptions` (fable Q2's SELECT,
    section 11) has no `request_id` row and has `lapsed_at`; `to_regclass('feed_tier_requests')
    is null`; `pg_indexes` has neither `feed_subscriptions_request_tier_uidx` nor
@@ -1016,7 +1033,10 @@ m50396_mu10majx (09:03Z). Z3 was answered separately as m50397_mu10mcpp (the raw
 **Z1 -- RULED (a), the conjunct is added; expected count 18 rows / 6 clients.** R9's predicate
 `status <> 'lapsed' and ends_at < now()` selected population (b) of R9's own table, which is not
 the population coxwell ruled on: one client's 3 rows are past `ends_at` but HAVE a server
-registration, so they were never in the no-server blocker table he was shown. Marcus's three
+registration, so they were never in the no-server blocker table he was shown. "One" is the count
+in marcus's 08:41Z read (m50350_mu0ztzip); a second client crossed `ends_at` at 09:01:12Z (marcus
+m50417 as relayed by fable m50440_mu111ike, not my read), so a reader at apply time finds two, and
+the `server_registration_id is null` conjunct excludes both and any later one (fable W1). Marcus's three
 reasons, in his order of weight: (1) "it exceeds the authorisation" -- "his rows were about to be
 lapsed on a ruling that never mentioned him"; (2) it buys nothing -- the lapse exists to unblock
 the CHECK, "and the CHECK only cares about no-server rows... a step that alters client records
@@ -1026,11 +1046,11 @@ until an admin re-grant, where today they would read live again. His rule for th
 literal can under-reach; a predicate can over-reach. Neither is safe by category -- the test is
 whether the set it selects is the set that was authorised." The refusal gate is unchanged; it now
 runs over the 18. Text follows in 0088 header 4b, the step-4b comment, step 5's listing comment,
-0088_rollback's not-reverted note, and this document (4b, section 11 step 4, R9 ruling 1).
+0088_rollback's not-reverted note, and this document (4b, section 9 step 4, R9 ruling 1).
 
 **Z2 -- BUILT.** 4b raises one `step 4b candidate:` notice per candidate BEFORE the gate (id,
 subscriber, tier, `server_registration_id`, `ends_at`, computed status, reason), so the run names
-every row it is about to touch and not only the refused ones. Section 11 step 4 is corrected with
+every row it is about to touch and not only the refused ones. Section 9 step 4 is corrected with
 it: the expected movers are those lines from THE SAME RUN's paste plus any 2b(b) lines, NOT rows
 named ahead from the before-read -- the before-read is a different `now()`, and Aylrn's 3 rows
 cross on 09-19, mid-run.
@@ -1041,6 +1061,23 @@ until the rollback's own DROP in the same transaction, so no non-lapsed NULL-ser
 to be found. The carrying branch is kept as a GUARD against the constraint not having been in
 force, not described as "non-empty only if new NULL-server rows appeared".
 
+**Z5 -- TEXT, in a later commit; fable's own correction of her Z2 text, NOT a marcus ruling
+(m50440_mu111ike, 2026-09-14 09:14Z, her R10 read: Z1/Z2/Z4 PASS).** Z2 fixed only the
+stored-status half of section 9 step 4; steps 3 and 4 still compared two results taken at two
+different `now()`s, so the clock alone could send a correct run to rollback. Section 9 step 2 now
+selects `now()` in both reads; step 3 allows exactly one difference from the dry-run paste (a row
+whose `ends_at` falls between the two runs' `now()` moves from `step 5 carve-out:` to `step 4b
+candidate:`, counts with it); step 4 allows exactly one computed mover (live -> lapsed where the
+row's own `ends_at`, or the licence or trial end the CASE reads, falls between the two reads'
+`now()`). Also fable's W1, taken: the "one client with a server row" count in R10 Z1 above is
+dated to marcus's 08:41Z read, with the second crossing at 09:01:12Z named. The same count in the
+0088 header 4b (:78-79) and the step-4b comment (:630-632) already reads "in his 08:41Z read" and
+is left alone; section 3's 4b already dates it too. Three mis-citations of "section 11 step 4" for
+section 9 step 4 (R10 Z1, R10 Z2, R10 applied-list) are corrected here -- they are what sent
+fable's read to section 11. No SQL changes; marcus's dry-run does not wait on this.
+Applied at this commit: this document only (section 9 steps 2-4, section 12 R10 Z1 + Z2 +
+applied-list + this entry).
+
 Noted, not struck, and NOT mine: R9 no longer refuses carve-out GROWTH (marcus struck the step-5
 SUBSET gate in m50350). He has taken that guard into his apply procedure explicitly (m50396):
 read the step-5 carve-out notice, compare it to the expected set, abort if it does not match, same
@@ -1048,7 +1085,7 @@ paste compared between dry-run and apply.
 
 Applied at this commit: 0088 header 4b + step 4b (predicate, candidate notices, comments, expected
 counts) + step 5 listing comment, 0088_rollback not-reverted note, 0089_rollback header + section
-4 comments, and this document (4b, section 11 step 4, section 12 R9 ruling 1 + this entry).
+4 comments, and this document (4b, section 9 step 4, section 12 R9 ruling 1 + this entry).
 
 **R8 (SUPERSEDED by R9, kept as history; text only) -- a live NULL-server row outside the six has ONE fix; 0089's order is
 re-key, gate, lapse.** Fable m50023_mtzyhpob (2026-09-13 15:15Z, her R5 read, PASS-WITH-STRIKES
