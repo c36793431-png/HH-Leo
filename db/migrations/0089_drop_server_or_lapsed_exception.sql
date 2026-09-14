@@ -83,7 +83,7 @@ begin
   -- The run's own clock, before anything else, and repeated as a column of the step 6 summary.
   -- Same reasoning as 0088_tighten.sql step 0 (marcus m50485_mu11vkq7, 2026-09-14): this file's
   -- step 2 liveness gate, step 3 refusal gate and step 4 no-server gate are all stated relative
-  -- to THIS instant, and its paste is compared with 0088's. His two sites were named for 0088;
+  -- to THIS instant, and its paste is compared with 0088's. Its two sites were named for 0088;
   -- the property that selects them is "a pasted run whose gates are evaluated against now()",
   -- and this file has it too. now(), not clock_timestamp() and not a literal.
   raise notice 'run now()=%', now();

@@ -11,7 +11,7 @@
 -- every notice line, then runs it for real; the two pastes must be equal.
 --
 -- NO CLIENT LIST IS COMMITTED IN THIS FILE. R4..R8 carried six full uuids (marcus's Neon read of
--- 2026-09-13 14:55Z, m49945_mtzxrd14); two days later his read of 2026-09-14 08:41Z
+-- 2026-09-13 14:55Z, m49945_mtzxrd14); two days later marcus's read of 2026-09-14 08:41Z
 -- (m50350_mu0ztzip) returns a different population, and the committed list would have aborted
 -- step 5 on apply. Every set this file acts on is therefore computed from the data at run time,
 -- on the transaction's own now(): the lapse population (step 4b) and the CHECK's carve-out
@@ -54,7 +54,7 @@
 --      no_server), ends_at re-seed for rows still NULL (non-trial from the licence, trial from
 --      feed_tier_trials), gate active rows with ends_at NULL = 0. Expected UPDATE 0 / 0 / 0.
 --   4b. REFUSAL GATE, THEN THE PREDICATE LAPSE (marcus m50350_mu0ztzip, 2026-09-14; narrowed to
---      NULL-server rows by his Z1 ruling m50396_mu10majx, 2026-09-14). One notice per candidate
+--      NULL-server rows by the Z1 ruling m50396_mu10majx, 2026-09-14). One notice per candidate
 --      first ('step 4b candidate:', fable Z2 in m50391_mu10l45h), so the paste names every row
 --      the step is about to touch, not only the refused ones. Then the gate: every row the lapse
 --      is about to touch (`status <> 'lapsed' and ends_at < now() and server_registration_id is
@@ -69,7 +69,7 @@
 --      by time. Then the lapse: `status = 'lapsed', lapsed_at = coalesce(lapsed_at, ends_at)`
 --      where `status <> 'lapsed' and ends_at < now() and server_registration_id is null` --
 --      NULL-server rows only. The `server_registration_id is null` conjunct is marcus's Z1 ruling
---      (m50396_mu10majx, 2026-09-14, option (a)), in his words: the lapse "exceeds the
+--      (m50396_mu10majx, 2026-09-14, option (a)), in marcus's words: the lapse "exceeds the
 --      authorisation" without it, because coxwell ruled on the six clients in the no-server
 --      blocker table and a client with a server row "was not in that table"; and "a step that
 --      alters client records without advancing its own purpose should not run" -- the CHECK this
@@ -77,7 +77,7 @@
 --      read CASE's first branch, so on a renewed-in-place licence such a row would stay lapsed
 --      until an admin re-grant where today it reads live again (fable, m50391_mu10l45h Z1).
 --      Expected today 18 rows / 6 clients (marcus's prod read of 08:41Z, m50350_mu0ztzip, minus
---      the three rows / one client that HAVE a server row; count restated in his Z1 ruling).
+--      the three rows / one client that HAVE a server row; count restated in the Z1 ruling).
 --      lapsed_at is the seeded end, not now(): the truthful instant is when access actually
 --      stopped.
 --   5. Every feed_subscriptions row with server_registration_id NULL, one notice per row. What is
@@ -388,7 +388,7 @@ end $$;
 
 -- NO EXEMPT LIST HERE ANY MORE. R4..R8 created tmp_0088_exempt at this point with six committed
 -- uuids (fable ruling 12:53Z, ledger v1.71 3800e9d, on marcus m49538_mtzt2uia; full uuids from
--- his read of 2026-09-13 14:55Z, m49945_mtzxrd14). Marcus's read of 2026-09-14 08:41Z
+-- marcus's read of 2026-09-13 14:55Z, m49945_mtzxrd14). Marcus's read of 2026-09-14 08:41Z
 -- (m50350_mu0ztzip) returns a different population two days later, so that list would have
 -- aborted the old step-5 SUBSET gate on apply. The carve-out is computed in step 5 instead, from
 -- the rows that are still non-lapsed with a NULL server after the step-4b lapse, and is
@@ -658,10 +658,10 @@ end $$;
 -- marcus m50350_mu0ztzip ("Predicate lapse step -- `ends_at < now()`, as specified").
 -- NULL-server rows ONLY: `and fs.server_registration_id is null` is marcus's Z1 ruling
 -- (m50396_mu10majx, 2026-09-14, option (a), on fable's strike m50391_mu10l45h Z1). Without it the
--- set is population (b) (`status <> 'lapsed' and ends_at < now()`, 21 rows / 7 clients in his
+-- set is population (b) (`status <> 'lapsed' and ends_at < now()`, 21 rows / 7 clients in the
 -- 08:41Z read) rather than population (b) intersected with the no-server population (a) that
 -- coxwell was actually shown, and it would lapse 3 rows of one client who HAS a server row and
--- was never in the blocker table. His words: "a literal can under-reach; a predicate can
+-- was never in the blocker table. Marcus's words: "a literal can under-reach; a predicate can
 -- over-reach. Neither is safe by category -- the test is whether the set it selects is the set
 -- that was authorised."
 --
@@ -761,7 +761,7 @@ where fs.status <> 'lapsed'
 -- file is applied. This block re-takes that proof on the transaction's own now(), so the file
 -- cannot be overtaken by time the way its committed six-uuid list was. It does not abort on the
 -- count -- only on a row that would lose something. Expected today: candidates=18 clients=6
--- non_lapsed=0 (18 / 6 is marcus's Z1 ruling m50396_mu10majx; the other 3 rows of his 21 have a
+-- non_lapsed=0 (18 / 6 is marcus's Z1 ruling m50396_mu10majx; the other 3 rows of the 21 have a
 -- server row and are no longer candidates).
 do $$
 declare
@@ -818,7 +818,7 @@ begin
 
   insert into tmp_0088_counts (k, v) values ('fs_predicate_lapsed', lapsed_now);
   insert into tmp_0088_counts (k, v) values ('fs_predicate_lapsed_clients', clients);
-  raise notice 'step 4b ok: candidates=% clients=% computed_non_lapsed=0 lapsed=% (expected 18 / 6 / 0 / 18: marcus m50350 08:41Z read narrowed to NULL-server rows by his Z1 ruling m50396)',
+  raise notice 'step 4b ok: candidates=% clients=% computed_non_lapsed=0 lapsed=% (expected 18 / 6 / 0 / 18: marcus m50350 08:41Z read narrowed to NULL-server rows by the Z1 ruling m50396)',
     candidates, clients, lapsed_now;
 end $$;
 
@@ -838,9 +838,9 @@ end $$;
 -- First one notice per NULL-server row whatever its status; the operator pastes every
 -- 'step 5 no server:' and 'step 5 carve-out:' line. Expected today listed=27: marcus's read of
 -- 08:41Z (m50350) has 24 NULL-server non-lapsed rows / 8 clients, of which 18 were just lapsed by
--- 4b -- since his Z1 ruling (m50396_mu10majx) every 4b candidate is a NULL-server row, so 4b's
+-- 4b -- since the Z1 ruling (m50396_mu10majx) every 4b candidate is a NULL-server row, so 4b's
 -- population and this listing's non-lapsed half are the same 18 rows / 6 clients -- plus the 3
--- already stored lapsed with a NULL server in his read of 2026-09-12 (m49188), and the 6 / 2 that
+-- already stored lapsed with a NULL server in the 2026-09-12 read (m49188), and the 6 / 2 that
 -- are still live and become the carve-out.
 do $$
 declare
@@ -868,9 +868,9 @@ end $$;
 -- THE CARVE-OUT. Predicate word for word from marcus m50350_mu0ztzip ("NULL-server carve-out
 -- gated on `ends_at > now()`"), with `or ends_at is null` kept from the S4 liveness form (a NULL
 -- ends_at reads live; step 4's gate has already forced active rows with ends_at NULL to 0).
--- Expected: SELECT 6 today (his read: Aylrn to 2026-09-19 x3, rasoolx55 to 2026-09-25 x3). That
--- number is a CHECK to read against, never a bound: it becomes 3 after the 19th and 0 after the
--- 25th, and 0 is a legitimate outcome that drops the exception clause entirely.
+-- Expected: SELECT 6 today (marcus's read: Aylrn to 2026-09-19 x3, rasoolx55 to 2026-09-25 x3).
+-- That number is a CHECK to read against, never a bound: it becomes 3 after the 19th and 0 after
+-- the 25th, and 0 is a legitimate outcome that drops the exception clause entirely.
 create temp table tmp_0088_carve_out on commit drop as
 select fs.id
 from feed_subscriptions fs
@@ -1271,7 +1271,7 @@ drop table feed_tier_requests;
 -- by construction: the carve-out was read from exactly that predicate after the 4b lapse, and
 -- nothing between here and there writes feed_subscriptions) fs_request_id_column_present=false
 -- ftr_table_present=false; the rest are counts to paste. Today's expected counts, from marcus's
--- prod read of 2026-09-14 08:41Z (m50350_mu0ztzip) narrowed by his Z1 ruling (m50396_mu10majx),
+-- prod read of 2026-09-14 08:41Z (m50350_mu0ztzip) narrowed by the Z1 ruling (m50396_mu10majx),
 -- are NOT gates: fs_predicate_lapsed=18, fs_predicate_lapsed_clients=6, fs_carve_out=6,
 -- fs_carve_out_clients=2, fs_no_server_listed=27.
 -- run_now is the same now() the step 0 notice printed and the same one every predicate in this

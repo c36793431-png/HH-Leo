@@ -30,7 +30,7 @@
 --   - The step-4b predicate lapses are NOT reverted: stored 'lapsed' on a row whose ends_at is
 --     past is truthful either way, and 4b's refusal gate proved every one of them already read
 --     'lapsed' to the client before the flip (the lapse moved from step 5 to 4b in marcus
---     m50350_mu0ztzip, 2026-09-14, and stays on NULL-server rows only: his Z1 ruling
+--     m50350_mu0ztzip, 2026-09-14, and stays on NULL-server rows only: the Z1 ruling
 --     m50396_mu10majx the same day restored the `server_registration_id is null` conjunct that
 --     m50350's predicate had dropped, so no row with a server row is touched).
 --   - The 2b(a) reject and 2b(b) worded lapses are NOT reverted: dated decisions.
