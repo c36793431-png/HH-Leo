@@ -193,6 +193,30 @@ export async function editMessageText(
   if (!res.ok) console.error("editMessageText failed", await res.text());
 }
 
+/** Telegram's cap on answerCallbackQuery's `text`. REPORTED, NOT VERIFIED HERE: the 200 is
+ * Leo's, via marcus m51425_mu4nsxlp on bus thread kai-telegram-callback-defects-2026-09-16
+ * ("Telegram caps answerCallbackQuery text at 200 characters"). core.telegram.org was not
+ * reachable from the box that wrote this, so whether the API rejects an over-long `text` with
+ * a 400 or silently truncates it is UNESTABLISHED -- the clamp below is written to make that
+ * question moot rather than to answer it. */
+const CALLBACK_ANSWER_MAX_CHARS = 200;
+
+/** The limit belongs with the transport, not with each message. An alert's text is authored
+ * far from here -- access-requests.ts:127's TrialAlreadyGrantedError is 164 chars before its
+ * tier name is interpolated, and that sentence was written to be read by an admin, not to fit
+ * a transport budget. Clamping once, here, covers every caller present and future.
+ *
+ * Counted in UTF-16 code units (String.length), which over-counts astral characters relative
+ * to Telegram's character count; that errs towards clamping early, never late. The full text
+ * is logged so the tail is recoverable from the server log when a clamp happens. */
+function clampCallbackAnswer(text: string | undefined): string | undefined {
+  if (text === undefined || text.length <= CALLBACK_ANSWER_MAX_CHARS) return text;
+  console.warn(
+    `answerCallbackQuery: text of ${text.length} chars exceeds the ${CALLBACK_ANSWER_MAX_CHARS}-char cap, clamping: ${text}`
+  );
+  return `${text.slice(0, CALLBACK_ANSWER_MAX_CHARS - 1)}…`;
+}
+
 /** Acks a callback_query -- Telegram shows a spinner on the tapped button until this is
  * called, and will eventually retry the update if it never gets one. */
 export async function answerCallbackQuery(
@@ -204,7 +228,7 @@ export async function answerCallbackQuery(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       callback_query_id: callbackQueryId,
-      text: opts.text,
+      text: clampCallbackAnswer(opts.text),
       show_alert: opts.showAlert ?? false,
     }),
   });
