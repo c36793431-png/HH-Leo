@@ -177,8 +177,15 @@ async function notifyClient(row: FeedTierRequestRow, text: string): Promise<void
  * EFFECTIVE_STATUS_SQL branch (4), the expire-trials cron and the provider Trials tab still
  * read it, so a trial decision on a trial-eligible tier still writes the row, best-effort,
  * after the envelope commit. Its own 7-day clock matches the envelope's derived ends_at to
- * within the after-commit gap (S4). A failure here (already claimed, race, etc.) must never
- * fail the approve action itself. */
+ * within the after-commit gap (S4). A failure here must never fail the approve action itself --
+ * the grant is already committed, so throwing would report a failure that did not happen.
+ *
+ * "Already claimed" is no longer an ordinary outcome here: approveOnClient asks the same
+ * predicate inside the approval transaction now (TrialAlreadyGrantedError, access-requests.ts),
+ * so an approve that reaches this point had no trial row when it committed. Seeing one means a
+ * row appeared in the gap, and that leaves a grant with no mirror row -- it is logged, not
+ * swallowed, because nothing else records it. TrialNotEligibleError still cannot fire: the
+ * trialRowWouldBeWritten guard above already required an eligible tier. */
 async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string): Promise<void> {
   if (!trialRowWouldBeWritten(row.tierKey, row.licenseId)) return;
   try {
@@ -201,7 +208,14 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
     }).catch(() => {});
     await notifyTrialClientActivated(trial);
   } catch (err) {
-    if (err instanceof TrialAlreadyClaimedError || err instanceof TrialNotEligibleError) return;
+    if (err instanceof TrialAlreadyClaimedError) {
+      console.error(
+        `approveFeedTierRequest: trial granted for user ${row.userId} tier ${row.tierKey} but the mirror row was already claimed -- grant committed with no feed_tier_trials row`,
+        err
+      );
+      return;
+    }
+    if (err instanceof TrialNotEligibleError) return;
     console.error("approveFeedTierRequest: failed to activate trial", err);
   }
 }

@@ -1,6 +1,6 @@
 import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
-import { TRIAL_DURATION_DAYS, TrialAlreadyClaimedError, TrialNotEligibleError } from "./feed-tier-trials";
+import { TRIAL_DURATION_DAYS, TrialAlreadyClaimedError, TrialNotEligibleError, hasClaimedTrial } from "./feed-tier-trials";
 import { isTrialEligibleTier } from "./feed-tier-catalogue";
 import {
   assertNoLiveGrant,
@@ -111,6 +111,21 @@ export class UntrackableTrialError extends Error {
   constructor(tierName: string) {
     super(`${tierName} cannot be approved as a trial: no trial record would be written for it. Approve it as paid, with an end date and invoice ref.`);
     this.name = "UntrackableTrialError";
+  }
+}
+
+/** Rule #2 refused at the only point that can still refuse it. The mirror's own
+ * TrialAlreadyClaimedError (feed-tier-trials.ts) is raised AFTER the grant has committed, from
+ * activateTrialIfEligible's best-effort step, so it could not stop the second grant -- the
+ * account kept the access and only the trial record was missing. Asking the same predicate
+ * inside the approval transaction rolls the grant back instead.
+ * Separate from TrialAlreadyClaimedError because the surfaces differ: that one is the client's
+ * ("You've already trialed this tier"), this one is the admin's and names the way forward,
+ * verbatim through runAction (lib/action-result.ts) -- same shape as UntrackableTrialError. */
+export class TrialAlreadyGrantedError extends Error {
+  constructor(tierName: string) {
+    super(`${tierName} has already been trialed on this account: a second trial cannot be recorded, whatever the first one's status. Approve it as paid, with an end date and invoice ref.`);
+    this.name = "TrialAlreadyGrantedError";
   }
 }
 
@@ -338,6 +353,13 @@ async function approveOnClient(client: PoolClient, input: ApproveAccessRequestIn
       if (input.decision === "trial" && !trialRowWouldBeWritten(tier.tierKey, sr.licenseId)) {
         throw new UntrackableTrialError(tier.name);
       }
+      // Rule #2, asked while the grant can still be rolled back. On this client, so the
+      // self-serve path sees the row its own open transaction would write. Both callers of
+      // approveOnClient reach it, so admin-approve, provider-approve, the Telegram card and
+      // self-serve all refuse on the same predicate.
+      if (input.decision === "trial" && (await hasClaimedTrial(client, envelope.user_id, tier.tierKey))) {
+        throw new TrialAlreadyGrantedError(tier.name);
+      }
 
       await assignPseudonymSeq(client, tier.providerUserId, envelope.user_id);
       try {
@@ -436,11 +458,13 @@ export interface StartSelfServeTrialInput {
  * it as decided with no decider ("self-serve"). Eligibility and one-trial-per-(user, tier)
  * (feed_tier_trials_user_tier_uidx, 0036) are checked before the transaction opens so the
  * existing errors surface unchanged; the feed_tier_trials row itself is the caller's
- * after-commit step (feed-tier-trials.ts is not edited in this slice). */
+ * after-commit step.
+ * The pre-check below stays for that client-facing message, but it is no longer what enforces
+ * Rule #2 -- approveOnClient asks the same predicate inside the transaction, so a row that
+ * appears after this line refuses there (TrialAlreadyGrantedError) rather than granting. */
 export async function startSelfServeTrial(input: StartSelfServeTrialInput): Promise<ApproveAccessRequestResult> {
   if (!isTrialEligibleTier(input.tierKey)) throw new TrialNotEligibleError();
-  const claimed = await pool.query(`select 1 from feed_tier_trials where user_id = $1 and tier_key = $2`, [input.userId, input.tierKey]);
-  if (claimed.rowCount) throw new TrialAlreadyClaimedError();
+  if (await hasClaimedTrial(pool, input.userId, input.tierKey)) throw new TrialAlreadyClaimedError();
 
   const client = await pool.connect();
   try {

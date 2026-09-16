@@ -109,20 +109,40 @@ interface InsertTrialArgs {
   tierKey: string;
 }
 
+/** Pool or transaction client -- structural so a caller inside an open transaction can ask the
+ * question on its own client and see its own uncommitted writes. */
+type TrialQueryable = {
+  query(text: string, values: unknown[]): Promise<{ rowCount: number | null }>;
+};
+
+/** Rule #2's predicate, stated ONCE so its readers cannot drift: ANY feed_tier_trials row for
+ * this (user, tier) is a claim, whatever its status -- an expired, cancelled or converted trial
+ * still blocks a new one. Read by insertFeedTierTrial below, by startSelfServeTrial's
+ * pre-transaction check, and -- the one that decides whether a grant may commit at all -- by
+ * approveOnClient inside the approval transaction (all in access-requests.ts). */
+export async function hasClaimedTrial(q: TrialQueryable, userId: string, tierKey: string): Promise<boolean> {
+  const existing = await q.query(
+    `select 1 from feed_tier_trials where user_id = $1 and tier_key = $2`,
+    [userId, tierKey]
+  );
+  return (existing.rowCount ?? 0) > 0;
+}
+
 /** Rule #2 (marcus, trial feature add-on): any existing row for this (user, tier) blocks a
  * new trial regardless of its status -- enforced here for a clean error message, and again at
  * the DB level via feed_tier_trials_user_tier_uidx (0036) so a race can't double-book.
  * Shared by self-serve trial start and admin-approve of a feed-tier-request for a
  * trial-eligible tier (leo-feed-activation-notification-2026-08-17) so both converge on one
- * source of truth for trial duration/uniqueness. */
+ * source of truth for trial duration/uniqueness.
+ *
+ * This is the MIRROR write and it runs after the grant has committed, so the refusal below can
+ * no longer prevent a second grant -- that is why the same predicate is now also asked inside
+ * the approval transaction (access-requests.ts, TrialAlreadyGrantedError). Reaching it here
+ * means a row appeared in between; see activateTrialIfEligible (feed-tier-requests.ts). */
 export async function insertFeedTierTrial(args: InsertTrialArgs): Promise<FeedTierTrialRow> {
   if (!isTrialEligibleTier(args.tierKey)) throw new TrialNotEligibleError();
 
-  const existing = await pool.query(
-    `select id from feed_tier_trials where user_id = $1 and tier_key = $2`,
-    [args.userId, args.tierKey]
-  );
-  if ((existing.rowCount ?? 0) > 0) throw new TrialAlreadyClaimedError();
+  if (await hasClaimedTrial(pool, args.userId, args.tierKey)) throw new TrialAlreadyClaimedError();
 
   let insertedId: string;
   try {
