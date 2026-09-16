@@ -207,8 +207,14 @@ const CALLBACK_ANSWER_MAX_CHARS = 200;
  * a transport budget. Clamping once, here, covers every caller present and future.
  *
  * Counted in UTF-16 code units (String.length), which over-counts astral characters relative
- * to Telegram's character count; that errs towards clamping early, never late. The full text
- * is logged so the tail is recoverable from the server log when a clamp happens. */
+ * to Telegram's character count; that errs towards clamping early, never late.
+ *
+ * The full text is logged before it is cut, but that log is a window, not a record: this
+ * deploy is on a Vercel Hobby team, which retains runtime logs about one hour. NOT READ FROM
+ * THIS BOX -- vercel.com/c36793431-gmailcoms-projects/horizon-portal/logs, read 2026-09-11
+ * 20:53Z by marcus (bus m51481_mu4o5kxa), Vercel's literal string "You have reached your 1
+ * hour of maximum retention limit" under a Hobby team badge. An hour after a clamp, the tail
+ * is gone; if a clamped tail ever has to survive, it has to reach the database. */
 function clampCallbackAnswer(text: string | undefined): string | undefined {
   if (text === undefined || text.length <= CALLBACK_ANSWER_MAX_CHARS) return text;
   console.warn(
