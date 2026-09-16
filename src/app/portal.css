@@ -1002,6 +1002,14 @@
    Deliberately the /feeds card language (fp-*) at one size up, not a new one: the marketplace
    lists the same products those cards do, and a catalogue that looks like a different product
    from the pages it links to is its own kind of disagreement. */
+/* The storefront glyph before the page title. inline-flex on the h1 rather than a float or a
+   pseudo-element so the mark sits on the title's own baseline row and inherits its colour — the
+   sidebar's accent means "selected menu row" and would read as a state here (marcus, 2026-09-16). */
+.portal-shell .mkt-head h1 { display: inline-flex; align-items: center; gap: 10px; }
+/* Category filter chips. Same .chip / .chip.on the education catalogue uses -- only the row's
+   own spacing lives here, so a chip cannot look like one thing on one surface and another on
+   the next. The row sits under the heading and above the first section. */
+.portal-shell .mkt-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
 .portal-shell .mkt-section { margin-top: 26px; }
 .portal-shell .mkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .portal-shell .mkt-card { display: flex; flex-direction: column; gap: 6px; }

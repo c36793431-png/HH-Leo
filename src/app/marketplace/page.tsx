@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Store } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { getReachablePanels } from "@/lib/user-roles";
 import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
@@ -14,6 +15,10 @@ import {
   MARKETPLACE_CATEGORY_LABELS,
   MARKETPLACE_AVAILABILITY_LABELS,
 } from "@/lib/marketplace-catalogue";
+import {
+  MarketplaceCategoryFilter,
+  type MarketplaceSection,
+} from "@/components/marketplace/marketplace-category-filter";
 
 /**
  * /marketplace — the catalogue of what Horizon sells (coxwell via marcus, 2026-09-14).
@@ -36,6 +41,14 @@ import {
  * hand-written "Feed latency" — a score read as a latency, which reverses which feed looks best
  * (marcus, m50770). The heading now comes from tierFigureHeading in the same lib, so a surface
  * cannot label one thing and render another.
+ *
+ * THE CATEGORY FILTER ROW IS DERIVED, NOT DECLARED (Iris's design via marcus, 2026-09-16). The
+ * chips are built from the sections this page is about to render, so a chip cannot select an
+ * empty result set and a category that loses its last listing loses its chip in the same pass.
+ * Her row also carries a fourth chip, `Consulting`, which is NOT here: there is no consulting
+ * listing and MarketplaceCategory is deliberately "exactly the two coxwell named". A COMING SOON
+ * chip is a claim that a product is on its way, which is the same claim this catalogue already
+ * declines to make about Tokyo without a ruling (marcus, m50723). It is coxwell's word to give.
  */
 export default async function MarketplacePage() {
   const session = await auth();
@@ -66,17 +79,18 @@ export default async function MarketplacePage() {
     ({ listing, members }) => listing.tierKeys.length === 0 || members.length > 0
   );
 
-  return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
-      <div className="comm-head">
-        <h1>Marketplace</h1>
-        <p>Everything Horizon sells, by category — and what you can get today.</p>
-      </div>
-
-      {MARKETPLACE_CATEGORY_ORDER.map((category) => {
-        const items = listings.filter(({ listing }) => listing.category === category);
-        if (items.length === 0) return null;
-        return (
+  const sections: MarketplaceSection[] = MARKETPLACE_CATEGORY_ORDER.flatMap((category) => {
+    const items = listings.filter(({ listing }) => listing.category === category);
+    // Same test as before the filter row existed: a category with nothing to show renders
+    // nothing. It now also costs that category its chip — the chips come from this array.
+    if (items.length === 0) return [];
+    return [
+      {
+        key: category,
+        label: MARKETPLACE_CATEGORY_LABELS[category],
+        // Keyed here rather than at the call site: these nodes are rendered from an array, and
+        // the key travels with the element.
+        content: (
           <div key={category} className="fp-section mkt-section">
             <h2 className="fp-section-title">{MARKETPLACE_CATEGORY_LABELS[category]}</h2>
             <div className="mkt-grid">
@@ -90,46 +104,61 @@ export default async function MarketplacePage() {
                 // unlabelled numbers are the same defect in a quieter form.
                 const heading = tierFigureHeading(members.map((m) => m.regionKey));
                 return (
-                <div key={listing.key} className={`card mkt-card mkt-${listing.availability}`}>
-                  <div className="mkt-top">
-                    <span className={`mkt-pill mkt-pill-${listing.availability}`}>
-                      {MARKETPLACE_AVAILABILITY_LABELS[listing.availability]}
-                    </span>
-                  </div>
-                  <h3 className="mkt-name">{listing.title}</h3>
-                  <p className="mkt-desc">{listing.blurb}</p>
-
-                  {members.length > 0 && heading && (
-                    <div className="mkt-members">
-                      <span className="mkt-members-label">
-                        {heading.label}
-                        {heading.note && (
-                          <span className="figure-direction-note">{` · ${heading.note}`}</span>
-                        )}
+                  <div key={listing.key} className={`card mkt-card mkt-${listing.availability}`}>
+                    <div className="mkt-top">
+                      <span className={`mkt-pill mkt-pill-${listing.availability}`}>
+                        {MARKETPLACE_AVAILABILITY_LABELS[listing.availability]}
                       </span>
-                      {members.map((m) => (
-                        <div key={m.tierKey} className="mkt-member">
-                          <span className="mkt-member-name">{m.name}</span>
-                          <span className="mkt-member-figure">{formatTierLatency(m.regionKey, m)}</span>
-                        </div>
-                      ))}
                     </div>
-                  )}
+                    <h3 className="mkt-name">{listing.title}</h3>
+                    <p className="mkt-desc">{listing.blurb}</p>
 
-                  {/* No CTA on a coming-soon or maintenance listing: "can be listed not
-                      requested" means the action is absent, not disabled. */}
-                  {listing.ctaHref && (
-                    <Link href={listing.ctaHref} className="btn ghost sm mkt-cta">
-                      {listing.ctaLabel}
-                    </Link>
-                  )}
-                </div>
+                    {members.length > 0 && heading && (
+                      <div className="mkt-members">
+                        <span className="mkt-members-label">
+                          {heading.label}
+                          {heading.note && (
+                            <span className="figure-direction-note">{` · ${heading.note}`}</span>
+                          )}
+                        </span>
+                        {members.map((m) => (
+                          <div key={m.tierKey} className="mkt-member">
+                            <span className="mkt-member-name">{m.name}</span>
+                            <span className="mkt-member-figure">{formatTierLatency(m.regionKey, m)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* No CTA on a coming-soon or maintenance listing: "can be listed not
+                        requested" means the action is absent, not disabled. */}
+                    {listing.ctaHref && (
+                      <Link href={listing.ctaHref} className="btn ghost sm mkt-cta">
+                        {listing.ctaLabel}
+                      </Link>
+                    )}
+                  </div>
                 );
               })}
             </div>
           </div>
-        );
-      })}
+        ),
+      },
+    ];
+  });
+
+  return (
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
+      <div className="comm-head mkt-head">
+        {/* The sidebar's own Marketplace glyph, not a second storefront mark — the same lucide
+            Store the nav item renders (sidebar.tsx PORTAL_LINKS). Deliberately NOT the nav's
+            #A78BFA accent: that colour means "this menu row is selected", and a page title is
+            not a selection. No colour set, so it inherits the heading's own. */}
+        <h1><Store size={24} strokeWidth={2} aria-hidden="true" /> Marketplace</h1>
+        <p>Everything Horizon sells, by category — and what you can get today.</p>
+      </div>
+
+      <MarketplaceCategoryFilter sections={sections} />
 
       <p className="fp-footnote">
         Availability shown here is the same state the rest of the portal renders. Need something
