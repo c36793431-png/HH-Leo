@@ -6,11 +6,13 @@ import {
 } from "@/lib/marketplace-catalogue";
 
 export interface MarketplacePromoCardProps {
-  /** THE IMAGE IS NOT CHOSEN YET, so it is a prop rather than a literal in this file.
-   *  marcus, m50840 (2026-09-14): "coxwell has not answered simple-graphic vs real-asset.
-   *  Build the card so the image is a swappable prop and ship it with whatever placeholder
-   *  the codebase already uses -- do not invent art". Swapping the asset is then a one-line
-   *  change at the call site, with no edit to this component. */
+  /** THE IMAGE IS CHOSEN and it is the free-tier hero's: coxwell via marcus, m51374 (2026-09-16),
+   *  "yes reuse thats fine". It stays a prop rather than becoming a literal here because the page
+   *  owns that choice for both of its top blocks and passes one constant to both
+   *  (DASHBOARD_HERO_IMAGE, src/app/dashboard/page.tsx:55); a literal in this file would make this
+   *  component a second producer of the string. These two are ONE ATOM -- an asset swap that
+   *  leaves imageAlt behind describes an image that is not on the page -- so they are declared and
+   *  passed together, never separately. */
   imageSrc: string;
   imageAlt: string;
   /** The shipped .hero .hero-image box is a fixed 340x210 with object-fit: cover
@@ -26,16 +28,17 @@ export interface MarketplacePromoCardProps {
  * coxwell's words, relayed by marcus (m50840, 2026-09-14): "paid users should have also
  * marketplace image in front upper area." A free account already gets a marketplace route from
  * the upgrade hero shipped in 9290dad; a paid account got none, because that hero is gated
- * !paid && !isAdmin (src/app/dashboard/page.tsx:223).
+ * !paid && !isAdmin (src/app/dashboard/page.tsx:245).
  *
- * IT REUSES THE .hero CLASSES RATHER THAN ADDING CSS, and that is a deliberate call, not
- * laziness. src/app/portal.css is a file Leo edited in the same commit that shipped the hero
- * (9290dad, portal.css:272-277), so opening it here is a collision I have not been cleared for.
- * The reuse is safe because the two blocks are MUTUALLY EXCLUSIVE -- the hero renders only for
- * !paid && !isAdmin and this card only for paid -- so at most one .hero exists on the page, and
- * the layout rules (including the <=breakpoint rule that hides .hero-image, portal.css:1052)
- * apply unchanged. `mkt-promo` carries no styling today; it is the hook for restyling this card
- * away from the hero without touching the hero, once marcus rules on portal.css.
+ * IT REUSES THE .hero CLASSES AND STILL ADDS NO CSS. marcus cleared src/app/portal.css for this
+ * card once the image was ruled on (m51374, 2026-09-16), and it turned out to need nothing: the
+ * asset is byte-for-byte the hero's, and .hero .hero-image is a fixed 340x210 box with
+ * object-fit: cover (src/app/portal.css:278-282), so the picture lands in the same box under the
+ * same rules. The reuse is safe because the two blocks are MUTUALLY EXCLUSIVE -- the hero renders
+ * only for !paid && !isAdmin and this card only for paid -- so at most one .hero exists on the
+ * page, and the layout rules (including the <=breakpoint rule that hides .hero-image,
+ * src/app/portal.css:1052) apply unchanged. `mkt-promo` carries no styling today; it stays the
+ * hook for restyling this card away from the hero without touching the hero.
  *
  * NO COUNTS AND NO PRICES. The catalogue's listings drop out when their feed_tiers rows go
  * (src/app/marketplace/page.tsx:62-67), so a count rendered here would be a second, unfiltered

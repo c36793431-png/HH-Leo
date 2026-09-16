@@ -35,6 +35,28 @@ import { getRecentAlertsForUser, countDistinctAlertLicenses } from "@/lib/tradin
 
 const DASHBOARD_ALERTS_LIMIT = 10;
 
+/** The image both of this page's top blocks render -- the free tier's hero and the paid account's
+ *  marketplace card. THE ASSET IS NOW A RULING, NOT A PLACEHOLDER. coxwell, relayed by marcus
+ *  (m51374, thread kai-marketplace-card-image-2026-09-16, 2026-09-16), verbatim: "yes reuse thats
+ *  fine." -- answering marcus's question of reuse the free card's existing image / point at a
+ *  different repo asset / commission a new one. Before that the two blocks carried equal literals
+ *  by coincidence; they are now bound to one asset, so the string has ONE producer rather than two
+ *  (marcus, same message: "reuse the constant rather than copying the literal").
+ *
+ *  src AND alt SIT IN ONE OBJECT because they are one atom: a later asset swap that edits the src
+ *  alone leaves an alt describing an image that is no longer on the page. Together they are one
+ *  edit for both call sites.
+ *
+ *  THE ALT IS THE FREE HERO'S, CARRIED OVER UNCHANGED. marcus's predicate (m51374) was to reuse it
+ *  if it describes the image and rewrite it if it describes the free-tier offer. "Horizon HFT
+ *  terminal" describes public/hero-terminal-2x.png -- the Horizon HFT v1.6 window beside a branded
+ *  chart -- and carries no unlock, trial or upgrade wording, so none of it reads as a free-tier
+ *  pitch on a paid account's screen. */
+const DASHBOARD_HERO_IMAGE = {
+  src: "/hero-terminal-2x.png",
+  alt: "Horizon HFT terminal",
+} as const;
+
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -242,7 +264,7 @@ export default async function DashboardPage() {
             </div>
           </div>
           <div className="hero-image">
-            <Image src="/hero-terminal-2x.png" alt="Horizon HFT terminal" width={340} height={210} priority />
+            <Image src={DASHBOARD_HERO_IMAGE.src} alt={DASHBOARD_HERO_IMAGE.alt} width={340} height={210} priority />
           </div>
         </div>
       )}
@@ -259,13 +281,13 @@ export default async function DashboardPage() {
           this renders, exactly as /marketplace does at its own :44. Using `unlocked` would add a
           branch no account can take and imply admins are a case this card handles.
 
-          THE IMAGE IS A PROP AND THIS VALUE IS A PLACEHOLDER, not a choice. marcus, m50840:
-          "the IMAGE is not chosen ... coxwell has not answered simple-graphic vs real-asset ...
-          ship it with whatever placeholder the codebase already uses -- do not invent art".
-          /hero-terminal-2x.png is the only dashboard art in public/, and it is already on this
-          page one block up. Swapping it is this call site, not the component. */}
+          THE IMAGE IS THE FREE HERO'S, BY RULING. coxwell via marcus, m51374 (2026-09-16): "yes
+          reuse thats fine", to the question reuse the free card's image / a different repo asset /
+          commission a new one. It is DASHBOARD_HERO_IMAGE (:55) rather than a literal repeated
+          here, so the hero above and this card cannot drift onto different art. The component
+          still takes it as a prop: the choice belongs to the page, not to the card. */}
       {paid && (
-        <MarketplacePromoCard imageSrc="/hero-terminal-2x.png" imageAlt="Horizon HFT terminal" />
+        <MarketplacePromoCard imageSrc={DASHBOARD_HERO_IMAGE.src} imageAlt={DASHBOARD_HERO_IMAGE.alt} />
       )}
 
       <div className="grid">
