@@ -6,7 +6,12 @@ import { getActiveLicenseDetailsForUser, getGroupTarget, isPaidTier } from "@/li
 import { sendPaidGroupInvite } from "@/lib/group-membership";
 import { resolveAdminUserId } from "@/lib/admin-telegram-map";
 import { approveFeedTierRequest, rejectFeedTierRequest, getFeedTierRequest } from "@/lib/feed-tier-requests";
-import { PaidApprovalNeedsQueueError, PackageNeedsQueueError } from "@/lib/access-requests";
+import {
+  PaidApprovalNeedsQueueError,
+  PackageNeedsQueueError,
+  TrialAlreadyGrantedError,
+  UntrackableTrialError,
+} from "@/lib/access-requests";
 import { approvePartnerApplication, declinePartnerApplication, getPartnerApplication } from "@/lib/partner-applications";
 
 const INVITE_RATE_LIMIT_MS = 60_000;
@@ -108,10 +113,17 @@ async function handleCallbackQuery(cq: NonNullable<TelegramUpdate["callback_quer
     }
   } catch (err) {
     // 0086 phase 2 spec 4(c), file 9: a feedreq approve from the card carries no decision, so
-    // the facade applies the trial-only rule. Its two named refusals (a paid-only tier; a legacy
-    // id that 0086 copied as a package) are the admin's instruction to use the queue -- show
-    // that text as the alert instead of the outer catch's generic "Action failed".
-    if (err instanceof PaidApprovalNeedsQueueError || err instanceof PackageNeedsQueueError) {
+    // the facade applies the trial-only rule. Its named refusals (a paid-only tier; a legacy id
+    // that 0086 copied as a package; a trial the mirror would not record; a tier already trialed
+    // on this account) are the admin's instruction to use the queue -- show that text as the
+    // alert instead of the outer catch's generic "Action failed". The last two are raised inside
+    // the approval transaction (access-requests.ts), which rolls the grant back before rethrowing.
+    if (
+      err instanceof PaidApprovalNeedsQueueError ||
+      err instanceof PackageNeedsQueueError ||
+      err instanceof UntrackableTrialError ||
+      err instanceof TrialAlreadyGrantedError
+    ) {
       await answerCallbackQuery(cq.id, { text: err.message, showAlert: true });
       return;
     }
