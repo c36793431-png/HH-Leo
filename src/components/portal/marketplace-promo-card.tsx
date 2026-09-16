@@ -81,8 +81,18 @@ export function MarketplacePromoCard({
           <span className="note">{categories}</span>
         </div>
       </div>
+      {/* `priority` MIRRORS THE FREE HERO, by ruling. marcus, m51383 (2026-09-16): "whatever the
+          free hero does about preload, the paid card does the same" -- a paid account should not
+          lose an LCP preload a free account gets. The free hero sets it on its own <Image>
+          (src/app/dashboard/page.tsx:267), so this sets it the same way rather than taking it as a
+          prop: the two blocks are mutually exclusive and occupy the same above-the-fold slot, and
+          the box is the same one under the same rules (.portal-shell .hero .hero-image, fixed
+          340x210, src/app/portal.css:278-282; hidden at the <=breakpoint, src/app/portal.css:1052)
+          -- both selectors match this card, because its class is `hero mkt-promo`. The preload
+          fires below that breakpoint for this card exactly as it already does for the hero; that
+          is the symmetry, not a new cost. */}
       <div className="hero-image">
-        <Image src={imageSrc} alt={imageAlt} width={imageWidth} height={imageHeight} />
+        <Image src={imageSrc} alt={imageAlt} width={imageWidth} height={imageHeight} priority />
       </div>
     </div>
   );
