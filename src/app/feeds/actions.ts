@@ -61,7 +61,7 @@ export async function submitFeedTierRequestAction(
       // before -- only a stated non-available product is refused.
       return declared != null && declared !== "available";
     });
-    if (unavailable) throw new Error(`${feedTierMeta(unavailable)?.name ?? unavailable} isn't available to request yet`);
+    if (unavailable) throw new Error(`${feedTierMeta(unavailable)?.name ?? unavailable} isn't available to request`);
     if (!licenseId) throw new Error("Select a server");
 
     const licenses = await getActiveLicensesForUser(session.user.id);

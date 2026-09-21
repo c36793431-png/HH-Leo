@@ -1019,11 +1019,12 @@
   border-radius: 999px; border: 1px solid transparent;
 }
 .portal-shell .mkt-pill-available { background: var(--hz-ok); color: #04170f; border-color: var(--hz-ok); }
-.portal-shell .mkt-pill-coming-soon { background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); border-color: rgba(138, 155, 160, 0.35); }
+.portal-shell .mkt-pill-coming-soon,
+.portal-shell .mkt-pill-unavailable { background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); border-color: rgba(138, 155, 160, 0.35); }
 .portal-shell .mkt-pill-maintenance { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: var(--hz-amber-line); }
 .portal-shell .mkt-name { font-family: var(--hz-disp); font-weight: 700; font-size: 17px; }
 .portal-shell .mkt-desc { font-size: 12px; color: var(--hz-ink-3); line-height: 1.5; min-height: 34px; }
-.portal-shell .mkt-card.mkt-coming-soon, .portal-shell .mkt-card.mkt-maintenance { opacity: 0.75; }
+.portal-shell .mkt-card.mkt-coming-soon, .portal-shell .mkt-card.mkt-unavailable, .portal-shell .mkt-card.mkt-maintenance { opacity: 0.75; }
 .portal-shell .mkt-members {
   display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 8px;
   border-top: 1px solid var(--hz-line-soft);

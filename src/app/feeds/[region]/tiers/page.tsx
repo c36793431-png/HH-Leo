@@ -152,11 +152,17 @@ function packageCardState(memberStates: TierRequestState[]): PackageCardState {
  * describing the current one.
  *
  * Returns the first blocking state so the pill names it: a maintenance product and a
- * coming-soon one are different promises to a buyer and must not collapse into one word. */
+ * coming-soon one are different promises to a buyer and must not collapse into one word.
+ *
+ * FAILS CLOSED: anything declared and not "available" blocks, the same predicate as the submit
+ * action (feeds/actions.ts). This used to list the blocking states by name, so a state added to
+ * MarketplaceAvailability put a live request control back on a product not on sale until
+ * someone remembered this line (marcus, m52137). null still means "not declared" and leaves the
+ * card as it was. */
 function blockingAvailability(members: FeedTierDetail[]): MarketplaceAvailability | null {
   for (const m of members) {
     const declared = tierAvailability(m.tierKey);
-    if (declared === "coming-soon" || declared === "maintenance") return declared;
+    if (declared != null && declared !== "available") return declared;
   }
   return null;
 }

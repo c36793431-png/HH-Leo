@@ -120,8 +120,8 @@ export const PACKAGE_DISPLAY_LABELS: Record<string, string> = {
  *
  * NOT DERIVED FROM marketplace-catalogue.ts, which is where availability otherwise has its one
  * home: that module imports this one, so reading it back here would be an import cycle. This
- * literal is the copy, and this comment is the pointer -- a tier listed coming-soon there has
- * to be taken out here by hand. */
+ * literal is the copy, and this comment is the pointer -- a tier listed there in any state other
+ * than "available" (both are "unavailable" since 2026-09-21) has to be taken out here by hand. */
 export const TRIAL_ELIGIBLE_TIER_KEYS: readonly string[] = ["ny-normal", "ny-fast"];
 
 export function isTrialEligibleTier(tierKey: string): boolean {

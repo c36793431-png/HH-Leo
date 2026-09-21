@@ -92,9 +92,34 @@ export function computeFeedCardStatus(
   // who hold it too, not just for the ones who don't. Blast radius when it landed: zero rows in
   // licenses carry `futures` and there are no CME tiers to have granted, so no client's card
   // changed. Restoring the feed is a one-word edit in that file, and it moves both surfaces.
+  //
+  // THE BRIDGE BELOW IS DORMANT, AND IT IS THE ONE PATH FROM /marketplace TO /feeds. It maps
+  // marketplace "coming-soon" onto FeedCardStatus coming_soon -- the same English on both
+  // surfaces, from two different enums. Only a listing with a feedSlug reaches it; today that is
+  // Chicago alone (maintenance), and Alpha/Ultra carry feedSlug: null. A marketplace state
+  // that is added or renamed MUST be mapped here, or /feeds and /marketplace will disagree about
+  // the same product. The switch is exhaustive so that omission fails the build, not the page.
+  //
+  // "unavailable" -> maintenance is a DELIBERATELY WRONG PLACEHOLDER. It is chosen only because it
+  // fails CLOSED: /feeds has no "not available" label, and a declared non-available product must
+  // never fall through to a live card. It is semantically false -- a product that is not for sale
+  // is not "under maintenance". Nothing reaches it today. The FIRST listing that does needs a real
+  // /feeds label ruled by coxwell before it ships; do not inherit this mapping as correct.
   const declared = feedCardAvailability(entry.slug);
-  if (declared === "maintenance") return "maintenance";
-  if (declared === "coming-soon") return "coming_soon";
+  switch (declared) {
+    case "maintenance":
+    case "unavailable":
+      return "maintenance";
+    case "coming-soon":
+      return "coming_soon";
+    case "available":
+    case null:
+      break;
+    default: {
+      const unmapped: never = declared;
+      return unmapped;
+    }
+  }
   if (!entry.isLive || !entry.feedType) return "coming_soon";
   if (activeFeeds.includes(entry.feedType)) return licenseTier === "trial" ? "trial" : "active";
   if (isAdmin) return "included";

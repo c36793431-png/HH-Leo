@@ -29,7 +29,7 @@ import { FEED_REGION_LABELS, PACKAGE_DISPLAY_LABELS, PACKAGE_TIER_KEYS } from ".
  *   it and neither has marcus; absence is not a claim about a product, "maintenance" would be
  *   (marcus, m50723). It joins this list when he rules, not before.
  */
-export type MarketplaceAvailability = "available" | "coming-soon" | "maintenance";
+export type MarketplaceAvailability = "available" | "coming-soon" | "unavailable" | "maintenance";
 
 /** Exactly the two coxwell named. A third category is a product decision, so a third word here
  * must not compile until he makes it. */
@@ -45,9 +45,13 @@ export const MARKETPLACE_CATEGORY_LABELS: Record<MarketplaceCategory, string> = 
  * coxwell 2026-09-21 via marcus, "Horizon software would be above feeds also". */
 export const MARKETPLACE_CATEGORY_ORDER: MarketplaceCategory[] = ["software", "feeds"];
 
+/** "coming-soon" has no listing today and is kept on purpose: it is a state Horizon will want,
+ * and its label must stay true to its name. "unavailable" is coxwell's own string, shipped as he
+ * typed it (2026-09-21 via marcus, m52137) — not a paraphrase. */
 export const MARKETPLACE_AVAILABILITY_LABELS: Record<MarketplaceAvailability, string> = {
   available: "Available",
   "coming-soon": "Coming soon",
+  unavailable: "Not available at this moment",
   maintenance: "Maintenance",
 };
 
@@ -112,8 +116,11 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     ctaLabel: "See tiers →",
   },
   {
-    // COMING SOON, and therefore NOT REQUESTABLE ANYWHERE (coxwell "Alpha Coming Soon" via
-    // marcus, m50788, read with his morning "listed not requested"). Promoted out of the old
+    // NOT AVAILABLE, and therefore NOT REQUESTABLE ANYWHERE. First ruled coming-soon (coxwell
+    // "Alpha Coming Soon" via marcus, m50788, read with his morning "listed not requested");
+    // restated 2026-09-21 as "Not available at this moment" (via marcus, m52137), which is a
+    // different promise to a buyer, so it is a different state rather than a relabel of
+    // coming-soon. Promoted out of the old
     // MARKETPLACE_LISTINGS_HELD block once that predicate could be met: the tiers page reads
     // tierAvailability() below and renders these two without a request control, the trial path
     // is closed in feed-tier-catalogue.ts, and the submit action refuses the key. Both rows
@@ -129,7 +136,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     key: "ld-alpha",
     title: `${FEED_REGION_LABELS.london} · Alpha`,
     category: "feeds",
-    availability: "coming-soon",
+    availability: "unavailable",
     tierKeys: ["ld-alpha-85"],
     feedSlug: null,
     blurb: "London · LD4 co-lo.",
@@ -142,7 +149,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     key: "ld-ultra",
     title: `${FEED_REGION_LABELS.london} · Ultra`,
     category: "feeds",
-    availability: "coming-soon",
+    availability: "unavailable",
     tierKeys: ["ld-ultra"],
     feedSlug: null,
     blurb: "London · LD4 co-lo.",
@@ -201,7 +208,8 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
  * rendered a live TierRequestControl on each, both were trial-eligible, and /dashboard counted
  * them in London's badge. coxwell resolved it the other way round (m50788): make the surfaces
  * agree by removing requestability, not by hiding the product. The predicate still governs —
- * anything added here as coming-soon must already be unrequestable everywhere first.
+ * anything added here in any state other than "available" must already be unrequestable
+ * everywhere first.
  */
 
 /**
