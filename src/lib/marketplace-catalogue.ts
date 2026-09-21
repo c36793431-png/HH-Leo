@@ -40,8 +40,10 @@ export const MARKETPLACE_CATEGORY_LABELS: Record<MarketplaceCategory, string> = 
   software: "Software",
 };
 
-/** Render order of the category sections. */
-export const MARKETPLACE_CATEGORY_ORDER: MarketplaceCategory[] = ["feeds", "software"];
+/** Render order of the category sections — and of the filter chips, which /marketplace derives
+ * from the rendered sections, so this is the only place the order lives. Software first:
+ * coxwell 2026-09-21 via marcus, "Horizon software would be above feeds also". */
+export const MARKETPLACE_CATEGORY_ORDER: MarketplaceCategory[] = ["software", "feeds"];
 
 export const MARKETPLACE_AVAILABILITY_LABELS: Record<MarketplaceAvailability, string> = {
   available: "Available",
