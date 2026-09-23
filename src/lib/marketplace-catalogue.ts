@@ -93,7 +93,7 @@ export interface MarketplaceListing {
   scoreTierKey?: string;
   /** ISO 3166-1 alpha-2 codes, rendered by the flag-icons set the portal already loads
    * (`fi fi-<code>`, as on /feeds) on the shelf card and the product page. Iris's art replaces
-   * these later (coxwell via marcus, m52589); software carries none. */
+   * these later (coxwell via marcus, m52589); software and Black carry none. */
   flagCountryCodes?: string[];
   // Product-page slots for Iris's per-product assets (coxwell via marcus, m52443/m52454: an
   // image and "What's included" for every product). They are OPTIONAL and EMPTY until her
@@ -127,8 +127,8 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     blurb: "Horizon's flagship institutional feed, ranked #1 on the Horizon Feed Comparison. Access is requested from your Servers page.",
     action: { kind: "link", href: "/account/servers", label: "Request access →" },
     scoreTierKey: "black",
-    // London: Black is the London tiers page's flagship card (BLACK_TIER, regionKey "london").
-    flagCountryCodes: ["GB"],
+    // No flag: Black's region is unruled, so it gets Iris's plate when her files land, not a
+    // country (marcus m52740).
   },
   {
     // Membership is read from PACKAGE_TIER_KEYS, not re-listed, so this cannot drift from the
