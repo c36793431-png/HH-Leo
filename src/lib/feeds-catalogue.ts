@@ -1,5 +1,5 @@
 import { FEED_TYPE_META, type FeedType } from "@/lib/licenses";
-import { feedCardAvailability } from "@/lib/marketplace-catalogue";
+import { feedCardAvailability, feedCardBlurb } from "@/lib/marketplace-catalogue";
 
 export interface FeedCatalogueEntry {
   slug: string;
@@ -9,7 +9,8 @@ export interface FeedCatalogueEntry {
   countryFlag: string;
   countryCode: string;
   description: string;
-  latencyBand: string;
+  /** null = no figure to state, and the card prints no band. That is not the same as "fast". */
+  latencyBand: string | null;
   isLive: boolean;
 }
 
@@ -38,13 +39,18 @@ export const FEED_CATALOGUE: FeedCatalogueEntry[] = [
     isLive: true,
   },
   {
+    // Since 2026-09-23 this card IS the /marketplace Chicago listing: The Pip Dealer's CME feed
+    // over cTrader FIX (m52432). The copy is the listing's blurb. FEED_TYPE_META's "CH1 co-lo,
+    // indices, metals & energy" described a different CME feed and is not in marcus's read of
+    // this one. NO LATENCY BAND: nobody has measured this feed, and "<1ms typical" would be an
+    // invented figure on a live card (marcus, m52432: "no invented latency figure").
     slug: "futures",
     feedType: "futures",
     name: FEED_TYPE_META.futures.name,
     countryFlag: "🇺🇸",
     countryCode: "US",
-    description: FEED_TYPE_META.futures.description,
-    latencyBand: "<1ms typical",
+    description: feedCardBlurb("futures") ?? FEED_TYPE_META.futures.description,
+    latencyBand: null,
     isLive: true,
   },
   {
@@ -96,7 +102,7 @@ export function computeFeedCardStatus(
   // THE BRIDGE BELOW IS DORMANT, AND IT IS THE ONE PATH FROM /marketplace TO /feeds. It maps
   // marketplace "coming-soon" onto FeedCardStatus coming_soon -- the same English on both
   // surfaces, from two different enums. Only a listing with a feedSlug reaches it; today that is
-  // Chicago alone (maintenance), and Alpha/Ultra carry feedSlug: null. A marketplace state
+  // Chicago alone (available since 2026-09-23), and Alpha/Ultra carry feedSlug: null. A marketplace state
   // that is added or renamed MUST be mapped here, or /feeds and /marketplace will disagree about
   // the same product. The switch is exhaustive so that omission fails the build, not the page.
   //

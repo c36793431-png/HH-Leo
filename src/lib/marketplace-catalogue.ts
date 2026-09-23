@@ -20,16 +20,20 @@ import { FEED_REGION_LABELS, PACKAGE_DISPLAY_LABELS, PACKAGE_TIER_KEYS } from ".
  * defect (marcus, m50717 #5, m50788).
  *
  * DELIBERATELY NOT HERE:
- * - PRICES. No buyer surface Horizon ships renders a feed price: /feeds, /feeds/[region]/tiers
- *   and /dashboard render none, and price_cents reaches only the provider and admin panels.
- *   Publishing one would be the first feed price Horizon has ever shown a customer — a
- *   commercial first, not a layout choice (marcus ruling, m50723 #1). Whether to publish prices
- *   is coxwell's, and additive. Do not add a price field here to "finish" the card.
+ * - PRICES. No buyer surface Horizon ships renders a feed price: /feeds, /feeds/[region]/tiers,
+ *   /marketplace, its product pages and /dashboard render none, and price_cents reaches only the
+ *   provider and admin panels (marcus ruling, m50723 #1). coxwell restated it on 2026-09-16:
+ *   "prices are discussed in telegram". marcus applied it to Chicago on 2026-09-23 (m52454 (a)),
+ *   whose row carries 5000 for approval and revenue only. Do not add a price field or a price
+ *   slot here to "finish" a card or a product page.
  * - TOKYO (`crypto`), a declared FEED_REGION with a live /feeds card. coxwell has never ruled on
  *   it and neither has marcus; absence is not a claim about a product, "maintenance" would be
  *   (marcus, m50723). It joins this list when he rules, not before.
  */
 export type MarketplaceAvailability = "available" | "coming-soon" | "unavailable" | "maintenance";
+
+/** Product pages live at <base>/<listing key>. Declared before MARKETPLACE_LISTINGS, which uses it. */
+const MARKETPLACE_DETAIL_BASE = "/marketplace";
 
 /** Exactly the two coxwell named. A third category is a product decision, so a third word here
  * must not compile until he makes it. */
@@ -62,7 +66,7 @@ export interface MarketplaceListing {
   category: MarketplaceCategory;
   availability: MarketplaceAvailability;
   /** feed_tiers.tier_key(s) this listing covers, in render order. EMPTY = a declared listing
-   * with no feed_tiers row (Black, Chicago, the terminal): it renders from this file alone and
+   * with no feed_tiers row (Black, the terminal): it renders from this file alone and
    * cannot vanish when someone refactors a query (marcus, m50711 trap 2). */
   tierKeys: string[];
   /** Only set when this listing IS an entire /feeds card, so its state can speak for that card.
@@ -75,6 +79,21 @@ export interface MarketplaceListing {
    * the action is ABSENT, not present-and-disabled. */
   ctaHref: string | null;
   ctaLabel: string | null;
+  /** True only when the listing has a product page at /marketplace/<key>. The card's title and
+   * its CTA then both lead there — one destination per box (Iris, sheet 1, m51796). A listing
+   * without one 404s on that route rather than rendering an empty product page. */
+  hasDetailPage: boolean;
+  // Product-page slots for Iris's per-product assets (coxwell via marcus, m52443/m52454: an
+  // image, region flag(s) and "What's included" for every product). They are OPTIONAL and EMPTY
+  // until her assets land. An empty slot renders nothing: no placeholder, no frame, no "coming
+  // soon". Fill them from her delivery only, never from the 09-18 mockup, which is layout and
+  // not inventory.
+  /** Path under /public to the product image. */
+  image?: string;
+  /** ISO 3166-1 alpha-2 codes, rendered by flag-icons as on /feeds (`fi fi-<code>`). */
+  flagCountryCodes?: string[];
+  /** One line per included item, in render order. */
+  included?: string[];
 }
 
 /**
@@ -82,7 +101,7 @@ export interface MarketplaceListing {
  * bundles, not five tiers — a marketplace selling five things where the tiers page sells two
  * bundles is a pricing misrepresentation, marcus m50717 #1); Black is INCLUDED as a declared
  * entry because the catalogue's whole point is completeness and it is the flagship (m50717 #6);
- * Chicago is a declared MAINTENANCE listing and /feeds moves with it (m50717 #5).
+ * Chicago's state moves /feeds with it (m50717 #5).
  */
 export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
   {
@@ -98,6 +117,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     blurb: "Horizon's flagship institutional feed, ranked #1 on the Horizon Feed Comparison. Access is requested from your Servers page.",
     ctaHref: "/account/servers",
     ctaLabel: "Request access →",
+    hasDetailPage: false,
   },
   {
     // Membership is read from PACKAGE_TIER_KEYS, not re-listed, so this cannot drift from the
@@ -114,6 +134,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     blurb: "London · LD4 co-lo. Three feeds from one provider, sold as a single bundle.",
     ctaHref: "/feeds/london/tiers",
     ctaLabel: "See tiers →",
+    hasDetailPage: false,
   },
   {
     // NOT AVAILABLE, and therefore NOT REQUESTABLE ANYWHERE. First ruled coming-soon (coxwell
@@ -142,6 +163,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     blurb: "London · LD4 co-lo.",
     ctaHref: null,
     ctaLabel: null,
+    hasDetailPage: false,
   },
   {
     // Same shape and same ruling as Alpha above. marcus's instruction names Alpha, but its
@@ -155,6 +177,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     blurb: "London · LD4 co-lo.",
     ctaHref: null,
     ctaLabel: null,
+    hasDetailPage: false,
   },
   {
     key: "ny-base",
@@ -166,21 +189,33 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     blurb: "New York · NY4 co-lo. Two feeds from one provider, sold as a single bundle.",
     ctaHref: "/feeds/ny/tiers",
     ctaLabel: "See tiers →",
+    hasDetailPage: false,
   },
   {
-    // Declared, not queried: there are zero Chicago rows in feed_tiers and `cme` is a region
-    // key with no tiers. The product itself is real and already ships on /feeds as
-    // FEED_CATALOGUE's `futures` entry — so this listing states its state, it does not invent
-    // the product. feedSlug wires the /feeds card to this state so the two cannot disagree.
+    // The Pip Dealer's CME feed over cTrader FIX, requestable (coxwell 2026-09-23 via marcus,
+    // m52432: "clients can request it once they click on the product"). It was a declared
+    // MAINTENANCE listing with no feed_tiers row. It is now backed by `cme-ctrader-fix`,
+    // because a request and a grant can only key on a feed_tiers row. The row is
+    // 6760e796, written and read back by marcus at 22:07Z from provider_tiers dff16179, the live
+    // source (m52454). REQUEST, not buy: coxwell ruled there is no checkout. Fulfilment is the
+    // admin queue and a manual allowlist.
+    //
+    // The blurb holds only what marcus read off the live row. The old "CH1 co-lo" and
+    // "indices, metals and energy" are gone because neither is in that read. The spec detail
+    // lives in feed_tiers.description, which the product page renders. It is not copied here.
+    // feedSlug still wires the /feeds CME card to this state.
     key: "chicago",
-    title: "Chicago",
+    title: "CME Futures · cTrader FIX",
     category: "feeds",
-    availability: "maintenance",
-    tierKeys: [],
+    availability: "available",
+    tierKeys: ["cme-ctrader-fix"],
     feedSlug: "futures",
-    blurb: "Chicago · CH1 co-lo. CME Group futures, indices, metals and energy. Temporarily unavailable.",
-    ctaHref: null,
-    ctaLabel: null,
+    blurb: "US Central (Chicago). CME futures delivered over cTrader FIX.",
+    // "See more" and not "Request access": the card leads to the product page, and Request
+    // access lives only there (coxwell's flow via marcus, m52443).
+    ctaHref: `${MARKETPLACE_DETAIL_BASE}/chicago`,
+    ctaLabel: "See more →",
+    hasDetailPage: true,
   },
   {
     key: "horizon-terminal",
@@ -196,6 +231,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     // "/dashboard#downloads"). Paid accounts get the real build list in that same section.
     ctaHref: "/dashboard#downloads",
     ctaLabel: "Downloads →",
+    hasDetailPage: false,
   },
 ];
 
@@ -233,4 +269,30 @@ export function tierAvailability(tierKey: string): MarketplaceAvailability | nul
  */
 export function feedCardAvailability(slug: string): MarketplaceAvailability | null {
   return MARKETPLACE_LISTINGS.find((listing) => listing.feedSlug === slug)?.availability ?? null;
+}
+
+/** The product page of a listing, or null when it has none. Single spelling of the route so the
+ * card, the CTA and the /feeds hand-off cannot point at three different places. */
+export function listingDetailHref(listing: MarketplaceListing): string | null {
+  return listing.hasDetailPage ? `${MARKETPLACE_DETAIL_BASE}/${listing.key}` : null;
+}
+
+/** A listing with a product page, by its route key. null means a 404. It includes a listing
+ * that exists but has no page, so a guessed URL never renders an empty product. */
+export function listingWithDetailPage(key: string): MarketplaceListing | null {
+  return MARKETPLACE_LISTINGS.find((listing) => listing.key === key && listing.hasDetailPage) ?? null;
+}
+
+/** The blurb of the listing that speaks for a whole /feeds card, or null. /feeds uses it in
+ * place of its own copy for that card. Both surfaces describe the same product, so they read
+ * one sentence and not two that can drift. */
+export function feedCardBlurb(slug: string): string | null {
+  return MARKETPLACE_LISTINGS.find((listing) => listing.feedSlug === slug)?.blurb ?? null;
+}
+
+/** The product page behind a /feeds card, for a card whose listing has one. This is how the
+ * /feeds CME card sends a buyer to the one request flow, not to Telegram. */
+export function feedCardDetailHref(slug: string): string | null {
+  const listing = MARKETPLACE_LISTINGS.find((l) => l.feedSlug === slug);
+  return listing ? listingDetailHref(listing) : null;
 }

@@ -1039,6 +1039,30 @@
 .portal-shell .mkt-member-name { font-size: 12px; font-weight: 600; color: var(--hz-ink-2); }
 .portal-shell .mkt-member-figure { font-family: var(--hz-mono); font-size: 13px; font-weight: 700; color: var(--hz-ink); }
 .portal-shell .mkt-cta { align-self: flex-start; margin-top: 10px; }
+/* A listing with a product page. The title inherits the card's own heading colour and gains the
+   underline only on hover, so it reads as the same title and not as a new blue element. */
+.portal-shell .mkt-name-link { color: inherit; text-decoration: none; }
+.portal-shell .mkt-name-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---- MARKETPLACE PRODUCT PAGE (/marketplace/[key]) ----
+   Layout from Iris's sheet 2 (m51796): a spec plate on the left and the request box on the
+   right. Only the layout is taken, not her inventory. Stacks to one column under 900px, where
+   the request box follows the spec it is read after. */
+.portal-shell .mkd-back { margin-bottom: 12px; display: inline-block; }
+.portal-shell .mkd-title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.portal-shell .mkd-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.portal-shell .mkd-plate-title { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--hz-ink-3); margin-bottom: 10px; }
+.portal-shell .mkd-spec { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px 16px; font-size: 13px; }
+.portal-shell .mkd-spec dt { color: var(--hz-ink-3); }
+.portal-shell .mkd-spec dd { color: var(--hz-ink); line-height: 1.5; }
+.portal-shell .mkd-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.portal-shell .mkd-image { display: block; width: 100%; height: auto; border-radius: 12px; }
+.portal-shell .mkd-included { margin: 0; padding-left: 18px; font-size: 13px; color: var(--hz-ink); line-height: 1.7; }
+.portal-shell .mkd-request { display: flex; flex-direction: column; gap: 10px; }
+.portal-shell .mkd-request .ftd-unlock { align-self: flex-start; }
+@media (max-width: 900px) {
+  .portal-shell .mkd-grid { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 768px) {
   .portal-shell .app { grid-template-columns: 1fr; }

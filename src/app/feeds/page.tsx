@@ -18,6 +18,11 @@ import {
   type FeedCardStatus,
 } from "@/lib/feeds-catalogue";
 import { regionForFeedType } from "@/lib/feed-tier-catalogue";
+import {
+  feedCardAvailability,
+  feedCardDetailHref,
+  MARKETPLACE_AVAILABILITY_LABELS,
+} from "@/lib/marketplace-catalogue";
 import { getTierCountsByRegion } from "@/lib/feed-tiers";
 import { FeedRequestForm } from "@/components/feeds/feed-request-form";
 import { getAnyServerRegistrationForUser } from "@/lib/server-registration";
@@ -87,6 +92,37 @@ export default async function FeedsPage() {
             </Link>
           );
 
+          // A card whose product has a marketplace page shows that product's own state and hands
+          // off to it (marcus, m52454 (b)). Today that is only CME. It deliberately does NOT
+          // render a per-user Active/Locked: a cme grant never reaches `activeFeeds`, because
+          // REGION_TO_FEED_TYPE maps cme to nothing. That card would read Locked to a client who
+          // had just been approved. The product page reads the real request state instead.
+          const detailHref = feedCardDetailHref(entry.slug);
+          const declared = feedCardAvailability(entry.slug);
+          if (detailHref && declared) {
+            return (
+              <div key={entry.slug} className="card fp-card">
+                <div className="fp-top">
+                  <span className="fp-flag-group">
+                    <span
+                      className={`fp-flag fi fi-${entry.countryCode.toLowerCase()}`}
+                      role="img"
+                      aria-label={`${entry.countryCode} flag`}
+                    />
+                    <span className="fp-code">{entry.countryCode}</span>
+                  </span>
+                  <span className={`mkt-pill mkt-pill-${declared}`}>{MARKETPLACE_AVAILABILITY_LABELS[declared]}</span>
+                </div>
+                <h3 className="fp-name">{entry.name}</h3>
+                <p className="fp-desc">{entry.description}</p>
+                {entry.latencyBand && <span className="fp-latency">{entry.latencyBand}</span>}
+                <Link href={detailHref} className="btn primary sm fp-cta">
+                  View product →
+                </Link>
+              </div>
+            );
+          }
+
           return (
             <div key={entry.slug} className={`card fp-card fp-${status}`}>
               <div className="fp-top">
@@ -110,7 +146,7 @@ export default async function FeedsPage() {
                   m50726 — same class as the invented uptime figures). Suppressed rather than
                   reworded: the band is a catalogue fact and stays true for when the feed returns.
                   Only maintenance is cut; coming-soon cards carry their own band deliberately. */}
-              {status !== "maintenance" && <span className="fp-latency">{entry.latencyBand}</span>}
+              {status !== "maintenance" && entry.latencyBand && <span className="fp-latency">{entry.latencyBand}</span>}
 
               {(status === "active" || status === "trial") && grantingLicense && (
                 <span className="fp-expiry">
@@ -177,7 +213,7 @@ export default async function FeedsPage() {
                 </div>
                 <h3 className="fp-name">{entry.name}</h3>
                 <p className="fp-desc">{entry.description}</p>
-                <span className="fp-latency">{entry.latencyBand}</span>
+                {entry.latencyBand && <span className="fp-latency">{entry.latencyBand}</span>}
                 <span className="fp-note">Planned — not live yet</span>
               </div>
             ))}

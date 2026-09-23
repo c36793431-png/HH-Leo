@@ -14,6 +14,7 @@ import {
   MARKETPLACE_CATEGORY_ORDER,
   MARKETPLACE_CATEGORY_LABELS,
   MARKETPLACE_AVAILABILITY_LABELS,
+  listingDetailHref,
 } from "@/lib/marketplace-catalogue";
 import {
   MarketplaceCategoryFilter,
@@ -28,7 +29,7 @@ import {
  *
  * NO PRICES, ANYWHERE ON THIS PAGE. Every shipped buyer surface renders none, and publishing one
  * would be the first feed price Horizon has ever shown a customer — coxwell's, not this errand's
- * (marcus ruling, m50723 #1).
+ * (marcus ruling, m50723 #1; re-applied to Chicago's priced row, m52454 (a)).
  *
  * NO NEW QUERY AND NO NEW DISPLAY RULE. Tiers come from the shipped getTiersForRegion, and a
  * tier's figure is rendered by the shipped formatTierLatency — London's feed_tiers.latency_us
@@ -62,7 +63,7 @@ export default async function MarketplacePage() {
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
-  // One call of the shipped query per declared region. A region with no rows (cme, tokyo today)
+  // One call of the shipped query per declared region. A region with no rows (tokyo today)
   // returns an empty list, which is why the declared listings below do not depend on it.
   const tierLists = await Promise.all(FEED_REGIONS.map((region) => getTiersForRegion(region).catch(() => [])));
   const tierByKey = new Map(tierLists.flat().map((t) => [t.tierKey, t]));
@@ -103,6 +104,7 @@ export default async function MarketplacePage() {
                 // the figures are dropped rather than shown under a guessed label, because
                 // unlabelled numbers are the same defect in a quieter form.
                 const heading = tierFigureHeading(members.map((m) => m.regionKey));
+                const detailHref = listingDetailHref(listing);
                 return (
                   <div key={listing.key} className={`card mkt-card mkt-${listing.availability}`}>
                     <div className="mkt-top">
@@ -110,10 +112,24 @@ export default async function MarketplacePage() {
                         {MARKETPLACE_AVAILABILITY_LABELS[listing.availability]}
                       </span>
                     </div>
-                    <h3 className="mkt-name">{listing.title}</h3>
+                    <h3 className="mkt-name">
+                      {/* A listing with a product page is clicked into (coxwell, m52432: "request it
+                          once they click on the product"). The title and the CTA go to the same
+                          page, one destination per box (Iris sheet 1). */}
+                      {detailHref ? (
+                        <Link href={detailHref} className="mkt-name-link">
+                          {listing.title}
+                        </Link>
+                      ) : (
+                        listing.title
+                      )}
+                    </h3>
                     <p className="mkt-desc">{listing.blurb}</p>
 
-                    {members.length > 0 && heading && (
+                    {/* A listing with a product page leaves its specs to that page. Chicago's only
+                        member has no latency figure, so this block would print the title again
+                        over a bare "—". */}
+                    {members.length > 0 && heading && !detailHref && (
                       <div className="mkt-members">
                         <span className="mkt-members-label">
                           {heading.label}

@@ -22,7 +22,10 @@ export const FEED_REGION_LABELS: Record<FeedRegion, string> = {
 };
 
 /** Maps a signup region to the license feed_types entitlement it corresponds to.
- * null regions (cme, tokyo) aren't wired to a FeedType yet -- coming soon only. */
+ * cme is null: no licence tick governs it. Its one tier is requested and granted like any
+ * other, but a grant there never unlocks the `futures` FeedType. So the /feeds CME card shows
+ * the marketplace listing's state and not a per-user one (marcus, m52454 (b): "don't touch the
+ * entitlement mapping"). */
 export const FEED_REGION_TYPE: Record<FeedRegion, FeedType | null> = {
   london: "london",
   ny: "ny",
@@ -44,6 +47,12 @@ export const FEED_TIERS: FeedTierMeta[] = [
   { key: "ld-ultra", name: "Ultra", region: "london" },
   { key: "ny-normal", name: "NY Beta", region: "ny" },
   { key: "ny-fast", name: "NY Alpha", region: "ny" },
+  /** The Pip Dealer's CME feed over cTrader FIX (coxwell via marcus, m52432). Its feed_tiers row
+   * is marcus's hand-applied INSERT from provider_tiers dff16179. submitFeedTierRequestAction
+   * refuses a key that is not in this list. This name is the one the admin queue and the
+   * Telegram DM show (feedTierMeta wins over the DB name), so it matches the row's `name`.
+   * NOT trial-eligible: a paid tier, approved from the admin queue only. */
+  { key: "cme-ctrader-fix", name: "CME Futures · cTrader FIX", region: "cme" },
   /** Pseudo-tier for the Base package card's single request button (tiers/page.tsx
    * TIER_PACKAGE_KEY, london-tiers-retail-package-card-2026-08-29). Not a real feed_tiers
    * DB row and never rendered as its own card. SUBMIT-SIDE ONLY since 0086 phase 2: the

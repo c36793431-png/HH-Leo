@@ -5,7 +5,7 @@ import { getReachablePanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { isFeedRegion, FEED_REGION_TYPE, PACKAGE_DISPLAY_LABELS } from "@/lib/feed-tier-catalogue";
+import { isFeedRegion, PACKAGE_DISPLAY_LABELS } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { isScoreRegion, formatTierLatency, tierFigureHeading } from "@/lib/feed-provider-packages";
 import {
@@ -14,15 +14,10 @@ import {
   type MarketplaceAvailability,
 } from "@/lib/marketplace-catalogue";
 import { FEED_CATALOGUE } from "@/lib/feeds-catalogue";
-import {
-  TierRequestControl,
-  type TierRequestServerOption,
-  type TierRequestState,
-} from "@/components/feeds/tier-request-control";
-import { getAnyServerRegistrationForUser, getServerRegistrationsForUser } from "@/lib/server-registration";
-import { effectiveServerLocation } from "@/lib/server-locations";
+import { TierRequestControl, type TierRequestState } from "@/components/feeds/tier-request-control";
+import { getAnyServerRegistrationForUser } from "@/lib/server-registration";
+import { getTierRequestContext } from "@/lib/tier-request-context";
 import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
-import { listFeedTierRequests } from "@/lib/feed-tier-requests";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
 import { scoreForTierKey } from "@/lib/feed-comparison-scores";
 import { SectionPills } from "@/components/shared/section-pills";
@@ -226,60 +221,14 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
-  const [serverRegistration, userServerRegistrations, existingRequests] = await Promise.all([
-    getAnyServerRegistrationForUser(session.user.id),
-    getServerRegistrationsForUser(session.user.id),
-    listFeedTierRequests({ userId: session.user.id }),
-  ]);
-  // Cross-region binding is legitimate (coxwell, leo-cross-region-server-picker-2026-09-04:
-  // "yes they can if they wish") -- the request modal picks from every active license the
-  // client holds, not just servers registered in the tier's own region. A license with no
-  // registration stays listed (Fable's R6 "binding unconfirmed" downstream) -- deliberate,
-  // do not filter it out here.
-  const registrationByLicenseId = new Map(userServerRegistrations.map((r) => [r.licenseId, r]));
-  // Distinct from serverOptions.length === 0 (no active license): this is "active license(s),
-  // but not one of them has ever had a server registered" -- R6's "binding unconfirmed" listing
-  // only covers a client who has at least one registration elsewhere (marcus,
-  // leo-cross-region-server-picker-2026-09-04 ruling). Zero here must still hard-stop.
-  const hasAnyRegisteredServer = userServerRegistrations.length > 0;
-  const serverOptions: TierRequestServerOption[] = activeLicenses.map((l) => {
-    const r = registrationByLicenseId.get(l.id);
-    return {
-      licenseId: l.id,
-      serverName: r?.serverName ?? null,
-      declaredIp: r?.declaredIp ?? null,
-      region: r ? effectiveServerLocation(r.location, r.serverLocation) : null,
-      licenseKeyTail: l.licenseKey.slice(-4),
-      registered: !!r,
-    };
-  });
-  // Per-tier request state for this client. The old set collapsed every non-rejected status
-  // into one "Requested" pill, so approved and provisioned rows -- a client who already HAS
-  // the access -- kept rendering as still-waiting (marcus,
-  // leo-approval-invisible-to-client-2026-09-11). Precedence granted > pending: a client can
-  // hold a grant and a later request on the same tier (nothing stops a re-request), and the
-  // access they already have is the truer thing to show. rejected maps to "none" exactly as
-  // before -- it resolves back to a usable Request access button, deliberately.
-  const requestStateByTierKey = new Map<string, TierRequestState>();
-  for (const r of existingRequests) {
-    if (r.region !== region) continue;
-    if (r.status === "approved") {
-      requestStateByTierKey.set(r.tierKey, "granted");
-    } else if (r.status === "pending" && requestStateByTierKey.get(r.tierKey) !== "granted") {
-      requestStateByTierKey.set(r.tierKey, "pending");
-    }
-  }
-  const requestStateFor = (tierKey: string): TierRequestState => requestStateByTierKey.get(tierKey) ?? "none";
-  // A license key identifies one specific license, not an aggregate — never blend multiple
-  // licenses into one tail. Show this region's active license(s); if the client holds two
-  // active licenses that both grant this region, show both rather than picking one
-  // (coxwell-approved rule, thread multi-license-visibility-2026-08-31).
-  const regionFeedType = FEED_REGION_TYPE[region];
-  const regionLicenses = regionFeedType
-    ? activeLicenses.filter((l) => l.feedTypes.includes(regionFeedType))
-    : [];
-  const licenseTail =
-    regionLicenses.length > 0 ? regionLicenses.map((l) => l.licenseKey.slice(-4)).join(", ") : "—";
+  // Server options, per-tier request state and the licence tail come from the shared helper
+  // (lib/tier-request-context.ts), which /marketplace/[key] also renders from. The R6 and
+  // multi-licence rulings live there now.
+  const [serverRegistration, { serverOptions, hasAnyRegisteredServer, requestStateFor, licenseTail }] =
+    await Promise.all([
+      getAnyServerRegistrationForUser(session.user.id),
+      getTierRequestContext(session.user.id, activeLicenses, region),
+    ]);
 
   const displayTiers =
     region === "london"
