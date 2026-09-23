@@ -394,22 +394,10 @@ export default async function DashboardPage() {
                     <span className="ver">—</span>
                   )}
                 </div>
-                <div className="rw">
-                  <div className="ricon">⤓</div>
-                  <div className="rmeta">
-                    <b>Horizon Terminal — macOS</b>
-                    <span>
-                      {downloads.macos
-                        ? `v${downloads.macos.version} · SHA256 ${downloads.macos.sha256.slice(0, 8)}…`
-                        : "Not yet published"}
-                    </span>
-                  </div>
-                  {downloads.macos ? (
-                    <DownloadButton version={downloads.macos.version} platform="macos" />
-                  ) : (
-                    <span className="ver">—</span>
-                  )}
-                </div>
+                {/* No macOS row. The terminal is Windows only (coxwell 2026-09-23 via marcus,
+                    m52817/m52879), and no macOS build has ever been published: the downloads
+                    table has never held a macos row, soft-deleted ones included. The pipeline
+                    still accepts the platform; this is the buyer surface only. */}
                 <Link className="rw" href="/downloads">
                   <div className="ricon">≡</div>
                   <div className="rmeta">
@@ -426,7 +414,7 @@ export default async function DashboardPage() {
                     <div className="ricon">⤓</div>
                     <div className="rmeta">
                       <b>Horizon Terminal v4.2.1</b>
-                      <span>Windows · macOS</span>
+                      <span>Windows</span>
                     </div>
                   </div>
                   <div className="rw">

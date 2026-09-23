@@ -1,8 +1,30 @@
-import { FEED_COMPARISON_SCORES } from "@/lib/feed-comparison-scores";
+import { FEED_COMPARISON_SCORES, SCORE_TIER_NAMES } from "@/lib/feed-comparison-scores";
 
-export function FeedComparisonScores() {
+/** Entries that are a Horizon product: every one with a tier_key. Epsilon has none. */
+const LISTED_NAMES = new Set(Object.values(SCORE_TIER_NAMES));
+
+/**
+ * The London leaderboard. "tiers" is the /feeds/london/tiers board as it has always been.
+ * "marketplace" is the product-page embed (marcus, m52875): it hides the rows that are not a
+ * Horizon product (Epsilon, "Offline", has no listing) and drops the row notes, because Delta's
+ * carries a latency figure and marketplace surfaces carry none. It is a variant, not an edit to
+ * FEED_COMPARISON_SCORES, so the tiers page keeps both. The window line and the estimated-split
+ * footnote are the same in both.
+ *
+ * highlight: entry names to mark as the page's own product, e.g. Beta, Gamma and Delta on
+ * London's Base bundle.
+ */
+export function FeedComparisonScores({
+  variant = "tiers",
+  highlight = [],
+}: {
+  variant?: "tiers" | "marketplace";
+  highlight?: string[];
+}) {
+  const marketplace = variant === "marketplace";
+  const entries = marketplace ? FEED_COMPARISON_SCORES.filter((f) => LISTED_NAMES.has(f.name)) : FEED_COMPARISON_SCORES;
   return (
-    <div className="card full fcs">
+    <div className={`card full fcs${marketplace ? " fcs-embed" : ""}`}>
       <h3 className="fp-section-title">🇬🇧 London Feed Comparison Scores</h3>
       <p className="fcs-measured-on">Measured over 51h, 16 Aug 2026</p>
 
@@ -19,8 +41,8 @@ export function FeedComparisonScores() {
       </div>
 
       <div className="fcs-rows">
-        {FEED_COMPARISON_SCORES.map((f) => (
-          <div key={f.name} className="fcs-row">
+        {entries.map((f) => (
+          <div key={f.name} className={`fcs-row${highlight.includes(f.name) ? " fcs-row-own" : ""}`}>
             <span className="fcs-rank">{f.rank}</span>
             <span className="fcs-name">{f.name}</span>
             <div className="fcs-bar-track">
@@ -38,7 +60,7 @@ export function FeedComparisonScores() {
               />
             </div>
             <span className="fcs-score">{f.score.toFixed(1)}</span>
-            {f.note && <span className="fcs-note">{f.note}</span>}
+            {f.note && !marketplace && <span className="fcs-note">{f.note}</span>}
           </div>
         ))}
       </div>

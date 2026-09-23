@@ -12,6 +12,8 @@ import { getTierRequestContext } from "@/lib/tier-request-context";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
 import { ListingFigures, hasListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
 import { ListingMedia } from "@/components/marketplace/listing-media";
+import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
+import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
 
 /**
  * /marketplace/[key]: the product page behind every shelf card's "See more →" (coxwell
@@ -39,6 +41,11 @@ import { ListingMedia } from "@/components/marketplace/listing-media";
  * the product on the left and the Access box on the right. The hero image (with its flag or
  * plate) and What's included come from her 2026-09-23 delivery through the catalogue (m52632),
  * and each renders only when the listing carries it.
+ *
+ * THE COMPARISON sits below both, full width, "for reference" (coxwell via marcus, m52822/m52875):
+ * the whole London leaderboard with this listing's own row(s) highlighted, in its marketplace
+ * variant. It renders only for a listing with a row on the board, which is Black and the London
+ * listings. NY and Chicago have no measurement, so they get nothing, not a placeholder.
  */
 export default async function MarketplaceProductPage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
@@ -81,6 +88,9 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
 
   const figures = listingFigureMembers(listing, members);
   const included = listing.included ?? [];
+  const comparisonOwnRows = scoreNamesForTierKeys(
+    listing.scoreTierKey ? [...listing.tierKeys, listing.scoreTierKey] : listing.tierKeys,
+  );
   // With no image, spec, figures or included list, the left column is empty and the Access box
   // would float alone at the far right. It takes the left edge instead. No listing hits this since
   // every one carries an image; it guards the next listing added without one.
@@ -165,6 +175,8 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
           )}
         </div>
       </div>
+
+      {comparisonOwnRows.length > 0 && <FeedComparisonScores variant="marketplace" highlight={comparisonOwnRows} />}
 
       <div className="foot">HORIZON HFT · customer portal</div>
     </PortalShell>

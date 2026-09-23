@@ -62,8 +62,9 @@ export const FEED_COMPARISON_SCORES: FeedScoreEntry[] = [
  * leo-london-tier-score-mismatch-2026-09-07) — 0074 only short-formed Alpha/Ultra's name,
  * so a name-string match would silently miss Beta/Gamma/Delta. Single source for every
  * surface that needs London's canonical score by tier_key (feeds/[region]/tiers page,
- * formatTierLatency, getBestLatencyByRegion) so it can't drift a third time. */
-const SCORE_TIER_NAMES: Record<string, string> = {
+ * formatTierLatency, getBestLatencyByRegion) so it can't drift a third time. Exported for the
+ * marketplace product pages, which highlight their own rows by it (marcus, m52875). */
+export const SCORE_TIER_NAMES: Record<string, string> = {
   "ld-alpha-85": "Alpha",
   "ld-beta-56": "Beta",
   "ld-gamma-19": "Gamma",
@@ -76,4 +77,11 @@ export function scoreForTierKey(tierKey: string): number | null {
   const name = SCORE_TIER_NAMES[tierKey];
   const entry = name ? FEED_COMPARISON_SCORES.find((f) => f.name === name) : undefined;
   return entry ? entry.score : null;
+}
+
+/** The FEED_COMPARISON_SCORES names of the tier_keys that have a score, in leaderboard order.
+ * Empty = none of them is on the board (NY, Chicago, the terminal). */
+export function scoreNamesForTierKeys(tierKeys: string[]): string[] {
+  const names = new Set(tierKeys.map((k) => SCORE_TIER_NAMES[k]).filter(Boolean));
+  return FEED_COMPARISON_SCORES.filter((f) => names.has(f.name)).map((f) => f.name);
 }
