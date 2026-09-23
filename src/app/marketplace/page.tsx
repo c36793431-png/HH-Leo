@@ -20,6 +20,7 @@ import {
   type MarketplaceSection,
 } from "@/components/marketplace/marketplace-category-filter";
 import { ListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
+import { ListingMedia } from "@/components/marketplace/listing-media";
 
 /**
  * /marketplace — the catalogue of what Horizon sells (coxwell via marcus, 2026-09-14).
@@ -97,22 +98,12 @@ export default async function MarketplacePage() {
             <div className="mkt-grid">
               {items.map(({ listing, members }) => {
                 const detailHref = listingDetailHref(listing);
-                const flags = listing.flagCountryCodes ?? [];
                 return (
                   <div key={listing.key} className={`card mkt-card mkt-${listing.availability}`}>
+                    {/* Iris's card order (m52632 item 4): image with its flag or plate, then name,
+                        one sentence and See more. The comparison score stays on the card. */}
+                    <ListingMedia listing={listing} variant="card" />
                     <div className="mkt-top">
-                      {flags.length > 0 && (
-                        <span className="fp-flag-group">
-                          {flags.map((code) => (
-                            <span
-                              key={code}
-                              className={`fp-flag fi fi-${code.toLowerCase()}`}
-                              role="img"
-                              aria-label={`${code} flag`}
-                            />
-                          ))}
-                        </span>
-                      )}
                       <span className={`mkt-pill mkt-pill-${listing.availability}`}>
                         {MARKETPLACE_AVAILABILITY_LABELS[listing.availability]}
                       </span>

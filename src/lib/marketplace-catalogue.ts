@@ -44,6 +44,24 @@ const MARKETPLACE_DETAIL_BASE = "/marketplace";
  *   tier_key, so the page 404s unless the listing is backed by exactly one feed_tiers row. */
 export type MarketplaceAction = { kind: "link"; href: string; label: string } | { kind: "request" };
 
+/** Iris's 60×36 flag-slot art under /public/marketplace/flags (m52632, mapping m52668). A plate
+ * is NOT a flag: it fills the same slot for a listing with no country to show, which today is
+ * only the terminal, because software has no venue. Her plate-horizon for Black is not shipped:
+ * coxwell ruled Black is London (m52813). */
+export type ListingMark = "flag-gb" | "flag-us" | "plate-desktop";
+
+/** Alt text for each mark. These are ours, not the aria-labels inside Iris's files, because
+ * <img> reads alt. */
+export const LISTING_MARK_ALT: Record<ListingMark, string> = {
+  "flag-gb": "United Kingdom",
+  "flag-us": "United States",
+  "plate-desktop": "Desktop software",
+};
+
+export function listingMarkSrc(mark: ListingMark): string {
+  return `/marketplace/flags/${mark}.svg`;
+}
+
 /** Exactly the two coxwell named. A third category is a product decision, so a third word here
  * must not compile until he makes it. */
 export type MarketplaceCategory = "feeds" | "software";
@@ -91,18 +109,20 @@ export interface MarketplaceListing {
    * reads (feed-comparison-scores.ts). Black only: it has no feed_tiers row to carry its score,
    * and the London cards read theirs from that same table by tier_key. Absent = no score. */
   scoreTierKey?: string;
-  /** ISO 3166-1 alpha-2 codes, rendered by the flag-icons set the portal already loads
-   * (`fi fi-<code>`, as on /feeds) on the shelf card and the product page. Iris's art replaces
-   * these later (coxwell via marcus, m52589); software and Black carry none. */
-  flagCountryCodes?: string[];
-  // Product-page slots for Iris's per-product assets (coxwell via marcus, m52443/m52454: an
-  // image and "What's included" for every product). They are OPTIONAL and EMPTY until her
-  // assets land. An empty slot renders nothing: no placeholder, no frame, no "coming soon".
-  // Fill them from her delivery only, never from the 09-18 mockup, which is layout and not
-  // inventory.
-  /** Path under /public to the product image. */
-  image?: string;
-  /** One line per included item, in render order. */
+  // Iris's per-product assets (coxwell via marcus, m52443/m52632). Every slot is OPTIONAL, and
+  // an empty one renders nothing: no placeholder, no frame, no "coming soon". Fill them from her
+  // delivery only (public/marketplace/, md5s in her MANIFEST), never from the 09-18 mockup,
+  // which is layout and not inventory.
+  /** Her card crop (1024×640, the shelf) and hero crop (1024×440, the product page), paths
+   * under /public, and her description of the picture. */
+  image?: { card: string; hero: string; alt: string };
+  /** Drawn bottom-left on the image, on the card and the product page. Replaces the flag-icons
+   * interim of 246b0a4 (m52632 item 2). */
+  mark?: ListingMark;
+  /** One line per included item, in render order. ONLY products.json lines marked FACT whose
+   * claim is also on a shipped surface (m52632 item 3). Her FACT means "exists on a shipped
+   * surface", and several of hers cite her own mockup HTML instead, so each line here names the
+   * shipped file it was checked against. No price, latency or uptime line, even a FACT one. */
   included?: string[];
 }
 
@@ -127,8 +147,20 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     blurb: "Horizon's flagship institutional feed, ranked #1 on the Horizon Feed Comparison. Access is requested from your Servers page.",
     action: { kind: "link", href: "/account/servers", label: "Request access →" },
     scoreTierKey: "black",
-    // No flag: Black's region is unruled, so it gets Iris's plate when her files land, not a
-    // country (marcus m52740).
+    image: {
+      card: "/marketplace/black-card.jpg",
+      hero: "/marketplace/black-hero.jpg",
+      alt: "A black sea with no land; a thin platinum horizon line and a few tall platinum ticks.",
+    },
+    // coxwell ruled Black is London (2026-09-23 via marcus, m52813), so it carries the GB flag
+    // like the three London cards. Iris's plate-horizon was for an unruled region and is dropped.
+    mark: "flag-gb",
+    // Both from the Black trial card on /account/servers (black-trial-card.tsx): "One trial per
+    // client — first time only", "Start 3-day trial", "we whitelist your IP".
+    included: [
+      "A 3-day trial, once per client — first time only",
+      "Delivered by IP allowlist to a server you register",
+    ],
   },
   {
     // Membership is read from PACKAGE_TIER_KEYS, not re-listed, so this cannot drift from the
@@ -147,7 +179,20 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     // member (packageCardState on the tiers page, including the "mixed" branch), and a second
     // copy of that rule here would be a second place for it to drift.
     action: { kind: "link", href: "/feeds/london/tiers", label: "See tiers →" },
-    flagCountryCodes: ["GB"],
+    image: {
+      card: "/marketplace/ld-base-card.jpg",
+      hero: "/marketplace/ld-base-hero.jpg",
+      alt: "The London skyline across the Thames at night under a sparse field of cyan ticks rising from the horizon.",
+    },
+    mark: "flag-gb",
+    // Both checked against shipped copy: the request note on this product page's own Access box
+    // and the rule on /account/servers (server-registrations-grouped.tsx, "One licence covers one
+    // server (one IP)"). Iris's venue line ("Equinix LD4, Slough") and "Tick-level" cite her
+    // feeds-page.html mockup and appear nowhere in src, so they stay off.
+    included: [
+      "Delivery by IP allowlist to a server you register on /account/servers",
+      "One licence per server, one IP each — add servers later, each with its own licence",
+    ],
   },
   {
     // NOT AVAILABLE, and therefore NOT REQUESTABLE ANYWHERE. First ruled coming-soon (coxwell
@@ -175,7 +220,15 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     feedSlug: null,
     blurb: "London · LD4 co-lo.",
     action: null,
-    flagCountryCodes: ["GB"],
+    image: {
+      card: "/marketplace/ld-alpha-card.jpg",
+      hero: "/marketplace/ld-alpha-hero.jpg",
+      alt: "The London skyline across the Thames at night under a medium-density field of cyan ticks in two heights.",
+    },
+    mark: "flag-gb",
+    // No included list. Iris's one FACT line, "Specifications are published at release",
+    // promises a release, and coxwell moved these two from Coming soon to "Not available at this
+    // moment" precisely because that is a different promise (m52137).
   },
   {
     // Same shape and same ruling as Alpha above. marcus's instruction names Alpha, but its
@@ -188,7 +241,12 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     feedSlug: null,
     blurb: "London · LD4 co-lo.",
     action: null,
-    flagCountryCodes: ["GB"],
+    image: {
+      card: "/marketplace/ld-ultra-card.jpg",
+      hero: "/marketplace/ld-ultra-hero.jpg",
+      alt: "The London skyline across the Thames at night under a dense, full-depth field of fine cyan ticks with faint horizontal price bands.",
+    },
+    mark: "flag-gb",
   },
   {
     key: "ny-base",
@@ -200,7 +258,17 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     blurb: "New York · NY4 co-lo. Two feeds from one provider, sold as a single bundle.",
     // A link for the same reason as London's Base above.
     action: { kind: "link", href: "/feeds/ny/tiers", label: "See tiers →" },
-    flagCountryCodes: ["US"],
+    image: {
+      card: "/marketplace/ny-base-card.jpg",
+      hero: "/marketplace/ny-base-hero.jpg",
+      alt: "The Manhattan skyline across the Hudson from the New Jersey shore at night under a sparse field of cyan ticks.",
+    },
+    mark: "flag-us",
+    // Same two lines and the same check as London's Base.
+    included: [
+      "Delivery by IP allowlist to a server you register on /account/servers",
+      "One licence per server, one IP each — add servers later, each with its own licence",
+    ],
   },
   {
     // The Pip Dealer's CME feed over cTrader FIX, requestable (coxwell 2026-09-23 via marcus,
@@ -224,7 +292,14 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     blurb: "US Central (Chicago). CME futures delivered over cTrader FIX.",
     // Request access lives only on the product page (coxwell's flow via marcus, m52443).
     action: { kind: "request" },
-    flagCountryCodes: ["US"],
+    image: {
+      card: "/marketplace/chicago-card.jpg",
+      hero: "/marketplace/chicago-hero.jpg",
+      alt: "The Chicago skyline across Lake Michigan at night under sparse cyan ticks, with one luminous curve sweeping across them.",
+    },
+    mark: "flag-us",
+    // No included list. Iris's FACT delivery, region and coverage are already on this page, from
+    // the blurb and the row's Specification plate. Her remaining FACT line is a pricing line.
   },
   {
     key: "horizon-terminal",
@@ -233,13 +308,23 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     availability: "available",
     tierKeys: [],
     feedSlug: null,
-    blurb: "The Horizon trading terminal for Windows and macOS, included with an active licence.",
+    // Windows only (coxwell 2026-09-23 via marcus, m52817): the terminal has no macOS build.
+    blurb: "The Horizon trading terminal for Windows, included with an active licence.",
     // /downloads redirects a non-paid account to /dashboard, and this page is visible to free
     // accounts — so the CTA points at the dashboard's Downloads section, which is the exact
     // destination the sidebar already sends a locked account to (sidebar.tsx PORTAL_LINKS,
     // "/dashboard#downloads"). Paid accounts get the real build list in that same section.
-    // No flag: software is not delivered from a region (coxwell via marcus, m52589).
     action: { kind: "link", href: "/dashboard#downloads", label: "Downloads →" },
+    image: {
+      card: "/marketplace/horizon-terminal-card.jpg",
+      hero: "/marketplace/horizon-terminal-hero.jpg",
+      alt: "A dark trading desk at night; a single monitor showing the Horizon horizon line with sparse cyan ticks.",
+    },
+    // A plate, not a flag: software is not delivered from a region (coxwell via marcus, m52589).
+    mark: "plate-desktop",
+    // No included list. Iris's FACT lines cite the /dashboard hero "free-dashboard.html:221",
+    // which is her mockup. The shipped hero (dashboard/page.tsx) says none of them, so they are
+    // coxwell's copy to give, as m52589 item 4 already said.
   },
 ];
 

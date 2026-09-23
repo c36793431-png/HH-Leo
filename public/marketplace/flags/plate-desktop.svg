@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 36" width="60" height="36" role="img" aria-label="Desktop software — no venue">
+  <!-- The flag-slot plate for SOFTWARE (Horizon Terminal). A product with no venue has
+       no flag; its "where" is the desk. Same 60x36 box as a flag; a monitor glyph in
+       cyan on graphite, with the horizon line drawn on the screen so it is still a
+       Horizon object and not a generic computer icon. -->
+  <rect width="60" height="36" fill="#14191F"/>
+  <rect x="0.5" y="0.5" width="59" height="35" fill="none" stroke="#3A4650" stroke-width="1"/>
+  <rect x="14" y="7" width="32" height="19" rx="2" fill="none" stroke="#2DE2E6" stroke-width="2"/>
+  <path d="M19,19 H41" stroke="#2DE2E6" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M23,19 V15 M28,19 V12.5 M33,19 V16 M38,19 V13.5" stroke="#2DE2E6" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M25,30 H35 M30,26 V30" stroke="#2DE2E6" stroke-width="2" stroke-linecap="round"/>
+</svg>

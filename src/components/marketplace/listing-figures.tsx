@@ -35,13 +35,14 @@ function hasFigure(m: ListingFigureMember): boolean {
  * reverses which feed looks best. A null heading means the figures are not all one kind, and
  * they are dropped rather than shown under a guessed label.
  *
- * A single member with no figure renders nothing. That is Chicago: its only row has no measured
- * latency, so the block would print the title again over a bare "—". A bundle still renders its
- * members' names under a "—", as NY Base did before this block was shared.
+ * A listing none of whose members has a figure renders nothing. That is Chicago (one row, no
+ * measured latency) and NY Base (two rows, latency_us null on both): the block would print a
+ * heading over bare "—"s, which reads as broken next to the cards that carry a score (marcus,
+ * m52813). A bundle with at least one figure still lists every member, "—" included.
  */
 export function hasListingFigures(members: ListingFigureMember[]): boolean {
   if (!tierFigureHeading(members.map((m) => m.regionKey))) return false;
-  return !(members.length === 1 && !hasFigure(members[0]));
+  return members.some(hasFigure);
 }
 
 export function ListingFigures({ members }: { members: ListingFigureMember[] }) {

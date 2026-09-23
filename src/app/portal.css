@@ -1013,7 +1013,16 @@
 .portal-shell .mkt-section { margin-top: 26px; }
 .portal-shell .mkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .portal-shell .mkt-card { display: flex; flex-direction: column; gap: 6px; }
-/* Flags left, pill right. The pill's auto margin keeps it right on a card with no flag (software). */
+/* Iris's image with its 60×36 flag or plate bottom-left (m52632). Shared by the card and the
+   product page hero (ListingMedia). */
+.portal-shell .mkt-media { position: relative; }
+.portal-shell .mkt-image { display: block; width: 100%; height: auto; border-radius: 10px; }
+.portal-shell .mkt-media-card { margin-bottom: 6px; }
+.portal-shell .mkt-mark { position: absolute; left: 10px; bottom: 10px; width: 60px; height: 36px; border-radius: 3px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); }
+/* Iris's own spec for a card that is not on sale: the picture is dimmed by CSS, not by a second
+   file. Stacks with the card's 0.75 opacity below. */
+.portal-shell .mkt-card:not(.mkt-available) .mkt-image { filter: saturate(0.3) brightness(0.7); }
+/* The pill sits right. The flags that used to sit left of it are on the image now. */
 .portal-shell .mkt-top { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 .portal-shell .mkt-top .mkt-pill { margin-left: auto; }
 .portal-shell .mkt-pill {
@@ -1062,7 +1071,7 @@
 .portal-shell .mkd-spec dt { color: var(--hz-ink-3); }
 .portal-shell .mkd-spec dd { color: var(--hz-ink); line-height: 1.5; }
 .portal-shell .mkd-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.portal-shell .mkd-image { display: block; width: 100%; height: auto; border-radius: 12px; }
+.portal-shell .mkt-media-hero .mkt-image { border-radius: 12px; }
 /* The shelf card's figures block, on its own plate: the card draws the frame, so the block's
    divider line and top spacing come off. */
 .portal-shell .mkd-figures .mkt-members { margin-top: 0; padding-top: 0; border-top: 0; }

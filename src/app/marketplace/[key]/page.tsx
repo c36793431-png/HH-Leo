@@ -11,6 +11,7 @@ import { MARKETPLACE_AVAILABILITY_LABELS, listingByKey } from "@/lib/marketplace
 import { getTierRequestContext } from "@/lib/tier-request-context";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
 import { ListingFigures, hasListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
+import { ListingMedia } from "@/components/marketplace/listing-media";
 
 /**
  * /marketplace/[key]: the product page behind every shelf card's "See more →" (coxwell
@@ -35,9 +36,9 @@ import { ListingFigures, hasListingFigures, listingFigureMembers } from "@/compo
  * block as its shelf card. Host and port are fulfilment detail and never reach this page.
  *
  * LAYOUT follows Iris's 09-18 product-available.html (m52499–m52503): an identity block, then
- * the product on the left and the Access box on the right. It takes none of her inventory. The
- * image and What's-included slots render only when the listing carries them, and today none
- * does. Iris's assets fill them later (m52454).
+ * the product on the left and the Access box on the right. The hero image (with its flag or
+ * plate) and What's included come from her 2026-09-23 delivery through the catalogue (m52632),
+ * and each renders only when the listing carries it.
  */
 export default async function MarketplaceProductPage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
@@ -79,10 +80,10 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
     : null;
 
   const figures = listingFigureMembers(listing, members);
-  const flags = listing.flagCountryCodes ?? [];
   const included = listing.included ?? [];
-  // With no image, spec, figures or included list (the terminal today), the left column is empty
-  // and the Access box would float alone at the far right. It takes the left edge instead.
+  // With no image, spec, figures or included list, the left column is empty and the Access box
+  // would float alone at the far right. It takes the left edge instead. No listing hits this since
+  // every one carries an image; it guards the next listing added without one.
   const leftEmpty = !listing.image && !request && !hasListingFigures(figures) && included.length === 0;
 
   return (
@@ -92,14 +93,6 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
           ← Marketplace
         </Link>
         <div className="mkd-title-row">
-          {flags.map((code) => (
-            <span
-              key={code}
-              className={`fp-flag fi fi-${code.toLowerCase()}`}
-              role="img"
-              aria-label={`${code} flag`}
-            />
-          ))}
           <h1>{listing.title}</h1>
           <span className={`mkt-pill mkt-pill-${listing.availability}`}>
             {MARKETPLACE_AVAILABILITY_LABELS[listing.availability]}
@@ -111,13 +104,7 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
       <div className={`mkd-grid${leftEmpty ? " mkd-grid-solo" : ""}`}>
         {!leftEmpty && (
           <div className="mkd-col">
-            {listing.image && (
-              // A static asset from /public with a known path, so a plain <img> is enough. No
-              // next/image remote config is needed, and the image has no layout of its own to
-              // guard: it fills the column width.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img className="mkd-image" src={listing.image} alt={listing.title} />
-            )}
+            <ListingMedia listing={listing} variant="hero" />
 
             {request ? (
               <div className="card">

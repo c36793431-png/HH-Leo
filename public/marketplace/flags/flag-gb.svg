@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 36" width="60" height="36" role="img" aria-label="United Kingdom">
+  <clipPath id="gb-clip"><rect width="60" height="36"/></clipPath>
+  <clipPath id="gb-diag"><path d="M30,18 h30 v18 z v18 h-30 z h-30 v-18 z v-18 h30 z"/></clipPath>
+  <g clip-path="url(#gb-clip)">
+    <rect width="60" height="36" fill="#012169"/>
+    <path d="M0,0 L60,36 M60,0 L0,36" stroke="#FFFFFF" stroke-width="7.2"/>
+    <path d="M0,0 L60,36 M60,0 L0,36" clip-path="url(#gb-diag)" stroke="#C8102E" stroke-width="4.8"/>
+    <path d="M30,0 V36 M0,18 H60" stroke="#FFFFFF" stroke-width="12"/>
+    <path d="M30,0 V36 M0,18 H60" stroke="#C8102E" stroke-width="7.2"/>
+  </g>
+</svg>
