@@ -138,9 +138,20 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
               <div className="card">
                 <div className="mkd-plate-title">What&apos;s included</div>
                 <ul className="mkd-included">
-                  {included.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
+                  {included.map((item) =>
+                    typeof item === "string" ? (
+                      <li key={item}>{item}</li>
+                    ) : (
+                      <li key={item.label}>
+                        <span className="mkd-included-label">{item.label}</span>
+                        <ul>
+                          {item.items.map((sub) => (
+                            <li key={sub}>{sub}</li>
+                          ))}
+                        </ul>
+                      </li>
+                    ),
+                  )}
                 </ul>
               </div>
             )}

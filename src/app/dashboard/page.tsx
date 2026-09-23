@@ -413,7 +413,9 @@ export default async function DashboardPage() {
                   <div className="rw">
                     <div className="ricon">⤓</div>
                     <div className="rmeta">
-                      <b>Horizon Terminal v4.2.1</b>
+                      {/* The version the unlocked row shows, from the same latest windows row
+                          (marcus, m52910). No build published means no version, not a made-up one. */}
+                      <b>Horizon Terminal{downloads.windows ? ` v${downloads.windows.version}` : ""}</b>
                       <span>Windows</span>
                     </div>
                   </div>

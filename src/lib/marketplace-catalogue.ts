@@ -86,6 +86,10 @@ export const MARKETPLACE_AVAILABILITY_LABELS: Record<MarketplaceAvailability, st
   maintenance: "Maintenance",
 };
 
+/** One "What's included" entry: a line, or a labelled group of lines (the terminal's
+ * strategies). */
+export type IncludedLine = string | { label: string; items: string[] };
+
 export interface MarketplaceListing {
   /** Stable render key. Deliberately not a tier_key — several listings have no feed_tiers row. */
   key: string;
@@ -122,8 +126,10 @@ export interface MarketplaceListing {
   /** One line per included item, in render order. ONLY products.json lines marked FACT whose
    * claim is also on a shipped surface (m52632 item 3). Her FACT means "exists on a shipped
    * surface", and several of hers cite her own mockup HTML instead, so each line here names the
-   * shipped file it was checked against. No price, latency or uptime line, even a FACT one. */
-  included?: string[];
+   * shipped file it was checked against. No price, latency or uptime line, even a FACT one.
+   * The terminal's lines are the exception to the products.json source: they come from FOC12's
+   * read of the terminal's own code (m52904), and its comment says so. */
+  included?: IncludedLine[];
 }
 
 /**
@@ -322,9 +328,41 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     },
     // A plate, not a flag: software is not delivered from a region (coxwell via marcus, m52589).
     mark: "plate-desktop",
-    // No included list. Iris's FACT lines cite the /dashboard hero "free-dashboard.html:221",
-    // which is her mockup. The shipped hero (dashboard/page.tsx) says none of them, so they are
-    // coxwell's copy to give, as m52589 item 4 already said.
+    // From FOC12's read of the terminal's code at horizon-src 5b28079 (m52902), as marcus picked
+    // the lines (m52904). Iris's products.json lines are not used here: they cite her mockup.
+    // - Names are the app's own (the strategy dropdown, NewUI.cs:307), not the website's: "1 Leg",
+    //   not "1 Leg Lock"; "Order Block Imbalance", not "Order Book".
+    // - No NinjaTrader: the code has no reference to it.
+    // - Emergency Close is per instance, since ForceCloseAllTrades closes one tab.
+    // - Set files are load and save only. They hold broker passwords in plaintext today, so
+    //   nothing here says share or export.
+    // - Left out: stealth/identity rotation, the offline licence grace, and every line with a
+    //   figure in it. No performance words.
+    // - Brokers and feeds read "connects to", because the terminal does not include a feed
+    //   licence or a broker account.
+    included: [
+      {
+        label: "Strategies",
+        items: [
+          "1 Leg — one market order when the gap between the Horizon feed and your broker's price reaches your setting, with a virtual stop-loss, take-profit and trailing stop",
+          "2 Leg Lock — on the same gap, a hedged pair with a pending lock leg; the losing leg is released and the other is trailed",
+          "Trend Impulse — trades in the direction of a move in the Horizon feed that reaches your size within your time window, with an EMA trend filter",
+          "Order Block Imbalance — trades a gap on one side only, and checks order-book imbalance when book depth is available (cTrader FIX)",
+          "Grid Arbitrage — opens a basket on the gap, adds levels at your step and multiplier up to your maximum, and closes the basket at its own take-profit or stop-loss",
+        ],
+      },
+      "Connects to brokers: MT5, MT4, Rithmic (CME futures) and BloFin (crypto)",
+      "Connects to feeds: Horizon London, New York and Chicago, cTrader FIX (with book depth) and Binance",
+      "Multi-instance: several accounts or symbols in one window, one per tab",
+      "Emergency Close per instance: closes everything on that tab",
+      "Set files: load and save your settings as profiles (.ini)",
+      "Tick recorder (CSV)",
+      "Auto-offset calibration",
+      "Automatic reconnect when a feed stalls",
+      "Lot sizing by risk %",
+      "Telegram alerts",
+      "Windows only — no .NET install needed",
+    ],
   },
 ];
 

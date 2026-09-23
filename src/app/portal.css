@@ -1086,6 +1086,8 @@
    divider line and top spacing come off. */
 .portal-shell .mkd-figures .mkt-members { margin-top: 0; padding-top: 0; border-top: 0; }
 .portal-shell .mkd-included { margin: 0; padding-left: 18px; font-size: 13px; color: var(--hz-ink); line-height: 1.7; }
+.portal-shell .mkd-included ul { margin: 2px 0 6px; padding-left: 18px; list-style: circle; color: var(--hz-ink-2); }
+.portal-shell .mkd-included-label { font-weight: 600; }
 .portal-shell .mkd-request { display: flex; flex-direction: column; gap: 10px; }
 .portal-shell .mkd-request .ftd-unlock,
 .portal-shell .mkd-request .mkd-action { align-self: flex-start; }
