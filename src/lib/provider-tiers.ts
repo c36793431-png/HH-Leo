@@ -104,10 +104,11 @@ export interface ApplicationConnectionDetails {
 
 /** Connection details as captured on provider_tiers -- PER TIER. protocol/compid are text and
  * regions/coverage are text[] (0083), matching provider_tier_proposals, so these arrive already
- * structured and need no parsing. Populated only by confirmProposalRound's copy-forward
- * (3f96166/d25c250/849b383); the manual register-provider path still writes none of the four
- * 0083 columns, so hand-registered tiers read null here by design and fall back to the
- * application grain at render time. */
+ * structured and need no parsing. Written by confirmProposalRound's copy-forward
+ * (3f96166/d25c250/849b383) and by registerProviderTiers from its per-tier inputs -- protocol,
+ * regions and coverage only; register-provider still writes no compid (see RegisterTierInput).
+ * A register-provider tier left blank reads null here and falls back to the application grain
+ * at render time. */
 export interface TierConnectionDetails {
   protocol: string | null;
   compid: string | null;
@@ -248,6 +249,14 @@ export interface RegisterTierInput {
   endpointHost: string | null;
   endpointPort: string | null;
   endpointVerified: boolean;
+  /** Per-tier, typed on this tier's own inputs -- never copied from the application fields, so a
+   * blank stays null and the roster keeps showing the application's value, marked as such.
+   * No compid here on purpose: a live tier's compid is echoed back to the provider by the
+   * blank-clear refusal in submitProposalRound (provider-tier-proposals.ts), so writing one from
+   * this path needs marcus's say first (2026-09-23). */
+  protocol: string | null;
+  regions: string[] | null;
+  coverage: string[] | null;
 }
 
 export interface ApplicationFieldEdits {
@@ -311,8 +320,8 @@ export async function registerProviderTiers(
       await client.query(
         `insert into provider_tiers
            (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
-            endpoint_host, endpoint_port, endpoint_verified)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            endpoint_host, endpoint_port, endpoint_verified, protocol, regions, coverage)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           applicationId,
           application.userId,
@@ -322,6 +331,9 @@ export async function registerProviderTiers(
           tier.endpointHost,
           tier.endpointPort,
           tier.endpointVerified,
+          tier.protocol,
+          tier.regions,
+          tier.coverage,
         ]
       );
     }

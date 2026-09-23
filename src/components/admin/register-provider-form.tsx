@@ -15,8 +15,15 @@ interface TierDraft {
   endpointHost: string;
   endpointPort: string;
   endpointVerified: boolean;
+  protocol: string;
+  /** One entry per line -- see lines() in the register-provider action. */
+  regions: string;
+  coverage: string;
 }
 
+/** protocol/regions/coverage start blank rather than pre-filled from the application: a blank
+ * stays null on provider_tiers and the roster shows the application's value marked "from
+ * application", instead of a silent per-tier copy nothing re-syncs. */
 function emptyTier(defaults: { host: string; port: string }): TierDraft {
   return {
     tierName: "",
@@ -25,7 +32,25 @@ function emptyTier(defaults: { host: string; port: string }): TierDraft {
     endpointHost: defaults.host,
     endpointPort: defaults.port,
     endpointVerified: false,
+    protocol: "",
+    regions: "",
+    coverage: "",
   };
+}
+
+function ApplicationHint({ value }: { value: string | null | undefined }) {
+  return (
+    <span className="mt-1 block text-[11px] text-zinc-500">
+      {value ? (
+        <>
+          Application: <span className="text-zinc-400">{value}</span> — left blank, the roster shows this, marked
+          &ldquo;from application&rdquo;.
+        </>
+      ) : (
+        "Nothing on the application."
+      )}
+    </span>
+  );
 }
 
 const SECTION = "rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6";
@@ -229,6 +254,37 @@ export function RegisterProviderForm({
                     value={tier.endpointPort}
                     onChange={(e) => updateTier(i, { endpointPort: e.target.value })}
                   />
+                </label>
+                <label>
+                  <span className={LABEL}>Tier protocol</span>
+                  <input
+                    className={INPUT}
+                    value={tier.protocol}
+                    onChange={(e) => updateTier(i, { protocol: e.target.value })}
+                    placeholder="e.g. FIX 4.4"
+                  />
+                  <ApplicationHint value={application?.protocol} />
+                </label>
+                <div className="hidden sm:block" />
+                <label>
+                  <span className={LABEL}>Tier regions — one per line</span>
+                  <textarea
+                    className={INPUT}
+                    rows={2}
+                    value={tier.regions}
+                    onChange={(e) => updateTier(i, { regions: e.target.value })}
+                  />
+                  <ApplicationHint value={application?.regions} />
+                </label>
+                <label>
+                  <span className={LABEL}>Tier coverage — one per line</span>
+                  <textarea
+                    className={INPUT}
+                    rows={2}
+                    value={tier.coverage}
+                    onChange={(e) => updateTier(i, { coverage: e.target.value })}
+                  />
+                  <ApplicationHint value={application?.coverage} />
                 </label>
               </div>
             </div>

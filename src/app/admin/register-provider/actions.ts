@@ -18,6 +18,17 @@ async function requireAdmin(): Promise<string> {
   return session.user.id;
 }
 
+/** One entry per line. Deliberately not the terms form's comma split: an admin-typed entry can
+ * carry its own commas -- "CME futures (GLBX.MDP3, 13 symbols, MBP-1)" is one coverage item,
+ * not three. The input's hint states the rule, so the delimiter is chosen at entry, not guessed. */
+function lines(raw: string | undefined): string[] | null {
+  const parts = (raw ?? "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.length ? parts : null;
+}
+
 function parseTiers(raw: string): RegisterTierInput[] {
   const parsed = JSON.parse(raw) as Array<{
     tierName: string;
@@ -26,6 +37,9 @@ function parseTiers(raw: string): RegisterTierInput[] {
     endpointHost: string;
     endpointPort: string;
     endpointVerified: boolean;
+    protocol?: string;
+    regions?: string;
+    coverage?: string;
   }>;
 
   return parsed
@@ -46,6 +60,9 @@ function parseTiers(raw: string): RegisterTierInput[] {
         endpointHost: t.endpointHost.trim() || null,
         endpointPort: t.endpointPort.trim() || null,
         endpointVerified: !!t.endpointVerified,
+        protocol: t.protocol?.trim() || null,
+        regions: lines(t.regions),
+        coverage: lines(t.coverage),
       };
     });
 }
