@@ -37,12 +37,20 @@ const MARKETPLACE_DETAIL_BASE = "/marketplace";
 
 /** What a listing's product page offers. The shelf card never renders it: every card's one
  * control is "See more →", bottom-right, into the product page (coxwell 2026-09-23 via marcus,
- * m52589). Two kinds, and neither is a second copy of a flow:
+ * m52589). Three kinds, and none is a second copy of a flow:
  * - link: hands off to the existing portal page that owns the flow (Black's gate on
- *   /account/servers, a Base bundle's request on its tiers page, the terminal's Downloads).
+ *   /account/servers, a Base bundle's request on its tiers page).
  * - request: the shipped TierRequestControl on the product page itself. It submits one
- *   tier_key, so the page 404s unless the listing is backed by exactly one feed_tiers row. */
-export type MarketplaceAction = { kind: "link"; href: string; label: string } | { kind: "request" };
+ *   tier_key, so the page 404s unless the listing is backed by exactly one feed_tiers row.
+ * - download: the terminal only. The link shows ONLY to an account with an active, unexpired
+ *   licence (isPaidUser, the check /dashboard unlocks Downloads with). Every other account gets
+ *   "Request access →" to config.telegramChannelUrl, the /dashboard veil's own upgrade path
+ *   (coxwell 2026-09-23 23:48Z via marcus, m53003/m53009 (a)). Nothing records that request:
+ *   a tracked software request is the separate (b) job, gated on Fable and coxwell. */
+export type MarketplaceAction =
+  | { kind: "link"; href: string; label: string }
+  | { kind: "request" }
+  | { kind: "download"; href: string; label: string };
 
 /** Iris's 60×36 flag-slot art under /public/marketplace/flags (m52632, mapping m52668). A plate
  * is NOT a flag: it fills the same slot for a listing with no country to show, which today is
@@ -316,11 +324,10 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     feedSlug: null,
     // Windows only (coxwell 2026-09-23 via marcus, m52817): the terminal has no macOS build.
     blurb: "The Horizon trading terminal for Windows, included with an active licence.",
-    // /downloads redirects a non-paid account to /dashboard, and this page is visible to free
-    // accounts — so the CTA points at the dashboard's Downloads section, which is the exact
-    // destination the sidebar already sends a locked account to (sidebar.tsx PORTAL_LINKS,
-    // "/dashboard#downloads"). Paid accounts get the real build list in that same section.
-    action: { kind: "link", href: "/dashboard#downloads", label: "Downloads →" },
+    // Licensed accounts only; everyone else gets Request access (see MarketplaceAction). It
+    // points at the dashboard's Downloads section, where a licensed account has the real build
+    // list, the same destination the sidebar uses (sidebar.tsx PORTAL_LINKS).
+    action: { kind: "download", href: "/dashboard#downloads", label: "Downloads →" },
     image: {
       card: "/marketplace/horizon-terminal-card.jpg",
       hero: "/marketplace/horizon-terminal-hero.jpg",

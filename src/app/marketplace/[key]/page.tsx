@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getReachablePanels } from "@/lib/user-roles";
-import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
+import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses, isPaidUser } from "@/lib/licenses";
+import { getPortalConfig } from "@/lib/portal-config";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { feedTierMeta } from "@/lib/feed-tier-catalogue";
@@ -23,8 +24,10 @@ import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
  * THE ACTION IS THE LISTING'S, AND ONLY WHEN IT IS AVAILABLE. A "request" listing renders the
  * shipped TierRequestControl, which goes through submitFeedTierRequestAction to the normal admin
  * queue and the Telegram DM, with the same Requested/Approved states as the tiers page. A "link"
- * listing hands off to the page that owns its flow. A listing that is not available offers
- * nothing, even if the catalogue gave it an action by mistake.
+ * listing hands off to the page that owns its flow. A "download" listing (the terminal) shows its
+ * link to a licensed account and "Request access →" to Telegram to everyone else (m53009 (a)).
+ * A listing that is not available offers nothing, even if the catalogue gave it an action by
+ * mistake.
  *
  * REQUEST, NOT BUY, AND NO PRICE. coxwell ruled no checkout, and prices are agreed over
  * Telegram (m52454 (a)).
@@ -85,6 +88,16 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
   const requestContext = request
     ? await getTierRequestContext(session.user.id, activeLicenses, request.region)
     : null;
+
+  // A "download" listing shows its link only to a licensed account (isPaidUser, as /dashboard).
+  // Everyone else is sent to the /dashboard veil's Telegram upgrade path. A failed check fails
+  // closed to Request access, never to Downloads.
+  const download =
+    action?.kind === "download"
+      ? await Promise.all([isPaidUser(session.user.id).catch(() => false), getPortalConfig()]).then(
+          ([licensed, config]) => ({ licensed, requestHref: config.telegramChannelUrl }),
+        )
+      : null;
 
   const figures = listingFigureMembers(listing, members);
   const included = listing.included ?? [];
@@ -175,6 +188,16 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
                 Access is granted to one registered server. Its IP is allowlisted once your request is approved.
               </p>
             </>
+          ) : action?.kind === "download" && download ? (
+            download.licensed ? (
+              <Link href={action.href} className="btn primary sm mkd-action">
+                {action.label}
+              </Link>
+            ) : (
+              <a className="btn primary sm mkd-action" href={download.requestHref} target="_blank" rel="noopener noreferrer">
+                Request access →
+              </a>
+            )
           ) : action?.kind === "link" ? (
             <Link href={action.href} className="btn primary sm mkd-action">
               {action.label}
