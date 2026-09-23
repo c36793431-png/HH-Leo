@@ -62,7 +62,8 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
           ← All strategies
         </Link>
         <h1>
-          <span className="fp-colo fp-colo-inline">{strategyColoCode(meta)}</span> {meta.name}
+          {strategyColoCode(meta) && <span className="fp-colo fp-colo-inline">{strategyColoCode(meta)}</span>}{" "}
+          {meta.name}
         </h1>
         <p>{meta.hook}</p>
       </div>

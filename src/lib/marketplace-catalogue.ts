@@ -32,8 +32,17 @@ import { FEED_REGION_LABELS, PACKAGE_DISPLAY_LABELS, PACKAGE_TIER_KEYS } from ".
  */
 export type MarketplaceAvailability = "available" | "coming-soon" | "unavailable" | "maintenance";
 
-/** Product pages live at <base>/<listing key>. Declared before MARKETPLACE_LISTINGS, which uses it. */
+/** Product pages live at <base>/<listing key>. */
 const MARKETPLACE_DETAIL_BASE = "/marketplace";
+
+/** What a listing's product page offers. The shelf card never renders it: every card's one
+ * control is "See more →", bottom-right, into the product page (coxwell 2026-09-23 via marcus,
+ * m52589). Two kinds, and neither is a second copy of a flow:
+ * - link: hands off to the existing portal page that owns the flow (Black's gate on
+ *   /account/servers, a Base bundle's request on its tiers page, the terminal's Downloads).
+ * - request: the shipped TierRequestControl on the product page itself. It submits one
+ *   tier_key, so the page 404s unless the listing is backed by exactly one feed_tiers row. */
+export type MarketplaceAction = { kind: "link"; href: string; label: string } | { kind: "request" };
 
 /** Exactly the two coxwell named. A third category is a product decision, so a third word here
  * must not compile until he makes it. */
@@ -74,24 +83,25 @@ export interface MarketplaceListing {
    * while Alpha and Ultra are not), so no single state could speak for it. */
   feedSlug: string | null;
   blurb: string;
-  /** Existing portal path this listing's CTA links to, never a second copy of a request flow.
-   * null on every non-available listing: coxwell's words are "can be listed not requested", so
-   * the action is ABSENT, not present-and-disabled. */
-  ctaHref: string | null;
-  ctaLabel: string | null;
-  /** True only when the listing has a product page at /marketplace/<key>. The card's title and
-   * its CTA then both lead there — one destination per box (Iris, sheet 1, m51796). A listing
-   * without one 404s on that route rather than rendering an empty product page. */
-  hasDetailPage: boolean;
+  /** The product page's action. null on every non-available listing: coxwell's words are "can be
+   * listed not requested", so the action is ABSENT, not present-and-disabled. The product page
+   * also drops it for any listing that is not "available", so a wrong entry here fails closed. */
+  action: MarketplaceAction | null;
+  /** A DECLARED listing's own Horizon Feed Comparison entry, as the tier_key scoreForTierKey
+   * reads (feed-comparison-scores.ts). Black only: it has no feed_tiers row to carry its score,
+   * and the London cards read theirs from that same table by tier_key. Absent = no score. */
+  scoreTierKey?: string;
+  /** ISO 3166-1 alpha-2 codes, rendered by the flag-icons set the portal already loads
+   * (`fi fi-<code>`, as on /feeds) on the shelf card and the product page. Iris's art replaces
+   * these later (coxwell via marcus, m52589); software carries none. */
+  flagCountryCodes?: string[];
   // Product-page slots for Iris's per-product assets (coxwell via marcus, m52443/m52454: an
-  // image, region flag(s) and "What's included" for every product). They are OPTIONAL and EMPTY
-  // until her assets land. An empty slot renders nothing: no placeholder, no frame, no "coming
-  // soon". Fill them from her delivery only, never from the 09-18 mockup, which is layout and
-  // not inventory.
+  // image and "What's included" for every product). They are OPTIONAL and EMPTY until her
+  // assets land. An empty slot renders nothing: no placeholder, no frame, no "coming soon".
+  // Fill them from her delivery only, never from the 09-18 mockup, which is layout and not
+  // inventory.
   /** Path under /public to the product image. */
   image?: string;
-  /** ISO 3166-1 alpha-2 codes, rendered by flag-icons as on /feeds (`fi fi-<code>`). */
-  flagCountryCodes?: string[];
   /** One line per included item, in render order. */
   included?: string[];
 }
@@ -115,9 +125,10 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     tierKeys: [],
     feedSlug: null,
     blurb: "Horizon's flagship institutional feed, ranked #1 on the Horizon Feed Comparison. Access is requested from your Servers page.",
-    ctaHref: "/account/servers",
-    ctaLabel: "Request access →",
-    hasDetailPage: false,
+    action: { kind: "link", href: "/account/servers", label: "Request access →" },
+    scoreTierKey: "black",
+    // London: Black is the London tiers page's flagship card (BLACK_TIER, regionKey "london").
+    flagCountryCodes: ["GB"],
   },
   {
     // Membership is read from PACKAGE_TIER_KEYS, not re-listed, so this cannot drift from the
@@ -132,9 +143,11 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     tierKeys: PACKAGE_TIER_KEYS["ld-retail-package"],
     feedSlug: null,
     blurb: "London · LD4 co-lo. Three feeds from one provider, sold as a single bundle.",
-    ctaHref: "/feeds/london/tiers",
-    ctaLabel: "See tiers →",
-    hasDetailPage: false,
+    // A link and not an embedded control: the bundle's request derives its state from every
+    // member (packageCardState on the tiers page, including the "mixed" branch), and a second
+    // copy of that rule here would be a second place for it to drift.
+    action: { kind: "link", href: "/feeds/london/tiers", label: "See tiers →" },
+    flagCountryCodes: ["GB"],
   },
   {
     // NOT AVAILABLE, and therefore NOT REQUESTABLE ANYWHERE. First ruled coming-soon (coxwell
@@ -161,9 +174,8 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     tierKeys: ["ld-alpha-85"],
     feedSlug: null,
     blurb: "London · LD4 co-lo.",
-    ctaHref: null,
-    ctaLabel: null,
-    hasDetailPage: false,
+    action: null,
+    flagCountryCodes: ["GB"],
   },
   {
     // Same shape and same ruling as Alpha above. marcus's instruction names Alpha, but its
@@ -175,9 +187,8 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     tierKeys: ["ld-ultra"],
     feedSlug: null,
     blurb: "London · LD4 co-lo.",
-    ctaHref: null,
-    ctaLabel: null,
-    hasDetailPage: false,
+    action: null,
+    flagCountryCodes: ["GB"],
   },
   {
     key: "ny-base",
@@ -187,9 +198,9 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     tierKeys: PACKAGE_TIER_KEYS["ny-retail-package"],
     feedSlug: null,
     blurb: "New York · NY4 co-lo. Two feeds from one provider, sold as a single bundle.",
-    ctaHref: "/feeds/ny/tiers",
-    ctaLabel: "See tiers →",
-    hasDetailPage: false,
+    // A link for the same reason as London's Base above.
+    action: { kind: "link", href: "/feeds/ny/tiers", label: "See tiers →" },
+    flagCountryCodes: ["US"],
   },
   {
     // The Pip Dealer's CME feed over cTrader FIX, requestable (coxwell 2026-09-23 via marcus,
@@ -211,11 +222,9 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     tierKeys: ["cme-ctrader-fix"],
     feedSlug: "futures",
     blurb: "US Central (Chicago). CME futures delivered over cTrader FIX.",
-    // "See more" and not "Request access": the card leads to the product page, and Request
-    // access lives only there (coxwell's flow via marcus, m52443).
-    ctaHref: `${MARKETPLACE_DETAIL_BASE}/chicago`,
-    ctaLabel: "See more →",
-    hasDetailPage: true,
+    // Request access lives only on the product page (coxwell's flow via marcus, m52443).
+    action: { kind: "request" },
+    flagCountryCodes: ["US"],
   },
   {
     key: "horizon-terminal",
@@ -229,9 +238,8 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     // accounts — so the CTA points at the dashboard's Downloads section, which is the exact
     // destination the sidebar already sends a locked account to (sidebar.tsx PORTAL_LINKS,
     // "/dashboard#downloads"). Paid accounts get the real build list in that same section.
-    ctaHref: "/dashboard#downloads",
-    ctaLabel: "Downloads →",
-    hasDetailPage: false,
+    // No flag: software is not delivered from a region (coxwell via marcus, m52589).
+    action: { kind: "link", href: "/dashboard#downloads", label: "Downloads →" },
   },
 ];
 
@@ -271,16 +279,16 @@ export function feedCardAvailability(slug: string): MarketplaceAvailability | nu
   return MARKETPLACE_LISTINGS.find((listing) => listing.feedSlug === slug)?.availability ?? null;
 }
 
-/** The product page of a listing, or null when it has none. Single spelling of the route so the
- * card, the CTA and the /feeds hand-off cannot point at three different places. */
-export function listingDetailHref(listing: MarketplaceListing): string | null {
-  return listing.hasDetailPage ? `${MARKETPLACE_DETAIL_BASE}/${listing.key}` : null;
+/** The product page of a listing. Every listing has one, Not available ones included
+ * (coxwell via marcus, m52589). Single spelling of the route so the card's title, its See more
+ * and the /feeds hand-off cannot point at three different places. */
+export function listingDetailHref(listing: MarketplaceListing): string {
+  return `${MARKETPLACE_DETAIL_BASE}/${listing.key}`;
 }
 
-/** A listing with a product page, by its route key. null means a 404. It includes a listing
- * that exists but has no page, so a guessed URL never renders an empty product. */
-export function listingWithDetailPage(key: string): MarketplaceListing | null {
-  return MARKETPLACE_LISTINGS.find((listing) => listing.key === key && listing.hasDetailPage) ?? null;
+/** A listing by its route key. null means a 404. */
+export function listingByKey(key: string): MarketplaceListing | null {
+  return MARKETPLACE_LISTINGS.find((listing) => listing.key === key) ?? null;
 }
 
 /** The blurb of the listing that speaks for a whole /feeds card, or null. /feeds uses it in

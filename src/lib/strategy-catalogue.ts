@@ -47,8 +47,9 @@ export const STRATEGY_DISPLAY_META: Record<StrategyKey, StrategyDisplayMeta> = {
 };
 
 /** Co-lo code badge (e.g. "NY4") for a strategy's recommended feed — same vocabulary /feeds
- * already teaches the user, so no separate legend or tooltip is needed. */
-export function strategyColoCode(meta: StrategyDisplayMeta): string {
+ * already teaches the user, so no separate legend or tooltip is needed. null when the feed has
+ * no co-lo code (futures), and the badge is then not rendered. */
+export function strategyColoCode(meta: StrategyDisplayMeta): string | null {
   return FEED_TYPE_META[meta.recommendedFeedSlug].coloCode;
 }
 

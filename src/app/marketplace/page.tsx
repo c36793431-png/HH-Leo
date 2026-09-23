@@ -8,7 +8,6 @@ import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { FEED_REGIONS } from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, type FeedTierDetail } from "@/lib/feed-tiers";
-import { formatTierLatency, tierFigureHeading } from "@/lib/feed-provider-packages";
 import {
   MARKETPLACE_LISTINGS,
   MARKETPLACE_CATEGORY_ORDER,
@@ -20,6 +19,7 @@ import {
   MarketplaceCategoryFilter,
   type MarketplaceSection,
 } from "@/components/marketplace/marketplace-category-filter";
+import { ListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
 
 /**
  * /marketplace — the catalogue of what Horizon sells (coxwell via marcus, 2026-09-14).
@@ -96,63 +96,47 @@ export default async function MarketplacePage() {
             <h2 className="fp-section-title">{MARKETPLACE_CATEGORY_LABELS[category]}</h2>
             <div className="mkt-grid">
               {items.map(({ listing, members }) => {
-                // Heading comes from the same lib as the figure beneath it. London's number is a
-                // comparison score, not a latency, and the two run in opposite directions -- this
-                // card headed the score "Feed latency", which told a buyer that Delta 6.0 was the
-                // fastest of the bundle when it is the slowest (marcus, m50770). A null heading
-                // means the group's figures aren't all one kind, which no shipped listing is;
-                // the figures are dropped rather than shown under a guessed label, because
-                // unlabelled numbers are the same defect in a quieter form.
-                const heading = tierFigureHeading(members.map((m) => m.regionKey));
                 const detailHref = listingDetailHref(listing);
+                const flags = listing.flagCountryCodes ?? [];
                 return (
                   <div key={listing.key} className={`card mkt-card mkt-${listing.availability}`}>
                     <div className="mkt-top">
+                      {flags.length > 0 && (
+                        <span className="fp-flag-group">
+                          {flags.map((code) => (
+                            <span
+                              key={code}
+                              className={`fp-flag fi fi-${code.toLowerCase()}`}
+                              role="img"
+                              aria-label={`${code} flag`}
+                            />
+                          ))}
+                        </span>
+                      )}
                       <span className={`mkt-pill mkt-pill-${listing.availability}`}>
                         {MARKETPLACE_AVAILABILITY_LABELS[listing.availability]}
                       </span>
                     </div>
                     <h3 className="mkt-name">
-                      {/* A listing with a product page is clicked into (coxwell, m52432: "request it
-                          once they click on the product"). The title and the CTA go to the same
-                          page, one destination per box (Iris sheet 1). */}
-                      {detailHref ? (
-                        <Link href={detailHref} className="mkt-name-link">
-                          {listing.title}
-                        </Link>
-                      ) : (
-                        listing.title
-                      )}
+                      {/* The title and See more go to the same product page, one destination per
+                          box (Iris sheet 1). */}
+                      <Link href={detailHref} className="mkt-name-link">
+                        {listing.title}
+                      </Link>
                     </h3>
                     <p className="mkt-desc">{listing.blurb}</p>
 
-                    {/* A listing with a product page leaves its specs to that page. Chicago's only
-                        member has no latency figure, so this block would print the title again
-                        over a bare "—". */}
-                    {members.length > 0 && heading && !detailHref && (
-                      <div className="mkt-members">
-                        <span className="mkt-members-label">
-                          {heading.label}
-                          {heading.note && (
-                            <span className="figure-direction-note">{` · ${heading.note}`}</span>
-                          )}
-                        </span>
-                        {members.map((m) => (
-                          <div key={m.tierKey} className="mkt-member">
-                            <span className="mkt-member-name">{m.name}</span>
-                            <span className="mkt-member-figure">{formatTierLatency(m.regionKey, m)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <ListingFigures members={listingFigureMembers(listing, members)} />
 
-                    {/* No CTA on a coming-soon or maintenance listing: "can be listed not
-                        requested" means the action is absent, not disabled. */}
-                    {listing.ctaHref && (
-                      <Link href={listing.ctaHref} className="btn ghost sm mkt-cta">
-                        {listing.ctaLabel}
+                    {/* ONE control per card, the same on every card and in the same place,
+                        bottom-right (coxwell via marcus, m52589). The listing's own action lives on
+                        its product page, so a Not available card still has See more but its page
+                        offers nothing to request. */}
+                    <div className="mkt-foot">
+                      <Link href={detailHref} className="btn ghost sm mkt-cta">
+                        See more →
                       </Link>
-                    )}
+                    </div>
                   </div>
                 );
               })}

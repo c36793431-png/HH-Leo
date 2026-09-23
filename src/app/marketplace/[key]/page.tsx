@@ -6,44 +6,43 @@ import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { feedTierMeta } from "@/lib/feed-tier-catalogue";
-import { getTiersForRegion } from "@/lib/feed-tiers";
-import { MARKETPLACE_AVAILABILITY_LABELS, listingWithDetailPage } from "@/lib/marketplace-catalogue";
+import { getTiersForRegion, type FeedTierDetail } from "@/lib/feed-tiers";
+import { MARKETPLACE_AVAILABILITY_LABELS, listingByKey } from "@/lib/marketplace-catalogue";
 import { getTierRequestContext } from "@/lib/tier-request-context";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
+import { ListingFigures, hasListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
 
 /**
- * /marketplace/[key]: the product page a listing card opens (coxwell 2026-09-23 via marcus,
- * m52432/m52443: card → "See more" → product page → Request access). Chicago is the only
- * listing with one today, set by hasDetailPage in marketplace-catalogue.ts. Every other key 404s.
+ * /marketplace/[key]: the product page behind every shelf card's "See more →" (coxwell
+ * 2026-09-23 via marcus, m52432/m52443, and m52589: "See more should be for all of them").
+ * Every listing has one, Not available ones included. An unknown key 404s.
+ *
+ * THE ACTION IS THE LISTING'S, AND ONLY WHEN IT IS AVAILABLE. A "request" listing renders the
+ * shipped TierRequestControl, which goes through submitFeedTierRequestAction to the normal admin
+ * queue and the Telegram DM, with the same Requested/Approved states as the tiers page. A "link"
+ * listing hands off to the page that owns its flow. A listing that is not available offers
+ * nothing, even if the catalogue gave it an action by mistake.
  *
  * REQUEST, NOT BUY, AND NO PRICE. coxwell ruled no checkout, and prices are agreed over
- * Telegram (m52454 (a)). The control is the shipped TierRequestControl: it goes through
- * submitFeedTierRequestAction to the normal admin queue and the Telegram DM, with the same
- * Requested/Approved states as the tiers page. There is no second request flow.
+ * Telegram (m52454 (a)).
  *
- * EVERYTHING ON THE SPEC PLATE IS THE feed_tiers ROW. Delivery is `subtitle` and coverage is
- * `description`, both from marcus's INSERT off provider_tiers dff16179. Nothing is copied into
- * code. No latency, redundancy or support figure is shown: the row has no measured latency,
- * and redundancy and support are '—' until FOC13 sources them. Host and port are fulfilment
- * detail and never reach this page.
+ * THE SPEC PLATE IS CHICAGO'S ROW AND NOBODY ELSE'S. Delivery is `subtitle` and coverage is
+ * `description`, both from marcus's INSERT off provider_tiers dff16179, read back live (m52454).
+ * The London and NY rows' subtitle and description are not that: they carry latency claims
+ * ("Minimum achievable latency", "fastest fixed-latency") that no buyer surface added since may
+ * repeat, and the London subtitles contradict the comparison scores. So the plate renders only
+ * for a "request" listing, and every other feed page shows its comparison figures from the same
+ * block as its shelf card. Host and port are fulfilment detail and never reach this page.
  *
  * LAYOUT follows Iris's 09-18 product-available.html (m52499–m52503): an identity block, then
- * the spec on the left and the request box on the right. It takes none of her inventory: no
- * stepper, no measured-not-reviewed panel, no steps list, no price or "Negotiated" slot. The
- * image, flag and What's-included slots render only when the listing carries them, and today
- * none does. Iris's assets fill them later (m52454).
- *
- * ONE TIER PER PRODUCT PAGE. One request control can only submit one tier_key. A listing
- * flagged for a page but not backed by exactly one row 404s. The alternative is a page with a
- * button that submits the wrong thing, or nothing.
+ * the product on the left and the Access box on the right. It takes none of her inventory. The
+ * image and What's-included slots render only when the listing carries them, and today none
+ * does. Iris's assets fill them later (m52454).
  */
 export default async function MarketplaceProductPage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
-  const listing = listingWithDetailPage(key);
-  if (!listing || listing.tierKeys.length !== 1) notFound();
-  const tierKey = listing.tierKeys[0];
-  const tierMeta = feedTierMeta(tierKey);
-  if (!tierMeta) notFound();
+  const listing = listingByKey(key);
+  if (!listing) notFound();
 
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -56,18 +55,35 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
-  // The shipped query, as /marketplace uses it. A missing row means there is nothing to
-  // request, so the page 404s, the same way the card leaves the catalogue.
-  const row = (await getTiersForRegion(tierMeta.region)).find((t) => t.tierKey === tierKey);
-  if (!row) notFound();
+  // The shipped query, as /marketplace uses it, once per region the listing's tiers live in. A
+  // tier-backed listing whose rows have all gone 404s, the same way its card leaves the shelf.
+  const regions = [...new Set(listing.tierKeys.flatMap((k) => feedTierMeta(k)?.region ?? []))];
+  const rows = (await Promise.all(regions.map((r) => getTiersForRegion(r).catch(() => [])))).flat();
+  const members = listing.tierKeys
+    .map((k) => rows.find((t) => t.tierKey === k))
+    .filter((t): t is FeedTierDetail => t != null);
+  if (listing.tierKeys.length > 0 && members.length === 0) notFound();
 
-  const requestable = listing.availability === "available";
-  const { serverOptions, hasAnyRegisteredServer, requestStateFor, licenseTail } = requestable
-    ? await getTierRequestContext(session.user.id, activeLicenses, tierMeta.region)
-    : { serverOptions: [], hasAnyRegisteredServer: false, requestStateFor: () => "none" as const, licenseTail: "—" };
+  const action = listing.availability === "available" ? listing.action : null;
 
+  // A request control submits one tier_key. A "request" listing not backed by exactly one row
+  // 404s rather than rendering a button that submits the wrong thing, or nothing.
+  let request: { row: FeedTierDetail; tierName: string; region: FeedTierDetail["regionKey"] } | null = null;
+  if (action?.kind === "request") {
+    const tierMeta = listing.tierKeys.length === 1 ? feedTierMeta(listing.tierKeys[0]) : null;
+    if (!tierMeta || members.length !== 1) notFound();
+    request = { row: members[0], tierName: tierMeta.name, region: tierMeta.region };
+  }
+  const requestContext = request
+    ? await getTierRequestContext(session.user.id, activeLicenses, request.region)
+    : null;
+
+  const figures = listingFigureMembers(listing, members);
   const flags = listing.flagCountryCodes ?? [];
   const included = listing.included ?? [];
+  // With no image, spec, figures or included list (the terminal today), the left column is empty
+  // and the Access box would float alone at the far right. It takes the left edge instead.
+  const leftEmpty = !listing.image && !request && !hasListingFigures(figures) && included.length === 0;
 
   return (
     <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
@@ -92,55 +108,69 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
         <p>{listing.blurb}</p>
       </div>
 
-      <div className="mkd-grid">
-        <div className="mkd-col">
-          {listing.image && (
-            // A static asset from /public with a known path, so a plain <img> is enough. No
-            // next/image remote config is needed, and the image has no layout of its own to
-            // guard: it fills the column width.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="mkd-image" src={listing.image} alt={listing.title} />
-          )}
+      <div className={`mkd-grid${leftEmpty ? " mkd-grid-solo" : ""}`}>
+        {!leftEmpty && (
+          <div className="mkd-col">
+            {listing.image && (
+              // A static asset from /public with a known path, so a plain <img> is enough. No
+              // next/image remote config is needed, and the image has no layout of its own to
+              // guard: it fills the column width.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="mkd-image" src={listing.image} alt={listing.title} />
+            )}
 
-          <div className="card">
-            <div className="mkd-plate-title">Specification</div>
-            <dl className="mkd-spec">
-              <dt>Delivery</dt>
-              <dd>{row.subtitle}</dd>
-              <dt>Coverage</dt>
-              <dd>{row.description}</dd>
-            </dl>
+            {request ? (
+              <div className="card">
+                <div className="mkd-plate-title">Specification</div>
+                <dl className="mkd-spec">
+                  <dt>Delivery</dt>
+                  <dd>{request.row.subtitle}</dd>
+                  <dt>Coverage</dt>
+                  <dd>{request.row.description}</dd>
+                </dl>
+              </div>
+            ) : (
+              hasListingFigures(figures) && (
+                <div className="card mkd-figures">
+                  <ListingFigures members={figures} />
+                </div>
+              )
+            )}
+
+            {included.length > 0 && (
+              <div className="card">
+                <div className="mkd-plate-title">What&apos;s included</div>
+                <ul className="mkd-included">
+                  {included.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
-
-          {included.length > 0 && (
-            <div className="card">
-              <div className="mkd-plate-title">What&apos;s included</div>
-              <ul className="mkd-included">
-                {included.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+        )}
 
         <div id="request" className="card mkd-request">
           <div className="mkd-plate-title">Access</div>
-          {requestable ? (
+          {request && requestContext ? (
             <>
               <TierRequestControl
-                region={tierMeta.region}
-                tierKey={tierKey}
-                tierName={tierMeta.name}
-                requestState={requestStateFor(tierKey)}
-                servers={serverOptions}
-                hasAnyRegisteredServer={hasAnyRegisteredServer}
-                fallbackLicenseTail={licenseTail}
+                region={request.region}
+                tierKey={request.row.tierKey}
+                tierName={request.tierName}
+                requestState={requestContext.requestStateFor(request.row.tierKey)}
+                servers={requestContext.serverOptions}
+                hasAnyRegisteredServer={requestContext.hasAnyRegisteredServer}
+                fallbackLicenseTail={requestContext.licenseTail}
               />
               <p className="fp-note">
                 Access is granted to one registered server. Its IP is allowlisted once your request is approved.
               </p>
             </>
+          ) : action?.kind === "link" ? (
+            <Link href={action.href} className="btn primary sm mkd-action">
+              {action.label}
+            </Link>
           ) : (
             /* The same predicate as the catalogue: a listing that is not available offers no
                control, not even a greyed one ("can be listed not requested"). */

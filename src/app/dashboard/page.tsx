@@ -122,7 +122,8 @@ export default async function DashboardPage() {
     };
 
     const bestLatency = region ? feedBestLatency[region] : undefined;
-    const stat = bestLatency != null ? `${bestLatency}µs · ${meta.coloCode} co-lo` : `${meta.coloCode} co-lo`;
+    const colo = meta.coloCode ? `${meta.coloCode} co-lo` : null;
+    const stat = [bestLatency != null ? `${bestLatency}µs` : null, colo].filter(Boolean).join(" · ") || null;
 
     return {
       feedType,
@@ -316,7 +317,7 @@ export default async function DashboardPage() {
                   <span className={`sf-pill sf-pill-${f.pill.color}`}>● {f.pill.label}</span>
                   {f.tierBadge && <span className="sf-pill sf-pill-cyan">{f.tierBadge}</span>}
                 </div>
-                <span className="sf-stat">{f.stat}</span>
+                {f.stat && <span className="sf-stat">{f.stat}</span>}
                 {f.action.external ? (
                   <a className="sf-action" href={f.action.href} target="_blank" rel="noopener noreferrer">
                     {f.action.label}

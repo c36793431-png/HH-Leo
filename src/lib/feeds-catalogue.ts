@@ -40,10 +40,10 @@ export const FEED_CATALOGUE: FeedCatalogueEntry[] = [
   },
   {
     // Since 2026-09-23 this card IS the /marketplace Chicago listing: The Pip Dealer's CME feed
-    // over cTrader FIX (m52432). The copy is the listing's blurb. FEED_TYPE_META's "CH1 co-lo,
-    // indices, metals & energy" described a different CME feed and is not in marcus's read of
-    // this one. NO LATENCY BAND: nobody has measured this feed, and "<1ms typical" would be an
-    // invented figure on a live card (marcus, m52432: "no invented latency figure").
+    // over cTrader FIX (m52432). The copy is the listing's blurb; FEED_TYPE_META.futures is only
+    // the fallback if that listing ever loses its feedSlug. NO LATENCY BAND: nobody has
+    // measured this feed, and "<1ms typical" would be an invented figure on a live card
+    // (marcus, m52432: "no invented latency figure").
     slug: "futures",
     feedType: "futures",
     name: FEED_TYPE_META.futures.name,
@@ -90,21 +90,19 @@ export function computeFeedCardStatus(
     isAdmin,
   }: { activeFeeds: FeedType[]; licenseTier: string | null; isAdmin: boolean }
 ): FeedCardStatus {
-  // A product's availability has ONE home: marketplace-catalogue.ts. This card would otherwise
-  // keep rendering CME Futures as a live feed (isLive: true) while /marketplace calls it
-  // maintenance, and two surfaces disagreeing about a product is the defect itself, not a
-  // cosmetic mismatch (marcus, m50717 #5 -- "both surfaces move together"). The override runs
-  // BEFORE the entitlement branches deliberately: a feed that is down is down for the clients
-  // who hold it too, not just for the ones who don't. Blast radius when it landed: zero rows in
-  // licenses carry `futures` and there are no CME tiers to have granted, so no client's card
-  // changed. Restoring the feed is a one-word edit in that file, and it moves both surfaces.
+  // A product's availability has ONE home: marketplace-catalogue.ts. A /feeds card whose listing
+  // declares a state other than "available" must not keep rendering as a live feed, because two
+  // surfaces disagreeing about a product is the defect itself, not a cosmetic mismatch (marcus,
+  // m50717 #5 -- "both surfaces move together"). The override runs BEFORE the entitlement
+  // branches deliberately: a feed that is down is down for the clients who hold it too, not just
+  // for the ones who don't.
   //
-  // THE BRIDGE BELOW IS DORMANT, AND IT IS THE ONE PATH FROM /marketplace TO /feeds. It maps
-  // marketplace "coming-soon" onto FeedCardStatus coming_soon -- the same English on both
-  // surfaces, from two different enums. Only a listing with a feedSlug reaches it; today that is
-  // Chicago alone (available since 2026-09-23), and Alpha/Ultra carry feedSlug: null. A marketplace state
-  // that is added or renamed MUST be mapped here, or /feeds and /marketplace will disagree about
-  // the same product. The switch is exhaustive so that omission fails the build, not the page.
+  // THIS SWITCH IS THE ONE PATH FROM /marketplace TO /feeds. It maps marketplace "coming-soon"
+  // onto FeedCardStatus coming_soon -- the same English on both surfaces, from two different
+  // enums. Only a listing with a feedSlug reaches it; today that is the CME listing, which is
+  // available. A marketplace state that is added or renamed MUST be mapped here, or /feeds and
+  // /marketplace will disagree about the same product. The switch is exhaustive so that omission
+  // fails the build, not the page.
   //
   // "unavailable" -> maintenance is a DELIBERATELY WRONG PLACEHOLDER. It is chosen only because it
   // fails CLOSED: /feeds has no "not available" label, and a declared non-available product must

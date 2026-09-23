@@ -1326,13 +1326,17 @@ export interface FeedTypeMeta {
   name: string;
   description: string;
   /** Short co-lo code shown as a compact badge (e.g. on /strategies cards) — matches the
-   * vocabulary already spelled out in `description` so the two stay consistent. */
-  coloCode: string;
+   * vocabulary already spelled out in `description` so the two stay consistent. null = no
+   * co-lo to state, and every reader prints nothing rather than a placeholder. */
+  coloCode: string | null;
 }
 
 // text[] column (not enum) — new feed types append here without a schema change.
 export const FEED_TYPE_META: Record<FeedType, FeedTypeMeta> = {
-  futures: { id: "futures", name: "CME Futures Feed", description: "Chicago · CH1 co-lo — CME Group futures, indices, metals & energy", coloCode: "CH1" },
+  // DISPLAY TEXT ONLY. The futures feed is The Pip Dealer's CME feed over cTrader FIX, served from
+  // US Central (Chicago). "CH1 co-lo" and "indices, metals & energy" described a different feed
+  // and were removed (coxwell via marcus, m52589). No co-lo code is known for this one.
+  futures: { id: "futures", name: "CME Futures Feed", description: "US Central (Chicago) — CME futures delivered over cTrader FIX", coloCode: null },
   london: { id: "london", name: "London Feed", description: "London · LD4 co-lo — European ECN aggregator, FX, gold & indices", coloCode: "LD4" },
   ny: { id: "ny", name: "New York Feed", description: "New York · NY4 co-lo — Institutional FX aggregator, majors, metals & US indices", coloCode: "NY4" },
   crypto: { id: "crypto", name: "Crypto Tokyo Feed", description: "Tokyo · TY3 co-lo — Institutional crypto aggregator, spot & perpetual futures", coloCode: "TY3" },

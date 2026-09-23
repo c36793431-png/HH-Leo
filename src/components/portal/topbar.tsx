@@ -41,6 +41,9 @@ function resolveTitle(pathname: string, adminSurface: AdminSurface): { title: st
   const segments = pathname.split("/").filter(Boolean);
   const last = segments[segments.length - 1] ?? "dashboard";
   const crumb = segments.join(" / ");
+  // A product page's slug is a catalogue key ("ld-alpha"), not a word: title-casing it printed
+  // "Ld Alpha" above "London · Alpha". The page's own h1 carries the product title.
+  if (segments[0] === "marketplace") return { title: "Marketplace", crumb };
   if (UUID_SEGMENT.test(last) && segments.length > 1) {
     const parentTitle = titleCaseSegment(segments[segments.length - 2]);
     const singular = parentTitle.endsWith("s") ? parentTitle.slice(0, -1) : parentTitle;
