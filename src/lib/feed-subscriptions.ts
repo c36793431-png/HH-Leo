@@ -78,6 +78,10 @@ export interface ProviderSubscriberRow {
   lapsedAt: Date | null;
   endsAt: Date | null;
   licenseExpiresAt: Date | null;
+  /** The approving envelope, or null for a direct admin grant / 0086-seeded row. Read by
+   * recordedEndFor only: on a null-envelope row ends_at is a COPY of the licence expiry, not a
+   * term anybody agreed (m53589 (a)(ii)). */
+  accessRequestId: string | null;
   /** `licenses.tier` of the bound licence. Two jobs, both label-only: statusForLicenseTier reads
    * it to call a live grant trial rather than paying (m49078 item 2), and the reason text reads it
    * to say "Trial ended {date}" instead of "Licence expired {date}" when what ran out was a trial
@@ -654,11 +658,12 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       lapsed_at: Date | null;
       ends_at: Date | null;
       license_expires_at: Date | null;
+      access_request_id: string | null;
     }>(
       `select s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name, ft.tier_key, ft.region_key,
               ${EFFECTIVE_STATUS_SQL} as status, s.started_at, sr.declared_ip, s.price_cents,
               l.tier as license_tier, s.status as raw_status, s.lapsed_at, s.ends_at,
-              l.expires_at as license_expires_at
+              l.expires_at as license_expires_at, s.access_request_id
        from feed_subscriptions s
        join provider_client_pseudonyms p
          on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
@@ -682,6 +687,7 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
       lapsedAt: row.lapsed_at,
       endsAt: row.ends_at,
       licenseExpiresAt: row.license_expires_at,
+      accessRequestId: row.access_request_id,
       licenseTier: row.license_tier,
       serverIp: row.declared_ip,
       priceCents: row.price_cents,
@@ -773,6 +779,7 @@ export async function listSubscribersByProvider(): Promise<ProviderSubscriberPar
       lapsed_at: Date | null;
       ends_at: Date | null;
       license_expires_at: Date | null;
+      access_request_id: string | null;
     }>(
       /* Identical column list, joins and ORDER BY to listSubscribersForProvider -- only the
        * provider predicate is dropped and provider_user_id added. Any divergence here would mean
@@ -780,7 +787,7 @@ export async function listSubscribersByProvider(): Promise<ProviderSubscriberPar
       `select s.provider_user_id, s.id, p.seq, coalesce(ft.name, pt.tier_name) as tier_name,
               ft.tier_key, ft.region_key, ${EFFECTIVE_STATUS_SQL} as status, s.started_at,
               sr.declared_ip, s.price_cents, l.tier as license_tier, s.status as raw_status,
-              s.lapsed_at, s.ends_at, l.expires_at as license_expires_at
+              s.lapsed_at, s.ends_at, l.expires_at as license_expires_at, s.access_request_id
        from feed_subscriptions s
        join provider_client_pseudonyms p
          on p.provider_user_id = s.provider_user_id and p.subscriber_user_id = s.subscriber_user_id
@@ -806,6 +813,7 @@ export async function listSubscribersByProvider(): Promise<ProviderSubscriberPar
         lapsedAt: row.lapsed_at,
         endsAt: row.ends_at,
         licenseExpiresAt: row.license_expires_at,
+        accessRequestId: row.access_request_id,
         licenseTier: row.license_tier,
         serverIp: row.declared_ip,
         priceCents: row.price_cents,
@@ -1127,6 +1135,28 @@ export interface MonthlyHistoryEntry {
   rows: MonthlyHistoryClient[];
 }
 
+/** Where a row's contracted period ends, for History -- ONE reader so the month test and the
+ * printed "to" date cannot disagree (marcus m53589 (a)(ii)).
+ *
+ * An explicit lapse always wins. Otherwise it depends on where ends_at came from:
+ * - An APPROVED REQUEST's ends_at is the end date the admin typed at approval (resolveDecision,
+ *   access-requests.ts), a term somebody agreed. It stays.
+ * - A DIRECT GRANT's ends_at (access_request_id NULL: assignFeedTierSubscription, 0086's seed) is
+ *   only a copy of the licence expiry at write time, and nothing re-syncs it. The licence is the
+ *   clock (ruling (a)), so this reads the licence. @aylrn09's copy said 09-19 while CHFP ran to
+ *   10-19, so History ended him a month early while every status surface called him live.
+ *
+ * Chosen over re-syncing ends_at on extension: his extension left no admin_actions row and left
+ * lifecycle_state 'expired_processed', which every in-app extend path resets, so a writer in
+ * extendLicense would not have caught it. And it would still need a hand UPDATE for his rows.
+ * Measured on prod 2026-09-24: 43 of 46 rows had ends_at = licence expiry exactly; his 3 were the
+ * only ones that moved (one printed end date, no count or money). */
+function recordedEndFor(row: ProviderSubscriberRow): Date | null {
+  if (row.lapsedAt) return row.lapsedAt;
+  if (row.accessRequestId == null) return row.licenseExpiresAt ?? row.endsAt;
+  return row.endsAt;
+}
+
 function monthLabel(year: number, monthIndex: number): string {
   return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][monthIndex]} ${year}`;
 }
@@ -1138,7 +1168,8 @@ function monthLabel(year: number, monthIndex: number): string {
  * derives entirely from the periods already on feed_subscriptions -- no new table, no invented
  * transaction. A group counts in month M when any of its member rows was live at any point in M:
  * `started_at <= end of M AND coalesce(lapsed_at, ends_at, now) >= start of M`, exactly m49083's
- * test. `now` is a parameter, not read here, so a month boundary can be reasoned about.
+ * test -- where "ends_at" is recordedEndFor's (a direct grant reads its licence instead, m53589).
+ * `now` is a parameter, not read here, so a month boundary can be reasoned about.
  *
  * PRICE COMES FROM THE ROWS THAT WERE LIVE IN THAT MONTH, which is why this does not call
  * resolvedPriceCentsFor: that function answers "what is this client being charged now" and (since
@@ -1174,7 +1205,7 @@ export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): Month
   const dayOf = (d: Date): number => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 
   const overlaps = (row: ProviderSubscriberRow, start: Date, endExclusive: Date): boolean => {
-    const recordedEnd = row.lapsedAt ?? row.endsAt;
+    const recordedEnd = recordedEndFor(row);
     const startDay = dayOf(row.startedAt);
     const endDay = recordedEnd == null ? dayOf(now) + DAY_MS : dayOf(recordedEnd);
     return startDay < dayOf(endExclusive) && endDay > dayOf(start) && endDay > startDay;
@@ -1226,7 +1257,7 @@ export function buildMonthlyHistory(groups: AccountRowGroup[], now: Date): Month
        * fixed on the live views, in its historical form. */
       const priceSource = priceCents == null ? members : members.filter((r) => r.priceCents === priceCents);
       const from = priceSource.reduce((a, r) => (r.startedAt < a ? r.startedAt : a), priceSource[0].startedAt);
-      const ends = priceSource.map((r) => r.lapsedAt ?? r.endsAt).filter((d): d is Date => d != null);
+      const ends = priceSource.map(recordedEndFor).filter((d): d is Date => d != null);
       /** "ongoing" is reserved for a row with NO end date at all. A period that simply runs past
        * this month still has an agreed end, and printing that date is more honest than implying
        * the client is open-ended. */
