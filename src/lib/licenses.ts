@@ -89,29 +89,33 @@ export interface IssuedLicense {
  * one — i.e. a genuine new activation rather than a renewal/re-issue landing alongside
  * (or on top of) one that's still active. issueLicense already refuses to create a second
  * active license for a known userId, so this mainly guards the claim_email/claim_telegram
- * pre-provision path, which has no such check at insert time. */
-async function isFirstActiveLicense(args: {
-  newLicenseId: string;
-  userId?: string;
-  claimEmail?: string;
-  claimTelegramUserId?: number;
-}): Promise<boolean> {
+ * pre-provision path, which has no such check at insert time. `db` defaults to the shared
+ * pool; licenses.first-active.test.ts passes one transaction-scoped client instead. */
+export async function isFirstActiveLicense(
+  args: {
+    newLicenseId: string;
+    userId?: string;
+    claimEmail?: string;
+    claimTelegramUserId?: number;
+  },
+  db: { query(text: string, params: unknown[]): Promise<{ rowCount: number | null }> } = pool
+): Promise<boolean> {
   if (args.userId) {
-    const result = await pool.query(
+    const result = await db.query(
       `select 1 from licenses where user_id = $1 and status = 'active' and id != $2 limit 1`,
       [args.userId, args.newLicenseId]
     );
     return (result.rowCount ?? 0) === 0;
   }
   if (args.claimEmail) {
-    const result = await pool.query(
+    const result = await db.query(
       `select 1 from licenses where claim_email = $1 and status = 'active' and id != $2 limit 1`,
       [args.claimEmail, args.newLicenseId]
     );
     return (result.rowCount ?? 0) === 0;
   }
   if (args.claimTelegramUserId !== undefined) {
-    const result = await pool.query(
+    const result = await db.query(
       `select 1 from licenses where claim_telegram_user_id = $1 and status = 'active' and id != $2 limit 1`,
       [args.claimTelegramUserId, args.newLicenseId]
     );
