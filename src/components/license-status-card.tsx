@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { computeLicenseDisplayStatus, type LicenseDetail } from "@/lib/licenses";
+import { computeLicenseDisplayStatus, type LicenseDetail, type LicenseDisplayStatus } from "@/lib/licenses";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 
 function daysBetween(a: Date, b: Date): number {
@@ -12,6 +12,40 @@ function daysBetween(a: Date, b: Date): number {
 function maskLicenseKey(key: string): string {
   const segments = key.split("-");
   return segments.map((seg, i) => (i <= 1 ? seg : "•".repeat(seg.length))).join("-");
+}
+
+/** The card's countdown, shared with LicenseStatusCompact so the two never count differently. */
+function licenseCountdown(license: { issuedAt: Date; expiresAt: Date }, now: Date) {
+  const msRemaining = Math.max(0, license.expiresAt.getTime() - now.getTime());
+  const totalDays = Math.max(1, daysBetween(license.expiresAt, license.issuedAt));
+  const daysLeft = Math.max(0, daysBetween(license.expiresAt, now));
+  const pct = Math.round(Math.min(100, Math.max(0, (daysLeft / totalDays) * 100)));
+
+  // Round-to-nearest everywhere a countdown renders (thread multi-license-visibility-2026-08-31,
+  // marcus) — this used to Math.ceil, so the ring read "20 hours left" on the same ~19h20m
+  // remaining that formatRelative/humanizeTimeUntil below both round to "19 hours".
+  let ringValue: number;
+  let ringUnit: string;
+  if (msRemaining < 60 * 60 * 1000) {
+    ringValue = Math.round(msRemaining / 60_000);
+    ringUnit = "minutes left";
+  } else if (msRemaining < 24 * 60 * 60 * 1000) {
+    ringValue = Math.round(msRemaining / 3_600_000);
+    ringUnit = "hours left";
+  } else {
+    ringValue = daysLeft;
+    ringUnit = "days left";
+  }
+  return { daysLeft, pct, ringValue, ringUnit };
+}
+
+function licenseBadge(displayStatus: LicenseDisplayStatus, isAdminAccount: boolean) {
+  const isExpired = displayStatus === "expired";
+  const isExpiring = displayStatus === "expiring";
+  return {
+    badgeClass: isExpired ? "bad" : isExpiring ? "expiring" : isAdminAccount ? "amber" : "",
+    badgeLabel: isExpired ? "EXPIRED" : isExpiring ? "EXPIRING SOON" : "ACTIVE",
+  };
 }
 
 // Deterministic (not random) so the fake admin key row doesn't change between server/client render.
@@ -133,26 +167,7 @@ export function LicenseStatusCard({
 
   const isExpiring = displayStatus === "expiring";
   const isExpired = displayStatus === "expired";
-  const msRemaining = Math.max(0, license.expiresAt.getTime() - now.getTime());
-  const totalDays = Math.max(1, daysBetween(license.expiresAt, license.issuedAt));
-  const daysLeft = Math.max(0, daysBetween(license.expiresAt, now));
-  const pct = Math.round(Math.min(100, Math.max(0, (daysLeft / totalDays) * 100)));
-
-  // Round-to-nearest everywhere a countdown renders (thread multi-license-visibility-2026-08-31,
-  // marcus) — this used to Math.ceil, so the ring read "20 hours left" on the same ~19h20m
-  // remaining that formatRelative/humanizeTimeUntil below both round to "19 hours".
-  let ringValue: number;
-  let ringUnit: string;
-  if (msRemaining < 60 * 60 * 1000) {
-    ringValue = Math.round(msRemaining / 60_000);
-    ringUnit = "minutes left";
-  } else if (msRemaining < 24 * 60 * 60 * 1000) {
-    ringValue = Math.round(msRemaining / 3_600_000);
-    ringUnit = "hours left";
-  } else {
-    ringValue = daysLeft;
-    ringUnit = "days left";
-  }
+  const { daysLeft, pct, ringValue, ringUnit } = licenseCountdown(license, now);
 
   async function handleCopy() {
     try {
@@ -164,8 +179,7 @@ export function LicenseStatusCard({
     }
   }
 
-  const badgeClass = isExpired ? "bad" : isExpiring ? "expiring" : isAdminAccount ? "amber" : "";
-  const badgeLabel = isExpired ? "EXPIRED" : isExpiring ? "EXPIRING SOON" : "ACTIVE";
+  const { badgeClass, badgeLabel } = licenseBadge(displayStatus, isAdminAccount);
 
   return (
     <div className={`card full${isAdminAccount ? " admin-lic" : ""}`}>
@@ -224,6 +238,55 @@ export function LicenseStatusCard({
             <b>{isExpired ? "0d" : `${daysLeft}d`}</b>
             <span>Remaining</span>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The dashboard card, compact: status pill, time left, valid-until and the masked key with
+ * Copy, for the terminal product page's Access box (coxwell via marcus, m53069). Same countdown,
+ * badge and mask as LicenseStatusCard above, so the two cannot read differently. The caller
+ * passes only active licences (getActiveLicenseDetailsForUser, the read /dashboard's card uses). */
+export function LicenseStatusCompact({ license, showBadge = false }: { license: LicenseDetail; showBadge?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const [now] = useState(() => new Date());
+
+  const displayStatus = computeLicenseDisplayStatus(license, now);
+  const isActive = displayStatus === "active" || displayStatus === "expiring";
+  const { ringValue, ringUnit } = licenseCountdown(license, now);
+  const { badgeClass, badgeLabel } = licenseBadge(displayStatus, false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(license.licenseKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard unavailable — no-op
+    }
+  }
+
+  return (
+    <div className="lic-active lic-compact">
+      <div className="body">
+        <div className="lic-compact-top">
+          <span className={`badge-ok${badgeClass ? ` ${badgeClass}` : ""}`}>
+            <span className="dot" /> {badgeLabel}
+          </span>
+          <span className={`lic-compact-left${displayStatus === "expiring" ? " warn" : ""}`}>
+            <b>{ringValue}</b> {ringUnit}
+          </span>
+        </div>
+        <p>
+          Valid until <b>{formatAbsoluteUtc(license.expiresAt)}</b>
+        </p>
+        <div className="keyrow">
+          {showBadge && <span className="lic-num-badge">HH{license.licenseNumber}</span>}
+          <span className={`k${isActive ? " ok" : " bad"}`}>{maskLicenseKey(license.licenseKey)}</span>
+          <button type="button" className="copy" onClick={handleCopy}>
+            {copied ? "Copied" : "Copy"}
+          </button>
         </div>
       </div>
     </div>

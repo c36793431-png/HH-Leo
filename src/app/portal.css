@@ -1091,6 +1091,22 @@
 .portal-shell .mkd-request { display: flex; flex-direction: column; gap: 10px; }
 .portal-shell .mkd-request .ftd-unlock,
 .portal-shell .mkd-request .mkd-action { align-self: flex-start; }
+/* The terminal's licensed Access box (m53069): the dashboard licence card, compact, then the four
+   feed cards as one-line rows. The box is 320px, so nothing here sits side by side. */
+.portal-shell .lic-compact { gap: 0; }
+.portal-shell .lic-compact .body { min-width: 0; }
+.portal-shell .lic-compact-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.portal-shell .lic-compact-left { font-size: 12px; color: var(--hz-ink-3); text-transform: uppercase; letter-spacing: 0.08em; }
+.portal-shell .lic-compact-left b { font-family: var(--hz-disp); font-size: 18px; color: var(--hz-ok); letter-spacing: 0; }
+.portal-shell .lic-compact-left.warn b { color: var(--hz-warn); }
+.portal-shell .lic-compact .keyrow { margin-top: 10px; max-width: none; font-size: 12px; padding: 9px 12px; }
+.portal-shell .lic-compact .keyrow .k { letter-spacing: 0.02em; }
+.portal-shell .mkd-feeds { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.portal-shell .mkd-feeds-head { display: flex; align-items: baseline; justify-content: space-between; }
+.portal-shell .mkd-feeds-head .mkd-plate-title { margin-bottom: 4px; }
+.portal-shell .mkd-feeds-count { font-size: 11px; color: var(--hz-ink-3); }
+.portal-shell .mkd-feed { padding: 9px 12px; }
+.portal-shell .mkd-feed .sf-action { align-self: center; flex: none; }
 @media (max-width: 900px) {
   .portal-shell .mkd-grid { grid-template-columns: 1fr; }
 }

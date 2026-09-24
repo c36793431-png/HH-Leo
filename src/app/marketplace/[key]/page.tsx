@@ -2,12 +2,15 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getReachablePanels } from "@/lib/user-roles";
-import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses, isPaidUser } from "@/lib/licenses";
+import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses, type FeedType } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
+import { computeUnlockedFeedTypes } from "@/lib/feed-subscriptions";
+import { computeSignalFeedCards } from "@/lib/signal-feed-cards";
+import { TerminalAccessBox } from "@/components/marketplace/terminal-access-box";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { feedTierMeta } from "@/lib/feed-tier-catalogue";
-import { getTiersForRegion, type FeedTierDetail } from "@/lib/feed-tiers";
+import { getTiersForRegion, getTierCountsByRegion, getBestLatencyByRegion, type FeedTierDetail } from "@/lib/feed-tiers";
 import { MARKETPLACE_AVAILABILITY_LABELS, listingByKey } from "@/lib/marketplace-catalogue";
 import { getTierRequestContext } from "@/lib/tier-request-context";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
@@ -24,8 +27,9 @@ import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
  * THE ACTION IS THE LISTING'S, AND ONLY WHEN IT IS AVAILABLE. A "request" listing renders the
  * shipped TierRequestControl, which goes through submitFeedTierRequestAction to the normal admin
  * queue and the Telegram DM, with the same Requested/Approved states as the tiers page. A "link"
- * listing hands off to the page that owns its flow. A "download" listing (the terminal) shows its
- * link to a licensed account and "Request access →" to Telegram to everyone else (m53009 (a)).
+ * listing hands off to the page that owns its flow. A "download" listing (the terminal) renders
+ * TerminalAccessBox: a licensed account gets its licence, its feeds and the link (m53069), and
+ * everyone else "Request access →" to Telegram (m53009 (a)).
  * A listing that is not available offers nothing, even if the catalogue gave it an action by
  * mistake.
  *
@@ -89,14 +93,24 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
     ? await getTierRequestContext(session.user.id, activeLicenses, request.region)
     : null;
 
-  // A "download" listing shows its link only to a licensed account (isPaidUser, as /dashboard).
-  // Everyone else is sent to the /dashboard veil's Telegram upgrade path. A failed check fails
-  // closed to Request access, never to Downloads.
+  // A "download" listing: licensed means activeLicenses is non-empty, the read above, which is
+  // /dashboard's licence card read and isPaidUser's predicate (m53069). A failed read is [] and
+  // fails closed to Request access, never to Downloads. The feed cards are /dashboard's, from the
+  // same readers, and are only read for a licensed account.
+  const licensed = activeLicenses.length > 0;
   const download =
     action?.kind === "download"
-      ? await Promise.all([isPaidUser(session.user.id).catch(() => false), getPortalConfig()]).then(
-          ([licensed, config]) => ({ licensed, requestHref: config.telegramChannelUrl }),
-        )
+      ? await Promise.all([
+          getPortalConfig(),
+          licensed ? computeUnlockedFeedTypes(session.user.id).catch((): FeedType[] => []) : [],
+          licensed ? getTierCountsByRegion().catch(() => ({}) as Awaited<ReturnType<typeof getTierCountsByRegion>>) : {},
+          licensed ? getBestLatencyByRegion().catch(() => ({}) as Awaited<ReturnType<typeof getBestLatencyByRegion>>) : {},
+        ]).then(([config, activeFeeds, feedTierCounts, feedBestLatency]) => ({
+          requestHref: config.telegramChannelUrl,
+          feeds: licensed
+            ? computeSignalFeedCards({ activeFeeds, activeLicenses, isAdmin, feedTierCounts, feedBestLatency })
+            : [],
+        }))
       : null;
 
   const figures = listingFigureMembers(listing, members);
@@ -189,15 +203,12 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
               </p>
             </>
           ) : action?.kind === "download" && download ? (
-            download.licensed ? (
-              <Link href={action.href} className="btn primary sm mkd-action">
-                {action.label}
-              </Link>
-            ) : (
-              <a className="btn primary sm mkd-action" href={download.requestHref} target="_blank" rel="noopener noreferrer">
-                Request access →
-              </a>
-            )
+            <TerminalAccessBox
+              licenses={activeLicenses}
+              feeds={download.feeds}
+              download={{ href: action.href, label: action.label }}
+              requestHref={download.requestHref}
+            />
           ) : action?.kind === "link" ? (
             <Link href={action.href} className="btn primary sm mkd-action">
               {action.label}

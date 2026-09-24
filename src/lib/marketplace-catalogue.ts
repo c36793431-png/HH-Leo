@@ -43,7 +43,8 @@ const MARKETPLACE_DETAIL_BASE = "/marketplace";
  * - request: the shipped TierRequestControl on the product page itself. It submits one
  *   tier_key, so the page 404s unless the listing is backed by exactly one feed_tiers row.
  * - download: the terminal only. The link shows ONLY to an account with an active, unexpired
- *   licence (isPaidUser, the check /dashboard unlocks Downloads with). Every other account gets
+ *   licence (isPaidUser's predicate, the check /dashboard unlocks Downloads with), alongside that
+ *   licence and its feeds (TerminalAccessBox, m53069). Every other account gets
  *   "Request access →" to config.telegramChannelUrl, the /dashboard veil's own upgrade path
  *   (coxwell 2026-09-23 23:48Z via marcus, m53003/m53009 (a)). Nothing records that request:
  *   a tracked software request is the separate (b) job, gated on Fable and coxwell. */
