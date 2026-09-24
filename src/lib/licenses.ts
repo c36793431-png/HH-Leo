@@ -92,11 +92,10 @@ export interface IssuedLicense {
  * never changes status: the expire-licenses cron sets only lifecycle_state (route.ts:111 at
  * 9c831bf) and revokeLicense is the only writer of licenses.status, so without the expiry
  * test a lapsed holder's old row blocked this gate for good (Leo, bus m53048 section C,
- * relayed by marcus m53080). issueLicense
- * already refuses a second unexpired active license for a known userId, so this mainly
- * guards the claim_email/claim_telegram pre-provision path, which has no such check at
- * insert time. `db` defaults to the shared
- * pool; licenses.first-active.test.ts passes one transaction-scoped client instead. */
+ * relayed by marcus m53080). issueLicense already refuses a second unexpired active license
+ * for a known userId, so this mainly guards the claim_email/claim_telegram pre-provision
+ * path, which has no such check at insert time. `db` defaults to the shared pool;
+ * licenses.first-active.test.ts passes one transaction-scoped client instead. */
 export async function isFirstActiveLicense(
   args: {
     newLicenseId: string;
