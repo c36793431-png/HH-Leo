@@ -303,23 +303,36 @@ export async function notifyFirstLogin(opts: {
   );
 }
 
+/** New server, or a declared_ip change on an existing one (server-registration.ts
+ * alertServerIp). oldIp null = nothing declared or observed before. liveGrants null = the
+ * lookup failed, said so rather than read as "no". */
 export async function notifyServerRegistered(opts: {
+  kind: "registered" | "edited";
   email: string | null;
   serverName: string;
   vpsProvider: string;
+  oldIp: string | null;
   declaredIp: string;
   declaredLocation: string;
   feeds: string[];
+  liveGrants: number | null;
   adminUrl: string;
 }): Promise<void> {
+  const grants =
+    opts.liveGrants === null
+      ? "unknown (lookup failed)"
+      : opts.liveGrants > 0
+        ? `${opts.liveGrants}${opts.oldIp ? " (a vendor allowlist may still hold the old ip)" : ""}`
+        : "none";
   await sendSinkMessage(
-    `🖥 new server registration\n` +
+    `${opts.kind === "registered" ? "🖥 new server registration" : "🔁 server ip changed"}\n` +
       `email: ${opts.email ?? "-"}\n` +
       `feed: ${opts.feeds.length ? opts.feeds.join(", ") : "-"}\n` +
       `server: ${opts.serverName}\n` +
       `provider: ${opts.vpsProvider}\n` +
-      `declared ip: ${opts.declaredIp}\n` +
+      `ip: ${opts.oldIp ?? "none"} -> ${opts.declaredIp}\n` +
       `declared location: ${opts.declaredLocation}\n` +
+      `live grants: ${grants}\n` +
       `${opts.adminUrl}`
   );
 }

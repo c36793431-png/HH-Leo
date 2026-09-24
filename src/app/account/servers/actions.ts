@@ -86,7 +86,13 @@ export async function updateServerRegistrationAction(
     if (!session?.user?.id) throw new Error("Not signed in");
     const input = parseRegistrationInput(formData);
 
-    const updated = await updateServerRegistrationById(registrationId, session.user.id, input);
+    const updated = await updateServerRegistrationById(
+      registrationId,
+      session.user.id,
+      input,
+      session.user.email ?? null,
+      (licenseId) => `https://portal.horizonhft.com/admin/connections/${licenseId}`
+    );
     if (!updated) throw new Error("Server not found on this account");
     revalidatePath("/account/servers");
   });

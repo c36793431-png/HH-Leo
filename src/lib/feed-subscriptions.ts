@@ -274,6 +274,25 @@ export async function listLiveFeedTierGrantsForSubscriber(
   }
 }
 
+/** How many live grants would have this server's IP on a vendor allowlist -- the admin sink's
+ * server-IP alert reads it (2-interim, marcus m53665). Keyed on the server OR its licence, never
+ * the server alone: a direct grant carries server_registration_id NULL (@aylrn09's three), so a
+ * server-only lookup answers "none" for exactly the client the alert exists for (Fable m53676).
+ * Live is EFFECTIVE_STATUS_SQL's, trials included -- a trial IP sits on the allowlist too. Left
+ * join on feed_tiers, as listSubscribersForProvider, so a provider_tier_id row counts. Throws;
+ * the caller decides what an unknown reads as. */
+export async function countLiveGrantsForServer(serverRegistrationId: string, licenseId: string | null): Promise<number> {
+  const result = await pool.query<{ n: string }>(
+    `select count(*) as n
+     from feed_subscriptions s
+     left join feed_tiers ft on ft.id = s.feed_tier_id
+     where (s.server_registration_id = $1 or s.license_id = $2)
+       and ${EFFECTIVE_STATUS_SQL} <> 'lapsed'`,
+    [serverRegistrationId, licenseId]
+  );
+  return Number(result.rows[0]?.n ?? 0);
+}
+
 /** Which feed cards this client has -- one source for /feeds and /dashboard, so the two can
  * never disagree about the same account (marcus, leo-approval-invisible-to-client-2026-09-11).
  *

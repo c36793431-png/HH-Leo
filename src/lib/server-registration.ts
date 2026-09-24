@@ -3,6 +3,7 @@ import { resolveGeoIp } from "./geoip";
 import { notifyServerRegistered, notifyIpMismatch, notifyCountryChange } from "./telemetry-sink";
 import { FEED_TYPE_META, getActiveLicensesForUser, type FeedType } from "./licenses";
 import { SERVER_LOCATION_LABELS, type ServerLocation } from "./server-locations";
+import { countLiveGrantsForServer } from "./feed-subscriptions";
 
 function isFeedType(value: string): value is FeedType {
   return (["futures", "london", "ny", "crypto"] as const).includes(value as FeedType);
@@ -158,9 +159,9 @@ export async function countUserActiveServers(userId: string): Promise<number> {
   return Number(result.rows[0]?.count ?? 0);
 }
 
-/** Upserts the registration and fires the "new registration" alert only on first insert
- * (an edit shouldn't re-fire it). adminUrl is passed in by the caller since this lib has
- * no request context to build one from.
+/** Upserts the registration and alerts the admin sink on a first insert, or when the ON
+ * CONFLICT branch changes declared_ip (see alertServerIp). adminUrl is passed in by the
+ * caller since this lib has no request context to build one from.
  *
  * userId is the signed-in user, and under 0086 it must also be the licence owner -- the
  * only caller reaches here through requireLicenseId, which accepts licenseId only if it
@@ -190,9 +191,12 @@ export async function saveServerRegistration(
   const serverLocationLabel = SERVER_LOCATION_LABELS[input.location];
   const hasLocationColumn = await checkLocationColumnExists();
 
+  // `prev` reads the row as it was before this statement (same snapshot), so old_ip is the
+  // declared IP the ON CONFLICT branch is about to overwrite -- null on a genuine insert.
   const result = hasLocationColumn
-    ? await pool.query(
-        `insert into server_registrations
+    ? await pool.query<UpsertRow>(
+        `with prev as (select declared_ip from server_registrations where license_id = $1)
+         insert into server_registrations
            (license_id, user_id, server_name, vps_provider, vps_provider_other, server_location, location, declared_ip, updated_at)
          values ($1, $2, $3, $4, $5, $6, $7, $8, now())
          on conflict (license_id) do update set
@@ -204,11 +208,12 @@ export async function saveServerRegistration(
            location = excluded.location,
            declared_ip = excluded.declared_ip,
            updated_at = now()
-         returning (xmax = 0) as inserted`,
+         returning id, (xmax = 0) as inserted, (select declared_ip from prev) as old_ip`,
         [licenseId, userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.location, input.declaredIp]
       )
-    : await pool.query(
-        `insert into server_registrations
+    : await pool.query<UpsertRow>(
+        `with prev as (select declared_ip from server_registrations where license_id = $1)
+         insert into server_registrations
            (license_id, user_id, server_name, vps_provider, vps_provider_other, server_location, declared_ip, updated_at)
          values ($1, $2, $3, $4, $5, $6, $7, now())
          on conflict (license_id) do update set
@@ -219,24 +224,84 @@ export async function saveServerRegistration(
            server_location = excluded.server_location,
            declared_ip = excluded.declared_ip,
            updated_at = now()
-         returning (xmax = 0) as inserted`,
+         returning id, (xmax = 0) as inserted, (select declared_ip from prev) as old_ip`,
         [licenseId, userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.declaredIp]
       );
 
-  if (result.rows[0]?.inserted) {
-    const license = await pool.query<{ feed_types: string[] }>(
-      `select feed_types from licenses where id = $1`,
-      [licenseId]
-    );
+  // A first insert always alerts. The ON CONFLICT branch is an edit in all but name (it
+  // overwrites declared_ip), so it alerts like one: only when the IP actually changed.
+  const row = result.rows[0];
+  if (!row) return;
+  if (!row.inserted && row.old_ip === input.declaredIp) return;
+  await alertServerIp({
+    kind: row.inserted ? "registered" : "edited",
+    registrationId: row.id,
+    licenseId,
+    previousDeclaredIp: row.inserted ? null : row.old_ip,
+    input,
+    serverLocationLabel,
+    ownerEmail,
+    adminUrl,
+  });
+}
+
+interface UpsertRow {
+  id: string;
+  inserted: boolean;
+  old_ip: string | null;
+}
+
+/** The admin sink's server-IP alert (notifyServerRegistered), for a new server and for a
+ * declared_ip change on an existing one -- 2-interim, marcus m53665, until the provider-facing
+ * client_server_ip_changed key (2) lands; retire the edit arm then (Fable m53676). Runs after
+ * the write has committed (pool.query autocommits), and swallows every error of its own: an
+ * alert that fails must never fail the client's save.
+ *
+ * Old IP (Fable m53676): the previous declared IP; else the latest IP OBSERVED on the licence
+ * that differs from the new one -- a client often connects before registering, so the latest
+ * observed can already be the new IP; else none. @aylrn09 is the case: 223.26.17.21 was only
+ * ever observed, never declared, before Loan was registered on 185.237.98.162. */
+async function alertServerIp(opts: {
+  kind: "registered" | "edited";
+  registrationId: string;
+  licenseId: string | null;
+  previousDeclaredIp: string | null;
+  input: ServerRegistrationInput;
+  serverLocationLabel: string;
+  ownerEmail: string | null;
+  adminUrl: string;
+}): Promise<void> {
+  try {
+    const { licenseId, input } = opts;
+    const [license, observed, liveGrants] = await Promise.all([
+      licenseId
+        ? pool.query<{ feed_types: string[] }>(`select feed_types from licenses where id = $1`, [licenseId])
+        : Promise.resolve(null),
+      !opts.previousDeclaredIp && licenseId
+        ? pool.query<{ ip: string }>(
+            `select ip from connection_ips where license_id = $1 and ip <> $2 order by captured_at desc limit 1`,
+            [licenseId, input.declaredIp]
+          )
+        : Promise.resolve(null),
+      countLiveGrantsForServer(opts.registrationId, licenseId).catch((err) => {
+        console.error("alertServerIp: live-grant lookup failed", err);
+        return null;
+      }),
+    ]);
     await notifyServerRegistered({
-      email: ownerEmail,
+      kind: opts.kind,
+      email: opts.ownerEmail,
       serverName: input.serverName,
       vpsProvider: input.vpsProviderOther ? `${input.vpsProvider} (${input.vpsProviderOther})` : input.vpsProvider,
+      oldIp: opts.previousDeclaredIp ?? observed?.rows[0]?.ip ?? null,
       declaredIp: input.declaredIp,
-      declaredLocation: serverLocationLabel,
-      feeds: feedLabels(license.rows[0]?.feed_types),
-      adminUrl,
-    }).catch(() => {});
+      declaredLocation: opts.serverLocationLabel,
+      feeds: feedLabels(license?.rows[0]?.feed_types),
+      liveGrants,
+      adminUrl: opts.adminUrl,
+    });
+  } catch (err) {
+    console.error("alertServerIp failed", err);
   }
 }
 
@@ -257,19 +322,26 @@ export async function saveServerRegistration(
  * Returns false when nothing matched -- wrong id, or the row is not this user's. The caller
  * cannot tell those apart, which is deliberate.
  *
- * No notifyServerRegistered here: that alert fires on first insert only (xmax = 0), and an
- * edit never fired it before this split either. */
+ * Alerts the admin sink when declared_ip actually changed (2-interim, marcus m53665): `old`
+ * locks the row and reads its declared IP in the same statement, so old -> new is the pair this
+ * write really replaced, even against a concurrent edit. A no-op IP (every other field edited,
+ * or nothing) never alerts. */
 export async function updateServerRegistrationById(
   id: string,
   userId: string,
-  input: ServerRegistrationInput
+  input: ServerRegistrationInput,
+  ownerEmail: string | null,
+  adminUrlForLicence: (licenseId: string) => string
 ): Promise<boolean> {
   const serverLocationLabel = SERVER_LOCATION_LABELS[input.location];
   const hasLocationColumn = await checkLocationColumnExists();
 
   const result = hasLocationColumn
-    ? await pool.query(
-        `update server_registrations set
+    ? await pool.query<{ license_id: string | null; old_ip: string }>(
+        `with old as (
+           select id, declared_ip from server_registrations where id = $1 and user_id = $2 for update
+         )
+         update server_registrations sr set
            server_name = $3,
            vps_provider = $4,
            vps_provider_other = $5,
@@ -277,22 +349,43 @@ export async function updateServerRegistrationById(
            location = $7,
            declared_ip = $8,
            updated_at = now()
-         where id = $1 and user_id = $2`,
+         from old
+         where sr.id = $1 and sr.user_id = $2 and sr.id = old.id
+         returning sr.license_id, old.declared_ip as old_ip`,
         [id, userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.location, input.declaredIp]
       )
-    : await pool.query(
-        `update server_registrations set
+    : await pool.query<{ license_id: string | null; old_ip: string }>(
+        `with old as (
+           select id, declared_ip from server_registrations where id = $1 and user_id = $2 for update
+         )
+         update server_registrations sr set
            server_name = $3,
            vps_provider = $4,
            vps_provider_other = $5,
            server_location = $6,
            declared_ip = $7,
            updated_at = now()
-         where id = $1 and user_id = $2`,
+         from old
+         where sr.id = $1 and sr.user_id = $2 and sr.id = old.id
+         returning sr.license_id, old.declared_ip as old_ip`,
         [id, userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.declaredIp]
       );
 
-  return (result.rowCount ?? 0) > 0;
+  const row = result.rows[0];
+  if (!row) return false;
+  if (row.old_ip !== input.declaredIp) {
+    await alertServerIp({
+      kind: "edited",
+      registrationId: id,
+      licenseId: row.license_id,
+      previousDeclaredIp: row.old_ip,
+      input,
+      serverLocationLabel,
+      ownerEmail,
+      adminUrl: row.license_id ? adminUrlForLicence(row.license_id) : "",
+    });
+  }
+  return true;
 }
 
 /** Most recent observed IP for a license, or null if the client has never connected.
