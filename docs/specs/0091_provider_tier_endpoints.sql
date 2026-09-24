@@ -1,13 +1,13 @@
--- NOT APPLIED. 0090_provider_tier_endpoints.sql -- DESIGN CANDIDATE, thread
+-- NOT APPLIED. 0091_provider_tier_endpoints.sql -- DESIGN CANDIDATE, thread
 -- provider-tier-endpoints-2026-09-24 (marcus m53770_mufsp7zo). Written by kai on branch
--- kai/tier-endpoints-design-2026-09-24 off origin/main e4edea2. Design: docs/specs/0090-tier-endpoints-design.md.
+-- kai/tier-endpoints-design-2026-09-24 off origin/main e4edea2. Design: docs/specs/0091-tier-endpoints-design.md.
 -- Lives under docs/specs/ until fable passes the design; moves to db/migrations/ with the code
--- branch. Companion rollback: docs/specs/0090_rollback.sql. coxwell applies; neither coder writes
+-- branch. Companion rollback: docs/specs/0091_rollback.sql. coxwell applies; neither coder writes
 -- to prod.
 --
--- Number 0090: 0087 is reserved (feed_tiers connection fields, parked), 0088/0089 are on
+-- Number 0091: 0087 is reserved (feed_tiers connection fields, parked), 0088/0089 are on
 -- kai/tighten-0087-2026-09-12 (not applied). If marcus renumbers, the only literals that change
--- are the two '0090' strings in step 0 and step 6.
+-- are the two '0091' strings in step 0 and step 6.
 --
 -- WHAT IT DOES: adds two child tables, one per parent, holding N connection endpoints per
 -- listing, and backfills one child row per parent row that has any of the four scalar
@@ -17,7 +17,7 @@
 -- NOT dropped and NOT written here. main auto-deploys and this file is applied out of band, so
 -- at the apply instant the live code still writes them (confirmProposalRound at
 -- src/lib/provider-tier-proposals.ts:483-539 and registerProviderTiers at
--- src/lib/provider-tiers.ts:321-336, both at e4edea2). The drop is 0091, after the code that
+-- src/lib/provider-tiers.ts:321-336, both at e4edea2). The drop is 0092, after the code that
 -- reads the child tables is live and a re-run of step 4 shows zero drift.
 --
 -- ORDER OF OPERATIONS (three instants):
@@ -28,7 +28,7 @@
 --         self-contained. Expected notices: `backfill proposals: inserted 0`,
 --         `backfill tiers: inserted 0`, `drift rows: 0`. A non-zero drift row is printed with
 --         both sides and is resolved by hand, never by this script.
---   Then 0091 (not written): gate child == parent on every row, drop the five parent columns.
+--   Then 0092 (not written): gate child == parent on every row, drop the five parent columns.
 --
 -- One transaction. Every DO block either raises (whole transaction aborts) or emits a notice.
 --
@@ -41,15 +41,15 @@
 begin;
 
 -- 0. Ledger preflight. 0083 present (provider_tiers.protocol/compid exist, this file reads
---    them), 0090 absent. The run's now() is the first notice of the run.
+--    them), 0091 absent. The run's now() is the first notice of the run.
 do $$
 begin
   raise notice 'run now(): %', now();
   if not exists (select 1 from schema_migrations where version = '0083') then
-    raise exception '0090 preflight: 0083 not in schema_migrations';
+    raise exception '0091 preflight: 0083 not in schema_migrations';
   end if;
-  if exists (select 1 from schema_migrations where version = '0090') then
-    raise exception '0090 preflight: 0090 already in schema_migrations';
+  if exists (select 1 from schema_migrations where version = '0091') then
+    raise exception '0091 preflight: 0091 already in schema_migrations';
   end if;
 end $$;
 
@@ -189,7 +189,7 @@ begin
    where num_nonnulls(p.protocol, p.endpoint_host, p.endpoint_port, p.compid) > 0
      and not exists (select 1 from provider_tier_proposal_endpoints e where e.proposal_id = p.id);
   if p_missing > 0 then
-    raise exception '0090 gate: % proposals with scalars but no child row', p_missing;
+    raise exception '0091 gate: % proposals with scalars but no child row', p_missing;
   end if;
 
   select count(*) into p_drift from provider_tier_proposals p
@@ -199,14 +199,14 @@ begin
       or e.endpoint_port is distinct from p.endpoint_port
       or e.compid is distinct from p.compid;
   if p_drift > 0 then
-    raise exception '0090 gate: % proposal position-0 child rows differ from parent', p_drift;
+    raise exception '0091 gate: % proposal position-0 child rows differ from parent', p_drift;
   end if;
 
   select count(*) into t_missing from provider_tiers t
    where num_nonnulls(t.protocol, t.endpoint_host, t.endpoint_port, t.compid) > 0
      and not exists (select 1 from provider_tier_endpoints e where e.tier_id = t.id);
   if t_missing > 0 then
-    raise exception '0090 gate: % tiers with scalars but no child row', t_missing;
+    raise exception '0091 gate: % tiers with scalars but no child row', t_missing;
   end if;
 
   select count(*) into t_drift from provider_tiers t
@@ -217,7 +217,7 @@ begin
       or e.compid is distinct from t.compid
       or e.endpoint_verified is distinct from t.endpoint_verified;
   if t_drift > 0 then
-    raise exception '0090 gate: % tier position-0 child rows differ from parent', t_drift;
+    raise exception '0091 gate: % tier position-0 child rows differ from parent', t_drift;
   end if;
 
   raise notice 'gate: proposals missing % drift %; tiers missing % drift %',
@@ -226,7 +226,7 @@ end $$;
 
 -- 6. Ledger.
 insert into schema_migrations (version, name) values
-  ('0090', '0090_provider_tier_endpoints.sql')
+  ('0091', '0091_provider_tier_endpoints.sql')
 on conflict (version) do nothing;
 
 commit;

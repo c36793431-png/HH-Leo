@@ -1,8 +1,8 @@
--- NOT RUN AUTOMATICALLY. 0090_rollback.sql -- companion to 0090_provider_tier_endpoints.sql,
+-- NOT RUN AUTOMATICALLY. 0091_rollback.sql -- companion to 0091_provider_tier_endpoints.sql,
 -- thread provider-tier-endpoints-2026-09-24. Written by kai on kai/tier-endpoints-design-2026-09-24.
 --
--- 0090 is additive: it creates two child tables and backfills them, and never writes the parent
--- columns. So this rollback is loss-free ONLY before instant (ii) of the 0090 header (the code
+-- 0091 is additive: it creates two child tables and backfills them, and never writes the parent
+-- columns. So this rollback is loss-free ONLY before instant (ii) of the 0091 header (the code
 -- deploy that starts writing the child tables). After (ii) the child tables hold endpoint rows
 -- the parent columns never had (every position >= 1, and any position 0 written by new code),
 -- and dropping them loses data. The count check below refuses in that case; override by hand.
@@ -15,8 +15,8 @@ do $$
 declare
   extra int;
 begin
-  if not exists (select 1 from schema_migrations where version = '0090') then
-    raise exception '0090 rollback: 0090 not in schema_migrations';
+  if not exists (select 1 from schema_migrations where version = '0091') then
+    raise exception '0091 rollback: 0091 not in schema_migrations';
   end if;
   -- any child row the parent columns cannot reproduce = data that would be lost.
   select count(*) into extra from (
@@ -40,14 +40,14 @@ begin
         or e.notes is not null
   ) x;
   if extra > 0 then
-    raise exception '0090 rollback: % child rows the parent columns do not hold; dropping loses them', extra;
+    raise exception '0091 rollback: % child rows the parent columns do not hold; dropping loses them', extra;
   end if;
-  raise notice '0090 rollback: child rows not reproducible from parents: %', extra;
+  raise notice '0091 rollback: child rows not reproducible from parents: %', extra;
 end $$;
 
 drop table if exists provider_tier_endpoints;
 drop table if exists provider_tier_proposal_endpoints;
 
-delete from schema_migrations where version = '0090';
+delete from schema_migrations where version = '0091';
 
 commit;

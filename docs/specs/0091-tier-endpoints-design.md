@@ -5,7 +5,7 @@ Every file:line below is read at origin/main `e4edea2319d9e767e8264550b229de0f7b
 Design only. No code, no migration applied. The .sql beside this file is a candidate for coxwell,
 not a file under db/migrations.
 
-Companions: `docs/specs/0090_provider_tier_endpoints.sql`, `docs/specs/0090_rollback.sql`.
+Companions: `docs/specs/0091_provider_tier_endpoints.sql`, `docs/specs/0091_rollback.sql`.
 
 ## 0. The problem as read from the schema
 
@@ -85,7 +85,7 @@ Semantics carried over unchanged, now per set:
   differ only in `notes` are one endpoint.
 - Order: `position`, 0-based, assigned from array order at submit. App cap of 8 per parent, no DB
   cap.
-- The parent's four columns and `endpoint_verified` are NOT dropped by 0090. Reason in section 3.
+- The parent's four columns and `endpoint_verified` are NOT dropped by 0091. Reason in section 3.
 
 Backfill: one child row at position 0 per parent row that has any of the four non-null, copying
 the four verbatim and, on the tier side, `endpoint_verified`. A parent with all four null gets
@@ -96,30 +96,30 @@ template in the .sql header, values not known to me.
 
 ## 3. Migration and order of operations
 
-File: `docs/specs/0090_provider_tier_endpoints.sql`. Number 0090 because 0087 is reserved for the
+File: `docs/specs/0091_provider_tier_endpoints.sql`. Number 0091 because 0087 is reserved for the
 parked feed_tiers connection-fields migration and 0088/0089 sit unapplied on
 `kai/tighten-0087-2026-09-12`. If marcus renumbers, only the ledger literal changes.
 
 The migration is additive. Main auto-deploys and coxwell applies SQL out of band, so at the apply
-instant the live code still writes the parent columns. Dropping them in 0090 would break the
+instant the live code still writes the parent columns. Dropping them in 0091 would break the
 confirm INSERT/UPDATE and the register-provider INSERT between apply and deploy.
 
-1. Apply 0090 (dry-run with `rollback;` first, paste notices, then real). Old code keeps working.
+1. Apply 0091 (dry-run with `rollback;` first, paste notices, then real). Old code keeps working.
 2. Merge the code branch: every site in section 1 rows 1-3, 5, 7, 8 moves to the child tables,
    reads and writes. Old columns go stale from that instant.
-3. Re-run step 4 of 0090 alone, once, after deploy. It is idempotent (`not exists`). It inserts a
+3. Re-run step 4 of 0091 alone, once, after deploy. It is idempotent (`not exists`). It inserts a
    child for any parent row old code created in the window and prints, without changing, any
    tier whose parent values now differ from its single position-0 child (an old-code renegotiation
    confirm in the window). Expected notice: `backfill tiers: inserted 0`, `drift rows: 0`. A
    non-zero drift row is resolved by hand from the printed values, not by the script.
-4. 0091, not written: gate child == parent on every row that still has parent scalars, then drop
+4. 0092, not written: gate child == parent on every row that still has parent scalars, then drop
    the five parent columns.
 
 A trigger mirroring parent writes into the child during the window would close step 3's gap
 automatically. Not recommended: a prod trigger is a second writer with no reader in the repo, and
 the window is minutes.
 
-Rollback: `docs/specs/0090_rollback.sql` drops the two tables and the ledger row. Loss-free only
+Rollback: `docs/specs/0091_rollback.sql` drops the two tables and the ledger row. Loss-free only
 before step 2; after step 2 the child tables hold rows the parents never had.
 
 ## 4. What a buyer sees
@@ -180,7 +180,7 @@ test files above passing on a box that can run them, and fable's read of this de
 3. Register-provider (row 8) gets one endpoint per tier in the code phase, written as position 0.
    Widening that form to N is a separate item unless marcus wants it in the same branch.
 4. `notes` is free text per endpoint and is admin-visible only. Confirm no provider-side render.
-5. Number 0090 and the docs/specs location until fable passes.
+5. Number 0091 and the docs/specs location until fable passes.
 
 ## 7. Files the code phase would touch (declaration, not yet opened)
 
@@ -188,5 +188,5 @@ test files above passing on a box that can run them, and fable's read of this de
 `src/app/admin/providers/[proposalId]/page.tsx`, `src/app/feed/dashboard/terms/actions.ts`,
 `src/components/feed/tier-proposal-form.tsx`, `src/app/admin/register-provider/actions.ts`,
 `src/components/admin/register-provider-form.tsx`, new `src/lib/provider-tier-endpoints.ts` and
-its `.test.ts`, `db/migrations/0090_provider_tier_endpoints.sql` + rollback moved from docs/specs.
+its `.test.ts`, `db/migrations/0091_provider_tier_endpoints.sql` + rollback moved from docs/specs.
 None of these is `server-registration.ts` or ip-history.
