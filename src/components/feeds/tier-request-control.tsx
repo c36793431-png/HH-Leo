@@ -194,7 +194,7 @@ export function TierRequestControl({
 
             {servers.length === 0 ? (
               <p className="ftd-sla ftd-sla-warn">
-                No active license on this account yet. <Link href="/account/servers">Register a server →</Link>
+                No active license on this account. Renew your license or <Link href="/account/servers">register a server</Link>.
               </p>
             ) : !hasAnyRegisteredServer ? (
               <p className="ftd-sla ftd-sla-warn">
