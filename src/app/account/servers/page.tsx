@@ -8,7 +8,13 @@ import { PortalShell } from "@/components/portal/portal-shell";
 import { ServerRegistrationForm } from "@/components/account/server-registration-form";
 import { ServerRegistrationView } from "@/components/account/server-registration-view";
 import { ServerRegistrationsGrouped, type GroupedServerEntry } from "@/components/account/server-registrations-grouped";
-import { getServerRegistration, getLatestConnectionIp, type ServerRegistration } from "@/lib/server-registration";
+import {
+  getServerRegistration,
+  getLatestConnectionIp,
+  getConnectionHistory,
+  type ServerRegistration,
+  type ConnectionHistoryEntry,
+} from "@/lib/server-registration";
 import { getBlackTrialForUser } from "@/lib/black-trials";
 import { getPortalConfig } from "@/lib/portal-config";
 import { BlackTrialCard } from "@/components/account/black-trial-card";
@@ -122,9 +128,14 @@ export default async function ServersPage() {
     ? await Promise.all(
         licenses.map(async (license) => {
           const registration = await getServerRegistration(license.id).catch(() => null);
-          const latestIp = registration ? await getLatestConnectionIp(license.id).catch(() => null) : null;
+          const [latestIp, history]: [string | null, ConnectionHistoryEntry[]] = registration
+            ? await Promise.all([
+                getLatestConnectionIp(license.id).catch(() => null),
+                getConnectionHistory(license.id).catch(() => []),
+              ])
+            : [null, []];
           const verified = !!(registration && latestIp && latestIp === registration.declaredIp);
-          return { license, registration, verified };
+          return { license, registration, verified, history };
         })
       )
     : [];
@@ -138,12 +149,19 @@ export default async function ServersPage() {
   const grouped = cards.length > 0;
 
   const groupedEntries: GroupedServerEntry[] = grouped
-    ? registeredCards.map(({ license, registration, verified }) => ({
+    ? registeredCards.map(({ license, registration, verified, history }) => ({
         registrationId: (registration as ServerRegistration).id,
         licenseId: license.id,
         licenseKey: license.licenseKey,
         registration: registration as ServerRegistration,
         verified,
+        // Observed IPs for this licence only -- `licenses` is the signed-in user's own
+        // active licences, so no other client's history can reach this list.
+        seenFrom: history.map((h) => ({
+          ip: h.ip,
+          seenAt: h.capturedAt.toISOString(),
+          place: [h.city, h.country].filter(Boolean).join(", ") || null,
+        })),
         action: updateServerRegistrationAction.bind(null, (registration as ServerRegistration).id),
       }))
     : [];

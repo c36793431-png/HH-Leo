@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import type { ServerRegistration } from "@/lib/server-registration";
 import {
@@ -10,6 +10,7 @@ import {
   effectiveServerLocation,
   type ServerLocation,
 } from "@/lib/server-locations";
+import { formatAbsoluteUtc } from "@/lib/format-time";
 import { ServerRegistrationForm } from "./server-registration-form";
 
 type BoundAction = (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
@@ -23,7 +24,41 @@ export interface GroupedServerEntry {
   licenseKey: string;
   registration: ServerRegistration;
   verified: boolean;
+  /** IPs we have actually observed this licence's client connect from (connection_ips via
+   * getConnectionHistory), newest first. Change-only, so each row is the first sighting
+   * of that address. A LICENCE fact shown on a server card, labelled as such -- exact
+   * while a licence has one server (Fable, m53676). Not the declared IP's history. */
+  seenFrom: SeenFromEntry[];
   action: BoundAction;
+}
+
+export interface SeenFromEntry {
+  ip: string;
+  /** ISO string rather than a Date, so it crosses the server/client boundary as-is. */
+  seenAt: string;
+  place: string | null;
+}
+
+function SeenFrom({ entries }: { entries: SeenFromEntry[] }) {
+  return (
+    <div className="srv-seen">
+      <span className="srv-seen-h">Seen from (this licence)</span>
+      {entries.length === 0 ? (
+        <span className="srv-seen-none">Your Horizon client hasn&apos;t connected on this licence yet.</span>
+      ) : (
+        <ul className="srv-seen-list">
+          {entries.map((e, i) => (
+            <li key={`${e.ip}-${e.seenAt}`} className="srv-seen-row">
+              <span className="srv-seen-ip">{e.ip}</span>
+              {e.place && <span className="srv-seen-place">{e.place}</span>}
+              <span className="srv-seen-at">since {formatAbsoluteUtc(new Date(e.seenAt))}</span>
+              {i === 0 && <span className="srv-seen-cur">Current</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 interface ServerRegistrationsGroupedProps {
@@ -167,24 +202,26 @@ export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl }: S
                     );
                   }
                   return (
-                    <button
-                      type="button"
-                      className="srv-srow"
-                      key={entry.registrationId}
-                      onClick={() => setEditingServerId(entry.registrationId)}
-                    >
-                      <span className="srv-ic">🖥</span>
-                      <span className="srv-sname">{entry.registration.serverName}</span>
-                      <span className="srv-sprov">
-                        {entry.registration.vpsProvider}
-                        {entry.registration.vpsProviderOther ? ` · ${entry.registration.vpsProviderOther}` : ""}
-                      </span>
-                      <span className="srv-sip">{entry.registration.declaredIp}</span>
-                      <span className={`st ${entry.verified ? "ver" : "reg"}`} style={{ flex: "0 0 96px", justifyContent: "center" }}>
-                        <span className="d" />
-                        {entry.verified ? "Verified" : "Registered"}
-                      </span>
-                    </button>
+                    <Fragment key={entry.registrationId}>
+                      <button
+                        type="button"
+                        className="srv-srow"
+                        onClick={() => setEditingServerId(entry.registrationId)}
+                      >
+                        <span className="srv-ic">🖥</span>
+                        <span className="srv-sname">{entry.registration.serverName}</span>
+                        <span className="srv-sprov">
+                          {entry.registration.vpsProvider}
+                          {entry.registration.vpsProviderOther ? ` · ${entry.registration.vpsProviderOther}` : ""}
+                        </span>
+                        <span className="srv-sip">{entry.registration.declaredIp}</span>
+                        <span className={`st ${entry.verified ? "ver" : "reg"}`} style={{ flex: "0 0 96px", justifyContent: "center" }}>
+                          <span className="d" />
+                          {entry.verified ? "Verified" : "Registered"}
+                        </span>
+                      </button>
+                      <SeenFrom entries={entry.seenFrom} />
+                    </Fragment>
                   );
                 })}
                 {isAdding && addTarget && (
