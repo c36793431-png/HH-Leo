@@ -41,6 +41,9 @@ interface TierRequestControlProps {
   tierKey: string;
   tierName: string;
   requestState: TierRequestState;
+  /** When a "granted" tier's access ends, already formatted by the server page (the same
+   * toLocaleDateString /feeds prints "Active until" with). Omitted or null prints the pill bare. */
+  grantedUntil?: string | null;
   servers: TierRequestServerOption[];
   /** False when the client has active license(s) but has never registered a server on any
    * of them. R6 (leo-cross-region-server-picker-2026-09-04) only keeps an unregistered
@@ -69,6 +72,7 @@ export function TierRequestControl({
   tierKey,
   tierName,
   requestState,
+  grantedUntil = null,
   servers,
   hasAnyRegisteredServer,
   fallbackLicenseTail,
@@ -85,7 +89,7 @@ export function TierRequestControl({
   if (state === "granted") {
     return (
       <span className="ftd-granted-pill">
-        <span className="dot" /> Approved
+        <span className="dot" /> Approved{grantedUntil ? ` · until ${grantedUntil}` : ""}
       </span>
     );
   }

@@ -225,6 +225,51 @@ export async function computeGrantedFeedTypes(userId: string): Promise<FeedType[
   }
 }
 
+/** This client's own live grants, one row per feed_subscriptions row, for the request cards'
+ * state (tier-request-state.ts; marcus ruling (a)(i), m53589). Envelopes alone never saw a
+ * direct admin grant, so a holder was offered a Request button the guard then refused.
+ *
+ * "Live" is EFFECTIVE_STATUS_SQL's, as in computeGrantedFeedTypes above -- the licence is the
+ * clock (ruling (a)), and s.ends_at is not read: on a direct grant it is only a copy of the
+ * licence expiry and can go stale (@aylrn09's read 09-19 while his licence ran to 10-19).
+ *
+ * live_until is the instant the branch that makes the row live stops holding, in the CASE's own
+ * order: the bound licence's expires_at if that licence is live, else the covering trial's
+ * trial_ends_at. Both predicates are copied from EFFECTIVE_STATUS_SQL's branches -- change one,
+ * change the other. NULL only for a row live through an ungated branch (no region / no FeedType),
+ * which has no end to show.
+ *
+ * Degrades to [] pre-0071 (42P01): a missing table must never 500 a client's tier page. */
+export async function listLiveFeedTierGrantsForSubscriber(
+  userId: string
+): Promise<{ tierKey: string; regionKey: string; liveUntil: Date | null }[]> {
+  try {
+    const result = await pool.query<{ tier_key: string; region_key: string; live_until: Date | null }>(
+      `select ft.tier_key, ft.region_key,
+              case
+                when bl.status = 'active' and bl.expires_at > now() then bl.expires_at
+                else (
+                  select max(ftt.trial_ends_at) from feed_tier_trials ftt
+                  where ftt.user_id = s.subscriber_user_id
+                    and ftt.tier_key = ft.tier_key
+                    and ftt.trial_status = 'active'
+                    and ftt.trial_ends_at > now()
+                )
+              end as live_until
+       from feed_subscriptions s
+       join feed_tiers ft on ft.id = s.feed_tier_id
+       left join licenses bl on bl.id = s.license_id
+       where s.subscriber_user_id = $1
+         and ${EFFECTIVE_STATUS_SQL} <> 'lapsed'`,
+      [userId]
+    );
+    return result.rows.map((row) => ({ tierKey: row.tier_key, regionKey: row.region_key, liveUntil: row.live_until }));
+  } catch (err) {
+    if (isMissingTable(err)) return [];
+    throw err;
+  }
+}
+
 /** Which feed cards this client has -- one source for /feeds and /dashboard, so the two can
  * never disagree about the same account (marcus, leo-approval-invisible-to-client-2026-09-11).
  *

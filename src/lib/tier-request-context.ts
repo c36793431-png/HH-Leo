@@ -1,6 +1,8 @@
 import type { TierRequestServerOption, TierRequestState } from "@/components/feeds/tier-request-control";
 import { FEED_REGION_TYPE, type FeedRegion } from "./feed-tier-catalogue";
+import { listLiveFeedTierGrantsForSubscriber } from "./feed-subscriptions";
 import { listFeedTierRequests } from "./feed-tier-requests";
+import { deriveTierRequestStates } from "./tier-request-state";
 import type { LicenseDetail } from "./licenses";
 import { effectiveServerLocation } from "./server-locations";
 import { getServerRegistrationsForUser } from "./server-registration";
@@ -13,6 +15,8 @@ export interface TierRequestContext {
   serverOptions: TierRequestServerOption[];
   hasAnyRegisteredServer: boolean;
   requestStateFor: (tierKey: string) => TierRequestState;
+  /** When the access behind a "granted" tier ends; null when nothing live dates it. */
+  grantedUntilFor: (tierKey: string) => Date | null;
   licenseTail: string;
 }
 
@@ -21,9 +25,10 @@ export async function getTierRequestContext(
   activeLicenses: LicenseDetail[],
   region: FeedRegion
 ): Promise<TierRequestContext> {
-  const [userServerRegistrations, existingRequests] = await Promise.all([
+  const [userServerRegistrations, existingRequests, liveGrants] = await Promise.all([
     getServerRegistrationsForUser(userId),
     listFeedTierRequests({ userId }),
+    listLiveFeedTierGrantsForSubscriber(userId),
   ]);
   // Cross-region binding is legitimate (coxwell, leo-cross-region-server-picker-2026-09-04:
   // "yes they can if they wish") -- the request modal picks from every active license the
@@ -50,20 +55,12 @@ export async function getTierRequestContext(
   // Per-tier request state for this client. The old set collapsed every non-rejected status
   // into one "Requested" pill, so approved and provisioned rows -- a client who already HAS
   // the access -- kept rendering as still-waiting (marcus,
-  // leo-approval-invisible-to-client-2026-09-11). Precedence granted > pending: a client can
-  // hold a grant and a later request on the same tier (nothing stops a re-request), and the
-  // access they already have is the truer thing to show. rejected maps to "none" exactly as
-  // before -- it resolves back to a usable Request access button, deliberately.
-  const requestStateByTierKey = new Map<string, TierRequestState>();
-  for (const r of existingRequests) {
-    if (r.region !== region) continue;
-    if (r.status === "approved") {
-      requestStateByTierKey.set(r.tierKey, "granted");
-    } else if (r.status === "pending" && requestStateByTierKey.get(r.tierKey) !== "granted") {
-      requestStateByTierKey.set(r.tierKey, "pending");
-    }
-  }
-  const requestStateFor = (tierKey: string): TierRequestState => requestStateByTierKey.get(tierKey) ?? "none";
+  // leo-approval-invisible-to-client-2026-09-11). rejected maps to "none" exactly as before --
+  // it resolves back to a usable Request access button, deliberately. Live grants count as well
+  // as envelopes since m53589 (a)(i); the rule and its precedence live in tier-request-state.ts.
+  const requestStateByTierKey = deriveTierRequestStates(existingRequests, liveGrants, region);
+  const requestStateFor = (tierKey: string): TierRequestState => requestStateByTierKey.get(tierKey)?.state ?? "none";
+  const grantedUntilFor = (tierKey: string): Date | null => requestStateByTierKey.get(tierKey)?.grantedUntil ?? null;
   // A license key identifies one specific license, not an aggregate — never blend multiple
   // licenses into one tail. Show this region's active license(s); if the client holds two
   // active licenses that both grant this region, show both rather than picking one
@@ -75,5 +72,5 @@ export async function getTierRequestContext(
   const licenseTail =
     regionLicenses.length > 0 ? regionLicenses.map((l) => l.licenseKey.slice(-4)).join(", ") : "—";
 
-  return { serverOptions, hasAnyRegisteredServer, requestStateFor, licenseTail };
+  return { serverOptions, hasAnyRegisteredServer, requestStateFor, grantedUntilFor, licenseTail };
 }

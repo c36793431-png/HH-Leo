@@ -194,6 +194,7 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
                 tierKey={request.row.tierKey}
                 tierName={request.tierName}
                 requestState={requestContext.requestStateFor(request.row.tierKey)}
+                grantedUntil={requestContext.grantedUntilFor(request.row.tierKey)?.toLocaleDateString() ?? null}
                 servers={requestContext.serverOptions}
                 hasAnyRegisteredServer={requestContext.hasAnyRegisteredServer}
                 fallbackLicenseTail={requestContext.licenseTail}

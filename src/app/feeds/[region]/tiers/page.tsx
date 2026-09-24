@@ -133,6 +133,14 @@ function packageCardState(memberStates: TierRequestState[]): PackageCardState {
   return "mixed";
 }
 
+/** A granted package's end date is its EARLIEST member's: the card sells the bundle whole, so it
+ * is only held whole until the first member stops -- the same every() reading as packageCardState.
+ * Null when any member has no date, rather than printing a date that some member does not share. */
+function packageGrantedUntil(memberDates: (Date | null)[]): Date | null {
+  if (memberDates.length === 0 || memberDates.some((d) => d == null)) return null;
+  return (memberDates as Date[]).reduce((a, b) => (b < a ? b : a));
+}
+
 /** The declared state that must SUPPRESS a card's request control, or null when the card keeps
  * the behaviour it had. Driven from marketplace-catalogue.ts so this page cannot disagree with
  * /marketplace and /feeds about whether a product is on sale — coxwell ruled Alpha and Ultra
@@ -224,7 +232,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   // Server options, per-tier request state and the licence tail come from the shared helper
   // (lib/tier-request-context.ts), which /marketplace/[key] also renders from. The R6 and
   // multi-licence rulings live there now.
-  const [serverRegistration, { serverOptions, hasAnyRegisteredServer, requestStateFor, licenseTail }] =
+  const [serverRegistration, { serverOptions, hasAnyRegisteredServer, requestStateFor, grantedUntilFor, licenseTail }] =
     await Promise.all([
       getAnyServerRegistrationForUser(session.user.id),
       getTierRequestContext(session.user.id, activeLicenses, region),
@@ -324,6 +332,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
             const label = PACKAGE_LABELS[group.packageKey] ?? group.packageKey;
             const memberStates = group.members.map((m) => requestStateFor(m.tierKey));
             const cardState = packageCardState(memberStates);
+            const cardGrantedUntil = packageGrantedUntil(group.members.map((m) => grantedUntilFor(m.tierKey)));
             const blocked = blockingAvailability(group.members);
             return (
               <div
@@ -404,6 +413,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                     tierKey={PACKAGE_REQUEST_TIER_KEY[group.packageKey] ?? group.packageKey}
                     tierName={`${label} package`}
                     requestState={cardState}
+                    grantedUntil={cardGrantedUntil?.toLocaleDateString() ?? null}
                     servers={serverOptions}
                     hasAnyRegisteredServer={hasAnyRegisteredServer}
                     fallbackLicenseTail={licenseTail}
@@ -471,6 +481,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                 tierKey={t.tierKey}
                 tierName={t.name}
                 requestState={requestStateFor(t.tierKey)}
+                grantedUntil={grantedUntilFor(t.tierKey)?.toLocaleDateString() ?? null}
                 servers={serverOptions}
                 hasAnyRegisteredServer={hasAnyRegisteredServer}
                 fallbackLicenseTail={licenseTail}
