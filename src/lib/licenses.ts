@@ -87,9 +87,15 @@ export interface IssuedLicense {
 
 /** True if this license is the user's (or pre-provisioned claim's) only currently-active
  * one — i.e. a genuine new activation rather than a renewal/re-issue landing alongside
- * (or on top of) one that's still active. issueLicense already refuses to create a second
- * active license for a known userId, so this mainly guards the claim_email/claim_telegram
- * pre-provision path, which has no such check at insert time. `db` defaults to the shared
+ * (or on top of) one that's still active. "Active" means unexpired: status = 'active' and
+ * expires_at > now(), the same predicate as isPaidUser and getActiveLicenseForUser. Lapse
+ * never changes status: the expire-licenses cron sets only lifecycle_state (route.ts:111 at
+ * 9c831bf) and revokeLicense is the only writer of licenses.status, so without the expiry
+ * test a lapsed holder's old row blocked this gate for good (Leo, bus m53048 section C,
+ * relayed by marcus m53080). issueLicense
+ * already refuses a second unexpired active license for a known userId, so this mainly
+ * guards the claim_email/claim_telegram pre-provision path, which has no such check at
+ * insert time. `db` defaults to the shared
  * pool; licenses.first-active.test.ts passes one transaction-scoped client instead. */
 export async function isFirstActiveLicense(
   args: {
@@ -102,21 +108,21 @@ export async function isFirstActiveLicense(
 ): Promise<boolean> {
   if (args.userId) {
     const result = await db.query(
-      `select 1 from licenses where user_id = $1 and status = 'active' and id != $2 limit 1`,
+      `select 1 from licenses where user_id = $1 and status = 'active' and expires_at > now() and id != $2 limit 1`,
       [args.userId, args.newLicenseId]
     );
     return (result.rowCount ?? 0) === 0;
   }
   if (args.claimEmail) {
     const result = await db.query(
-      `select 1 from licenses where claim_email = $1 and status = 'active' and id != $2 limit 1`,
+      `select 1 from licenses where claim_email = $1 and status = 'active' and expires_at > now() and id != $2 limit 1`,
       [args.claimEmail, args.newLicenseId]
     );
     return (result.rowCount ?? 0) === 0;
   }
   if (args.claimTelegramUserId !== undefined) {
     const result = await db.query(
-      `select 1 from licenses where claim_telegram_user_id = $1 and status = 'active' and id != $2 limit 1`,
+      `select 1 from licenses where claim_telegram_user_id = $1 and status = 'active' and expires_at > now() and id != $2 limit 1`,
       [args.claimTelegramUserId, args.newLicenseId]
     );
     return (result.rowCount ?? 0) === 0;
