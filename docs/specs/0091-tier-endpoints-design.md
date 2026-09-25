@@ -78,7 +78,10 @@ Why a child table and not jsonb on the parent:
 Row identity is the four values coalesced to `''`:
 `(parent, coalesce(protocol,''), coalesce(host,''), coalesce(port,''), coalesce(compid,''))`,
 enforced by a unique expression index so it holds on any Postgres version. Two rows that differ
-only in `notes` are one endpoint. This is the ONLY row identity in the design; the carry rule
+only in `notes` are one endpoint. The nonempty check uses the same definition of set,
+`num_nonnulls(nullif(x,''), ...) > 0`, so a row of four empty strings is refused rather than
+accepted as an endpoint the identity calls "no address" (fable's .sql verdict S1, m53885).
+This is the ONLY row identity in the design; the carry rule
 below keys on it and nothing else, so there is one identity, not two.
 
 - **Verification carry keys on the full four-tuple.** A new tier endpoint row starts
@@ -162,9 +165,11 @@ confirm INSERT/UPDATE and the register-provider INSERT between apply and deploy.
 3. Re-run step 4 of 0091 alone, once, after deploy. It is idempotent (`not exists`). It inserts a
    child for any parent row old code created in the window and prints, without changing, any
    tier whose parent values differ from its position-0 child (an old-code confirm in the
-   (i)..(ii) window that the dual-write did not see). Expected notice:
-   `backfill tiers: inserted 0`, `drift rows: 0`. A non-zero drift row is printed with both sides
-   verbatim and resolved by hand, not by the script `[N4]`.
+   (i)..(ii) window that the dual-write did not see). Expected notices:
+   `backfill ...: inserted N`, N = listings old code created in the window, which is correct and
+   needs no hand resolution (fable's .sql verdict N1, m53885); `drift rows: 0`, and it must be 0.
+   A non-zero drift row is printed with both sides verbatim and resolved by hand, not by the
+   script `[N4]`.
 4. 0092, not written, gate is **position 0 only**: for every parent, the child row at position 0
    equals the parent four (coalesce both sides) and `endpoint_verified` on the tier side; and
    parent all-null <=> zero child rows. NOT child == parent over all rows: the Pip Dealer

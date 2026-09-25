@@ -10,6 +10,10 @@
 -- keeps the parent columns equal to the position-0 child, so position 0 is reproducible; every
 -- row at position >= 1 and every non-null notes is not, and dropping the tables loses it. The
 -- count check below refuses in that case; coxwell decides by hand.
+-- The same check also refuses on a STALE position-0 child: a tier old code re-confirmed in the
+-- (i)..(ii) window whose drift row has not been hand-resolved yet (fable N2). That case is
+-- loss-free, since the parent columns hold the newer value and the stale child is the only thing
+-- dropped. The refusal stays the default; coxwell reads the count and decides.
 --
 -- One transaction. Dry-run with `rollback;` in place of `commit;` first.
 

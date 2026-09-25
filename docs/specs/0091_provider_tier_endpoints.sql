@@ -3,6 +3,9 @@
 -- kai/tier-endpoints-design-2026-09-24 off origin/main e4edea2. Design: docs/specs/0091-tier-endpoints-design.md.
 -- Revised 2026-09-25 for fable's design ruling (marcus m53845_mugcb7oa): S2 dual-write and
 -- position-0 gate, N1 census print, N2 position check 0..7. Numbering 0091/0092 per m53796.
+-- Revised 2026-09-25 for fable's .sql verdict (fable m53885_mugcwdck via marcus m53887_mugcwt7d):
+-- S1 '' is unset in the nonempty checks, step-3 '' census, (iii) notice text (N1); the rollback
+-- header takes N2.
 -- Lives under docs/specs/ until fable passes this file; moves to db/migrations/ with the code
 -- branch. Companion rollback: docs/specs/0091_rollback.sql. coxwell applies; neither coder writes
 -- to prod.
@@ -32,9 +35,11 @@
 --   (ii)  the code branch merges, only after the (i) notices are on the bus (merge == deploy).
 --         Between (i) and (ii) old code keeps writing the parent columns and nothing else.
 --   (iii) step 4 ALONE re-run once after the (ii) deploy. It is idempotent (`not exists`) and
---         self-contained. Expected notices: `backfill proposals: inserted 0`,
---         `backfill tiers: inserted 0`, `drift rows: 0`. A non-zero drift row is printed with
---         both sides verbatim and is resolved by hand, never by this script.
+--         self-contained. Expected notices: `backfill proposals: inserted N` and
+--         `backfill tiers: inserted N`, where N = listings old code created in the (i)..(ii)
+--         window (scalars and no child row yet). Those inserts are expected and correct and need
+--         no hand resolution (fable N1). `drift rows` must be 0: a non-zero drift row is printed
+--         with both sides verbatim and is resolved by hand, never by this script.
 --   Then 0092 (not written), gate POSITION 0 ONLY: the child row at position 0 equals the
 --   parent four (coalesce both sides) and endpoint_verified on the tier side, and parent
 --   all-null <=> zero child rows. Not child == parent over all rows: every listing with a
@@ -42,6 +47,31 @@
 --   design. Then drop the five parent columns.
 --
 -- One transaction. Every DO block either raises (whole transaction aborts) or emits a notice.
+--
+-- EMPTY STRINGS (fable S1): the nonempty checks in steps 1 and 2 treat '' as unset, the same
+-- definition of "set" the identity indexes use, so a row of four '' is refused. The backfill and
+-- the step-4/step-5 compares still copy and compare the parent four VERBATIM, with no nullif or
+-- coalesce, because no writer of the parent four can emit '' (kai's read at e4edea2; src/ is
+-- unchanged on this branch):
+--   provider_tier_proposals: one INSERT, submitProposalRound, src/lib/provider-tier-proposals.ts
+--     :324-344, the four bound from input.protocol/endpointHost/endpointPort/compid (:337-340).
+--     Its only caller, submitTierProposalAction, builds all four with str(formData, key)
+--     (src/app/feed/dashboard/terms/actions.ts:48-51), and str trims and returns `value || null`
+--     (:17-20), so '' is null before the query. The two seed scripts
+--     (scripts/seed_terms_review_queue.sql:65-87, scripts/seed_terms_review_queue_fabricated.sql
+--     :71-93) insert without naming any of the four, so they take the default, null (0061:21-24).
+--   provider_tiers: confirmProposalRound copies proposal.protocol/endpoint_host/endpoint_port/
+--     compid verbatim (:509-512 on the update branch, :533-536 on the insert branch), so it holds
+--     '' only if the proposal row did. registerProviderTiers (src/lib/provider-tiers.ts:321-336)
+--     binds tier.endpointHost/endpointPort/protocol (:331-332, :334), built by parseTiers as
+--     `t.x.trim() || null` (src/app/admin/register-provider/actions.ts:60-63); compid is not in
+--     that INSERT's column list (:322-323) and takes the default, null (0083:55). No other
+--     INSERT or UPDATE on either parent names the four (declineProposalRound :584-589 and the
+--     confirm's own :434-439 write terms_status/decided_* only).
+--   The step-3 census still counts parent rows with any of the four = '' on both parents,
+--   expected 0. If it is not 0: a parent with ALL four '' is refused by the nonempty check and
+--   step 4 aborts (loud); a parent with '' in some of the four backfills verbatim and compares
+--   equal on both sides. Neither case is silent, and neither changes a parent row.
 --
 -- SECOND ADDRESS FOR AN EXISTING LIVE TIER (The Pip Dealer, tier dff16179...): not in this file,
 -- values not known to kai. Template for coxwell, after (i), to run by hand with real values:
@@ -73,6 +103,8 @@ end $$;
 --    `nulls not distinct`. Two rows differing only in notes are one endpoint and are refused.
 --    This is the row identity the app's verification carry keys on (design 2.1, fable S1).
 --    nonempty check: a row with none of the four set is not an endpoint; notes alone is refused.
+--    '' counts as unset (nullif), the same as the identity index's coalesce, so a row of four ''
+--    is refused too (fable S1). Fail-first: insert (parent, 2, '', '', '', '') must be refused.
 --    notes: provider-authored on the terms form, admin-only render (design 2.2, ruling (d)).
 create table if not exists provider_tier_proposal_endpoints (
   id            uuid primary key default gen_random_uuid(),
@@ -87,7 +119,7 @@ create table if not exists provider_tier_proposal_endpoints (
   constraint provider_tier_proposal_endpoints_position_key unique (proposal_id, position),
   constraint provider_tier_proposal_endpoints_position_check check (position between 0 and 7),
   constraint provider_tier_proposal_endpoints_nonempty_check
-    check (num_nonnulls(protocol, endpoint_host, endpoint_port, compid) > 0)
+    check (num_nonnulls(nullif(protocol, ''), nullif(endpoint_host, ''), nullif(endpoint_port, ''), nullif(compid, '')) > 0)
 );
 
 create unique index if not exists provider_tier_proposal_endpoints_identity_uidx
@@ -111,7 +143,7 @@ create table if not exists provider_tier_endpoints (
   constraint provider_tier_endpoints_position_key unique (tier_id, position),
   constraint provider_tier_endpoints_position_check check (position between 0 and 7),
   constraint provider_tier_endpoints_nonempty_check
-    check (num_nonnulls(protocol, endpoint_host, endpoint_port, compid) > 0)
+    check (num_nonnulls(nullif(protocol, ''), nullif(endpoint_host, ''), nullif(endpoint_port, ''), nullif(compid, '')) > 0)
 );
 
 create unique index if not exists provider_tier_endpoints_identity_uidx
@@ -127,9 +159,13 @@ create unique index if not exists provider_tier_endpoints_identity_uidx
 --    src/lib/provider-tier-proposals.ts:441-444) carries an address. Such a proposal gets no
 --    child row, so its confirm would replace the tier's endpoint set with nothing. Printed one
 --    notice per row with both sides, then counted; nothing is changed and nothing aborts.
+--    empty strings (fable S1): parent rows with any of the four = '', on both parents. Expected 0
+--    (header, EMPTY STRINGS: no writer emits ''). Counted and printed, not aborted; what a
+--    non-zero means is in the header.
 do $$
 declare
   p_src int; p_child int; t_src int; t_child int; t_vna int;
+  p_empty int; t_empty int;
   r record;
   p_allnull int := 0;
 begin
@@ -143,6 +179,13 @@ begin
     where endpoint_verified and num_nonnulls(protocol, endpoint_host, endpoint_port, compid) = 0;
   raise notice 'census before: proposals with any scalar %, proposal child rows %; tiers with any scalar %, tier child rows %; verified_no_address %',
     p_src, p_child, t_src, t_child, t_vna;
+
+  select count(*) into p_empty from provider_tier_proposals
+    where protocol = '' or endpoint_host = '' or endpoint_port = '' or compid = '';
+  select count(*) into t_empty from provider_tiers
+    where protocol = '' or endpoint_host = '' or endpoint_port = '' or compid = '';
+  raise notice 'empty strings (expected 0): proposals with any of the four = '''' %, tiers %',
+    p_empty, t_empty;
 
   for r in
     select p.id as proposal_id, p.terms_status, p.created_at, t.id as tier_id,
