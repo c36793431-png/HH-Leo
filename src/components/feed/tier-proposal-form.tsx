@@ -105,7 +105,9 @@ export function TierProposalForm({
             {/* Plain text, not a <label>: a <label> with no htmlFor labels the first control inside
                 it, so with Remove nested in it a click anywhere on this heading fired Remove and the
                 button's accessible name became "Connection endpoint 1 of 2 Remove" (Leo's headless
-                render at 70c5bba, m54370 F1, via marcus m54371). Remove stays a sibling. The inline
+                render at 70c5bba, m54370 F1, via marcus m54371). Remove is still a child of this
+                heading div (inside the fragment below); with a div, a click on the heading no longer
+                reaches it (Leo's render at cf66715, m54396 F1, via marcus m54397). The inline
                 style repeats `.feed-provider-v1 .field label` (feed-dashboard.css:137) so the heading
                 keeps its look without that stylesheet being opened here. */}
             <div
@@ -191,10 +193,12 @@ export function TierProposalForm({
         )}
         <span className="hint">
           An endpoint is a host and a port; protocol and SenderCompID describe that session, and the note is
-          read by Horizon only. Up to {MAX_ENDPOINTS_PER_PARENT} per tier. On a tier&rsquo;s first round,
+          read by Horizon only. Up to {MAX_ENDPOINTS_PER_PARENT}{" "}
+          per tier. On a tier&rsquo;s first round,
           endpoints, regions and coverage are optional — leave them blank if you&apos;d rather confirm them with
           Horizon directly. Once a tier is live, leaving an endpoint out, or leaving its protocol or SenderCompID
-          blank, does <b>not</b> remove that detail: the round is <b>refused</b> and names the address, so
+          blank, does <b>not</b> remove that detail: the round is <b>refused</b>{" "}
+          and names the address, so
           re-enter every endpoint you want to keep. Removing a live endpoint is Horizon&rsquo;s to do — ask them.
         </span>
       </div>
