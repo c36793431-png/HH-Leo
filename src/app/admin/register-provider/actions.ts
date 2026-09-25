@@ -6,6 +6,7 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { registerProviderTiers, type ApplicationFieldEdits, type RegisterTierInput } from "@/lib/provider-tiers";
 import { createManualProviderApplication } from "@/lib/provider-applications";
+import { parseEndpointsJson, serializeEndpointRows, type EndpointInput } from "@/lib/provider-tier-endpoints";
 
 function str(formData: FormData, key: string): string | null {
   const value = ((formData.get(key) as string) ?? "").trim();
@@ -53,14 +54,27 @@ function parseTiers(raw: string): RegisterTierInput[] {
       if (!Number.isFinite(providerSplitPct) || providerSplitPct < 0 || providerSplitPct > 100) {
         throw new Error(`Invalid provider split for tier "${t.tierName}"`);
       }
+      // Section 1 row 8 (docs/specs/0091-tier-endpoints-design.md @ 6100dc0, :44; 2.2 :178-179):
+      // the tier's host/port/protocol are one endpoint row at position 0, read through the same
+      // parser as the terms form, so its rules hold here too -- all blank is no row, a protocol
+      // with no address is refused naming the missing box (2.1 S1, :104-115; a tightening versus
+      // the three independent inputs this replaces), and no compid by design (ruling (c)). The
+      // draft goes through the serializer first so a numeric value cannot reach the parser as a
+      // "must be text" refusal (fable's delta-1 note N3, m54026 via marcus m54028).
+      let endpoints: EndpointInput[];
+      try {
+        endpoints = parseEndpointsJson(
+          serializeEndpointRows([{ protocol: t.protocol, endpointHost: t.endpointHost, endpointPort: t.endpointPort }])
+        );
+      } catch (err) {
+        throw new Error(`Tier "${t.tierName.trim()}": ${err instanceof Error ? err.message : String(err)}`);
+      }
       return {
         tierName: t.tierName.trim(),
         clientPriceCents,
         providerSplitPct,
-        endpointHost: t.endpointHost.trim() || null,
-        endpointPort: t.endpointPort.trim() || null,
+        endpoint: endpoints[0] ?? null,
         endpointVerified: !!t.endpointVerified,
-        protocol: t.protocol?.trim() || null,
         regions: lines(t.regions),
         coverage: lines(t.coverage),
       };

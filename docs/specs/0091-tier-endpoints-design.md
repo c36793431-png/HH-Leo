@@ -10,7 +10,10 @@ flagged blank-compid consequence (m53894 via marcus m53896: REFUSE THE BLANK, se
 1 and 2, section 5 test plan 2). Revised again 2026-09-25 for fable's design verdict on dc79b31
 (m53938 via marcus m53940: PASS WITH STRIKES, all text): S1 an endpoint row requires host and port
 (2.1, 5.3), S2 the 0092 order (3 step 4), S3 the grep gate split into two patterns (4), and her
-note N2 (2.2).
+note N2 (2.2). Revised 2026-09-25 at code delta 4, text only, for the items the code-phase
+reviews left owed to the first .md touch: fable's design-pass note N1 (6 item 7, m53977 via
+marcus m53979), the delta-1 strike S1 count-per-address (2.1, m54026 via m54028), the delta-2
+plan ruling J3 (2.2, m54043 via m54049), and the FLAG 1 baseline re-count (4).
 Every file:line below is read at origin/main `e4edea2319d9e767e8264550b229de0f7bb268ff`.
 Design only. No code, no migration applied. The .sql beside this file is a candidate for coxwell,
 not a file under db/migrations.
@@ -140,6 +143,17 @@ below keys on it and nothing else, so there is one identity, not two.
   is the point of the change. The narrowing rule decides what you may do to the matched row.
   SQL consequence: none; the check constraint and the identity index are unchanged, this is
   code-phase only.
+- **Where n > 1 live rows share one address, both clauses are counts per address** (fable's
+  code delta-1 strike S1, m54026 via marcus m54028; built at 3d8b1ce). Group live rows by
+  `(host, port)`; for each address: (i) fewer submitted rows at that address than live rows is
+  a removal, refused as "k of n endpoints removed at host:port"; (ii) otherwise, per column
+  `protocol` / `compid`, fewer submitted rows with it set than live rows with it set is a
+  narrowing, refused as "Label left blank at host:port". For n = 1 this is byte-identical to
+  clauses 1 and 2 as written. Why: the first cut counted a narrowed column as kept if ANY
+  submitted row at the address had it set, and with live `(FIX, gw:9443, C1)` verified and
+  `(FIX, gw:9443, C2)` verified a submission of `[C2]` alone passed with no refusal: a verified
+  session gone and nothing told anyone, the removal this guard exists to refuse. An edit at a
+  shared address with the neighbour kept (`C1 -> C3`, `C2` resubmitted) is still an edit.
 - **Do not harmonise these two keys.** The carry key answers "is this the same session the admin
   logged on to" and must be the four; the removal key answers "did an address disappear" and
   must be the address; the narrowing rule is not a third key, it is what clause 1's match may
@@ -160,7 +174,13 @@ below keys on it and nothing else, so there is one identity, not two.
   once 2.1 clause 1 holds (the guard refuses the submission at submit time); it is reachable only
   when coxwell edits the live tier rows by SQL between submit and confirm, and then replace
   semantics is the correct outcome, the confirmed round is what the provider submitted and the
-  admin saw (fable N2, m53938). Clause 1 has no hole here.
+  admin saw (fable N2, m53938). Clause 1 has no hole here. The tier row is locked FOR UPDATE
+  before the replace-set; the proposal lock alone serialises per proposal, not per tier
+  (fable's code delta-2 plan ruling J3, m54043 via marcus m54049; built at f65e492). Lock order
+  in every writer that takes both: proposal row, then tier row; submit locks nothing, it is
+  check-then-act and the confirm is the write of record. Two concurrent FIRST confirms into one
+  tier both INSERT, because provider_tiers has no unique on `(application_id, tier_name)`
+  (0060:29-30 are plain indexes); that race is today's, logged as a follow-up, not built here.
 - Removal path in this cut is unchanged from today: a provider submitting a set without a live
   address is refused by the guard (2.1 clause 1), and so is a set that blanks a live row's
   `protocol` or `compid` at a matched address (2.1 clause 2); the removal or the blanking is SQL
@@ -279,8 +299,10 @@ code phase builds it:
     `src/app/feed/dashboard/terms/`, `src/app/admin/register-provider/`,
     `src/lib/provider-tier-endpoints.ts`, `db/migrations/`, `docs/specs/`. camelCase field names
     and the `page.tsx:72` comment are not reads.
-  Baseline at e4edea2 (read on 2026-09-25, my claim until the code-phase review re-reads it):
-  3 hits in `db/migrations`, 1 in `src/app/admin/providers/page.tsx:72` (a comment), 15 in
+  Baseline at e4edea2 (`git grep -c endpoint_host e4edea2 -- <path>`, re-counted at code
+  delta 4 for fable's FLAG 1, m54026 via marcus m54028; the first cut of this line said 15 for
+  provider-tier-proposals.ts and was wrong): 3 hits in `db/migrations`, 1 in
+  `src/app/admin/providers/page.tsx:72` (a comment), 12 in
   `src/lib/provider-tier-proposals.ts`, 5 in `src/lib/provider-tiers.ts`; the table names have
   zero hits at e4edea2 because the tables do not exist yet. The two `src/lib` files must reach
   zero hits on both patterns: every SQL that names these tables or columns moves into the
@@ -366,9 +388,12 @@ sets, fable's pass on the 0091 .sql, and coxwell's apply notices on the bus.
 6. Blank at a matched address (fable m53894 via marcus m53896): REFUSE THE BLANK. Section 2.1
    clauses 1 and 2; three tests in section 5 item 2; no SQL change, code phase only.
 7. Address-less rows (fable m53938 via marcus m53940, S1): an endpoint row requires host and
-   port at the parser; section 2.1 and section 5 item 3; no SQL change, code phase only. Left
-   with marcus: whether step 3 of the .sql should print address-less parents per row (today it
-   counts them inside "with any scalar" only).
+   port at the parser; section 2.1 and section 5 item 3; no SQL change, code phase only. The
+   per-row step-3 print of address-less parents was ruled NO (fable m53977 via marcus m53979,
+   FLAG 1): no SQL change, the .sql stays passed at 1f649a9. Reason: the population is measured
+   at 0 (m53912), step 3's re-run reports any window row as `backfill ...: inserted N` for
+   coxwell to read, the parser then makes such a row impossible, and one that still slips
+   fails loud at clause 1. Closed.
 
 Open: none from the design. The .sql and rollback passed at 65a32dc (m53910) and the N1 header
 clause is at 1f649a9; the code phase starts only after fable passes the hunks of this file.

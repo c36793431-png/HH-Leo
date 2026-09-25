@@ -41,22 +41,12 @@ export async function submitTierProposalAction(formData: FormData): Promise<Acti
     const trialLengthDaysRaw = (formData.get("trialLengthDays") as string)?.trim();
     const trialLengthDays = trialLengthDaysRaw ? parseInt(trialLengthDaysRaw, 10) : 14;
 
-    // Adapter until the form posts N rows (code phase delta 4; marcus m54021, J1 = A): the four
-    // single boxes become one endpoint row through the same parser the N-row form will use, so
-    // its rules already apply here -- an all-blank row is no row, and a protocol or SenderCompID
-    // with no host and port is refused, naming the missing box (docs/specs/0091-tier-endpoints-
-    // design.md @ 6100dc0, section 2.1 :104-115: a tightening versus the four independent
-    // inputs this replaces, stated on purpose).
-    const endpoints = parseEndpointsJson(
-      JSON.stringify([
-        {
-          protocol: str(formData, "protocol"),
-          endpointHost: str(formData, "endpointHost"),
-          endpointPort: str(formData, "endpointPort"),
-          compid: str(formData, "compid"),
-        },
-      ])
-    );
+    // Section 1 row 2 (docs/specs/0091-tier-endpoints-design.md @ 6100dc0, :38): the form posts
+    // its endpoint rows as one JSON list in a hidden input (serializeEndpointRows in the
+    // component), and the parser owns every rule -- all-blank rows are skipped, positions are
+    // 0..n-1 in form order, at most 8, a row needs host AND port (2.1, :104-115), and a repeated
+    // identity is refused by row number. Nothing here reads a connection box by name any more.
+    const endpoints = parseEndpointsJson((formData.get("endpointsJson") as string | null) ?? null);
 
     await submitProposalRound(providerUserId, applicationId, {
       tierName: (formData.get("tierName") as string) ?? "",

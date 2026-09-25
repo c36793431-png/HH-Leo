@@ -3,6 +3,7 @@ import { getProviderApplication, notifyProviderLive } from "./provider-applicati
 import {
   carryVerification,
   readEndpoints,
+  writeTierEndpoints,
   type EndpointInput,
   type EndpointViewer,
   type LiveEndpoint,
@@ -280,7 +281,8 @@ export interface ProposalEndpointPreview {
  * different instants, which is why afterConfirm is documented as a preview and not a promise.
  *
  * provider_tiers has no unique on (application_id, tier_name) (0060:29-30 are plain indexes;
- * fable's J3 via marcus m54049, logged as a follow-up, not built here), so like confirm this
+ * fable's delta-2 plan ruling J3, m54043 via marcus m54049, logged as a follow-up, not built
+ * here), so like confirm this
  * takes the first row the same predicate returns. Should two rows ever exist, the card and the
  * confirm could pick differently; that is the logged race, not a new one. */
 export async function previewProposalEndpointsAdmin(
@@ -306,15 +308,18 @@ export interface RegisterTierInput {
   tierName: string;
   clientPriceCents: number;
   providerSplitPct: number;
-  endpointHost: string | null;
-  endpointPort: string | null;
-  endpointVerified: boolean;
-  /** Per-tier, typed on this tier's own inputs -- never copied from the application fields, so a
-   * blank stays null and the roster keeps showing the application's value, marked as such.
-   * No compid here on purpose: a live tier's compid is echoed back to the provider by the
+  /** The tier's one endpoint row (position 0: protocol, host, port) or null for none, parsed by
+   * the register-provider action through parseEndpointsJson (section 1 row 8, design 2.2
+   * :178-179). Per-tier, typed on this tier's own inputs -- never copied from the application
+   * fields, so a blank stays null and the roster keeps showing the application's value, marked
+   * as such. No compid here on purpose (design 6 item 3, ruling (c): "compid stays absent
+   * there, today's shape"): a live tier's compid is echoed back to the provider by the
    * blank-clear refusal in submitProposalRound (provider-tier-proposals.ts), so writing one from
-   * this path needs marcus's say first (2026-09-23). */
-  protocol: string | null;
+   * this path needs marcus's say first (2026-09-23). The action builds the row from a draft
+   * with no compid field, so it is null by construction, not by an override here. */
+  endpoint: EndpointInput | null;
+  /** The form's checkbox: becomes the position-0 row's endpoint_verified. */
+  endpointVerified: boolean;
   regions: string[] | null;
   coverage: string[] | null;
 }
@@ -346,6 +351,21 @@ export async function registerProviderTiers(
 ): Promise<void> {
   if (tiers.length === 0) throw new Error("At least one tier is required to publish.");
 
+  // A verified flag is a claim about this tier's specific host:port, not about the row
+  // (provider-tier-endpoints.ts LiveEndpoint); with no row there is nothing it can be a claim
+  // about, and the mirror would write endpoint_verified = false for the tier anyway (design 3
+  // step 2, :205-206: zero rows -> all null and false). Refused rather than dropped silently,
+  // because an admin ticked it and would otherwise get a success toast for a flag that did not
+  // land. Today's INSERT wrote the tick with null host/port; that is not ported. Judgement call,
+  // kai, delta 4: strike it if the tick should be dropped or accepted without an address.
+  for (const tier of tiers) {
+    if (tier.endpointVerified && tier.endpoint === null) {
+      throw new Error(
+        `Tier "${tier.tierName}": "Endpoint confirmed" is ticked but there is no endpoint to confirm. Enter host and port, or untick it.`
+      );
+    }
+  }
+
   const application = await getProviderApplication(applicationId);
   if (!application) throw new Error("Provider application not found");
   if (application.status !== "approved") throw new Error("Application must be approved before registration");
@@ -376,25 +396,33 @@ export async function registerProviderTiers(
       ]
     );
 
+    // The tier's endpoint is a child row at position 0 written by writeTierEndpoints, which also
+    // mirrors it (four + endpoint_verified) onto the parent columns until 0092 (design 3 step 2,
+    // :203-209; section 1 row 8, :44); the INSERT names none of the five. The writer wants the
+    // provider_tiers row lock: this row is inserted in this transaction and is invisible to every
+    // other transaction until commit, which is the same guarantee. A tier with no endpoint gets
+    // zero child rows and an all-null, false mirror.
     for (const tier of tiers) {
-      await client.query(
+      const inserted = await client.query<{ id: string }>(
         `insert into provider_tiers
            (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
-            endpoint_host, endpoint_port, endpoint_verified, protocol, regions, coverage)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            regions, coverage)
+         values ($1, $2, $3, $4, $5, $6, $7)
+         returning id`,
         [
           applicationId,
           application.userId,
           tier.tierName,
           tier.clientPriceCents,
           tier.providerSplitPct,
-          tier.endpointHost,
-          tier.endpointPort,
-          tier.endpointVerified,
-          tier.protocol,
           tier.regions,
           tier.coverage,
         ]
+      );
+      await writeTierEndpoints(
+        client,
+        inserted.rows[0].id,
+        tier.endpoint === null ? [] : [{ ...tier.endpoint, endpointVerified: tier.endpointVerified }]
       );
     }
 

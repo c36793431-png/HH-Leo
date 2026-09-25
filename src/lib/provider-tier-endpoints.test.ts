@@ -22,6 +22,7 @@ import {
   parentMirror,
   foldEndpointRows,
   resolveEndpointsForDisplay,
+  serializeEndpointRows,
   MAX_ENDPOINTS_PER_PARENT,
   type EndpointInput,
   type LiveEndpoint,
@@ -312,6 +313,49 @@ test("5.3 non-array JSON and malformed JSON are refused readably", () => {
   assert.throws(() => parseEndpointsJson("{}"), /list/i);
   assert.throws(() => parseEndpointsJson("not json"), /endpoints/i);
   assert.throws(() => parseEndpointsJson("[1]"), /row 1/i);
+});
+
+/* ---------- delta 4: serializeEndpointRows, the hidden-input contract (fable delta-1 N3) ---------- */
+
+test("N3: the parser refuses a numeric port posted raw, and the serializer is what makes it text", () => {
+  // fable m54026 via marcus m54028, N3: cleanField refuses non-string JSON values, so the form's
+  // serializer must stringify. First assertion = the contract the serializer exists to meet;
+  // second = the serializer meeting it on the same input.
+  const draft = [{ protocol: "FIX 4.4", endpointHost: "a.example.net", endpointPort: 9443, compid: "C1" }];
+  assert.throws(() => parseEndpointsJson(JSON.stringify(draft)), /must be text/);
+  const out = parseEndpointsJson(serializeEndpointRows(draft));
+  assert.deepEqual(out, [
+    { position: 0, protocol: "FIX 4.4", endpointHost: "a.example.net", endpointPort: "9443", compid: "C1", notes: null },
+  ]);
+  assert.equal(typeof out[0].endpointPort, "string");
+});
+
+test("N3: null and undefined stay null, blanks stay blank, no row is dropped, order kept (row numbers must match the form)", () => {
+  const wire = JSON.parse(
+    serializeEndpointRows([{}, { endpointHost: "", endpointPort: null, notes: undefined }, { endpointHost: "b.example.net", endpointPort: "7000" }])
+  );
+  assert.deepEqual(wire, [
+    { protocol: null, endpointHost: null, endpointPort: null, compid: null, notes: null },
+    { protocol: null, endpointHost: "", endpointPort: null, compid: null, notes: null },
+    { protocol: null, endpointHost: "b.example.net", endpointPort: "7000", compid: null, notes: null },
+  ]);
+  // The parser then skips the two blanks and numbers the error by source row, so a bad third
+  // row is still "row 3" to the provider.
+  assert.throws(() => parseEndpointsJson(serializeEndpointRows([{}, {}, { endpointHost: "c.example.net" }])), /row 3/i);
+});
+
+test("N3 register-provider path: one draft with host, port and protocol -> one row at position 0, compid null; all blank -> no row", () => {
+  // Row 8 (design 2.2 :178-179, ruling (c)): the register form posts one endpoint per tier and
+  // no compid; the action serializes the draft and parses it like the terms form's rows.
+  const one = parseEndpointsJson(serializeEndpointRows([{ protocol: "FIX 4.4", endpointHost: "a.example.net", endpointPort: "9443" }]));
+  assert.deepEqual(one, [{ position: 0, protocol: "FIX 4.4", endpointHost: "a.example.net", endpointPort: "9443", compid: null, notes: null }]);
+  assert.deepEqual(parseEndpointsJson(serializeEndpointRows([{ protocol: "", endpointHost: "", endpointPort: "" }])), []);
+  // Protocol with the address blanked is refused naming both boxes (S1), the register form's
+  // "Tier protocol" alone is no longer a tier endpoint.
+  assert.throws(
+    () => parseEndpointsJson(serializeEndpointRows([{ protocol: "FIX 4.4", endpointHost: "", endpointPort: "" }])),
+    (e: unknown) => e instanceof Error && /Endpoint host/.test(e.message) && /Endpoint port/.test(e.message)
+  );
 });
 
 /* ---------- delta 2: parentMirror, the dual-write's position-0 rule (design 3 step 2) ---------- */

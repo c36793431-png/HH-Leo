@@ -254,6 +254,12 @@ export function RegisterProviderForm({
                     value={tier.endpointPort}
                     onChange={(e) => updateTier(i, { endpointPort: e.target.value })}
                   />
+                  {/* 0091 row 8: host and port are one endpoint row (position 0); a protocol on
+                      its own is refused, and the tick above needs an address to be about. */}
+                  <span className="mt-1 block text-[11px] text-zinc-500">
+                    Host and port together, or both blank. The &ldquo;Endpoint confirmed&rdquo; tick needs an
+                    address.
+                  </span>
                 </label>
                 <label>
                   <span className={LABEL}>Tier protocol</span>

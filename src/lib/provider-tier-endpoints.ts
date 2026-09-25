@@ -197,6 +197,35 @@ interface RawEndpointRow {
   notes?: string | null;
 }
 
+/** One row as a form holds it before it is posted: whatever a controlled input or a JSON
+ * round-trip left in the field. A number is the case that matters (fable's delta-1 note N3,
+ * m54026 via marcus m54028: cleanField refuses a numeric port as a row-level "must be text"). */
+export interface EndpointRowDraft {
+  protocol?: string | number | null;
+  endpointHost?: string | number | null;
+  endpointPort?: string | number | null;
+  compid?: string | number | null;
+  notes?: string | number | null;
+}
+
+/** The hidden-input serializer, the only way a form should build the JSON parseEndpointsJson
+ * reads. Every present field is stringified, null and undefined stay null, so a port typed as
+ * 9443 reaches the parser as "9443" and not as a refused number (N3). Pure and exported so the
+ * contract is a test, not a hope about two client components. Rows are kept in order and none
+ * is dropped: blank rows are the parser's to skip, so row numbers in its errors still match
+ * the form. */
+export function serializeEndpointRows(rows: readonly EndpointRowDraft[]): string {
+  const asText = (v: string | number | null | undefined): string | null => (v === null || v === undefined ? null : String(v));
+  const wire: RawEndpointRow[] = rows.map((r) => ({
+    protocol: asText(r.protocol),
+    endpointHost: asText(r.endpointHost),
+    endpointPort: asText(r.endpointPort),
+    compid: asText(r.compid),
+    notes: asText(r.notes),
+  }));
+  return JSON.stringify(wire);
+}
+
 function cleanField(row: RawEndpointRow, key: keyof RawEndpointRow, rowNo: number): string | null {
   const value = row[key];
   if (value === undefined || value === null) return null;
@@ -387,8 +416,8 @@ export function resolveEndpointsForDisplay(
 export type EndpointParentKind = "tier" | "proposal";
 
 /** The two parents, same child shape each (design 2, :54-61). The child table and its foreign
- * key are looked up by kind so the reader is one function (fable's delta-2 ruling on J2 is
- * pending via marcus m54028; built as read). */
+ * key are looked up by kind so the reader is one function (fable's delta-2 plan ruling J2,
+ * m54043 via marcus m54049: one entry point whose viewer assert runs on both kinds). */
 const PARENT = {
   tier: { table: "provider_tier_endpoints", parentTable: "provider_tiers", fk: "tier_id" },
   proposal: { table: "provider_tier_proposal_endpoints", parentTable: "provider_tier_proposals", fk: "proposal_id" },
@@ -546,9 +575,10 @@ export async function insertProposalEndpoints(
 
 /** Tier writer, the set as given: delete every row of the tier, insert `rows` with their
  * verified flags as passed, mirror position 0 (four + endpoint_verified) onto provider_tiers.
- * Used by replaceTierEndpoints (confirm, flags from the carry) and, in a later delta, by
- * register-provider (row 8: position 0 only, flag from the checkbox, design 2.2 :178-179).
- * Caller holds the transaction AND the provider_tiers row lock (`select ... for update`). */
+ * Used by replaceTierEndpoints (confirm, flags from the carry) and by registerProviderTiers
+ * (row 8: position 0 only, flag from the checkbox, design 2.2 :178-179). Caller holds the
+ * transaction AND the provider_tiers row lock: `select ... for update`, or the row was
+ * inserted in this same transaction and no other transaction can see it yet. */
 export async function writeTierEndpoints(
   client: Queryable,
   tierId: string,
