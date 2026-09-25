@@ -325,18 +325,20 @@ test("mirror: zero rows -> all four null and endpoint_verified false (design 3 s
   });
 });
 
-test("mirror: the lowest position wins whatever the array order, and its verified flag rides with it", () => {
-  const p1 = live({ ...B, endpointVerified: true });
-  const p0 = live({ ...A, endpointVerified: false });
-  const out = parentMirror([p1, p0]);
-  assert.deepEqual(out, {
+test("mirror: the row at position 0 wins whatever the array order (listed second here), and its verified flag rides with it", () => {
+  // marcus m54075 item (1)/(2): the earlier form of this test fed two rows both at position 0
+  // and went red (40/41 on his box); a set never holds two rows at one position (unique
+  // (parent, position), 0091 .sql :123, :147), so the fixture was wrong, not the rule.
+  const p1 = live({ ...B, position: 1, endpointVerified: true });
+  const p0 = live({ ...A, position: 0, endpointVerified: false });
+  assert.deepEqual(parentMirror([p1, p0]), {
     protocol: A.protocol,
     endpointHost: A.endpointHost,
     endpointPort: A.endpointPort,
     compid: A.compid,
     endpointVerified: false,
   });
-  assert.equal(parentMirror([p0, live({ ...A, endpointVerified: true })]).endpointVerified, true);
+  assert.equal(parentMirror([p1, live({ ...A, position: 0, endpointVerified: true })]).endpointVerified, true);
 });
 
 test("mirror: proposal rows carry no flag, so the proposal-side mirror reads false without inventing one", () => {
