@@ -7,11 +7,20 @@
  * docs/specs/0091_provider_tier_endpoints.sql @ 1f649a9 (child DDL :113-155), a candidate for
  * coxwell, not yet under db/migrations.
  *
- * This delta (code phase delta 1) holds the pure functions only: the parser, the submit-time
- * guard (clauses 1 and 2), the verification carry and the reader's viewer predicate. The SQL
- * reader and writers (design section 4, :264-271) come in a later delta and are the only place
- * the table names may appear outside this file's tests and the migration text (grep gate,
- * :272-287). */
+ * Delta 1 holds the pure functions: the parser, the submit-time guard (clauses 1 and 2), the
+ * verification carry and the reader's viewer predicate. Delta 2 adds the SQL: the one reader
+ * (design section 4, :264-271), the two writers and the position-0 parent mirror (section 3
+ * step 2, :203-209). This file is the only place the table names may appear outside its tests
+ * and the migration text (grep gate, :272-287). The reader and writers take a Queryable, never
+ * the pool: every SQL here runs on whatever the caller is inside, so a writer is always in the
+ * caller's transaction and never opens one of its own. */
+import type { QueryResult, QueryResultRow } from "@neondatabase/serverless";
+
+/** Pool or transaction client, structural (the feed-tier-trials.ts:114 shape) so a caller
+ * inside an open transaction sees its own uncommitted writes. */
+export interface Queryable {
+  query<R extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<R>>;
+}
 
 /** One endpoint row as the app writes it: the four connection columns plus the provider's
  * note, at a 0-based position. Port stays text because the parent column is text today
@@ -279,8 +288,209 @@ export function endpointViewerAllowed(viewer: EndpointViewer, ownerUserId: strin
   return viewer.userId !== null && ownerUserId !== null && viewer.userId === ownerUserId;
 }
 
-/** Throws before any query runs when endpointViewerAllowed is false. The SQL reader (later
- * delta) calls this once per parent it was asked for. */
+/** Throws before any query runs when endpointViewerAllowed is false. readEndpoints calls this
+ * once per parent it was asked for. */
 export function assertEndpointViewer(viewer: EndpointViewer, ownerUserId: string | null): void {
   if (!endpointViewerAllowed(viewer, ownerUserId)) throw new EndpointViewerError();
+}
+
+/* ====================================================================================== SQL
+ * Code phase delta 2. Everything below names the two child tables; nothing above does, and no
+ * file outside this one may (design 4, grep gate (a), :275-277). */
+
+export type EndpointParentKind = "tier" | "proposal";
+
+/** The two parents, same child shape each (design 2, :54-61). The child table and its foreign
+ * key are looked up by kind so the reader is one function (fable's delta-2 ruling on J2 is
+ * pending via marcus m54028; built as read). */
+const PARENT = {
+  tier: { table: "provider_tier_endpoints", parentTable: "provider_tiers", fk: "tier_id" },
+  proposal: { table: "provider_tier_proposal_endpoints", parentTable: "provider_tier_proposals", fk: "proposal_id" },
+} as const;
+
+interface ChildRow {
+  parent_id: string;
+  position: number;
+  protocol: string | null;
+  endpoint_host: string | null;
+  endpoint_port: string | null;
+  compid: string | null;
+  notes: string | null;
+  endpoint_verified?: boolean;
+}
+
+function mapInput(r: ChildRow): EndpointInput {
+  return {
+    position: r.position,
+    protocol: r.protocol,
+    endpointHost: r.endpoint_host,
+    endpointPort: r.endpoint_port,
+    compid: r.compid,
+    notes: r.notes,
+  };
+}
+
+function mapLive(r: ChildRow): LiveEndpoint {
+  // provider_tier_endpoints.endpoint_verified is `not null default false` (0091 .sql :145);
+  // it is undefined here only when the row came from the proposal table, which never maps
+  // through this function.
+  return { ...mapInput(r), endpointVerified: r.endpoint_verified ?? false };
+}
+
+/** The ONE reader (design 4 [S3], :264-271). For every requested parent id the owner is
+ * re-read from the parent row's application (`provider_applications.user_id`, the same source
+ * assertOwnsApplication reads at provider-tier-proposals.ts:187-194) and assertEndpointViewer
+ * runs BEFORE any SELECT on the child table. An id with no parent row has owner null and so
+ * admits only an admin, who gets an empty list; a non-admin gets the same refusal as for a
+ * parent they do not own, so this is not an existence oracle. The result has one entry per
+ * requested id, rows in position order, an empty list for a parent with no rows. */
+export async function readEndpoints(
+  q: Queryable,
+  viewer: EndpointViewer,
+  parent: { kind: "tier"; ids: readonly string[] }
+): Promise<Map<string, LiveEndpoint[]>>;
+export async function readEndpoints(
+  q: Queryable,
+  viewer: EndpointViewer,
+  parent: { kind: "proposal"; ids: readonly string[] }
+): Promise<Map<string, EndpointInput[]>>;
+export async function readEndpoints(
+  q: Queryable,
+  viewer: EndpointViewer,
+  parent: { kind: EndpointParentKind; ids: readonly string[] }
+): Promise<Map<string, LiveEndpoint[]> | Map<string, EndpointInput[]>> {
+  const ids = Array.from(new Set(parent.ids));
+  const out = new Map<string, EndpointInput[]>();
+  if (ids.length === 0) return out;
+  const spec = PARENT[parent.kind];
+
+  const owners = await q.query<{ id: string; owner_user_id: string | null }>(
+    `select p.id, pa.user_id as owner_user_id
+       from ${spec.parentTable} p
+       join provider_applications pa on pa.id = p.application_id
+      where p.id = any($1::uuid[])`,
+    [ids]
+  );
+  const ownerById = new Map(owners.rows.map((r) => [r.id, r.owner_user_id]));
+  for (const id of ids) assertEndpointViewer(viewer, ownerById.get(id) ?? null);
+
+  const verifiedColumn = parent.kind === "tier" ? ", endpoint_verified" : "";
+  const rows = await q.query<ChildRow>(
+    `select ${spec.fk} as parent_id, position, protocol, endpoint_host, endpoint_port, compid, notes${verifiedColumn}
+       from ${spec.table}
+      where ${spec.fk} = any($1::uuid[])
+      order by ${spec.fk}, position`,
+    [ids]
+  );
+  for (const id of ids) out.set(id, []);
+  for (const r of rows.rows) {
+    const list = out.get(r.parent_id);
+    if (list) list.push(parent.kind === "tier" ? mapLive(r) : mapInput(r));
+  }
+  return out;
+}
+
+/** What the parent's five columns must read while the dual-write is on (design 3 step 2,
+ * :203-209): the position-0 row's four plus its verified flag, or all null and false when the
+ * parent has zero rows. Pure so the "zero rows -> all null" branch is a test, not a hope. The
+ * lowest position is taken rather than the array's first element so a caller's row order
+ * cannot move the mirror. */
+export interface ParentMirror extends ConnectionFour {
+  endpointVerified: boolean;
+}
+
+export function parentMirror(rows: readonly (EndpointInput & { endpointVerified?: boolean })[]): ParentMirror {
+  let first: (EndpointInput & { endpointVerified?: boolean }) | null = null;
+  for (const r of rows) if (first === null || r.position < first.position) first = r;
+  if (first === null) {
+    return { protocol: null, endpointHost: null, endpointPort: null, compid: null, endpointVerified: false };
+  }
+  return {
+    protocol: first.protocol,
+    endpointHost: first.endpointHost,
+    endpointPort: first.endpointPort,
+    compid: first.compid,
+    endpointVerified: first.endpointVerified ?? false,
+  };
+}
+
+/** Proposal writer (section 1 row 3). Inserts the round's rows, then mirrors position 0 onto
+ * the proposal row's four parent columns. The mirror is an UPDATE of a row the caller inserted
+ * in this same transaction and has not committed, so the 0061 "append-only, never updated in
+ * place" rule holds for every committed row; it is an UPDATE and not part of the INSERT because
+ * the INSERT lives in provider-tier-proposals.ts, which may not name the four columns (grep gate
+ * (b), :278-281). Caller holds the transaction. */
+export async function insertProposalEndpoints(
+  client: Queryable,
+  proposalId: string,
+  rows: readonly EndpointInput[]
+): Promise<void> {
+  for (const r of rows) {
+    await client.query(
+      `insert into provider_tier_proposal_endpoints
+         (proposal_id, position, protocol, endpoint_host, endpoint_port, compid, notes)
+       values ($1, $2, $3, $4, $5, $6, $7)`,
+      [proposalId, r.position, r.protocol, r.endpointHost, r.endpointPort, r.compid, r.notes]
+    );
+  }
+  const m = parentMirror(rows);
+  await client.query(
+    `update provider_tier_proposals
+        set protocol = $2, endpoint_host = $3, endpoint_port = $4, compid = $5
+      where id = $1`,
+    [proposalId, m.protocol, m.endpointHost, m.endpointPort, m.compid]
+  );
+}
+
+/** Tier writer, the set as given: delete every row of the tier, insert `rows` with their
+ * verified flags as passed, mirror position 0 (four + endpoint_verified) onto provider_tiers.
+ * Used by replaceTierEndpoints (confirm, flags from the carry) and, in a later delta, by
+ * register-provider (row 8: position 0 only, flag from the checkbox, design 2.2 :178-179).
+ * Caller holds the transaction AND the provider_tiers row lock (`select ... for update`). */
+export async function writeTierEndpoints(
+  client: Queryable,
+  tierId: string,
+  rows: readonly LiveEndpoint[]
+): Promise<void> {
+  await client.query(`delete from provider_tier_endpoints where tier_id = $1`, [tierId]);
+  for (const r of rows) {
+    await client.query(
+      `insert into provider_tier_endpoints
+         (tier_id, position, protocol, endpoint_host, endpoint_port, compid, notes, endpoint_verified)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [tierId, r.position, r.protocol, r.endpointHost, r.endpointPort, r.compid, r.notes, r.endpointVerified]
+    );
+  }
+  const m = parentMirror(rows);
+  await client.query(
+    `update provider_tiers
+        set protocol = $2, endpoint_host = $3, endpoint_port = $4, compid = $5, endpoint_verified = $6
+      where id = $1`,
+    [tierId, m.protocol, m.endpointHost, m.endpointPort, m.compid, m.endpointVerified]
+  );
+}
+
+/** Confirm's replace-set (design 2.2 [N3], :154-158): snapshot the tier's live rows, compute
+ * the carry from that pre-delete snapshot by the four-tuple, then delete-and-insert through
+ * writeTierEndpoints. Never upsert-by-position. Returns the rows as written, flags included, so
+ * the caller can say which rows carried. The snapshot is `for update` as well: the caller
+ * already holds the provider_tiers row lock (confirm, J3), and locking the child rows too
+ * costs nothing and refuses a second replace on the same tier that did not take the parent
+ * lock. Caller holds the transaction. */
+export async function replaceTierEndpoints(
+  client: Queryable,
+  tierId: string,
+  rows: readonly EndpointInput[]
+): Promise<LiveEndpoint[]> {
+  const snapshot = await client.query<ChildRow>(
+    `select tier_id as parent_id, position, protocol, endpoint_host, endpoint_port, compid, notes, endpoint_verified
+       from provider_tier_endpoints
+      where tier_id = $1
+      order by position
+        for update`,
+    [tierId]
+  );
+  const after = carryVerification(snapshot.rows.map(mapLive), rows);
+  await writeTierEndpoints(client, tierId, after);
+  return after;
 }

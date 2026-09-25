@@ -19,6 +19,7 @@ import {
   assertEndpointViewer,
   EndpointViewerError,
   parseEndpointsJson,
+  parentMirror,
   MAX_ENDPOINTS_PER_PARENT,
   type EndpointInput,
   type LiveEndpoint,
@@ -283,6 +284,37 @@ test("5.3 non-array JSON and malformed JSON are refused readably", () => {
   assert.throws(() => parseEndpointsJson("{}"), /list/i);
   assert.throws(() => parseEndpointsJson("not json"), /endpoints/i);
   assert.throws(() => parseEndpointsJson("[1]"), /row 1/i);
+});
+
+/* ---------- delta 2: parentMirror, the dual-write's position-0 rule (design 3 step 2) ---------- */
+
+test("mirror: zero rows -> all four null and endpoint_verified false (design 3 step 2, :205-206)", () => {
+  assert.deepEqual(parentMirror([]), {
+    protocol: null,
+    endpointHost: null,
+    endpointPort: null,
+    compid: null,
+    endpointVerified: false,
+  });
+});
+
+test("mirror: the lowest position wins whatever the array order, and its verified flag rides with it", () => {
+  const p1 = live({ ...B, endpointVerified: true });
+  const p0 = live({ ...A, endpointVerified: false });
+  const out = parentMirror([p1, p0]);
+  assert.deepEqual(out, {
+    protocol: A.protocol,
+    endpointHost: A.endpointHost,
+    endpointPort: A.endpointPort,
+    compid: A.compid,
+    endpointVerified: false,
+  });
+  assert.equal(parentMirror([p0, live({ ...A, endpointVerified: true })]).endpointVerified, true);
+});
+
+test("mirror: proposal rows carry no flag, so the proposal-side mirror reads false without inventing one", () => {
+  assert.equal(parentMirror([A, B]).endpointVerified, false);
+  assert.equal(parentMirror([A, B]).endpointHost, A.endpointHost);
 });
 
 /* ---------- 5.5 reader assert [S3] ---------- */

@@ -1,6 +1,13 @@
 import { pool } from "./db";
 import { sendEmail } from "./email";
 import { isNotificationEnabled } from "./notification-prefs";
+import {
+  endpointsThatWouldClear,
+  insertProposalEndpoints,
+  readEndpoints,
+  replaceTierEndpoints,
+  type EndpointInput,
+} from "./provider-tier-endpoints";
 
 // Round lineage is scoped by (application_id, tier_name), never application_id alone.
 // A provider can have several tiers negotiating in parallel (spec §3.5 -- "each proposal
@@ -38,14 +45,13 @@ interface AdminRow {
   created_at: Date;
 }
 
-/** The connection columns carried forward onto provider_tiers at confirm time (0083).
+/** The array connection columns carried forward onto provider_tiers at confirm time (0083).
  * Kept off AdminRow deliberately: every other query in this file selects the terms columns
- * only, so widening AdminRow would type those rows for fields they never fetch. */
+ * only, so widening AdminRow would type those rows for fields they never fetch. The four
+ * scalar connection columns are no longer read or written by this file: they live on the
+ * endpoint child tables and their position-0 mirror, both owned by provider-tier-endpoints.ts
+ * (docs/specs/0091-tier-endpoints-design.md @ 6100dc0, section 4 :264-271, grep gate :278-287). */
 interface ConnectionRow {
-  protocol: string | null;
-  endpoint_host: string | null;
-  endpoint_port: string | null;
-  compid: string | null;
   regions: string[] | null;
   coverage: string[] | null;
 }
@@ -200,26 +206,24 @@ export interface SubmitProposalInput {
   clientPriceCents: number;
   providerSplitPct: number;
   trialLengthDays: number;
-  protocol: string | null;
-  endpointHost: string | null;
-  endpointPort: string | null;
-  compid: string | null;
+  /** The round's connection endpoints, already parsed (parseEndpointsJson in
+   * provider-tier-endpoints.ts): positions 0..n-1, host and port on every row, at most 8. */
+  endpoints: EndpointInput[];
   regions: string[] | null;
   coverage: string[] | null;
 }
 
-/** The six connection columns confirmProposalRound copies onto provider_tiers, paired with
- * the label the provider actually sees on their own form -- an error that says "compid" when
- * the box is labelled "SenderCompID" sends them hunting for a field that isn't there. */
+/** The two array connection columns confirmProposalRound copies onto provider_tiers, paired
+ * with the label the provider actually sees on their own form. The four scalar columns left
+ * this list for the endpoint set guard (endpointsThatWouldClear, design 2.1 clauses 1 and 2),
+ * whose labels live beside it in provider-tier-endpoints.ts for the same reason: an error that
+ * says "compid" when the box is labelled "SenderCompID" sends them hunting for a field that
+ * isn't there. */
 const CONNECTION_FIELDS: ReadonlyArray<{
   label: string;
   column: keyof ConnectionRow;
-  submitted: (input: SubmitProposalInput) => string | string[] | null;
+  submitted: (input: SubmitProposalInput) => string[] | null;
 }> = [
-  { label: "Protocol", column: "protocol", submitted: (i) => i.protocol },
-  { label: "SenderCompID", column: "compid", submitted: (i) => i.compid },
-  { label: "Endpoint host", column: "endpoint_host", submitted: (i) => i.endpointHost },
-  { label: "Endpoint port", column: "endpoint_port", submitted: (i) => i.endpointPort },
   { label: "Regions", column: "regions", submitted: (i) => i.regions },
   { label: "Coverage", column: "coverage", submitted: (i) => i.coverage },
 ];
@@ -228,22 +232,18 @@ const CONNECTION_FIELDS: ReadonlyArray<{
  * leave `{}` behind, and refusing a round to protect a zero-length array would block a submit
  * that destroys nothing. The proposal path can't produce one -- list() in the terms action
  * returns null rather than [] -- so this only ever softens the guard, never tightens it. */
-function connectionValueIsSet(value: string | string[] | null): boolean {
-  return Array.isArray(value) ? value.length > 0 : value !== null && value.trim() !== "";
+function connectionValueIsSet(value: string[] | null): boolean {
+  return value !== null && value.length > 0;
 }
 
-function describeConnectionValue(value: string | string[]): string {
-  return Array.isArray(value) ? value.join(", ") : value;
-}
-
-/** Which of a live tier's connection details this submission would blank out, rendered as
+/** Which of a live tier's regions/coverage this submission would blank out, rendered as
  * "Label (current value)". Deliberately pure and exported apart from the query it feeds: with
  * provider_tiers empty there is no live row to drive the guard through the DB, so keeping the
  * decision free of the lookup is what makes it checkable at all rather than shipped on faith. */
 export function connectionFieldsThatWouldClear(liveRow: ConnectionRow, input: SubmitProposalInput): string[] {
   return CONNECTION_FIELDS.filter(
     (f) => connectionValueIsSet(liveRow[f.column]) && !connectionValueIsSet(f.submitted(input))
-  ).map((f) => `${f.label} (${describeConnectionValue(liveRow[f.column]!)})`);
+  ).map((f) => `${f.label} (${(liveRow[f.column] ?? []).join(", ")})`);
 }
 
 /** The missing writer: nothing in the codebase has ever inserted into
@@ -283,15 +283,23 @@ export async function submitProposalRound(
   );
   if (existing.rowCount) throw new Error(`"${tierName}" already has a round awaiting review.`);
 
-  // Null-overwrite guard (marcus, m49437, 2026-09-13). confirmProposalRound writes all six
-  // connection columns onto provider_tiers verbatim, null included, because a blank proposal
-  // field means "not supplied", never "unchanged". That semantic is correct and does not change
-  // here. Its consequence is what this guards: re-proposing an ALREADY-LIVE tier with the
-  // connection boxes left empty silently nulls the endpoint details subscribers connect
-  // against, and the provider gets a success toast for it. The fix belongs at submit, exactly
-  // as the comment on confirmProposalRound says -- refusing the round and naming the values
-  // beats teaching the copy-forward to coalesce, which would make "clear this field"
-  // inexpressible and reinterpret a deliberate blank as "keep".
+  // Null-overwrite guard (marcus, m49437, 2026-09-13). confirmProposalRound writes the round's
+  // connection details onto provider_tiers as a replace-set, null and absence included, because
+  // a blank proposal field means "not supplied", never "unchanged". That semantic is correct and
+  // does not change here. Its consequence is what this guards: re-proposing an ALREADY-LIVE tier
+  // with the connection boxes left empty silently nulls the endpoint details subscribers
+  // connect against, and the provider gets a success toast for it. The fix belongs at submit --
+  // refusing the round and naming what would go beats teaching the copy-forward to coalesce,
+  // which would make "clear this field" inexpressible and reinterpret a deliberate blank as
+  // "keep".
+  //
+  // Two guards on one input. The endpoint set is checked by endpointsThatWouldClear
+  // (docs/specs/0091-tier-endpoints-design.md @ 6100dc0, section 2.1 clauses 1 and 2,
+  // :124-142): a live host:port absent from the submission, fewer rows at a shared address, or
+  // a set protocol/compid coming back blank at a matched address is refused, the echo naming
+  // the address and the column, never the live value and never the note. Regions/coverage keep
+  // the per-column guard above. The live rows come through the one reader with this provider
+  // as the viewer, so the ownership check runs again against the tier row itself.
   //
   // Keyed on (application_id, tier_name), the same key confirmProposalRound resolves its
   // destination row with, so the two cannot disagree about which row is at risk. A tier with no
@@ -301,47 +309,63 @@ export async function submitProposalRound(
   // registerProviderTiers sets it, so there is no provider_tiers row this lookup can miss.
   //
   // Deliberately a refusal and not a silent coalesce-to-current: the provider is told which
-  // details are live and what they read, and re-enters the ones they want to keep. Clearing a
-  // live connection field is consequently not expressible from this form -- that is a real
-  // narrowing, flagged to marcus, and it routes through Horizon, who own the write to
+  // details are live, and re-enters the ones they want to keep. Removing a live endpoint or
+  // clearing a live field is consequently not expressible from this form (design 2.2, a per-row
+  // remove tick is a logged follow-up), and it routes through Horizon, who own the write to
   // provider_tiers anyway.
-  const liveTier = await pool.query<ConnectionRow>(
-    `select protocol, endpoint_host, endpoint_port, compid, regions, coverage
+  const liveTier = await pool.query<{ id: string } & ConnectionRow>(
+    `select id, regions, coverage
        from provider_tiers where application_id = $1 and tier_name = $2`,
     [applicationId, tierName]
   );
   const liveRow = liveTier.rows[0];
   if (liveRow) {
-    const wouldClear = connectionFieldsThatWouldClear(liveRow, input);
+    const liveEndpoints =
+      (await readEndpoints(pool, { userId: providerUserId, isAdmin: false }, { kind: "tier", ids: [liveRow.id] })).get(
+        liveRow.id
+      ) ?? [];
+    const wouldClear = [
+      ...endpointsThatWouldClear(liveEndpoints, input.endpoints),
+      ...connectionFieldsThatWouldClear(liveRow, input),
+    ];
     if (wouldClear.length) {
       throw new Error(
-        `"${tierName}" is already live and a blank box clears its connection details. ` +
+        `"${tierName}" is already live and this round would remove or blank its connection details. ` +
           `Re-enter what you want to keep, or ask Horizon to remove it — ${wouldClear.join(", ")}.`
       );
     }
   }
 
-  await pool.query(
-    `insert into provider_tier_proposals
-       (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
-        trial_length_days, protocol, endpoint_host, endpoint_port, compid, regions, coverage,
-        terms_status)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'proposed')`,
-    [
-      applicationId,
-      providerUserId,
-      tierName,
-      input.clientPriceCents,
-      input.providerSplitPct,
-      input.trialLengthDays,
-      input.protocol,
-      input.endpointHost,
-      input.endpointPort,
-      input.compid,
-      input.regions,
-      input.coverage,
-    ]
-  );
+  // One transaction for the proposal row and its endpoint rows (marcus m54021, J4 = yes): a
+  // round with its endpoints half-written is a round the admin would confirm blind.
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const inserted = await client.query<{ id: string }>(
+      `insert into provider_tier_proposals
+         (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
+          trial_length_days, regions, coverage, terms_status)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, 'proposed')
+       returning id`,
+      [
+        applicationId,
+        providerUserId,
+        tierName,
+        input.clientPriceCents,
+        input.providerSplitPct,
+        input.trialLengthDays,
+        input.regions,
+        input.coverage,
+      ]
+    );
+    await insertProposalEndpoints(client, inserted.rows[0].id, input.endpoints);
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export interface SiblingProposedTierRow {
@@ -401,13 +425,15 @@ export function calcRetainedCents(clientPriceCents: number, providerSplitPct: nu
  * the reviewed proposal row itself is never mutated beyond its own status/decision
  * fields, so the override never touches the audit trail). Stamps the round confirmed
  * (this is also what arms the trial clock -- provider_tiers.confirmed_at), then mirrors
- * terms and the scalar connection details onto provider_tiers -- update in place if a row
- * for this (application_id, tier_name) already exists (renegotiation of a live tier),
- * otherwise insert one (first confirmation). Built against marcus's authoritative §5/§6
- * spec, bus thread provider-terms-negotiation-2026-08-24 (m29333/m29343 reconciled); the
- * connection copy-forward is marcus's later go (m47739/m47740, 2026-09-10) and now covers all
- * six columns -- the four scalars plus the regions/coverage arrays, whose hold he withdrew the
- * same day. See the comment at the branch for the null and endpoint_verified semantics. */
+ * terms and regions/coverage onto provider_tiers -- update in place if a row for this
+ * (application_id, tier_name) already exists (renegotiation of a live tier), otherwise insert
+ * one (first confirmation) -- and replaces the tier's endpoint set with the round's rows
+ * through provider-tier-endpoints.ts (replaceTierEndpoints, verification carry included).
+ * Built against marcus's authoritative §5/§6 spec, bus thread
+ * provider-terms-negotiation-2026-08-24 (m29333/m29343 reconciled); the connection
+ * copy-forward is marcus's later go (m47739/m47740, 2026-09-10), and the four scalar columns
+ * moved to the endpoint child table under 0091 (thread provider-tier-endpoints-2026-09-24).
+ * See the comment at the branch for the null semantics. */
 export async function confirmProposalRound(
   proposalId: string,
   adminUserId: string,
@@ -421,7 +447,7 @@ export async function confirmProposalRound(
       `select id, application_id, provider_user_id, tier_name, client_price_cents,
               provider_split_pct, trial_length_days, terms_status, declined_note,
               decided_by, decided_at, created_at,
-              protocol, endpoint_host, endpoint_port, compid, regions, coverage
+              regions, coverage
        from provider_tier_proposals where id = $1 for update`,
       [proposalId]
     );
@@ -438,8 +464,12 @@ export async function confirmProposalRound(
       [proposalId, adminUserId]
     );
 
+    // The tier row is locked for the replace-set below (marcus m54028, J3: the safe side of the
+    // question, fable's ruling pending). Two confirms racing on one tier would otherwise each
+    // snapshot the same live endpoint rows, and the second delete-then-insert would carry
+    // verification from rows the first had already replaced.
     const existingTier = await client.query<{ id: string }>(
-      `select id from provider_tiers where application_id = $1 and tier_name = $2`,
+      `select id from provider_tiers where application_id = $1 and tier_name = $2 for update`,
       [proposal.application_id, proposal.tier_name]
     );
 
@@ -450,79 +480,47 @@ export async function confirmProposalRound(
     // not silently regress to the column default or leave a stale trial window in place.
     //
     // Connection copy-forward (marcus, m47739/m47740, 2026-09-10; regions/coverage added on his
-    // withdrawal of the hold, 2026-09-10): the confirmed round's connection details land on
-    // provider_tiers verbatim -- no parsing and no shape change, source and destination being the
-    // same declared type on both sides. protocol/endpoint_host/endpoint_port/compid are text on
-    // 0061 and on 0060+0083 alike; regions/coverage are text[] on provider_tier_proposals
-    // (0061:25-26) AND on provider_tiers (0083:56-57), so those two are a straight same-type array
+    // withdrawal of the hold, 2026-09-10): regions/coverage are text[] on provider_tier_proposals
+    // (0061:25-26) AND on provider_tiers (0083:56-57), so they are a straight same-type array
     // copy, not a delimiter decision. The free-text regions/coverage that WOULD need a split rule
     // live on provider_applications (0059:24-25) -- a different table, never read on this path.
     // marcus's no-parse ruling is scoped to that table and does not travel here just because the
-    // column names match.
+    // column names match. Null is written as null on BOTH branches by design: a blank proposal
+    // field means "not supplied", never "unchanged" (marcus, 2026-09-10); the guard against
+    // blanking a live value sits at submit (submitProposalRound above).
     //
-    // Null is written as null on all six columns and on BOTH branches by design: a blank proposal
-    // field means "not supplied", never "unchanged", so the update must overwrite a previously-set
-    // value with null rather than coalesce the old one forward, and must never synthesise a
-    // default. coalesce here would make "clear this field" inexpressible and would silently
-    // reinterpret an intentional blank as "keep" (marcus, 2026-09-10). The real guard -- refusing
-    // a blank connection field at renegotiation submit time -- belongs on the submit form and is
-    // logged as a separate item, deliberately not built here.
-    //
-    // endpoint_verified (0060) has no proposal counterpart, but it cannot simply be left alone on
-    // the update branch (marcus, 2026-09-10). Verification is a claim about a specific host:port,
-    // not about a row: move the endpoint and the claim is void by definition, and a stale `true`
-    // riding onto an endpoint nobody checked is worse than a blank because it will be believed.
-    // So it is forced false -- but only on an ACTUAL change, keyed in SQL off the pre-update row
-    // rather than in JS, so a no-op re-confirmation cannot destroy a real verification. (In an
-    // UPDATE, every SET right-hand side sees the OLD row, so provider_tiers.endpoint_host here is
-    // the value before this statement, not $6.) `is distinct from` rather than `<>` so a
-    // null-to-value or value-to-null transition counts as a change instead of being swallowed by
-    // three-valued logic. The insert branch needs no clause: a brand-new tier row takes 0060's
-    // `not null default false`, which is already the honest starting claim.
+    // The four scalar connection columns and endpoint_verified are not in these statements any
+    // more. The round's endpoint rows land on the tier's endpoint child table as a replace-set
+    // with the verification carry keyed on the four-tuple (docs/specs/0091-tier-endpoints-design.md
+    // @ 6100dc0, section 2.1 :93-103 and 2.2 :154-158), and the writer mirrors position 0 onto
+    // the five parent columns until 0092 (section 3 step 2, :203-209). Tightening versus the
+    // UPDATE this replaces, on purpose: it kept endpoint_verified across a compid-only edit; the
+    // carry does not (2.1, :101-103).
+    let tierId: string;
     if (existingTier.rows[0]) {
+      tierId = existingTier.rows[0].id;
       await client.query(
         `update provider_tiers
          set client_price_cents = $2,
              provider_split_pct = $3,
              trial_length_days = $4,
-             protocol = $5,
-             endpoint_host = $6,
-             endpoint_port = $7,
-             compid = $8,
-             regions = $9,
-             coverage = $10,
-             endpoint_verified = case
-               when provider_tiers.endpoint_host is distinct from $6::text
-                 or provider_tiers.endpoint_port is distinct from $7::text
-               then false
-               else provider_tiers.endpoint_verified
-             end,
+             regions = $5,
+             coverage = $6,
              confirmed_at = now(),
              status = case when $4::int > 0 then 'trial' else 'live' end,
              trial_expires_at = case when $4::int > 0 then now() + make_interval(days => $4::int) else null end
          where id = $1`,
-        [
-          existingTier.rows[0].id,
-          proposal.client_price_cents,
-          effectiveSplitPct,
-          proposal.trial_length_days,
-          proposal.protocol,
-          proposal.endpoint_host,
-          proposal.endpoint_port,
-          proposal.compid,
-          proposal.regions,
-          proposal.coverage,
-        ]
+        [tierId, proposal.client_price_cents, effectiveSplitPct, proposal.trial_length_days, proposal.regions, proposal.coverage]
       );
     } else {
-      await client.query(
+      const insertedTier = await client.query<{ id: string }>(
         `insert into provider_tiers
            (application_id, provider_user_id, tier_name, client_price_cents, provider_split_pct,
-            trial_length_days, protocol, endpoint_host, endpoint_port, compid, regions, coverage,
-            confirmed_at, status, trial_expires_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(),
+            trial_length_days, regions, coverage, confirmed_at, status, trial_expires_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, now(),
                  case when $6::int > 0 then 'trial' else 'live' end,
-                 case when $6::int > 0 then now() + make_interval(days => $6::int) else null end)`,
+                 case when $6::int > 0 then now() + make_interval(days => $6::int) else null end)
+         returning id`,
         [
           proposal.application_id,
           proposal.provider_user_id,
@@ -530,15 +528,20 @@ export async function confirmProposalRound(
           proposal.client_price_cents,
           effectiveSplitPct,
           proposal.trial_length_days,
-          proposal.protocol,
-          proposal.endpoint_host,
-          proposal.endpoint_port,
-          proposal.compid,
           proposal.regions,
           proposal.coverage,
         ]
       );
+      tierId = insertedTier.rows[0].id;
     }
+
+    // Confirm is admin-only (the action at src/app/admin/providers/actions.ts:27 gates it), so
+    // the reader's viewer is the admin; the read runs on this client so it sees this transaction.
+    const proposalEndpoints =
+      (await readEndpoints(client, { userId: adminUserId, isAdmin: true }, { kind: "proposal", ids: [proposalId] })).get(
+        proposalId
+      ) ?? [];
+    await replaceTierEndpoints(client, tierId, proposalEndpoints);
 
     await client.query("commit");
   } catch (err) {
