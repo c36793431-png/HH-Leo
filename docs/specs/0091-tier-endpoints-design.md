@@ -4,7 +4,10 @@ Thread provider-tier-endpoints-2026-09-24, marcus m53770_mufsp7zo. Written by ka
 Revised 2026-09-25 for fable's design ruling, relayed verbatim by marcus at m53845_mugcb7oa:
 DESIGN PASS WITH STRIKES S1 (carry key), S2 (dual-write, 0092 gate, no guards, rollback order),
 S3 (one reader with a viewer assert, grep gate); (a)-(e) ruled; notes N1-N5. Each strike is
-marked `[S1]` etc. where it lands below.
+marked `[S1]` etc. where it lands below. Revised again 2026-09-25 for fable's .sql verdict
+(m53885 via marcus m53887, one strike, section 2.1 nonempty check) and for fable's ruling on the
+flagged blank-compid consequence (m53894 via marcus m53896: REFUSE THE BLANK, section 2.1 clauses
+1 and 2, section 5 test plan 2).
 Every file:line below is read at origin/main `e4edea2319d9e767e8264550b229de0f7bb268ff`.
 Design only. No code, no migration applied. The .sql beside this file is a candidate for coxwell,
 not a file under db/migrations.
@@ -95,20 +98,33 @@ below keys on it and nothing else, so there is one identity, not two.
 - **Tightening versus today, stated on purpose.** Today's UPDATE (`:494-499`) resets
   `endpoint_verified` only when host or port changes, so a compid-only edit keeps `verified =
   true`. That loosening is NOT ported: a compid-only or protocol-only edit re-verifies.
-- **The submit-time removal guard keys on `(host, port)`.** Refuse when any live tier endpoint's
-  `(endpoint_host, endpoint_port)` is absent from the submission's set of `(host, port)`; the
-  message lists the missing addresses, same wording pattern as `:318-319`. Why: its one job is to
-  refuse silent removal of an address, and a compid or protocol edit at the same address is an
-  edit, not a removal.
+- **Clause 1, the removal key is `(host, port)`** (ruled m53894, unchanged). Refuse when any live
+  tier endpoint's `(endpoint_host, endpoint_port)` is absent from the submission's set of
+  `(host, port)`; the message lists the missing addresses, same wording pattern as `:318-319`.
+  Why: its one job is to refuse silent removal of an address, and a compid or protocol edit at
+  the same address is an edit, not a removal. The removal key decides WHICH live row a submitted
+  row is talking about.
+- **Clause 2, the narrowing rule on the matched row** (ruled m53894 via m53896). For a live row
+  matched by `(host, port)`, any of `protocol` / `compid` going from set to blank is refused, same
+  refusal shape as today's per-column guard (`:243-247`, echoed at `:318-319`): the echo names the
+  column, never the note (ruling (d) stands). Set -> different value is allowed and re-verifies
+  (the four-tuple carry misses, `endpoint_verified = false`). Null -> set is an add, allowed,
+  re-verifies. Why: a row that had a verified compid coming back with compid blank IS a silent
+  removal, the verified value is gone from the row and nothing told anyone; "a compid edit is an
+  edit" covers value -> different value only. A legitimate "drop the compid" goes the same road
+  as row removal: coxwell SQL (section 2.2). Net behaviour versus today: the per-column refusal
+  of blanks is preserved, and the only thing this section loosens is value -> value edits, which
+  is the point of the change. The narrowing rule decides what you may do to the matched row.
+  SQL consequence: none; the check constraint and the identity index are unchanged, this is
+  code-phase only.
 - **Do not harmonise these two keys.** The carry key answers "is this the same session the admin
-  logged on to" and must be the four; the removal guard answers "did an address disappear" and
-  must be the address. Making the guard the four would refuse every compid edit as a removal;
-  making the carry the address would carry a claim across sessions.
-- Consequence flagged, not ruled: today's per-column guard (`:243-247`) also refuses a blank
-  `protocol` or `compid` that would clear a live value. Under the `(host, port)` guard, a row
-  resubmitted at the same address with compid blank is an edit and passes; the row lands with
-  compid null and `verified = false` (carry misses on the four). That is the ruled shape; noted
-  here so the change from today's per-column refusal is visible.
+  logged on to" and must be the four; the removal key answers "did an address disappear" and
+  must be the address; the narrowing rule is not a third key, it is what clause 1's match may
+  and may not do. Making the guard the four would refuse every compid edit as a removal; making
+  the carry the address would carry a claim across sessions.
+- Record: the first cut of this section (0c59101) flagged, unruled, that a row resubmitted at the
+  same address with compid blank would pass as an edit and land with compid null. Fable ruled
+  that a defect of the `(host, port)` sentence, not of the build (m53894); clause 2 is the fix.
 
 ### 2.2 Semantics carried over, now per set
 
@@ -119,8 +135,10 @@ below keys on it and nothing else, so there is one identity, not two.
   verification to the wrong row. An endpoint absent from the round is removed, same as a null is
   written as null today (`:463-467`). No coalesce.
 - Removal path in this cut is unchanged from today: a provider submitting a set without a live
-  address is refused by the guard; the removal is SQL by coxwell. A per-row "remove" tick on the
-  terms form is logged as a follow-up (section 6 item 2), not built here.
+  address is refused by the guard (2.1 clause 1), and so is a set that blanks a live row's
+  `protocol` or `compid` at a matched address (2.1 clause 2); the removal or the blanking is SQL
+  by coxwell. A per-row "remove" tick on the terms form is logged as a follow-up (section 6
+  item 2), not built here.
 - Order: `position`, 0-based, assigned from array order at submit. Cap 8 per parent, enforced by
   the DB check `position between 0 and 7` `[N2]` and mirrored in the app parser so the error is
   readable.
@@ -239,8 +257,10 @@ Unrun tests are not a PASS input `[N5]`.
 Pure functions, each test written before the function exists so the first run fails on a missing
 export, then passes once built:
 
-1. `endpointsThatWouldClear(live, submitted)` in `provider-tier-endpoints.ts`, keyed on
-   `(host, port)`, replacing the per-column `connectionFieldsThatWouldClear`.
+1. `endpointsThatWouldClear(live, submitted)` in `provider-tier-endpoints.ts`, matched on
+   `(host, port)`, replacing the per-column `connectionFieldsThatWouldClear`. It returns the
+   missing addresses (2.1 clause 1) and, per matched row, the columns narrowed set -> blank
+   (2.1 clause 2); either non-empty is a refusal.
    - live `[A, B]`, submitted `[A]` -> `[B]` described as `host:port`.
    - live `[A]`, submitted `[A with different notes]` -> `[]` (notes are not identity).
    - live `[A]`, submitted `[A with different compid]` -> `[]` (an edit, not a removal).
@@ -254,6 +274,13 @@ export, then passes once built:
    - `[A verified, B verified]` at one host:port with different compids -> after `[B]` gives B
      true only; after `[C at that host:port, third compid]` gives false.
    - after `[]` gives `[]`.
+   - Narrowing, ruled m53894 via m53896, each case runs the guard of item 1 and the carry
+     together on one input, which is why they sit here:
+     - live `[A verified, compid set]`, resubmit the same `(host, port)` with compid blank ->
+       refused, echo names `compid`, never the note (fail-first: written before the narrowing
+       output exists, so the first run fails on the guard returning `[]`).
+     - same with a different compid -> accepted, carry misses, `endpoint_verified = false`.
+     - same with protocol blank on a row that had one -> refused, echo names `protocol`.
 3. `parseEndpointsJson(raw)` for the terms action and register-provider action: drops all-blank
    rows, assigns positions 0..n-1 in order, rejects 9 rows, rejects a row with only `notes` set.
 4. `ConnectionFields` shape: `pickEndpoint` today refuses to compose a tier host with an
@@ -288,9 +315,11 @@ outside the allowed set, fable's pass on the 0091 .sql, and coxwell's apply noti
 4. `notes`: provider-authored on the proposal form, admin-only render, never buyer, never in the
    refusal echo (section 2.2).
 5. Numbering 0091/0092 and docs/specs location: per m53796, superseded fable's (e).
+6. Blank at a matched address (fable m53894 via marcus m53896): REFUSE THE BLANK. Section 2.1
+   clauses 1 and 2; three tests in section 5 item 2; no SQL change, code phase only.
 
-Open: none from the design. The .sql review is its own turn (paste with md5); the code phase
-starts only after fable passes the .sql.
+Open: none from the design. The .sql passed with one strike (m53885), built at 65a32dc; the code
+phase starts only after fable passes that delta together with the hunks of this file.
 
 ## 7. Files the code phase would touch (declaration, not yet opened)
 
