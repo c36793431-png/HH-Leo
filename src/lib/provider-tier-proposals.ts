@@ -471,8 +471,9 @@ export async function confirmProposalRound(
       [proposalId, adminUserId]
     );
 
-    // The tier row is locked for the replace-set below (marcus m54028, J3: the safe side of the
-    // question, fable's ruling pending). Two confirms racing on one tier would otherwise each
+    // The tier row is locked for the replace-set below (fable's delta-2 plan ruling J3, m54043 via
+    // marcus m54049: BUILD the FOR UPDATE, lock order proposal then tier, which is the order of
+    // the proposal select above and this one). Two confirms racing on one tier would otherwise each
     // snapshot the same live endpoint rows, and the second delete-then-insert would carry
     // verification from rows the first had already replaced.
     const existingTier = await client.query<{ id: string }>(
