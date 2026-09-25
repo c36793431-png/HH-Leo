@@ -102,7 +102,21 @@ export function TierProposalForm({
       {endpoints.map((row, i) => (
         <div key={i} style={{ marginBottom: 14 }}>
           <div className="field" style={{ marginBottom: 8 }}>
-            <label>
+            {/* Plain text, not a <label>: a <label> with no htmlFor labels the first control inside
+                it, so with Remove nested in it a click anywhere on this heading fired Remove and the
+                button's accessible name became "Connection endpoint 1 of 2 Remove" (Leo's headless
+                render at 70c5bba, m54370 F1, via marcus m54371). Remove stays a sibling. The inline
+                style repeats `.feed-provider-v1 .field label` (feed-dashboard.css:137) so the heading
+                keeps its look without that stylesheet being opened here. */}
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: "var(--pfp-ink-3)",
+              }}
+            >
               Connection endpoint {i + 1} of {endpoints.length}
               {endpoints.length > 1 && (
                 <>
@@ -112,7 +126,7 @@ export function TierProposalForm({
                   </button>
                 </>
               )}
-            </label>
+            </div>
           </div>
           <div className="grid g3" style={{ marginBottom: 8 }}>
             <div className="field">
