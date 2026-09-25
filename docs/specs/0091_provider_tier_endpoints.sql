@@ -1,13 +1,14 @@
 -- NOT APPLIED. 0091_provider_tier_endpoints.sql -- DESIGN CANDIDATE, thread
 -- provider-tier-endpoints-2026-09-24 (marcus m53770_mufsp7zo). Written by kai on branch
 -- kai/tier-endpoints-design-2026-09-24 off origin/main e4edea2. Design: docs/specs/0091-tier-endpoints-design.md.
--- Lives under docs/specs/ until fable passes the design; moves to db/migrations/ with the code
+-- Revised 2026-09-25 for fable's design ruling (marcus m53845_mugcb7oa): S2 dual-write and
+-- position-0 gate, N1 census print, N2 position check 0..7. Numbering 0091/0092 per m53796.
+-- Lives under docs/specs/ until fable passes this file; moves to db/migrations/ with the code
 -- branch. Companion rollback: docs/specs/0091_rollback.sql. coxwell applies; neither coder writes
 -- to prod.
 --
--- Number 0091: 0087 is reserved (feed_tiers connection fields, parked), 0088/0089 are on
--- kai/tighten-0087-2026-09-12 (not applied). If marcus renumbers, the only literals that change
--- are the two '0091' strings in step 0 and step 6.
+-- If marcus renumbers, the only literals that change are the two '0091' strings in step 0 and
+-- step 6.
 --
 -- WHAT IT DOES: adds two child tables, one per parent, holding N connection endpoints per
 -- listing, and backfills one child row per parent row that has any of the four scalar
@@ -20,15 +21,25 @@
 -- src/lib/provider-tiers.ts:321-336, both at e4edea2). The drop is 0092, after the code that
 -- reads the child tables is live and a re-run of step 4 shows zero drift.
 --
+-- DUAL-WRITE (design section 3, fable S2): from the code deploy until 0092, the app writes the
+-- child rows AND mirrors position 0 (the four, plus endpoint_verified on the tier side) to the
+-- parent columns in the same transaction. So after (ii) the parent columns equal the position-0
+-- child by construction, and the drift print in step 4 is a real zero-check at (iii).
+--
 -- ORDER OF OPERATIONS (three instants):
 --   (i)   this file, dry-run with `rollback;` in place of `commit;`, paste every notice, then the
 --         real run; the two pastes must be equal except the now() line.
---   (ii)  the code branch merges. Between (i) and (ii) old code keeps writing the parent columns.
+--   (ii)  the code branch merges, only after the (i) notices are on the bus (merge == deploy).
+--         Between (i) and (ii) old code keeps writing the parent columns and nothing else.
 --   (iii) step 4 ALONE re-run once after the (ii) deploy. It is idempotent (`not exists`) and
 --         self-contained. Expected notices: `backfill proposals: inserted 0`,
 --         `backfill tiers: inserted 0`, `drift rows: 0`. A non-zero drift row is printed with
---         both sides and is resolved by hand, never by this script.
---   Then 0092 (not written): gate child == parent on every row, drop the five parent columns.
+--         both sides verbatim and is resolved by hand, never by this script.
+--   Then 0092 (not written), gate POSITION 0 ONLY: the child row at position 0 equals the
+--   parent four (coalesce both sides) and endpoint_verified on the tier side, and parent
+--   all-null <=> zero child rows. Not child == parent over all rows: every listing with a
+--   second endpoint (the Pip Dealer INSERT below, any N-endpoint round) would fail that by
+--   design. Then drop the five parent columns.
 --
 -- One transaction. Every DO block either raises (whole transaction aborts) or emits a notice.
 --
@@ -56,10 +67,13 @@ end $$;
 -- 1. Child of provider_tier_proposals. Append-only like its parent (0061 header: one row per
 --    round, never updated in place), so an endpoint row is never updated either; a new round is
 --    a new proposal row with its own endpoint rows.
---    position: 0-based display order, unique per parent.
+--    position: 0-based display order, unique per parent, 0..7 (cap of 8 per parent is a DB
+--    check, not an app claim; fable N2).
 --    identity index: the four values coalesced to '' so it holds on any Postgres version without
 --    `nulls not distinct`. Two rows differing only in notes are one endpoint and are refused.
+--    This is the row identity the app's verification carry keys on (design 2.1, fable S1).
 --    nonempty check: a row with none of the four set is not an endpoint; notes alone is refused.
+--    notes: provider-authored on the terms form, admin-only render (design 2.2, ruling (d)).
 create table if not exists provider_tier_proposal_endpoints (
   id            uuid primary key default gen_random_uuid(),
   proposal_id   uuid not null references provider_tier_proposals(id) on delete cascade,
@@ -71,7 +85,7 @@ create table if not exists provider_tier_proposal_endpoints (
   notes         text,
   created_at    timestamptz not null default now(),
   constraint provider_tier_proposal_endpoints_position_key unique (proposal_id, position),
-  constraint provider_tier_proposal_endpoints_position_check check (position >= 0),
+  constraint provider_tier_proposal_endpoints_position_check check (position between 0 and 7),
   constraint provider_tier_proposal_endpoints_nonempty_check
     check (num_nonnulls(protocol, endpoint_host, endpoint_port, compid) > 0)
 );
@@ -95,7 +109,7 @@ create table if not exists provider_tier_endpoints (
   endpoint_verified boolean not null default false,
   created_at        timestamptz not null default now(),
   constraint provider_tier_endpoints_position_key unique (tier_id, position),
-  constraint provider_tier_endpoints_position_check check (position >= 0),
+  constraint provider_tier_endpoints_position_check check (position between 0 and 7),
   constraint provider_tier_endpoints_nonempty_check
     check (num_nonnulls(protocol, endpoint_host, endpoint_port, compid) > 0)
 );
@@ -108,9 +122,16 @@ create unique index if not exists provider_tier_endpoints_identity_uidx
 --    verified_no_address: provider_tiers rows with endpoint_verified = true and none of the four
 --    set. They get no child row and the flag is not carried (it claims nothing without an
 --    address). Counted and printed, not aborted. Expected 0.
+--    allnull_proposal_addressed_tier (fable N1): proposals whose four are all null while the
+--    tier they confirm into (same application_id + tier_name, the confirm's lookup at
+--    src/lib/provider-tier-proposals.ts:441-444) carries an address. Such a proposal gets no
+--    child row, so its confirm would replace the tier's endpoint set with nothing. Printed one
+--    notice per row with both sides, then counted; nothing is changed and nothing aborts.
 do $$
 declare
   p_src int; p_child int; t_src int; t_child int; t_vna int;
+  r record;
+  p_allnull int := 0;
 begin
   select count(*) into p_src from provider_tier_proposals
     where num_nonnulls(protocol, endpoint_host, endpoint_port, compid) > 0;
@@ -122,6 +143,22 @@ begin
     where endpoint_verified and num_nonnulls(protocol, endpoint_host, endpoint_port, compid) = 0;
   raise notice 'census before: proposals with any scalar %, proposal child rows %; tiers with any scalar %, tier child rows %; verified_no_address %',
     p_src, p_child, t_src, t_child, t_vna;
+
+  for r in
+    select p.id as proposal_id, p.terms_status, p.created_at, t.id as tier_id,
+           t.protocol, t.endpoint_host, t.endpoint_port, t.compid
+      from provider_tier_proposals p
+      join provider_tiers t on t.application_id = p.application_id and t.tier_name = p.tier_name
+     where num_nonnulls(p.protocol, p.endpoint_host, p.endpoint_port, p.compid) = 0
+       and num_nonnulls(t.protocol, t.endpoint_host, t.endpoint_port, t.compid) > 0
+     order by p.created_at
+  loop
+    p_allnull := p_allnull + 1;
+    raise notice 'allnull proposal % (%, created %) vs addressed tier % (%, %, %, %)',
+      r.proposal_id, r.terms_status, r.created_at, r.tier_id,
+      r.protocol, r.endpoint_host, r.endpoint_port, r.compid;
+  end loop;
+  raise notice 'allnull_proposal_addressed_tier: %', p_allnull;
 end $$;
 
 -- 4. Backfill. One child row at position 0 per parent row that has any of the four set and has
@@ -129,8 +166,10 @@ end $$;
 --    no split); endpoint_verified is copied on the tier side. Idempotent by the `not exists`,
 --    re-runnable alone at instant (iii).
 --    drift rows (instant (iii) only, expected 0 at instant (i) by construction): tiers whose
---    parent scalars differ from their single position-0 child, i.e. a tier old code re-confirmed
---    in the (i)..(ii) window. Printed one notice per row with both sides; nothing is changed.
+--    parent scalars differ from their position-0 child, i.e. a tier old code re-confirmed in
+--    the (i)..(ii) window. Position 0 only, regardless of how many child rows the tier has: the
+--    dual-write keeps the parent equal to position 0 and says nothing about the others (fable
+--    S2). Printed one notice per row with both sides verbatim; nothing is changed.
 do $$
 declare
   n int;
@@ -158,32 +197,34 @@ begin
   for r in
     select t.id, t.confirmed_at,
            t.protocol as p_protocol, t.endpoint_host as p_host, t.endpoint_port as p_port, t.compid as p_compid,
-           e.protocol as c_protocol, e.endpoint_host as c_host, e.endpoint_port as c_port, e.compid as c_compid
+           t.endpoint_verified as p_verified,
+           e.protocol as c_protocol, e.endpoint_host as c_host, e.endpoint_port as c_port, e.compid as c_compid,
+           e.endpoint_verified as c_verified
       from provider_tiers t
       join provider_tier_endpoints e on e.tier_id = t.id and e.position = 0
-     where (select count(*) from provider_tier_endpoints e2 where e2.tier_id = t.id) = 1
-       and (e.protocol is distinct from t.protocol
-         or e.endpoint_host is distinct from t.endpoint_host
-         or e.endpoint_port is distinct from t.endpoint_port
-         or e.compid is distinct from t.compid)
-     order by t.confirmed_at
+     where e.protocol is distinct from t.protocol
+        or e.endpoint_host is distinct from t.endpoint_host
+        or e.endpoint_port is distinct from t.endpoint_port
+        or e.compid is distinct from t.compid
+        or e.endpoint_verified is distinct from t.endpoint_verified
+     order by t.confirmed_at nulls last, t.id
   loop
     drift := drift + 1;
-    raise notice 'drift row: tier % confirmed_at % parent (%, %, %, %) child (%, %, %, %)',
-      r.id, r.confirmed_at, r.p_protocol, r.p_host, r.p_port, r.p_compid,
-      r.c_protocol, r.c_host, r.c_port, r.c_compid;
+    raise notice 'drift row: tier % confirmed_at % parent (%, %, %, %, verified %) child pos 0 (%, %, %, %, verified %)',
+      r.id, r.confirmed_at, r.p_protocol, r.p_host, r.p_port, r.p_compid, r.p_verified,
+      r.c_protocol, r.c_host, r.c_port, r.c_compid, r.c_verified;
   end loop;
   raise notice 'drift rows: %', drift;
 end $$;
 
--- 5. Gate, instant (i) only (at instant (iii) run step 4 alone; after the code deploy the
---    parent is stale by design and this gate would wrongly abort). Every parent with any scalar
---    has a child; every position-0 child equals its parent on the four, and on endpoint_verified
---    for tiers. Raises on the first failure.
---    To see this gate fail once (design section 5, test 5): dry-run with step 4 commented out.
+-- 5. Gate, instant (i) only (at instant (iii) run step 4 alone, which prints drift without
+--    aborting). Same shape as the 0092 gate, position 0 only: every parent with any scalar has
+--    a child; every position-0 child equals its parent on the four, and on endpoint_verified for
+--    tiers; every parent with all four null has zero child rows. Raises on the first failure.
+--    To see this gate fail once (design section 5, test 6): dry-run with step 4 commented out.
 do $$
 declare
-  p_missing int; p_drift int; t_missing int; t_drift int;
+  p_missing int; p_drift int; p_orphan int; t_missing int; t_drift int; t_orphan int;
 begin
   select count(*) into p_missing from provider_tier_proposals p
    where num_nonnulls(p.protocol, p.endpoint_host, p.endpoint_port, p.compid) > 0
@@ -200,6 +241,13 @@ begin
       or e.compid is distinct from p.compid;
   if p_drift > 0 then
     raise exception '0091 gate: % proposal position-0 child rows differ from parent', p_drift;
+  end if;
+
+  select count(*) into p_orphan from provider_tier_proposals p
+   where num_nonnulls(p.protocol, p.endpoint_host, p.endpoint_port, p.compid) = 0
+     and exists (select 1 from provider_tier_proposal_endpoints e where e.proposal_id = p.id);
+  if p_orphan > 0 then
+    raise exception '0091 gate: % all-null proposals have child rows', p_orphan;
   end if;
 
   select count(*) into t_missing from provider_tiers t
@@ -220,8 +268,15 @@ begin
     raise exception '0091 gate: % tier position-0 child rows differ from parent', t_drift;
   end if;
 
-  raise notice 'gate: proposals missing % drift %; tiers missing % drift %',
-    p_missing, p_drift, t_missing, t_drift;
+  select count(*) into t_orphan from provider_tiers t
+   where num_nonnulls(t.protocol, t.endpoint_host, t.endpoint_port, t.compid) = 0
+     and exists (select 1 from provider_tier_endpoints e where e.tier_id = t.id);
+  if t_orphan > 0 then
+    raise exception '0091 gate: % all-null tiers have child rows', t_orphan;
+  end if;
+
+  raise notice 'gate: proposals missing % drift % orphan %; tiers missing % drift % orphan %',
+    p_missing, p_drift, p_orphan, t_missing, t_drift, t_orphan;
 end $$;
 
 -- 6. Ledger.

@@ -1,11 +1,15 @@
 -- NOT RUN AUTOMATICALLY. 0091_rollback.sql -- companion to 0091_provider_tier_endpoints.sql,
 -- thread provider-tier-endpoints-2026-09-24. Written by kai on kai/tier-endpoints-design-2026-09-24.
+-- AFTER THE CODE MERGE (instant (ii) of the 0091 header) THE CODE REVERT COMES FIRST: revert
+-- the code branch, wait for the deploy, then run this file (fable S2 via marcus m53845). The
+-- live code reads and writes the two tables with no guards, so dropping them under it 500s the
+-- admin pages and fails every confirm.
 --
 -- 0091 is additive: it creates two child tables and backfills them, and never writes the parent
--- columns. So this rollback is loss-free ONLY before instant (ii) of the 0091 header (the code
--- deploy that starts writing the child tables). After (ii) the child tables hold endpoint rows
--- the parent columns never had (every position >= 1, and any position 0 written by new code),
--- and dropping them loses data. The count check below refuses in that case; override by hand.
+-- columns. So this rollback is loss-free ONLY before instant (ii). After (ii) the dual-write
+-- keeps the parent columns equal to the position-0 child, so position 0 is reproducible; every
+-- row at position >= 1 and every non-null notes is not, and dropping the tables loses it. The
+-- count check below refuses in that case; coxwell decides by hand.
 --
 -- One transaction. Dry-run with `rollback;` in place of `commit;` first.
 
