@@ -173,15 +173,49 @@ test("5.2 narrowing: null -> set is an add, allowed", () => {
   assert.deepEqual(endpointsThatWouldClear([before], [row({ compid: "NEW", protocol: "FIX 4.4" })]), []);
 });
 
-test("5.2 narrowing: two live sessions at one address, one resubmitted with its compid: the other's compid is not a narrowing", () => {
+test("5.2 S1: two live sessions at one address, one resubmitted: the other is a removal, counted per address", () => {
   // Live A(C1) and B(C2) share host:port. Submitting [A(C1), B(C2)] keeps both; submitting
-  // [B(C2)] alone is clause-1 clean (address present) and clause-2 clean (C2 is set on the
-  // submitted row at that address). Whether dropping A this way is acceptable is the replace-set
-  // rule of design 2.2, not this guard's business.
+  // [B(C2)] alone drops A, and at 2b183a4 the guard let that through ("kept if ANY submitted row
+  // at the address has it set"): fable's delta-1 strike S1 (m54026 via marcus m54028, probe P1).
+  // The guard now counts rows per address.
+  const a = live({ compid: "C1", endpointVerified: true });
+  const b = live({ position: 1, compid: "C2", endpointVerified: true });
+  assert.deepEqual(endpointsThatWouldClear([a, b], [row({ compid: "C2" })]), [
+    "1 of 2 endpoints removed at fix.example.net:9443",
+  ]);
+  assert.deepEqual(endpointsThatWouldClear([a, b], [row({ compid: "C1" }), row({ position: 1, compid: "C2" })]), []);
+});
+
+test("5.2 S1 probe P2: same live pair, one submitted row with a third compid: still 1 of 2 removed, not a narrowing", () => {
+  const a = live({ compid: "C1", endpointVerified: true });
+  const b = live({ position: 1, compid: "C2", endpointVerified: true });
+  const out = endpointsThatWouldClear([a, b], [row({ compid: "C3" })]);
+  assert.deepEqual(out, ["1 of 2 endpoints removed at fix.example.net:9443"]);
+});
+
+test("5.2 S1: an edit at a shared address with the neighbour kept is allowed (C1 -> C3, B kept)", () => {
   const a = live({ compid: "C1" });
   const b = live({ position: 1, compid: "C2" });
-  assert.deepEqual(endpointsThatWouldClear([a, b], [row({ compid: "C2" })]), []);
-  assert.deepEqual(endpointsThatWouldClear([a, b], [row({ compid: "C1" }), row({ position: 1, compid: "C2" })]), []);
+  assert.deepEqual(endpointsThatWouldClear([a, b], [row({ compid: "C3" }), row({ position: 1, compid: "C2" })]), []);
+});
+
+test("5.2 S1 (ii): two live rows with compid at one address, both resubmitted but one compid blanked: SenderCompID left blank, once", () => {
+  const a = live({ compid: "C1" });
+  const b = live({ position: 1, compid: "C2" });
+  const out = endpointsThatWouldClear([a, b], [row({ compid: "C1" }), row({ position: 1, compid: null })]);
+  assert.deepEqual(out, ["SenderCompID left blank at fix.example.net:9443"]);
+});
+
+test("5.2 N2: two live rows at one address, address absent from the submission: echoed once", () => {
+  const a = live({ compid: "C1" });
+  const b = live({ position: 1, compid: "C2" });
+  assert.deepEqual(endpointsThatWouldClear([a, b], [B]), ["fix.example.net:9443"]);
+});
+
+test("5.2 N1: a live host with a leading space matches the trimmed submission (key on the trimmed value)", () => {
+  const before = live({ endpointHost: " fix.example.net", endpointVerified: true });
+  assert.deepEqual(endpointsThatWouldClear([before], [A]), []);
+  assert.deepEqual(carryVerification([before], [A]).map((r) => r.endpointVerified), [true]);
 });
 
 /* ---------- 5.3 parseEndpointsJson ---------- */

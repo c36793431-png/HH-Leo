@@ -60,8 +60,8 @@ function isSet(value: string | null | undefined): value is string {
  * bare colon (marcus m53979 relaying fable m53977, note N2). One half missing names the half
  * that is there and says which is missing, so the provider can tell the two apart. */
 function describeAddress(row: ConnectionFour): string {
-  const host = isSet(row.endpointHost) ? row.endpointHost : null;
-  const port = isSet(row.endpointPort) ? row.endpointPort : null;
+  const host = isSet(row.endpointHost) ? row.endpointHost.trim() : null;
+  const port = isSet(row.endpointPort) ? row.endpointPort.trim() : null;
   if (host === null && port === null) return "(no address)";
   return `${host ?? "(no host)"}:${port ?? "(no port)"}`;
 }
@@ -69,18 +69,38 @@ function describeAddress(row: ConnectionFour): string {
 /** Clause 1's removal key, `(host, port)` (design 2.1, :124-129). Defined only on rows that
  * have both: a submitted row can never lack them once parseEndpointsJson has run (design 2.1
  * :104-113), and a live row lacking either is un-matchable on purpose, so it is reported as
- * missing rather than matched to whatever else has no address. */
+ * missing rather than matched to whatever else has no address. Keyed on the trimmed value, as
+ * isSet tests it (fable delta-1 note N1, m54026 via marcus m54028): a backfilled live row with
+ * a leading space would otherwise never match the parser's trimmed submission. */
 function addressKey(row: ConnectionFour): string | null {
   if (!isSet(row.endpointHost) || !isSet(row.endpointPort)) return null;
-  return `${row.endpointHost}\u0000${row.endpointPort}`;
+  return `${row.endpointHost.trim()}\u0000${row.endpointPort.trim()}`;
 }
 
 /** Row identity and the carry key: the four coalesced to '' (design 2.1, :84-91), the same
- * expression as the identity index in the .sql (:129-131, :153-155). Notes are not identity. */
+ * expression as the identity index in the .sql (:129-131, :153-155) except that this one trims
+ * (N1, as addressKey). The parser never emits untrimmed or whitespace-only values, so the two
+ * diverge only on backfilled rows. Notes are not identity. */
 function identityKey(row: ConnectionFour): string {
   return [row.protocol, row.endpointHost, row.endpointPort, row.compid]
-    .map((v) => (isSet(v) ? v : ""))
+    .map((v) => (isSet(v) ? v.trim() : ""))
     .join("\u0000");
+}
+
+/** Bucket rows by addressKey. Rows with no key (address-less live rows) bucket under their
+ * description instead, so however many there are the address is echoed once (N2); the sentinel
+ * never collides with a real key because a real key always contains \u0000. */
+function groupByAddress(rows: readonly ConnectionFour[], keepKeyless: boolean): Map<string, ConnectionFour[]> {
+  const groups = new Map<string, ConnectionFour[]>();
+  for (const r of rows) {
+    const key = addressKey(r);
+    if (key === null && !keepKeyless) continue;
+    const groupKey = key ?? `\u0001${describeAddress(r)}`;
+    const bucket = groups.get(groupKey);
+    if (bucket) bucket.push(r);
+    else groups.set(groupKey, [r]);
+  }
+  return groups;
 }
 
 /** The submit-time guard, replacing the per-column connectionFieldsThatWouldClear for the
@@ -92,39 +112,49 @@ function identityKey(row: ConnectionFour): string {
  * a non-empty result is a refusal. Two clauses, design 2.1:
  *
  * - Clause 1 (:124-129): every live `(host, port)` must be present in the submission's set of
- *   `(host, port)`; a missing one is described as `host:port`. The removal key decides WHICH
- *   live row a submitted row is talking about.
+ *   `(host, port)`; a missing one is described as `host:port`, once per address. The removal
+ *   key decides WHICH live row a submitted row is talking about.
  * - Clause 2 (:130-142): on a live row matched by `(host, port)`, `protocol` or `compid` going
  *   from set to blank is refused, the echo naming the column's label and the address, never the
  *   note and never the live value. Set -> different value is an edit (allowed, re-verifies by
- *   the carry); null -> set is an add. Where two live sessions share one address (different
- *   compids) the column counts as kept if ANY submitted row at that address has it set.
+ *   the carry); null -> set is an add.
+ *
+ * Where n > 1 live sessions share one address (design 2.1 names one host:port serving a BJF and
+ * a cTrader session), both clauses are COUNTS per address, fable's delta-1 strike S1 (m54026 via
+ * marcus m54028): (i) fewer submitted rows at the address than live rows is a removal, echoed
+ * as "<k> of <n> endpoints removed at host:port"; (ii) otherwise, per column, fewer submitted
+ * rows with it set than live rows with it set is a narrowing. For n = 1 this is the same
+ * decision as the clauses above. The "kept if ANY submitted row has it set" rule that stood at
+ * 2b183a4 let one verified session vanish behind its neighbour, which is the removal this guard
+ * exists to refuse. When (i) fires, (ii) is not evaluated for that address: the row count is
+ * the thing to fix first, and a column count against a short set would only echo noise.
  *
  * The two keys are not the same key and must not be harmonised (:143-147). */
 export function endpointsThatWouldClear(
   liveRows: readonly ConnectionFour[],
   submitted: readonly ConnectionFour[]
 ): string[] {
-  const submittedByAddress = new Map<string, ConnectionFour[]>();
-  for (const s of submitted) {
-    const key = addressKey(s);
-    if (key === null) continue;
-    const bucket = submittedByAddress.get(key);
-    if (bucket) bucket.push(s);
-    else submittedByAddress.set(key, [s]);
-  }
+  const submittedByAddress = groupByAddress(submitted, false);
+  const liveByAddress = groupByAddress(liveRows, true);
 
   const refusals: string[] = [];
-  for (const liveRow of liveRows) {
-    const key = addressKey(liveRow);
-    const matched = key === null ? undefined : submittedByAddress.get(key);
-    if (!matched) {
-      refusals.push(describeAddress(liveRow));
+  for (const [key, liveAtAddress] of liveByAddress) {
+    const address = describeAddress(liveAtAddress[0]);
+    const submittedAtAddress = submittedByAddress.get(key) ?? [];
+    if (submittedAtAddress.length === 0) {
+      refusals.push(address);
+      continue;
+    }
+    if (submittedAtAddress.length < liveAtAddress.length) {
+      const removed = liveAtAddress.length - submittedAtAddress.length;
+      refusals.push(`${removed} of ${liveAtAddress.length} endpoints removed at ${address}`);
       continue;
     }
     for (const column of ["protocol", "compid"] as const) {
-      if (isSet(liveRow[column]) && !matched.some((s) => isSet(s[column]))) {
-        refusals.push(`${LABEL[column]} left blank at ${describeAddress(liveRow)}`);
+      const liveSet = liveAtAddress.filter((r) => isSet(r[column])).length;
+      const submittedSet = submittedAtAddress.filter((s) => isSet(s[column])).length;
+      if (submittedSet < liveSet) {
+        refusals.push(`${LABEL[column]} left blank at ${address}`);
       }
     }
   }
