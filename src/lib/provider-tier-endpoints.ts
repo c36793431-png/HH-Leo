@@ -36,7 +36,8 @@ export interface EndpointInput {
 
 /** A provider_tier_endpoints row: an EndpointInput plus the per-row verified claim, which is
  * "a claim about this tier's specific endpoint_host:endpoint_port, not about the row"
- * (src/lib/provider-tiers.ts:117-118, quoted at design 2 item 1, :65-68). */
+ * (src/lib/provider-tiers.ts:117-118 at 030d5c8, quoted at design 2 item 1, :65-68; that
+ * comment left provider-tiers.ts with the parent-column fields at delta 3 and lives here now). */
 export interface LiveEndpoint extends EndpointInput {
   endpointVerified: boolean;
 }
@@ -307,6 +308,76 @@ export function endpointViewerAllowed(viewer: EndpointViewer, ownerUserId: strin
  * once per parent it was asked for. */
 export function assertEndpointViewer(viewer: EndpointViewer, ownerUserId: string | null): void {
   if (!endpointViewerAllowed(viewer, ownerUserId)) throw new EndpointViewerError();
+}
+
+/** The application-grain connection details as provider_applications captured them (0059:
+ * one set per provider, never per tier; src/lib/provider-tiers.ts ApplicationConnectionDetails).
+ * Structural, so this module does not import provider-tiers.ts, which imports the pool. */
+export interface ApplicationEndpointSource {
+  protocol: string | null;
+  host: string | null;
+  port: string | null;
+  compid: string | null;
+}
+
+/** One entry of the admin Connection details block (section 1 row 7). Either a tier's own
+ * child row, or the application's one address standing in for a tier that has no rows. */
+export interface DisplayEndpoint {
+  /** The child row's position, or null for the application fallback. */
+  position: number | null;
+  protocol: string | null;
+  endpointHost: string | null;
+  endpointPort: string | null;
+  compid: string | null;
+  /** Provider-authored, rendered to admins only (design 2.2, :172-177); null on the fallback. */
+  notes: string | null;
+  /** The row's own claim, or null = withheld: a verified flag is about a tier's specific
+   * host:port and must never be shown against an address sourced from the application. */
+  endpointVerified: boolean | null;
+  fromApplication: boolean;
+}
+
+/** '' is absent here, as in the page's pickScalar it replaces (admin/providers/page.tsx:57-67
+ * at 030d5c8): register-provider submits blank inputs as "" rather than null. */
+function presentOrNull(value: string | null): string | null {
+  return isSet(value) ? value : null;
+}
+
+/** The N-endpoint successor of pickEndpoint (design 5 item 4, :333-336): zero tier rows render
+ * as the application fallback, one or more render as the list, and the two grains never mix.
+ * No mixing means no per-field fallback either: a tier row whose protocol or compid is null
+ * shows null even when the application has a value, where pickScalar at 030d5c8 filled the gap
+ * from the application per field. Reason: a row's four are one session's identity (design 2.1,
+ * :84-91); an application protocol pasted onto a tier row's host:port is a session that was
+ * never captured at either grain, the same fabrication pickEndpoint refused for host and port.
+ * Pure, so both branches are tests. Rows come back in position order whatever order they
+ * arrived in. */
+export function resolveEndpointsForDisplay(
+  tierEndpoints: readonly LiveEndpoint[],
+  app: ApplicationEndpointSource
+): DisplayEndpoint[] {
+  if (tierEndpoints.length > 0) {
+    return [...tierEndpoints]
+      .sort((a, b) => a.position - b.position)
+      .map((r) => ({
+        position: r.position,
+        protocol: r.protocol,
+        endpointHost: r.endpointHost,
+        endpointPort: r.endpointPort,
+        compid: r.compid,
+        notes: r.notes,
+        endpointVerified: r.endpointVerified,
+        fromApplication: false,
+      }));
+  }
+  const fallback = {
+    protocol: presentOrNull(app.protocol),
+    endpointHost: presentOrNull(app.host),
+    endpointPort: presentOrNull(app.port),
+    compid: presentOrNull(app.compid),
+  };
+  if (Object.values(fallback).every((v) => v === null)) return [];
+  return [{ position: null, ...fallback, notes: null, endpointVerified: null, fromApplication: true }];
 }
 
 /* ====================================================================================== SQL

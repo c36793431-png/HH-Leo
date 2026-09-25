@@ -6,7 +6,7 @@
  * Fail-first per docs/specs/0091-tier-endpoints-design.md @ 6100dc0, section 5 (:293-339):
  * these cases were written before the module existed, so the first run fails on a missing
  * export. Test numbers below follow section 5's items: 5.1 guard, 5.2 carry (+ narrowing),
- * 5.3 parser, 5.5 reader assert. 5.4 (resolveEndpointsForDisplay) is a later delta.
+ * 5.3 parser, 5.4 display resolver (delta 3), 5.5 reader assert.
  *
  * NOT RUN on the author's box (npx tsx --test refused 2026-09-24; design 5, :296-299). An unrun
  * test is not a PASS input (fable N5). */
@@ -21,6 +21,7 @@ import {
   parseEndpointsJson,
   parentMirror,
   foldEndpointRows,
+  resolveEndpointsForDisplay,
   MAX_ENDPOINTS_PER_PARENT,
   type EndpointInput,
   type LiveEndpoint,
@@ -378,6 +379,58 @@ test("fold: every requested id gets an entry, an empty list for a parent with no
 test("fold: a row for an id that was not requested is dropped, not invented as an entry", () => {
   const out = foldEndpointRows(["tier-x"], [{ parentId: "tier-z", endpoint: A }]);
   assert.deepEqual(Array.from(out.entries()), [["tier-x", []]]);
+});
+
+/* ---------- 5.4 resolveEndpointsForDisplay, the roster's ConnectionFields shape (delta 3) ---------- */
+
+const APP = { protocol: "FIX 4.2", host: "app.example.net", port: "443", compid: "APPCOMP" };
+
+test("5.4 zero tier rows -> the application's address as ONE fallback entry, verified withheld (null), notes none", () => {
+  assert.deepEqual(resolveEndpointsForDisplay([], APP), [
+    {
+      position: null,
+      protocol: "FIX 4.2",
+      endpointHost: "app.example.net",
+      endpointPort: "443",
+      compid: "APPCOMP",
+      notes: null,
+      endpointVerified: null,
+      fromApplication: true,
+    },
+  ]);
+});
+
+test("5.4 one or more tier rows -> the list in position order, nothing from the application, each row's own verified flag and notes", () => {
+  const b = live({ ...B, notes: "SBE session", endpointVerified: true });
+  const a = live({ ...A, endpointVerified: false });
+  const out = resolveEndpointsForDisplay([b, a], APP);
+  assert.deepEqual(
+    out.map((e) => [e.position, e.endpointHost, e.endpointVerified, e.notes, e.fromApplication]),
+    [
+      [0, A.endpointHost, false, null, false],
+      [1, B.endpointHost, true, "SBE session", false],
+    ]
+  );
+  assert.equal(out.some((e) => e.endpointHost === APP.host || e.compid === APP.compid), false);
+});
+
+test("5.4 no mixing: a tier row with protocol and compid null keeps them null although the application has both", () => {
+  const out = resolveEndpointsForDisplay([live({ ...C, protocol: null, compid: null })], APP);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].protocol, null);
+  assert.equal(out[0].compid, null);
+  assert.equal(out[0].fromApplication, false);
+});
+
+test("5.4 zero tier rows and a blank application (null and '' mixed) -> [] and never a half-empty entry", () => {
+  assert.deepEqual(resolveEndpointsForDisplay([], { protocol: null, host: "", port: " ", compid: null }), []);
+});
+
+test("5.4 fallback treats '' as absent per field (register-provider posts blanks as ''), the rest verbatim", () => {
+  const out = resolveEndpointsForDisplay([], { protocol: "", host: "app.example.net", port: "", compid: null });
+  assert.deepEqual(out.map((e) => [e.protocol, e.endpointHost, e.endpointPort, e.compid, e.fromApplication]), [
+    [null, "app.example.net", null, null, true],
+  ]);
 });
 
 /* ---------- 5.5 reader assert [S3] ---------- */

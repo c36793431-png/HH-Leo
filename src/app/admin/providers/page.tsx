@@ -9,6 +9,10 @@ import type {
   ProviderRosterEntry,
   TierConnectionDetails,
 } from "@/lib/provider-tiers";
+import { resolveEndpointsForDisplay } from "@/lib/provider-tier-endpoints";
+import type { DisplayEndpoint } from "@/lib/provider-tier-endpoints";
+import { auth } from "@/lib/auth";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { ChipList, Field } from "@/components/admin/detail-fields";
 import { TermsQueueRowActions } from "@/components/admin/terms-queue-row-actions";
 import { confirmProposalAction } from "./actions";
@@ -54,42 +58,45 @@ const APPLICATION_GRAIN_LEGEND =
   "Fields marked “from application · all tiers” come from the provider's application — one set for " +
   "the whole provider, not per tier. Unmarked fields were captured on this tier's confirmed row.";
 
-/** Per-field fallback: the tier's own value if it has one, otherwise the application's, flagged as
- * such. Empty string is treated as absent -- register-provider submits blank inputs as "" rather
- * than null, and a blank is not a value worth preferring over one that exists. */
-function pickScalar(
-  tierValue: string | null,
-  appValue: string | null
-): { value: string | null; fromApplication: boolean } {
-  if (tierValue) return { value: tierValue, fromApplication: false };
-  if (appValue) return { value: appValue, fromApplication: true };
-  return { value: null, fromApplication: false };
-}
-
-/** Host and port resolve TOGETHER, never field-by-field. Composing a tier's host with the
- * application's port would render a host:port pair that has never existed at either grain -- an
- * endpoint fabricated by the UI. Both grains really can hold different values at once:
- * registerProviderTiers writes host/port to provider_applications AND endpoint_host/endpoint_port
- * to provider_tiers in the same submit, from separate inputs.
+/** The tier's endpoint rows resolve as ONE SET against the application's one address, never
+ * field-by-field (resolveEndpointsForDisplay, provider-tier-endpoints.ts; design 5 item 4).
+ * Composing a tier row's host with the application's port, or its protocol, would render a
+ * session that has never existed at either grain -- an endpoint fabricated by the UI. Both
+ * grains really can hold different values at once: registerProviderTiers writes host/port to
+ * provider_applications AND a position-0 endpoint row to the tier in the same submit, from
+ * separate inputs. So: one or more tier rows render as the list, all of it from the tier; zero
+ * rows render the application's address once, marked as such.
  *
- * endpoint_verified rides with the tier grain only. It is a claim about the tier's specific
- * endpoint, so it is withheld entirely when the endpoint on display came from the application. */
-function pickEndpoint(
-  tier: TierConnectionDetails,
-  app: ApplicationConnectionDetails
-): { host: string | null; port: string | null; fromApplication: boolean; verified: boolean | null } {
-  if (tier.endpointHost || tier.endpointPort) {
-    return {
-      host: tier.endpointHost,
-      port: tier.endpointPort,
-      fromApplication: false,
-      verified: tier.endpointVerified,
-    };
-  }
-  if (app.host || app.port) {
-    return { host: app.host, port: app.port, fromApplication: true, verified: null };
-  }
-  return { host: null, port: null, fromApplication: false, verified: null };
+ * The verified flag rides with a tier row only. It is a claim about that row's specific
+ * host:port, so it is withheld entirely (null) when the address on display came from the
+ * application. `notes` is provider-authored and renders here and on the review card only, never
+ * to a buyer (design 2.2). */
+function EndpointFields({ endpoint, index, count }: { endpoint: DisplayEndpoint; index: number; count: number }) {
+  const note = endpoint.fromApplication ? APPLICATION_GRAIN_NOTE : undefined;
+  return (
+    <div className="flex flex-col gap-3">
+      {count > 1 && (
+        <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+          Endpoint {index + 1} of {count}
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="Feed protocol" value={endpoint.protocol} note={note} />
+        <Field label="Host endpoint" value={endpoint.endpointHost} note={note} />
+        <Field label="Port" value={endpoint.endpointPort} note={note} />
+        <Field label="CompID / stream id" value={endpoint.compid} note={note} />
+        {endpoint.notes !== null && <Field label="Provider note" value={endpoint.notes} />}
+        {endpoint.endpointVerified !== null && (
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-zinc-500">Endpoint verified</div>
+            <div className={`mt-0.5 text-sm ${endpoint.endpointVerified ? "text-emerald-400" : "text-zinc-400"}`}>
+              {endpoint.endpointVerified ? "Yes" : "Not verified"}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** regions/coverage are the one pair whose two grains have different *types*: text[] on
@@ -118,52 +125,28 @@ function ConnectionFields({
   tier: TierConnectionDetails | null;
   app: ApplicationConnectionDetails;
 }) {
-  const empty: TierConnectionDetails = {
-    protocol: null,
-    compid: null,
-    endpointHost: null,
-    endpointPort: null,
-    endpointVerified: false,
-    regions: [],
-    coverage: [],
-  };
+  const empty: TierConnectionDetails = { endpoints: [], regions: [], coverage: [] };
   const t = tier ?? empty;
-  const protocol = pickScalar(t.protocol, app.protocol);
-  const compid = pickScalar(t.compid, app.compid);
-  const endpoint = pickEndpoint(t, app);
+  const endpoints = resolveEndpointsForDisplay(t.endpoints, app);
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <Field
-        label="Feed protocol"
-        value={protocol.value}
-        note={protocol.fromApplication ? APPLICATION_GRAIN_NOTE : undefined}
-      />
-      <Field
-        label="Host endpoint"
-        value={endpoint.host}
-        note={endpoint.fromApplication ? APPLICATION_GRAIN_NOTE : undefined}
-      />
-      <Field
-        label="Port"
-        value={endpoint.port}
-        note={endpoint.fromApplication ? APPLICATION_GRAIN_NOTE : undefined}
-      />
-      <Field
-        label="CompID / stream id"
-        value={compid.value}
-        note={compid.fromApplication ? APPLICATION_GRAIN_NOTE : undefined}
-      />
-      <MultiValueField label="Regions" tierValues={t.regions} appValue={app.regions} />
-      <MultiValueField label="Coverage" tierValues={t.coverage} appValue={app.coverage} />
-      {endpoint.verified !== null && (
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">Endpoint verified</div>
-          <div className={`mt-0.5 text-sm ${endpoint.verified ? "text-emerald-400" : "text-zinc-400"}`}>
-            {endpoint.verified ? "Yes" : "Not verified"}
-          </div>
-        </div>
+    <div className="flex flex-col gap-4">
+      {endpoints.length > 0 ? (
+        endpoints.map((endpoint, index) => (
+          <EndpointFields
+            key={endpoint.position ?? "application"}
+            endpoint={endpoint}
+            index={index}
+            count={endpoints.length}
+          />
+        ))
+      ) : (
+        <div className="text-sm text-zinc-600">No connection endpoint at either grain.</div>
       )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <MultiValueField label="Regions" tierValues={t.regions} appValue={app.regions} />
+        <MultiValueField label="Coverage" tierValues={t.coverage} appValue={app.coverage} />
+      </div>
     </div>
   );
 }
@@ -182,10 +165,7 @@ function ConnectionBlock({ entry }: { entry: ProviderRosterEntry }) {
   );
   const hasTierDetail = entry.tiers.some(
     (tier) =>
-      tier.connection.protocol ||
-      tier.connection.compid ||
-      tier.connection.endpointHost ||
-      tier.connection.endpointPort ||
+      tier.connection.endpoints.length > 0 ||
       tier.connection.regions.length > 0 ||
       tier.connection.coverage.length > 0
   );
@@ -200,7 +180,7 @@ function ConnectionBlock({ entry }: { entry: ProviderRosterEntry }) {
       <div className="mt-2 flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
         {entry.tiers.length > 0 ? (
           entry.tiers.map((tier) => (
-            <div key={tier.tierName} className="border-b border-zinc-800 pb-3 last:border-b-0 last:pb-0">
+            <div key={tier.tierId} className="border-b border-zinc-800 pb-3 last:border-b-0 last:pb-0">
               <div className="mb-3 text-[11px] font-medium uppercase tracking-wide text-teal-400">
                 {tier.tierName}
               </div>
@@ -236,11 +216,18 @@ export default async function AdminProvidersPage({
   const { filter: filterParam } = await searchParams;
   const filter = FILTER_SEGMENTS.some((s) => s.key === filterParam) ? filterParam! : "needs-review";
 
+  // The endpoint reader asserts on the session it is handed (design 4 [S3]), so the roster gets
+  // the real one, not a constant: the admin layout has already redirected anyone who is not an
+  // admin (src/app/admin/layout.tsx:14-16), and if that ever stops being true the reader throws
+  // here rather than rendering addresses.
+  const session = await auth();
+  const viewer = { userId: session?.user?.id ?? null, isAdmin: isAdminUser(session?.user) };
+
   const [stats, bookContext, queue, roster] = await Promise.all([
     getTermsQueueStats(),
     getBookContext(),
     listTermsReviewQueue(),
-    listProviderRoster(),
+    listProviderRoster(viewer),
   ]);
 
   return (

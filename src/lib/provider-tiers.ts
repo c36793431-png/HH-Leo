@@ -1,5 +1,12 @@
 import { pool } from "./db";
 import { getProviderApplication, notifyProviderLive } from "./provider-applications";
+import {
+  carryVerification,
+  readEndpoints,
+  type EndpointInput,
+  type EndpointViewer,
+  type LiveEndpoint,
+} from "./provider-tier-endpoints";
 
 export interface ProviderMarketplaceSummary {
   liveProviderCount: number;
@@ -102,21 +109,18 @@ export interface ApplicationConnectionDetails {
   coverage: string | null;
 }
 
-/** Connection details as captured on provider_tiers -- PER TIER. protocol/compid are text and
- * regions/coverage are text[] (0083), matching provider_tier_proposals, so these arrive already
- * structured and need no parsing. Written by confirmProposalRound's copy-forward
- * (3f96166/d25c250/849b383) and by registerProviderTiers from its per-tier inputs -- protocol,
- * regions and coverage only; register-provider still writes no compid (see RegisterTierInput).
- * A register-provider tier left blank reads null here and falls back to the application grain
- * at render time. */
+/** Connection details as captured on provider_tiers -- PER TIER. regions/coverage are text[]
+ * (0083), matching provider_tier_proposals, so these arrive already structured and need no
+ * parsing. The connection endpoints (protocol, host, port, compid, the provider's note and the
+ * per-row verified claim) are the tier's 0091 child rows, 0..8 of them, read through the one
+ * reader in provider-tier-endpoints.ts, the only file that names the child tables (docs/specs/0091-tier-endpoints-design.md
+ * @ 6100dc0, section 4 :264-271); the parent's four scalar columns are that reader's position-0
+ * mirror until 0092 (section 3 step 2, :203-209) and are not read here any more. Written by
+ * confirmProposalRound's replace-set and by registerProviderTiers (position 0 only, no compid,
+ * see RegisterTierInput). A tier with zero rows falls back to the application grain at render
+ * time (resolveEndpointsForDisplay). */
 export interface TierConnectionDetails {
-  protocol: string | null;
-  compid: string | null;
-  endpointHost: string | null;
-  endpointPort: string | null;
-  /** A claim about this tier's specific endpoint_host:endpoint_port, not about the row -- so it
-   * must never be shown against an endpoint sourced from anywhere else. */
-  endpointVerified: boolean;
+  endpoints: LiveEndpoint[];
   regions: string[];
   coverage: string[];
 }
@@ -129,6 +133,7 @@ export interface ProviderRosterEntry {
   reviewedByLabel: string | null;
   applicationConnection: ApplicationConnectionDetails;
   tiers: {
+    tierId: string;
     tierName: string;
     clientPriceCents: number;
     providerSplitPct: number;
@@ -154,8 +159,13 @@ export interface ProviderRosterEntry {
  * onto provider_tiers to make it displayable. Fanning one application value onto N tier rows would
  * create copies with no writer to re-sync them -- right the day they are written and silently
  * wrong the moment a provider runs two tiers on different protocols. The two shapes stay distinct
- * in the return type so the caller has to state which one it is rendering. */
-export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
+ * in the return type so the caller has to state which one it is rendering.
+ *
+ * `viewer` is the caller's session as the endpoint reader wants it (design 4 [S3]): the roster
+ * is admin-only by route (src/app/admin/layout.tsx:14-16), but the reader asserts on what it is
+ * handed, not on the route, so the page passes its real session and a non-admin caller of this
+ * function gets EndpointViewerError from the reader, not a roster. */
+export async function listProviderRoster(viewer: EndpointViewer): Promise<ProviderRosterEntry[]> {
   const result = await pool.query<{
     application_id: string;
     provider_name: string;
@@ -169,14 +179,10 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
     app_compid: string | null;
     app_regions: string | null;
     app_coverage: string | null;
+    tier_id: string | null;
     tier_name: string | null;
     client_price_cents: number | null;
     provider_split_pct: number | null;
-    tier_protocol: string | null;
-    tier_compid: string | null;
-    endpoint_host: string | null;
-    endpoint_port: string | null;
-    endpoint_verified: boolean | null;
     tier_regions: string[] | null;
     tier_coverage: string[] | null;
   }>(
@@ -184,9 +190,7 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
             u.display_name as reviewer_display_name, u.email as reviewer_email,
             pa.protocol as app_protocol, pa.host as app_host, pa.port as app_port,
             pa.compid as app_compid, pa.regions as app_regions, pa.coverage as app_coverage,
-            t.tier_name, t.client_price_cents, t.provider_split_pct,
-            t.protocol as tier_protocol, t.compid as tier_compid,
-            t.endpoint_host, t.endpoint_port, t.endpoint_verified,
+            t.id as tier_id, t.tier_name, t.client_price_cents, t.provider_split_pct,
             t.regions as tier_regions, t.coverage as tier_coverage
      from provider_applications pa
      left join users u on u.id = pa.reviewed_by
@@ -220,26 +224,82 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
       };
       byApplication.set(row.application_id, entry);
     }
-    if (row.tier_name != null && row.client_price_cents != null && row.provider_split_pct != null) {
+    if (
+      row.tier_id != null &&
+      row.tier_name != null &&
+      row.client_price_cents != null &&
+      row.provider_split_pct != null
+    ) {
       entry.tiers.push({
+        tierId: row.tier_id,
         tierName: row.tier_name,
         clientPriceCents: row.client_price_cents,
         providerSplitPct: row.provider_split_pct,
         connection: {
-          protocol: row.tier_protocol,
-          compid: row.tier_compid,
-          endpointHost: row.endpoint_host,
-          endpointPort: row.endpoint_port,
-          // provider_tiers.endpoint_verified is `not null default false` (0060:25); it only
-          // arrives null from a left-join miss, which this branch has already excluded.
-          endpointVerified: row.endpoint_verified ?? false,
+          endpoints: [],
           regions: row.tier_regions ?? [],
           coverage: row.tier_coverage ?? [],
         },
       });
     }
   }
-  return Array.from(byApplication.values());
+  const entries = Array.from(byApplication.values());
+
+  // One round trip for every tier on the roster; the reader asserts the viewer per tier id
+  // before its SELECT and returns an entry (possibly []) for every id asked.
+  const tierIds = entries.flatMap((entry) => entry.tiers.map((tier) => tier.tierId));
+  const endpointsByTier = await readEndpoints(pool, viewer, { kind: "tier", ids: tierIds });
+  for (const entry of entries) {
+    for (const tier of entry.tiers) {
+      tier.connection.endpoints = endpointsByTier.get(tier.tierId) ?? [];
+    }
+  }
+  return entries;
+}
+
+/** What the admin review card shows beside a round's terms (section 1 row 6; design 6 item 1:
+ * "the admin confirms a round without seeing the address it will copy", ruled a defect). */
+export interface ProposalEndpointPreview {
+  /** The round's rows, as the provider submitted them. */
+  proposed: EndpointInput[];
+  /** The live tier this round confirms into, by the same (application_id, tier_name) lookup
+   * confirmProposalRound makes (provider-tier-proposals.ts:478-481), or null before the first
+   * confirmation. */
+  liveTierId: string | null;
+  /** That tier's rows now. [] when there is no tier yet. */
+  live: LiveEndpoint[];
+  /** What confirm would write if it ran now: `proposed` with the verification carry computed
+   * from `live` by the four-tuple (carryVerification). A claim about this page load: confirm
+   * recomputes it from its own FOR UPDATE snapshot (replaceTierEndpoints), so a coxwell edit
+   * to the live rows between this read and the confirm changes the outcome, not this preview. */
+  afterConfirm: LiveEndpoint[];
+}
+
+/** Reads a round's endpoint rows and the rows of the tier it would replace, both through the
+ * one reader with the caller's session. Read-only, no transaction: the two SELECTs may see
+ * different instants, which is why afterConfirm is documented as a preview and not a promise.
+ *
+ * provider_tiers has no unique on (application_id, tier_name) (0060:29-30 are plain indexes;
+ * fable's J3 via marcus m54049, logged as a follow-up, not built here), so like confirm this
+ * takes the first row the same predicate returns. Should two rows ever exist, the card and the
+ * confirm could pick differently; that is the logged race, not a new one. */
+export async function previewProposalEndpointsAdmin(
+  viewer: EndpointViewer,
+  round: { id: string; applicationId: string; tierName: string }
+): Promise<ProposalEndpointPreview> {
+  const proposed = (await readEndpoints(pool, viewer, { kind: "proposal", ids: [round.id] })).get(round.id) ?? [];
+
+  const tierResult = await pool.query<{ id: string }>(
+    `select id from provider_tiers where application_id = $1 and tier_name = $2`,
+    [round.applicationId, round.tierName]
+  );
+  const liveTierId = tierResult.rows[0]?.id ?? null;
+  const live =
+    liveTierId === null
+      ? []
+      : ((await readEndpoints(pool, viewer, { kind: "tier", ids: [liveTierId] })).get(liveTierId) ?? []);
+
+  return { proposed, liveTierId, live, afterConfirm: carryVerification(live, proposed) };
 }
 
 export interface RegisterTierInput {

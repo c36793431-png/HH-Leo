@@ -8,6 +8,9 @@ import {
   listProposalRoundsForTierAdmin,
   listSiblingProposedTiersAdmin,
 } from "@/lib/provider-tier-proposals";
+import { previewProposalEndpointsAdmin } from "@/lib/provider-tiers";
+import { auth } from "@/lib/auth";
+import { isAdminUser } from "@/lib/admin-users-panel";
 import { TermsReviewCardActions } from "@/components/admin/terms-review-card-actions";
 import { confirmProposalAction, declineProposalAction } from "../actions";
 
@@ -33,6 +36,19 @@ export default async function AdminProviderTermsReviewCard({
 
   const lineage = await listProposalRoundsForTierAdmin(round.applicationId, round.tierName);
   const siblingTiers = await listSiblingProposedTiersAdmin(round.providerUserId, round.tierName);
+
+  // The endpoint reader asserts on the session it is handed (design 4 [S3]), so the card passes
+  // its real one, not a constant: the admin layout has already redirected anyone who is not an
+  // admin (src/app/admin/layout.tsx:14-16), and if that ever stops being true the reader throws
+  // here rather than rendering addresses.
+  const session = await auth();
+  const viewer = { userId: session?.user?.id ?? null, isAdmin: isAdminUser(session?.user) };
+  const endpoints = await previewProposalEndpointsAdmin(viewer, {
+    id: round.id,
+    applicationId: round.applicationId,
+    tierName: round.tierName,
+  });
+  const isOpen = round.termsStatus === "proposed";
   const retainedCents = calcRetainedCents(round.clientPriceCents, round.providerSplitPct);
   const retainedPct = 100 - round.providerSplitPct;
 
@@ -100,7 +116,80 @@ export default async function AdminProviderTermsReviewCard({
         </div>
       </section>
 
-      {round.termsStatus === "proposed" ? (
+      {/* Section 1 row 6 of docs/specs/0091-tier-endpoints-design.md @ 6100dc0 (:42) and its
+          ruling at 6 item 1 (:358-359): "the admin confirms a round without seeing the address it
+          will copy" was a defect, so the card lists every endpoint row of the round with the
+          verified state it would have after confirm and which rows carry. Replace-set semantics
+          (6 item 2, :360): confirm deletes the live tier's rows and writes exactly these. */}
+      <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
+        <h2 className="text-sm font-medium text-cyan-400">
+          Connection endpoints this round ({endpoints.proposed.length})
+        </h2>
+        {isOpen && (
+          <p className="mt-1 text-[11px] text-zinc-500">
+            {endpoints.liveTierId === null
+              ? "No live tier yet: confirming creates it with exactly these rows, none verified."
+              : `Confirming replaces the live tier's ${endpoints.live.length} row${endpoints.live.length === 1 ? "" : "s"} with exactly these ${endpoints.proposed.length}.`}{" "}
+            A row keeps &ldquo;verified&rdquo; only where a verified live row matches it on all four of protocol, host,
+            port and CompID. Computed at page load; confirm recomputes from the rows it locks.
+          </p>
+        )}
+        {endpoints.proposed.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-500">This round carries no endpoint rows.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-zinc-500">
+                <tr>
+                  <th className="pb-2 pr-4">#</th>
+                  <th className="pb-2 pr-4">Protocol</th>
+                  <th className="pb-2 pr-4">Host</th>
+                  <th className="pb-2 pr-4">Port</th>
+                  <th className="pb-2 pr-4">CompID</th>
+                  <th className="pb-2 pr-4">
+                    <span className="inline-flex items-center gap-1">
+                      Provider note
+                      <Lock size={10} className="text-zinc-600" />
+                    </span>
+                  </th>
+                  {isOpen && <th className="pb-2">After confirm</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {endpoints.proposed.map((row, i) => {
+                  const carried = endpoints.afterConfirm[i]?.endpointVerified === true;
+                  return (
+                    <tr key={row.position}>
+                      <td className="py-2 pr-4 text-zinc-400">{row.position + 1}</td>
+                      <td className="py-2 pr-4 text-zinc-300">{row.protocol ?? "—"}</td>
+                      <td className="py-2 pr-4 text-zinc-200">{row.endpointHost ?? "—"}</td>
+                      <td className="py-2 pr-4 text-zinc-200">{row.endpointPort ?? "—"}</td>
+                      <td className="py-2 pr-4 text-zinc-300">{row.compid ?? "—"}</td>
+                      <td className="py-2 pr-4 text-zinc-500">{row.notes ?? "—"}</td>
+                      {isOpen && (
+                        <td className={`py-2 ${carried ? "text-emerald-400" : "text-zinc-400"}`}>
+                          {carried ? "Verified · carried from the live tier" : "Not verified"}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {isOpen && endpoints.live.length > 0 && (
+          <p className="mt-3 text-[11px] text-zinc-600">
+            Live now, to be replaced:{" "}
+            {endpoints.live
+              .map((r) => `${r.endpointHost ?? "(no host)"}:${r.endpointPort ?? "(no port)"}${r.endpointVerified ? " (verified)" : ""}`)
+              .join(", ")}
+            .
+          </p>
+        )}
+      </section>
+
+      {isOpen ? (
         <section className="rounded-xl border-2 border-emerald-500/50 bg-emerald-950/10 p-6">
           <h2 className="text-sm font-medium text-emerald-400">Confirm & bind terms</h2>
           <div className="mt-3">
