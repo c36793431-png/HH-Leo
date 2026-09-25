@@ -7,7 +7,10 @@ S3 (one reader with a viewer assert, grep gate); (a)-(e) ruled; notes N1-N5. Eac
 marked `[S1]` etc. where it lands below. Revised again 2026-09-25 for fable's .sql verdict
 (m53885 via marcus m53887, one strike, section 2.1 nonempty check) and for fable's ruling on the
 flagged blank-compid consequence (m53894 via marcus m53896: REFUSE THE BLANK, section 2.1 clauses
-1 and 2, section 5 test plan 2).
+1 and 2, section 5 test plan 2). Revised again 2026-09-25 for fable's design verdict on dc79b31
+(m53938 via marcus m53940: PASS WITH STRIKES, all text): S1 an endpoint row requires host and port
+(2.1, 5.3), S2 the 0092 order (3 step 4), S3 the grep gate split into two patterns (4), and her
+note N2 (2.2).
 Every file:line below is read at origin/main `e4edea2319d9e767e8264550b229de0f7bb268ff`.
 Design only. No code, no migration applied. The .sql beside this file is a candidate for coxwell,
 not a file under db/migrations.
@@ -98,6 +101,26 @@ below keys on it and nothing else, so there is one identity, not two.
 - **Tightening versus today, stated on purpose.** Today's UPDATE (`:494-499`) resets
   `endpoint_verified` only when host or port changes, so a compid-only edit keeps `verified =
   true`. That loosening is NOT ported: a compid-only or protocol-only edit re-verifies.
+- **An endpoint row requires host AND port** (fable's design verdict S1, m53938 via m53940).
+  The schema's nonempty check is `num_nonnulls(nullif(x,''), ...) > 0`, so `(protocol, null,
+  null, null)` and `(null, null, null, compid)` are legal rows and the backfill copies such
+  parents verbatim. Clause 1 below matches on `(host, port)`; for an address-less row that is
+  `(null, null)`, so every address-less live row would match every address-less submitted row:
+  live `X1 = (FIX, null, null, C1)`, `X2 = (SBE, null, null, C2)`, provider submits `[X1]`
+  alone, clause 1 sees `(null, null)` present and X2 is silently removed, the one thing the guard
+  exists to refuse. Fix, code phase only, no SQL change: `parseEndpointsJson` (section 5 item 3)
+  refuses a row missing `host` or missing `port`, naming the column, so clause 1's match is
+  defined on every row the app can write. Tightening versus today, stated on purpose: today the
+  four are independent inputs and a row with a protocol or a compid and no address is accepted
+  (`terms/actions.ts:48-51` passes each as `string | null`); that is NOT ported. A child row
+  without host and port can then exist only by backfill of an address-less parent (section 2.2)
+  or by coxwell SQL. Census: the step-3 print counts such parents inside "with any scalar" but
+  does not print them per row (my read of the .sql at 1f649a9, :176-185); marcus's prod read at
+  m53912 is 1 tier row with a host and 0 proposals, so there are none today. A provider whose
+  live tier carries a backfilled address-less row is refused by clause 1 on every submission
+  (the live `(null, null)` is never in the submitted set) until coxwell fixes the row by SQL; the
+  refusal echo names the row's address as blank. Flagged to marcus for a ruling on a per-row
+  step-3 print; not built, the .sql is passed.
 - **Clause 1, the removal key is `(host, port)`** (ruled m53894, unchanged). Refuse when any live
   tier endpoint's `(endpoint_host, endpoint_port)` is absent from the submission's set of
   `(host, port)`; the message lists the missing addresses, same wording pattern as `:318-319`.
@@ -133,7 +156,11 @@ below keys on it and nothing else, so there is one identity, not two.
   them, insert the proposal's rows at their submitted positions, and compute carry from the
   pre-delete snapshot by the four-tuple. Never upsert-by-position: a position shift would re-key
   verification to the wrong row. An endpoint absent from the round is removed, same as a null is
-  written as null today (`:463-467`). No coalesce.
+  written as null today (`:463-467`). No coalesce. That removal is unreachable through the form
+  once 2.1 clause 1 holds (the guard refuses the submission at submit time); it is reachable only
+  when coxwell edits the live tier rows by SQL between submit and confirm, and then replace
+  semantics is the correct outcome, the confirmed round is what the provider submitted and the
+  admin saw (fable N2, m53938). Clause 1 has no hole here.
 - Removal path in this cut is unchanged from today: a provider submitting a set without a live
   address is refused by the guard (2.1 clause 1), and so is a set that blanks a live row's
   `protocol` or `compid` at a matched address (2.1 clause 2); the removal or the blanking is SQL
@@ -188,14 +215,24 @@ confirm INSERT/UPDATE and the register-provider INSERT between apply and deploy.
    needs no hand resolution (fable's .sql verdict N1, m53885); `drift rows: 0`, and it must be 0.
    A non-zero drift row is printed with both sides verbatim and resolved by hand, not by the
    script `[N4]`.
-4. 0092, not written, gate is **position 0 only**: for every parent, the child row at position 0
-   equals the parent four (coalesce both sides) and `endpoint_verified` on the tier side; and
-   parent all-null <=> zero child rows. NOT child == parent over all rows: the Pip Dealer
-   hand-inserted second row and every N-endpoint listing would fail an all-rows gate by design.
-   Then drop the five parent columns and delete the dual-write mirror from the code in the same
-   merge-then-apply pair (reverse order of 0091: code that stops writing the columns can only
-   deploy after nothing reads them, so 0092's code change is reads first, then the drop, then
-   the writer cleanup).
+4. 0092, not written. Order, fixed by fable's design verdict S2 (m53938 via m53940):
+   1. Merge and deploy the writer cleanup: the position-0 mirror is removed from submit, confirm
+      and register. Every read left the parent columns in the 0091 code phase (step 2), so from
+      this deploy on nothing in the live code reads or writes the five parent columns.
+   2. Apply 0092. Its gate is **position 0 only**: for every parent, the child row at position 0
+      equals the parent four (coalesce both sides) and `endpoint_verified` on the tier side; and
+      parent all-null <=> zero child rows. NOT child == parent over all rows: the Pip Dealer
+      hand-inserted second row and every N-endpoint listing would fail an all-rows gate by
+      design. A drift row at this gate can now only be a write inside the (i)..(ii) window (fable
+      names a confirm; by my read of step 2 submit and register write the mirror too, so any of
+      the three), printed with both sides verbatim and resolved by hand exactly as step 3 `[N4]`.
+      Expected 0.
+   3. Drop the five parent columns, in the same 0092 file after its gate.
+   0091 is apply-then-merge and 0092 is merge-then-apply for one reason, stated once: the live
+   code must never touch a column that is not there. With the drop before the writer cleanup,
+   every confirm, submit and register between the apply and the deploy would fail on an
+   undefined column, the same break the second paragraph of this section sequences 0091 to
+   avoid.
 
 Merge order is a **process gate, not a code guard**: the code PR does not merge until coxwell's
 apply notices for 0091 are on the bus (main auto-deploys, so merge == deploy). No `42P01`
@@ -232,15 +269,22 @@ code phase builds it:
   card (row 6), the submit guard and the confirm copy (rows 3, 5) all read through it. The
   module also owns the writers (proposal insert, tier replace-set with carry, and the position-0
   parent mirror of section 3) so that no other file names the tables or the columns.
-- **Grep gate, review-time.** After the code phase,
-  `git grep -n "provider_tier_endpoints\|provider_tier_proposal_endpoints\|endpoint_host"` must
-  hit only `src/app/admin/`, `src/app/feed/dashboard/terms/`, `src/app/admin/register-provider/`,
-  `src/lib/provider-tier-endpoints.ts`, and SQL text under `db/migrations/` and `docs/specs/`.
-  Baseline at e4edea2 (read on 2026-09-25): 3 hits in `db/migrations`, 1 in
-  `src/app/admin/providers/page.tsx:72` (a comment), 15 in `src/lib/provider-tier-proposals.ts`,
-  5 in `src/lib/provider-tiers.ts`. The two `src/lib` files must reach zero hits: every SQL that
-  names these columns moves into the module. Any new hit outside the allowed set is a review
-  failure, not a judgement call.
+- **Grep gate, review-time, two patterns** (fable's design verdict S3, m53938 via m53940: one
+  pattern with one allowed set let a SELECT on the table dropped into `terms/page.tsx` pass the
+  gate and bypass the viewer assert, which the one-reader rule forbids). After the code phase:
+  - (a) Table names. `git grep -n "provider_tier_endpoints\|provider_tier_proposal_endpoints"`
+    must hit only `src/lib/provider-tier-endpoints.ts`, its `.test.ts` (fixtures only), and SQL
+    text under `db/migrations/` and `docs/specs/`. No page, action or component names a table.
+  - (b) Column name. `git grep -n "endpoint_host"` keeps the wider allowed set: `src/app/admin/`,
+    `src/app/feed/dashboard/terms/`, `src/app/admin/register-provider/`,
+    `src/lib/provider-tier-endpoints.ts`, `db/migrations/`, `docs/specs/`. camelCase field names
+    and the `page.tsx:72` comment are not reads.
+  Baseline at e4edea2 (read on 2026-09-25, my claim until the code-phase review re-reads it):
+  3 hits in `db/migrations`, 1 in `src/app/admin/providers/page.tsx:72` (a comment), 15 in
+  `src/lib/provider-tier-proposals.ts`, 5 in `src/lib/provider-tiers.ts`; the table names have
+  zero hits at e4edea2 because the tables do not exist yet. The two `src/lib` files must reach
+  zero hits on both patterns: every SQL that names these tables or columns moves into the
+  module. Any new hit outside either allowed set is a review failure, not a judgement call.
 - **Fail-first test.** The reader called with a viewer who is neither admin nor the owning
   provider throws before any query runs. Then secrecy is a check at the query, not a hope about
   page.tsx. Any future "connection details on the buyer's subscription page" is a new control
@@ -282,7 +326,10 @@ export, then passes once built:
      - same with a different compid -> accepted, carry misses, `endpoint_verified = false`.
      - same with protocol blank on a row that had one -> refused, echo names `protocol`.
 3. `parseEndpointsJson(raw)` for the terms action and register-provider action: drops all-blank
-   rows, assigns positions 0..n-1 in order, rejects 9 rows, rejects a row with only `notes` set.
+   rows, assigns positions 0..n-1 in order, rejects 9 rows, rejects a row with only `notes` set,
+   rejects a row with host but no port and a row with port but no host, the error naming the
+   missing column (2.1, an endpoint row requires host and port; fable S1 m53938). Item 1 gains
+   no case for this: its input can no longer contain an address-less row.
 4. `ConnectionFields` shape: `pickEndpoint` today refuses to compose a tier host with an
    application port (`page.tsx:77-92`). Its N-endpoint successor must render zero tier endpoints
    as the application fallback and one-or-more as the list with no application mixing. A pure
@@ -302,8 +349,9 @@ SQL, by dry-run paste (rollback in place of commit):
    `provider_tier_endpoints_position_check` `[N2]`.
 
 Merge gates for the code branch: tsc clean, lint at the 3 errors / 4 warnings baseline, the
-test files above passing on a box that can run them, the grep gate of section 4 at zero hits
-outside the allowed set, fable's pass on the 0091 .sql, and coxwell's apply notices on the bus.
+test files above passing on a box that can run them (nobody has run them yet; `[N5]` stands until
+a run output is on the bus), both grep patterns of section 4 at zero hits outside their allowed
+sets, fable's pass on the 0091 .sql, and coxwell's apply notices on the bus.
 
 ## 6. Rulings (fable via marcus m53845) and follow-ups
 
@@ -317,9 +365,13 @@ outside the allowed set, fable's pass on the 0091 .sql, and coxwell's apply noti
 5. Numbering 0091/0092 and docs/specs location: per m53796, superseded fable's (e).
 6. Blank at a matched address (fable m53894 via marcus m53896): REFUSE THE BLANK. Section 2.1
    clauses 1 and 2; three tests in section 5 item 2; no SQL change, code phase only.
+7. Address-less rows (fable m53938 via marcus m53940, S1): an endpoint row requires host and
+   port at the parser; section 2.1 and section 5 item 3; no SQL change, code phase only. Left
+   with marcus: whether step 3 of the .sql should print address-less parents per row (today it
+   counts them inside "with any scalar" only).
 
-Open: none from the design. The .sql passed with one strike (m53885), built at 65a32dc; the code
-phase starts only after fable passes that delta together with the hunks of this file.
+Open: none from the design. The .sql and rollback passed at 65a32dc (m53910) and the N1 header
+clause is at 1f649a9; the code phase starts only after fable passes the hunks of this file.
 
 ## 7. Files the code phase would touch (declaration, not yet opened)
 
