@@ -70,8 +70,12 @@
 --     confirm's own :434-439 write terms_status/decided_* only).
 --   The step-3 census still counts parent rows with any of the four = '' on both parents,
 --   expected 0. If it is not 0: a parent with ALL four '' is refused by the nonempty check and
---   step 4 aborts (loud); a parent with '' in some of the four backfills verbatim and compares
---   equal on both sides. Neither case is silent, and neither changes a parent row.
+--   step 4 aborts (loud); any parent whose four are all '' or null with at least one '' (e.g.
+--   ('', null, null, null)) aborts the same way, because the step-4 backfill selects it on the
+--   verbatim num_nonnulls (the '' counts, 1 > 0) and the child check then sees no value after
+--   nullif and refuses it (fable N1, m53910, measured on her PG16, rc 3, nothing persisted); a
+--   parent with '' in some of the four and at least one non-empty value in the rest backfills
+--   verbatim and compares equal on both sides. No case is silent, and no case changes a parent row.
 --
 -- SECOND ADDRESS FOR AN EXISTING LIVE TIER (The Pip Dealer, tier dff16179...): not in this file,
 -- values not known to kai. Template for coxwell, after (i), to run by hand with real values:
