@@ -20,6 +20,7 @@ import {
   EndpointViewerError,
   parseEndpointsJson,
   parentMirror,
+  foldEndpointRows,
   MAX_ENDPOINTS_PER_PARENT,
   type EndpointInput,
   type LiveEndpoint,
@@ -213,6 +214,18 @@ test("5.2 N2: two live rows at one address, address absent from the submission: 
   assert.deepEqual(endpointsThatWouldClear([a, b], [B]), ["fix.example.net:9443"]);
 });
 
+test("5.2 Q4 (fable m54051 N2, marcus mutant M5): two keyless live rows with the same description are echoed once", () => {
+  const a = live({ endpointPort: null, compid: "C1" });
+  const b = live({ position: 1, endpointPort: null, compid: "C2" });
+  assert.deepEqual(endpointsThatWouldClear([a, b], [A]), ["fix.example.net:(no port)"]);
+});
+
+test("5.2 Q4b: two keyless live rows missing different halves are two distinct echoes", () => {
+  const a = live({ endpointPort: null });
+  const b = live({ position: 1, endpointHost: null });
+  assert.deepEqual(endpointsThatWouldClear([a, b], [A]), ["fix.example.net:(no port)", "(no host):9443"]);
+});
+
 test("5.2 N1: a live host with a leading space matches the trimmed submission (key on the trimmed value)", () => {
   const before = live({ endpointHost: " fix.example.net", endpointVerified: true });
   assert.deepEqual(endpointsThatWouldClear([before], [A]), []);
@@ -280,6 +293,20 @@ test("5.3 the error names the row by its 1-based source index, blanks included",
   assert.throws(() => parseEndpointsJson(raw), /row 2/i);
 });
 
+test("5.3 N1: two rows with the same four (notes aside) are refused, naming both rows (fable m54051 via marcus m54053)", () => {
+  const raw = JSON.stringify([
+    { protocol: "FIX 4.4", endpointHost: "a.example.net", endpointPort: "9443", compid: "C1", notes: "one" },
+    { protocol: "FIX 4.4", endpointHost: "a.example.net", endpointPort: "9443", compid: "C1", notes: "two" },
+  ]);
+  assert.throws(() => parseEndpointsJson(raw), /row 2 repeats row 1/i);
+  // Different compid at the same address is a different identity: allowed.
+  const distinct = JSON.stringify([
+    { protocol: "FIX 4.4", endpointHost: "a.example.net", endpointPort: "9443", compid: "C1" },
+    { protocol: "FIX 4.4", endpointHost: "a.example.net", endpointPort: "9443", compid: "C2" },
+  ]);
+  assert.equal(parseEndpointsJson(distinct).length, 2);
+});
+
 test("5.3 non-array JSON and malformed JSON are refused readably", () => {
   assert.throws(() => parseEndpointsJson("{}"), /list/i);
   assert.throws(() => parseEndpointsJson("not json"), /endpoints/i);
@@ -315,6 +342,40 @@ test("mirror: the lowest position wins whatever the array order, and its verifie
 test("mirror: proposal rows carry no flag, so the proposal-side mirror reads false without inventing one", () => {
   assert.equal(parentMirror([A, B]).endpointVerified, false);
   assert.equal(parentMirror([A, B]).endpointHost, A.endpointHost);
+});
+
+test("mirror A2: rows at positions 1 and 2 only (coxwell SQL, no 0) -> all four null and false, as the 0092 gate would compare", () => {
+  // fable m54043 via marcus m54049, A2: "position-0 row" is the row whose position === 0, not
+  // index 0 of the ordered array.
+  const p1 = live({ ...A, position: 1, endpointVerified: true });
+  const p2 = live({ ...B, position: 2, endpointVerified: true });
+  assert.deepEqual(parentMirror([p1, p2]), {
+    protocol: null,
+    endpointHost: null,
+    endpointPort: null,
+    compid: null,
+    endpointVerified: false,
+  });
+});
+
+/* ---------- delta 2: the reader's row -> Map fold, pure (fable J2(iii) via marcus m54049) ---------- */
+
+test("fold: every requested id gets an entry, an empty list for a parent with no rows, rows kept in given order", () => {
+  const out = foldEndpointRows(
+    ["tier-x", "tier-y"],
+    [
+      { parentId: "tier-x", endpoint: A },
+      { parentId: "tier-x", endpoint: B },
+    ]
+  );
+  assert.deepEqual(Array.from(out.keys()), ["tier-x", "tier-y"]);
+  assert.deepEqual(out.get("tier-x"), [A, B]);
+  assert.deepEqual(out.get("tier-y"), []);
+});
+
+test("fold: a row for an id that was not requested is dropped, not invented as an entry", () => {
+  const out = foldEndpointRows(["tier-x"], [{ parentId: "tier-z", endpoint: A }]);
+  assert.deepEqual(Array.from(out.entries()), [["tier-x", []]]);
 });
 
 /* ---------- 5.5 reader assert [S3] ---------- */

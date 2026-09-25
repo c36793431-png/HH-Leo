@@ -228,6 +228,7 @@ export function parseEndpointsJson(raw: string | null | undefined): EndpointInpu
   if (!Array.isArray(parsed)) throw new Error("Endpoints must be a list.");
 
   const rows: EndpointInput[] = [];
+  const seen = new Map<string, number>();
   parsed.forEach((item: unknown, index) => {
     const rowNo = index + 1;
     if (item === null || typeof item !== "object" || Array.isArray(item)) {
@@ -254,6 +255,20 @@ export function parseEndpointsJson(raw: string | null | undefined): EndpointInpu
     if (missing.length) {
       throw new Error(`Endpoint row ${rowNo} needs ${missing.join(" and ")}: an endpoint is a host and a port.`);
     }
+
+    // A repeated identity (same four, notes aside) is refused here by row number rather than
+    // left to the writer, where the UNIQUE identity index (0091 .sql :129-131, :153-155) would
+    // refuse it as a bare constraint error the provider cannot read. Not a second source of
+    // truth: the index still holds, this is the same message the guard gives for the other
+    // refusals (fable's delta-1 follow-on note N1, m54051 via marcus m54053). Without it a
+    // submission [A, A] against live [A, B] counts as two rows at A's address, passes the
+    // per-address guard, and drops B.
+    const identity = identityKey({ protocol, endpointHost, endpointPort, compid });
+    const firstRowNo = seen.get(identity);
+    if (firstRowNo !== undefined) {
+      throw new Error(`Endpoint row ${rowNo} repeats row ${firstRowNo}. Remove one, or make them different endpoints.`);
+    }
+    seen.set(identity, rowNo);
 
     rows.push({ position: rows.length, protocol, endpointHost, endpointPort, compid, notes });
   });
@@ -360,8 +375,7 @@ export async function readEndpoints(
   parent: { kind: EndpointParentKind; ids: readonly string[] }
 ): Promise<Map<string, LiveEndpoint[]> | Map<string, EndpointInput[]>> {
   const ids = Array.from(new Set(parent.ids));
-  const out = new Map<string, EndpointInput[]>();
-  if (ids.length === 0) return out;
+  if (ids.length === 0) return new Map<string, EndpointInput[]>();
   const spec = PARENT[parent.kind];
 
   const owners = await q.query<{ id: string; owner_user_id: string | null }>(
@@ -382,35 +396,52 @@ export async function readEndpoints(
       order by ${spec.fk}, position`,
     [ids]
   );
+  return foldEndpointRows(
+    ids,
+    rows.rows.map((r) => ({ parentId: r.parent_id, endpoint: parent.kind === "tier" ? mapLive(r) : mapInput(r) }))
+  );
+}
+
+/** The reader's row -> Map fold, pure (fable's delta-2 plan ruling J2(iii), m54043 via marcus
+ * m54049): EVERY requested id gets an entry, an empty list for a parent with no rows, so a
+ * caller cannot mistake "not looked up" for "no endpoints". Rows are appended in the order
+ * given (the SELECT orders by position). A row for an id that was not requested is dropped;
+ * the SELECT's `= any($1)` never produces one. */
+export function foldEndpointRows<T>(
+  ids: readonly string[],
+  rows: ReadonlyArray<{ parentId: string; endpoint: T }>
+): Map<string, T[]> {
+  const out = new Map<string, T[]>();
   for (const id of ids) out.set(id, []);
-  for (const r of rows.rows) {
-    const list = out.get(r.parent_id);
-    if (list) list.push(parent.kind === "tier" ? mapLive(r) : mapInput(r));
+  for (const r of rows) {
+    const list = out.get(r.parentId);
+    if (list) list.push(r.endpoint);
   }
   return out;
 }
 
-/** What the parent's five columns must read while the dual-write is on (design 3 step 2,
- * :203-209): the position-0 row's four plus its verified flag, or all null and false when the
- * parent has zero rows. Pure so the "zero rows -> all null" branch is a test, not a hope. The
- * lowest position is taken rather than the array's first element so a caller's row order
- * cannot move the mirror. */
+/** What the parent's columns must read while the dual-write is on (design 3 step 2, :203-209):
+ * the row whose `position === 0` (its four, plus its verified flag on the tier side), or all
+ * null and false when the parent has no such row. Position 0 means the row AT position 0, not
+ * the first of the ordered array (fable's delta-2 plan ruling A2, m54043 via marcus m54049):
+ * the app always writes a 0, coxwell SQL need not, and the 0092 gate compares the parent to the
+ * position-0 child, so a parent with rows at 1 and 2 only mirrors as all-null and the two agree
+ * by construction. Pure so both branches are tests, not hopes. */
 export interface ParentMirror extends ConnectionFour {
   endpointVerified: boolean;
 }
 
 export function parentMirror(rows: readonly (EndpointInput & { endpointVerified?: boolean })[]): ParentMirror {
-  let first: (EndpointInput & { endpointVerified?: boolean }) | null = null;
-  for (const r of rows) if (first === null || r.position < first.position) first = r;
-  if (first === null) {
+  const zero = rows.find((r) => r.position === 0);
+  if (zero === undefined) {
     return { protocol: null, endpointHost: null, endpointPort: null, compid: null, endpointVerified: false };
   }
   return {
-    protocol: first.protocol,
-    endpointHost: first.endpointHost,
-    endpointPort: first.endpointPort,
-    compid: first.compid,
-    endpointVerified: first.endpointVerified ?? false,
+    protocol: zero.protocol,
+    endpointHost: zero.endpointHost,
+    endpointPort: zero.endpointPort,
+    compid: zero.compid,
+    endpointVerified: zero.endpointVerified ?? false,
   };
 }
 

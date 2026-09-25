@@ -246,17 +246,24 @@ export function connectionFieldsThatWouldClear(liveRow: ConnectionRow, input: Su
   ).map((f) => `${f.label} (${(liveRow[f.column] ?? []).join(", ")})`);
 }
 
-/** The missing writer: nothing in the codebase has ever inserted into
- * provider_tier_proposals before this (the table's been read-only since 0061 -- admin's
- * review card, decline/confirm, and the terms queue all assume rows just appear). This is
- * Slice B: a provider proposes their own terms, post-approval, from their own panel --
- * coxwell's 08-28 ruling and 09-10 restatement (see 12388f5/094b678/5c84441). Writes
- * terms_status = 'proposed' only; confirmProposalRound/declineProposalRound (admin-only)
- * are the sole path to 'confirmed'/'declined', untouched by this function. One active
- * 'proposed' round per (application, tier) at a time -- letting a second submission queue
- * up behind an undecided first would silently orphan it, since the terms queue and
- * listSiblingProposedTiersAdmin both key off "the latest row", not "the latest undecided
- * row". */
+/** The proposal writer. Until Slice B nothing in the codebase inserted into
+ * provider_tier_proposals (the table was read-only since 0061 -- admin's review card,
+ * decline/confirm, and the terms queue all assumed rows just appear). Slice B: a provider
+ * proposes their own terms, post-approval, from their own panel -- coxwell's 08-28 ruling and
+ * 09-10 restatement (see 12388f5/094b678/5c84441). Writes terms_status = 'proposed' only;
+ * confirmProposalRound/declineProposalRound (admin-only) are the sole path to
+ * 'confirmed'/'declined', untouched by this function. One active 'proposed' round per
+ * (application, tier) at a time -- letting a second submission queue up behind an undecided
+ * first would silently orphan it, since the terms queue and listSiblingProposedTiersAdmin both
+ * key off "the latest row", not "the latest undecided row".
+ *
+ * Since 0091 (thread provider-tier-endpoints-2026-09-24) a round is one proposal row plus its
+ * endpoint rows, written in one transaction: the proposal INSERT here (terms and
+ * regions/coverage; the four scalar connection columns are not named in this file any more),
+ * then insertProposalEndpoints in provider-tier-endpoints.ts, which inserts the rows and
+ * mirrors position 0 onto the proposal's four parent columns until 0092. Before the write, the
+ * live tier's endpoint set is read through the one reader and checked by endpointsThatWouldClear
+ * (below), the successor of the per-column blank guard for the four. */
 export async function submitProposalRound(
   providerUserId: string,
   applicationId: string,
