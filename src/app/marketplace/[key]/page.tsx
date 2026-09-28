@@ -41,8 +41,10 @@ import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
  * REQUEST, NOT BUY, AND NO PRICE. coxwell ruled no checkout, and prices are agreed over
  * Telegram (m52454 (a)).
  *
- * THE SPEC PLATE IS CHICAGO'S ROW AND NOBODY ELSE'S. Delivery is `subtitle` and coverage is
- * `description`, both from marcus's INSERT off provider_tiers dff16179, read back live (m52454).
+ * THE SPEC PLATE IS CHICAGO'S ROW AND NOBODY ELSE'S. Coverage is `description`, from marcus's
+ * INSERT off provider_tiers dff16179, read back live (m52454). There is no Delivery row. `subtitle`
+ * names the delivery protocol, which the public page does not (coxwell via marcus, m55723), and
+ * the row stays unedited because the provider's own dashboard renders it.
  * The London and NY rows' subtitle and description are not that: they carry latency claims
  * ("Minimum achievable latency", "fastest fixed-latency") that no buyer surface added since may
  * repeat, and the London subtitles contradict the comparison scores. So the plate renders only
@@ -153,8 +155,6 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
               <div className="card">
                 <div className="mkd-plate-title">Specification</div>
                 <dl className="mkd-spec">
-                  <dt>Delivery</dt>
-                  <dd>{request.row.subtitle}</dd>
                   <dt>Coverage</dt>
                   <dd>{request.row.description}</dd>
                 </dl>

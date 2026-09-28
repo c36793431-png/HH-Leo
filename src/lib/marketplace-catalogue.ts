@@ -298,13 +298,17 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     // "indices, metals and energy" are gone because neither is in that read. The spec detail
     // lives in feed_tiers.description, which the product page renders. It is not copied here.
     // feedSlug still wires the /feeds CME card to this state.
+    //
+    // No delivery protocol in the title or blurb: the public listing does not name cTrader FIX
+    // (coxwell via marcus, m55704/m55723). The signed-in request name in feed-tier-catalogue.ts
+    // still does, by ruling. It feeds the admin queue, Telegram and the provider's list.
     key: "chicago",
-    title: "CME Futures · cTrader FIX",
+    title: "CME Futures",
     category: "feeds",
     availability: "available",
     tierKeys: ["cme-ctrader-fix"],
     feedSlug: "futures",
-    blurb: "US Central (Chicago). CME futures delivered over cTrader FIX.",
+    blurb: "US Central (Chicago). CME futures.",
     // Request access lives only on the product page (coxwell's flow via marcus, m52443).
     action: { kind: "request" },
     image: {
