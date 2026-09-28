@@ -5,7 +5,8 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { LessonDetail } from "@/components/education/lesson-detail";
-import { getEducationLesson } from "@/lib/education";
+import { getEducationLesson, lessonHref } from "@/lib/education";
+import { authPageHref } from "@/lib/post-auth-redirect";
 
 export default async function EducationLessonPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -13,7 +14,8 @@ export default async function EducationLessonPage({ params }: { params: Promise<
   if (!lesson) notFound();
 
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+  // Built from the catalogue object, not the URL param: an unknown slug has already 404'd above.
+  if (!session?.user?.id) redirect(authPageHref("/login", lessonHref(lesson)));
   const switchablePanels = getReachablePanels(session.user.roles);
 
   const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);

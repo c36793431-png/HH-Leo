@@ -421,3 +421,9 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
 export function getEducationLesson(slug: string): EducationLesson | undefined {
   return EDUCATION_LESSONS.find((lesson) => lesson.slug === slug);
 }
+
+/** A lesson's page. Single spelling of the route so the catalogue's card link and the sign-in
+ * return allowlist (post-auth-redirect.ts) cannot point at two different places. */
+export function lessonHref(lesson: EducationLesson): string {
+  return `/education/${lesson.slug}`;
+}

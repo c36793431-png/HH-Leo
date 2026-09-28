@@ -1,4 +1,5 @@
 import { MARKETPLACE_LISTINGS, listingDetailHref } from "./marketplace-catalogue";
+import { EDUCATION_LESSONS, lessonHref } from "./education";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 const FEED_HOST = "feed.horizonhft.com";
@@ -20,13 +21,20 @@ export function getPostAuthRedirect(host: string | null): string {
 const CALLBACK_PARAM = "callbackUrl";
 
 /** The only places a sign-in may return to: the public marketplace and its product pages
- * (coxwell via marcus, m55542/m55551). Built from the catalogue, so a listing that is removed
- * stops being a destination in the same commit. */
-const CALLBACK_ALLOWLIST: readonly string[] = ["/marketplace", ...MARKETPLACE_LISTINGS.map(listingDetailHref)];
+ * (coxwell via marcus, m55542/m55551), and /education and its lesson pages (marcus, m55682).
+ * Built from the catalogues, so a listing or lesson that is removed stops being a destination in
+ * the same commit. /education/advanced is deliberately absent (m55682 ruling 1): its bounce
+ * stays a bare /login. */
+const CALLBACK_ALLOWLIST: readonly string[] = [
+  "/marketplace",
+  ...MARKETPLACE_LISTINGS.map(listingDetailHref),
+  "/education",
+  ...EDUCATION_LESSONS.map(lessonHref),
+];
 
 /**
- * The `callbackUrl` a signed-out marketplace visitor carries to /login or /signup, or null when
- * it is not one we honour. null means the caller falls back to getPostAuthRedirect.
+ * The `callbackUrl` a signed-out marketplace or education visitor carries to /login or /signup,
+ * or null when it is not one we honour. null means the caller falls back to getPostAuthRedirect.
  *
  * AN ALLOWLIST, NOT A PREFIX TEST (marcus, m55551 condition 1). The login page's
  * `if (session) redirect(redirectTo)` is Next's redirect(), which does no origin check, so a

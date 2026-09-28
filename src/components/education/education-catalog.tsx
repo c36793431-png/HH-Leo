@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { EDUCATION_CATEGORIES, type EducationCategoryKey, type EducationLesson } from "@/lib/education";
+import { EDUCATION_CATEGORIES, lessonHref, type EducationCategoryKey, type EducationLesson } from "@/lib/education";
 
 export function EducationCatalog({
   lessons,
@@ -91,7 +91,7 @@ function LessonCard({ lesson, isPaidTier }: { lesson: EducationLesson; isPaidTie
   }
 
   return (
-    <a className="lesson" href={`/education/${lesson.slug}`}>
+    <a className="lesson" href={lessonHref(lesson)}>
       <div className="lthumb">
         <span className="glyph">◈</span>
       </div>

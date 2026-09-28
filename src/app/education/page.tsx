@@ -6,10 +6,11 @@ import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@
 import { PortalShell } from "@/components/portal/portal-shell";
 import { EducationCatalog } from "@/components/education/education-catalog";
 import { EDUCATION_CATEGORIES, EDUCATION_LESSONS } from "@/lib/education";
+import { authPageHref } from "@/lib/post-auth-redirect";
 
 export default async function EducationPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+  if (!session?.user?.id) redirect(authPageHref("/login", "/education"));
   const switchablePanels = getReachablePanels(session.user.roles);
 
   const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
