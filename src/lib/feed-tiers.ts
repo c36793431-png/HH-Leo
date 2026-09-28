@@ -30,7 +30,20 @@ interface TierRow {
   support_level: string;
 }
 
-function mapRow(row: TierRow): FeedTierDetail | null {
+/**
+ * A tier as a page a signed-out visitor can load reads it: no price_cents, and none of the
+ * columns no such page renders. The public marketplace reads this, not FeedTierDetail
+ * (marcus, m55550 #2), so a price cannot reach its HTML or a client component's props, even
+ * by a later edit, because the query never fetches one.
+ */
+export type PublicFeedTier = Omit<FeedTierDetail, "priceCents" | "isFlagship" | "pathRedundancy" | "supportLevel">;
+
+type PublicTierRow = Pick<
+  TierRow,
+  "region_key" | "tier_key" | "name" | "subtitle" | "speed_display" | "latency_us" | "description"
+>;
+
+function mapPublicRow(row: PublicTierRow): PublicFeedTier | null {
   if (!isFeedRegion(row.region_key)) return null;
   return {
     regionKey: row.region_key,
@@ -40,6 +53,14 @@ function mapRow(row: TierRow): FeedTierDetail | null {
     speedDisplay: row.speed_display,
     latencyUs: row.latency_us,
     description: row.description,
+  };
+}
+
+function mapRow(row: TierRow): FeedTierDetail | null {
+  const tier = mapPublicRow(row);
+  if (!tier) return null;
+  return {
+    ...tier,
     priceCents: row.price_cents,
     isFlagship: row.is_flagship,
     pathRedundancy: row.path_redundancy,
@@ -47,17 +68,28 @@ function mapRow(row: TierRow): FeedTierDetail | null {
   };
 }
 
+const PUBLIC_COLUMNS = "region_key, tier_key, name, subtitle, speed_display, latency_us, description";
+
 const SELECT_BASE = `
-  select region_key, tier_key, name, subtitle, speed_display, latency_us, description,
+  select ${PUBLIC_COLUMNS},
          price_cents, is_flagship, path_redundancy, support_level
   from feed_tiers
 `;
 
+const SELECT_PUBLIC = `select ${PUBLIC_COLUMNS} from feed_tiers`;
+
+// One WHERE and ORDER for both projections, so the public marketplace and /feeds cannot list a
+// region's tiers differently.
+const BY_REGION = "where region_key = $1 order by sort_order asc";
+
 export async function getTiersForRegion(region: FeedRegion): Promise<FeedTierDetail[]> {
-  const result = await pool.query<TierRow>(`${SELECT_BASE} where region_key = $1 order by sort_order asc`, [
-    region,
-  ]);
+  const result = await pool.query<TierRow>(`${SELECT_BASE} ${BY_REGION}`, [region]);
   return result.rows.map(mapRow).filter((t): t is FeedTierDetail => t !== null);
+}
+
+export async function getPublicTiersForRegion(region: FeedRegion): Promise<PublicFeedTier[]> {
+  const result = await pool.query<PublicTierRow>(`${SELECT_PUBLIC} ${BY_REGION}`, [region]);
+  return result.rows.map(mapPublicRow).filter((t): t is PublicFeedTier => t !== null);
 }
 
 /** Region -> tier count, for the "N tiers" pill on /feeds. Regions with 0 or 1 rows

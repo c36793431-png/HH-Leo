@@ -1,10 +1,10 @@
-import type { FeedTierDetail } from "@/lib/feed-tiers";
+import type { PublicFeedTier } from "@/lib/feed-tiers";
 import { formatTierLatency, isScoreRegion, tierFigureHeading } from "@/lib/feed-provider-packages";
 import { scoreForTierKey } from "@/lib/feed-comparison-scores";
 import type { MarketplaceListing } from "@/lib/marketplace-catalogue";
 
 /** One figure row: what formatTierLatency needs, plus the name printed beside it. */
-export type ListingFigureMember = Pick<FeedTierDetail, "regionKey" | "tierKey" | "name" | "latencyUs" | "speedDisplay">;
+export type ListingFigureMember = Pick<PublicFeedTier, "regionKey" | "tierKey" | "name" | "latencyUs" | "speedDisplay">;
 
 /**
  * The figure rows of a listing: its feed_tiers members, or, for a declared listing with a
@@ -14,7 +14,7 @@ export type ListingFigureMember = Pick<FeedTierDetail, "regionKey" | "tierKey" |
  * comparison score"). regionKey is "london" because FOC13's scores are London's and Black is the
  * London tiers page's flagship. latencyUs and speedDisplay are never read on that path.
  */
-export function listingFigureMembers(listing: MarketplaceListing, members: FeedTierDetail[]): ListingFigureMember[] {
+export function listingFigureMembers(listing: MarketplaceListing, members: PublicFeedTier[]): ListingFigureMember[] {
   if (listing.scoreTierKey) {
     return [
       { regionKey: "london", tierKey: listing.scoreTierKey, name: listing.title, latencyUs: null, speedDisplay: "—" },

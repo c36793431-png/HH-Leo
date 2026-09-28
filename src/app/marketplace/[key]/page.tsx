@@ -10,8 +10,10 @@ import { TerminalAccessBox } from "@/components/marketplace/terminal-access-box"
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { feedTierMeta } from "@/lib/feed-tier-catalogue";
-import { getTiersForRegion, getTierCountsByRegion, getBestLatencyByRegion, type FeedTierDetail } from "@/lib/feed-tiers";
-import { MARKETPLACE_AVAILABILITY_LABELS, listingByKey } from "@/lib/marketplace-catalogue";
+import { getPublicTiersForRegion, getTierCountsByRegion, getBestLatencyByRegion, type PublicFeedTier } from "@/lib/feed-tiers";
+import { MARKETPLACE_AVAILABILITY_LABELS, listingByKey, listingDetailHref } from "@/lib/marketplace-catalogue";
+import { authPageHref } from "@/lib/post-auth-redirect";
+import { PublicShell } from "@/components/marketplace/public-shell";
 import { getTierRequestContext } from "@/lib/tier-request-context";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
 import { ListingFigures, hasListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
@@ -32,6 +34,9 @@ import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
  * everyone else "Request access →" to Telegram (m53009 (a)).
  * A listing that is not available offers nothing, even if the catalogue gave it an action by
  * mistake.
+ *
+ * PUBLIC SINCE 2026-09-28 (coxwell via marcus, m55542/m55551): a signed-out visitor sees the
+ * product and, in place of any action, "Sign in to request →", which returns them here.
  *
  * REQUEST, NOT BUY, AND NO PRICE. coxwell ruled no checkout, and prices are agreed over
  * Telegram (m52454 (a)).
@@ -60,37 +65,36 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
   if (!listing) notFound();
 
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getReachablePanels(session.user.roles);
-  if (isAdminUser(session.user)) redirect("/admin/dashboard");
+  // No account is a public visitor now, not a redirect to /login. A visitor gets every read below
+  // that is about the product and none that is about an account: those need a user id to run.
+  const user = session?.user?.id ? session.user : null;
+  if (user && isAdminUser(user)) redirect("/admin/dashboard");
 
-  const isAdmin = isAdminUser(session.user);
-  const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
-  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
-  const userName = session.user.name ?? session.user.email ?? "trader";
-  const userEmail = session.user.email ?? "";
+  const isAdmin = user ? isAdminUser(user) : false;
+  const activeLicenses = user ? await getActiveLicenseDetailsForUser(user.id).catch(() => []) : [];
 
-  // The shipped query, as /marketplace uses it, once per region the listing's tiers live in. A
-  // tier-backed listing whose rows have all gone 404s, the same way its card leaves the shelf.
+  // The shipped WHERE and ORDER, as /marketplace reads them, once per region the listing's tiers
+  // live in, without price_cents (see /marketplace). A tier-backed listing whose rows have all
+  // gone 404s, the same way its card leaves the shelf.
   const regions = [...new Set(listing.tierKeys.flatMap((k) => feedTierMeta(k)?.region ?? []))];
-  const rows = (await Promise.all(regions.map((r) => getTiersForRegion(r).catch(() => [])))).flat();
+  const rows = (await Promise.all(regions.map((r) => getPublicTiersForRegion(r).catch(() => [])))).flat();
   const members = listing.tierKeys
     .map((k) => rows.find((t) => t.tierKey === k))
-    .filter((t): t is FeedTierDetail => t != null);
+    .filter((t): t is PublicFeedTier => t != null);
   if (listing.tierKeys.length > 0 && members.length === 0) notFound();
 
   const action = listing.availability === "available" ? listing.action : null;
 
   // A request control submits one tier_key. A "request" listing not backed by exactly one row
   // 404s rather than rendering a button that submits the wrong thing, or nothing.
-  let request: { row: FeedTierDetail; tierName: string; region: FeedTierDetail["regionKey"] } | null = null;
+  let request: { row: PublicFeedTier; tierName: string; region: PublicFeedTier["regionKey"] } | null = null;
   if (action?.kind === "request") {
     const tierMeta = listing.tierKeys.length === 1 ? feedTierMeta(listing.tierKeys[0]) : null;
     if (!tierMeta || members.length !== 1) notFound();
     request = { row: members[0], tierName: tierMeta.name, region: tierMeta.region };
   }
-  const requestContext = request
-    ? await getTierRequestContext(session.user.id, activeLicenses, request.region)
+  const requestContext = request && user
+    ? await getTierRequestContext(user.id, activeLicenses, request.region)
     : null;
 
   // A "download" listing: licensed means activeLicenses is non-empty, the read above, which is
@@ -99,10 +103,10 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
   // same readers, and are only read for a licensed account.
   const licensed = activeLicenses.length > 0;
   const download =
-    action?.kind === "download"
+    action?.kind === "download" && user
       ? await Promise.all([
           getPortalConfig(),
-          licensed ? computeUnlockedFeedTypes(session.user.id).catch((): FeedType[] => []) : [],
+          licensed ? computeUnlockedFeedTypes(user.id).catch((): FeedType[] => []) : [],
           licensed ? getTierCountsByRegion().catch(() => ({}) as Awaited<ReturnType<typeof getTierCountsByRegion>>) : {},
           licensed ? getBestLatencyByRegion().catch(() => ({}) as Awaited<ReturnType<typeof getBestLatencyByRegion>>) : {},
         ]).then(([config, activeFeeds, feedTierCounts, feedBestLatency]) => ({
@@ -122,9 +126,11 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
   // would float alone at the far right. It takes the left edge instead. No listing hits this since
   // every one carries an image; it guards the next listing added without one.
   const leftEmpty = !listing.image && !request && !hasListingFigures(figures) && included.length === 0;
+  // Signing in returns the visitor to this product page, where the real control is.
+  const signInHref = authPageHref("/login", listingDetailHref(listing));
 
-  return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
+  const page = (
+    <>
       <div className="comm-head">
         <Link href="/marketplace" className="btn ghost sm mkd-back">
           ← Marketplace
@@ -187,7 +193,14 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
 
         <div id="request" className="card mkd-request">
           <div className="mkd-plate-title">Access</div>
-          {request && requestContext ? (
+          {!user && action ? (
+            /* Requesting needs an account (coxwell via marcus, m55542): one control for every
+               available listing, whatever its signed-in action is. A listing with no action falls
+               through to "Not open for requests right now.", the same as signed in. */
+            <Link href={signInHref} className="btn primary sm mkd-action">
+              Sign in to request →
+            </Link>
+          ) : request && requestContext ? (
             <>
               <TierRequestControl
                 region={request.region}
@@ -225,6 +238,19 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
       {comparisonOwnRows.length > 0 && <FeedComparisonScores variant="marketplace" highlight={comparisonOwnRows} />}
 
       <div className="foot">HORIZON HFT · customer portal</div>
+    </>
+  );
+
+  if (!user) return <PublicShell signInHref={signInHref}>{page}</PublicShell>;
+
+  const switchablePanels = getReachablePanels(user.roles);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
+  const userName = user.name ?? user.email ?? "trader";
+  const userEmail = user.email ?? "";
+
+  return (
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
+      {page}
     </PortalShell>
   );
 }

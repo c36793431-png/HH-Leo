@@ -1,11 +1,15 @@
 import { TelegramLoginButton } from "./telegram-login-button";
 import { EmailLoginForm } from "./email-login-form";
+import { authPageHref } from "@/lib/post-auth-redirect";
 
 interface AuthCardProps {
   mode: "login" | "signup";
   botUsername: string | null;
   error?: string;
   redirectTo: string;
+  /** An allowlisted callback the visitor arrived with (safeCallbackPath). The login/signup
+   * cross-link carries it, since most marketplace visitors have no account yet. */
+  callbackPath?: string | null;
 }
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
@@ -18,7 +22,7 @@ export function authErrorMessage(code: string): string {
   return AUTH_ERROR_MESSAGES[code] ?? "Something went wrong signing you in — please try again.";
 }
 
-export function AuthCard({ mode, botUsername, error, redirectTo }: AuthCardProps) {
+export function AuthCard({ mode, botUsername, error, redirectTo, callbackPath = null }: AuthCardProps) {
   const heading =
     mode === "login" ? "Log in to Horizon HFT" : "Create your Horizon HFT account";
   const sub =
@@ -58,14 +62,14 @@ export function AuthCard({ mode, botUsername, error, redirectTo }: AuthCardProps
         {mode === "login" ? (
           <>
             New here?{" "}
-            <a href="/signup" className="text-cyan-400 hover:underline">
+            <a href={authPageHref("/signup", callbackPath)} className="text-cyan-400 hover:underline">
               Sign up
             </a>
           </>
         ) : (
           <>
             Already have an account?{" "}
-            <a href="/login" className="text-cyan-400 hover:underline">
+            <a href={authPageHref("/login", callbackPath)} className="text-cyan-400 hover:underline">
               Log in
             </a>
           </>

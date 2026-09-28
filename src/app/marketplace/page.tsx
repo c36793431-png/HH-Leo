@@ -7,7 +7,9 @@ import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { FEED_REGIONS } from "@/lib/feed-tier-catalogue";
-import { getTiersForRegion, type FeedTierDetail } from "@/lib/feed-tiers";
+import { getPublicTiersForRegion, type PublicFeedTier } from "@/lib/feed-tiers";
+import { authPageHref } from "@/lib/post-auth-redirect";
+import { PublicShell } from "@/components/marketplace/public-shell";
 import {
   MARKETPLACE_LISTINGS,
   MARKETPLACE_CATEGORY_ORDER,
@@ -32,8 +34,15 @@ import { ListingMedia } from "@/components/marketplace/listing-media";
  * would be the first feed price Horizon has ever shown a customer — coxwell's, not this errand's
  * (marcus ruling, m50723 #1; re-applied to Chicago's priced row, m52454 (a)).
  *
- * NO NEW QUERY AND NO NEW DISPLAY RULE. Tiers come from the shipped getTiersForRegion, and a
- * tier's figure is rendered by the shipped formatTierLatency — London's feed_tiers.latency_us
+ * PUBLIC SINCE 2026-09-28 (coxwell via marcus, m55542/m55551): a signed-out visitor sees the same
+ * shelf in PublicShell, and every way to request goes through sign-in, which returns them to the
+ * page they were on. Signed in, nothing changed, admins included.
+ *
+ * NO NEW WHERE AND NO NEW DISPLAY RULE. Tiers come from getPublicTiersForRegion, a projection of
+ * the shipped getTiersForRegion that shares its WHERE and ORDER but never selects price_cents: a
+ * signed-out visitor can load this page, so the query itself keeps the price out rather than the
+ * page's care in not rendering one (marcus, m55550 #2). A tier's figure is rendered by the
+ * shipped formatTierLatency — London's feed_tiers.latency_us
  * holds FOC13's comparison SCORE rather than microseconds, so London renders "<score>/100" and
  * NY, whose latency_us is null, renders its bare "—" with no unit. Reusing the query is not by
  * itself enough to keep two surfaces agreeing, because the display rules live in the page, not
@@ -54,26 +63,20 @@ import { ListingMedia } from "@/components/marketplace/listing-media";
  */
 export default async function MarketplacePage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  const switchablePanels = getReachablePanels(session.user.roles);
-  if (isAdminUser(session.user)) redirect("/admin/dashboard");
-
-  const isAdmin = isAdminUser(session.user);
-  const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
-  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
-  const userName = session.user.name ?? session.user.email ?? "trader";
-  const userEmail = session.user.email ?? "";
+  // No account is a public visitor now, not a redirect to /login.
+  const user = session?.user?.id ? session.user : null;
+  if (user && isAdminUser(user)) redirect("/admin/dashboard");
 
   // One call of the shipped query per declared region. A region with no rows (tokyo today)
   // returns an empty list, which is why the declared listings below do not depend on it.
-  const tierLists = await Promise.all(FEED_REGIONS.map((region) => getTiersForRegion(region).catch(() => [])));
+  const tierLists = await Promise.all(FEED_REGIONS.map((region) => getPublicTiersForRegion(region).catch(() => [])));
   const tierByKey = new Map(tierLists.flat().map((t) => [t.tierKey, t]));
 
   const listings = MARKETPLACE_LISTINGS.map((listing) => ({
     listing,
     members: listing.tierKeys
       .map((key) => tierByKey.get(key))
-      .filter((t): t is FeedTierDetail => t != null),
+      .filter((t): t is PublicFeedTier => t != null),
   })).filter(
     // A DECLARED listing (no tier keys at all) always renders — that is the point of declaring
     // it. A tier-backed listing whose rows have all gone renders nothing rather than an empty
@@ -138,8 +141,9 @@ export default async function MarketplacePage() {
     ];
   });
 
-  return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
+  const signInHref = authPageHref("/login", "/marketplace");
+  const page = (
+    <>
       <div className="comm-head mkt-head">
         {/* The sidebar's own Marketplace glyph, not a second storefront mark — the same lucide
             Store the nav item renders (sidebar.tsx PORTAL_LINKS). Deliberately NOT the nav's
@@ -151,12 +155,37 @@ export default async function MarketplacePage() {
 
       <MarketplaceCategoryFilter sections={sections} />
 
-      <p className="fp-footnote">
-        Availability shown here is the same state the rest of the portal renders. Need something
-        that isn&apos;t listed? Ask on <Link href="/feeds">Feeds</Link> — we evaluate every request.
-      </p>
+      {user ? (
+        <p className="fp-footnote">
+          Availability shown here is the same state the rest of the portal renders. Need something
+          that isn&apos;t listed? Ask on <Link href="/feeds">Feeds</Link> — we evaluate every request.
+        </p>
+      ) : (
+        /* /feeds is not a sign-in destination (the allowlist is the marketplace only), so a
+           visitor signs in back to here, and the signed-in footnote then links Feeds. */
+        <p className="fp-footnote">
+          Availability shown here is the same state the rest of the portal renders. Need something
+          that isn&apos;t listed? <Link href={signInHref}>Sign in</Link> and ask on Feeds — we
+          evaluate every request.
+        </p>
+      )}
 
       <div className="foot">HORIZON HFT · customer portal</div>
+    </>
+  );
+
+  if (!user) return <PublicShell signInHref={signInHref}>{page}</PublicShell>;
+
+  const switchablePanels = getReachablePanels(user.roles);
+  const isAdmin = isAdminUser(user);
+  const activeLicenses = await getActiveLicenseDetailsForUser(user.id).catch(() => []);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
+  const userName = user.name ?? user.email ?? "trader";
+  const userEmail = user.email ?? "";
+
+  return (
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
+      {page}
     </PortalShell>
   );
 }
