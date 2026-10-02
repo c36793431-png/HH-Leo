@@ -30,6 +30,29 @@ export function licenseNumberSql(alias: string): string {
   )`;
 }
 
+/** Internal and test accounts, which get no client number. There is no flag column for this, so
+ * it is the email rule marcus gave (m57729). coalesce keeps a Telegram-only account (email NULL)
+ * a client: without it the NOT in clientNumberSql is NULL, and every such account drops out. */
+function notAClientSql(alias: string): string {
+  return `(coalesce(${alias}.email, '') ilike '%horizonhft.internal' or coalesce(${alias}.email, '') ilike '%test%')`;
+}
+
+/** "Client #N" on /admin/users and /admin/users/[id] (coxwell via marcus, m57729): the user's
+ * position by join date among accounts that are not internal/test, NULL for those. A correlated
+ * count for the same reason as licenseNumberSql: /admin/users filters and pages its outer query,
+ * and a window function would number within that subset. Tiebreaks on id.
+ * COMPUTED, NOT STORED, so it shifts when an earlier account is hard-deleted (a duplicate-account
+ * merge has done that once, scripts/merge-coxwell-duplicate-accounts.sql) or when an account's
+ * email starts or stops matching the rule. If a number is ever quoted outside the admin panel,
+ * this needs to become a stored column. */
+export function clientNumberSql(alias: string): string {
+  return `(case when ${notAClientSql(alias)} then null else (
+    select count(*) from users cn
+    where not ${notAClientSql("cn")}
+      and (cn.created_at, cn.id) <= (${alias}.created_at, ${alias}.id)
+  ) end)`;
+}
+
 /** Single source of truth for the active/expiring/expired/revoked bucket shown on every
  * license row across /admin/users, /admin/users/[id], and /admin/licenses — these three
  * pages used to each define their own CASE expression and drifted (a license 24h from
@@ -803,6 +826,8 @@ export interface AdminUserRow {
   telegramUsername: string | null;
   role: string;
   joinedAt: Date;
+  /** clientNumberSql; null for an internal/test account. */
+  clientNumber: number | null;
   signupSource: "telegram" | "email-link" | "both" | null;
   /** Most-recently-*issued* license — used for search/filter/pagination (hasLicense,
    * expires_at/last_verified_at sort) and as the row's display fallback when activeLicenses
@@ -949,6 +974,7 @@ export async function listAllUsersWithLicenses(
   params.push(offset);
   const result = await pool.query(
     `select u.id as user_id, u.email, u.display_name, u.telegram_username, u.role, u.created_at,
+            ${clientNumberSql("u")} as client_number,
             ${SIGNUP_SOURCE_SQL} as signup_source,
             l.id as license_id, l.license_key, l.status, l.expires_at, l.tier,
             l.hardware_id, l.last_verified_at, l.feed_types, l.license_number,
@@ -1004,6 +1030,7 @@ export async function listAllUsersWithLicenses(
       telegramUsername: r.telegram_username,
       role: r.role,
       joinedAt: r.created_at,
+      clientNumber: r.client_number !== null ? Number(r.client_number) : null,
       signupSource: r.signup_source,
       licenseId: r.license_id,
       licenseKey: r.license_key,
@@ -1071,6 +1098,8 @@ export interface UserDetail {
   role: string;
   roles: string[];
   joinedAt: Date;
+  /** clientNumberSql; null for an internal/test account. */
+  clientNumber: number | null;
   tierLabel: UserTierLabel;
   licenses: UserLicenseRow[];
   signins: SigninEventRow[];
@@ -1104,7 +1133,8 @@ function computeTierLabel(role: string, activeTier: string | null): UserTierLabe
  * history, admin actions taken against them, Telegram group memberships, and tier badge. */
 export async function getUserDetail(userId: string): Promise<UserDetail | null> {
   const userResult = await pool.query(
-    `select id, email, display_name, telegram_username, telegram_user_id, telegram_bot_started_at, role, created_at, admin_notes, active_ip
+    `select id, email, display_name, telegram_username, telegram_user_id, telegram_bot_started_at, role, created_at, admin_notes, active_ip,
+            ${clientNumberSql("users")} as client_number
      from users where id = $1`,
     [userId]
   );
@@ -1159,6 +1189,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
     role: user.role,
     roles: rolesResult.rows.map((r) => r.role as string),
     joinedAt: user.created_at,
+    clientNumber: user.client_number !== null ? Number(user.client_number) : null,
     tierLabel: computeTierLabel(user.role, activeTier ?? null),
     licenses: licensesResult.rows.map((r) => ({
       id: r.id,

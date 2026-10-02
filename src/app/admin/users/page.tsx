@@ -131,6 +131,11 @@ export default async function AdminUsersPage({
           Admin · Users
         </span>
         <p className="mt-2 text-sm text-zinc-400">All users, license state, per-row lifecycle actions</p>
+        {/* The number is computed on every load, not stored (clientNumberSql, lib/licenses.ts). */}
+        <p className="mt-1 text-xs text-zinc-500">
+          Client # is the order of joining. Internal and test accounts are not counted. It shifts
+          if an earlier account is deleted.
+        </p>
       </header>
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -236,6 +241,7 @@ export default async function AdminUsersPage({
           <table className="w-full text-left text-sm">
             <thead className="text-zinc-500">
               <tr>
+                <th className="pb-2 pr-4">Client</th>
                 <th className="pb-2 pr-4">Email</th>
                 <th className="pb-2 pr-4">Role</th>
                 <th className="pb-2 pr-4">Telegram</th>
@@ -296,6 +302,9 @@ export default async function AdminUsersPage({
                 const hasMultipleActive = u.role !== "admin" && u.activeLicenses.length > 1;
                 return (
                   <tr key={u.userId} className="group">
+                    <td className="py-2 pr-4 font-mono text-xs text-zinc-400">
+                      {u.clientNumber !== null ? `#${u.clientNumber}` : "—"}
+                    </td>
                     <td className="py-2 pr-4 text-zinc-200">
                       <Link href={`/admin/users/${u.userId}`} className="hover:text-cyan-300 hover:underline">
                         {u.email ?? u.displayName ?? "—"}
@@ -464,7 +473,7 @@ export default async function AdminUsersPage({
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="py-4 text-center text-zinc-500">
+                  <td colSpan={14} className="py-4 text-center text-zinc-500">
                     {search || hasLicense || signupSource || role
                       ? "No users match these filters."
                       : "No users yet."}

@@ -255,6 +255,16 @@ export default async function AdminUserDetailPage({
             >
               {user.tierLabel.toUpperCase()}
             </span>
+            {/* Computed, not stored: order of joining, internal and test accounts not counted
+                (clientNumberSql, lib/licenses.ts). */}
+            {user.clientNumber !== null && (
+              <span
+                className="rounded-full border border-zinc-600 px-2 py-0.5 font-mono text-xs text-zinc-300"
+                title="Order of joining. Internal and test accounts are not counted. Shifts if an earlier account is deleted."
+              >
+                Client #{user.clientNumber}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-sm text-zinc-400">
             Joined {formatAbsoluteUtc(user.joinedAt)} ({formatRelative(user.joinedAt)})
