@@ -3,7 +3,9 @@
  * The admin queue's trial on the CME tier, and its length (marcus m57688 + m57759/m57767).
  * Real Postgres, no prod: an in-memory PGlite carries the REAL migration chain from
  * db/migrations, and the shipped lib functions run against it through db.ts's global._pgPool
- * seam. PGlite is a pinned devDependency, so `npm install` is all a clean clone needs.
+ * seam. PGlite is a pinned devDependency, so `npm install` is all a clean clone needs. The pin is
+ * the last PGlite on PostgreSQL 17, prod's (Neon's) major, so the chain can't pass on SQL prod
+ * would reject (Fable m57824). Re-pin when Neon moves to 18.
  *
  * The chain replays every migration file except the rollbacks. Three files carry prod-data
  * preflights; each gets the minimum seed its preflight asserts, and none is edited:
