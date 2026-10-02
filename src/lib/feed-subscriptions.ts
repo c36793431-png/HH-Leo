@@ -734,9 +734,10 @@ export async function listSubscribersForProvider(providerUserId: string): Promis
  * transaction as the insert (assignPseudonymSeq), so this can only be non-zero after a direct SQL
  * write -- which makes it exactly the thing a human needs told, rather than a state to design for.
  *
- * READ-ONLY and deliberately so: it counts, it never assigns. Assignment stays on the write path
- * where it is transactional; a read that silently created identity rows would be a page load with
- * a side effect, and two concurrent loads could race for the same seq. */
+ * READ-ONLY and deliberately so: it counts, it never assigns. Pseudonyms DO allocate on view
+ * elsewhere (pseudonymForSubscriber, allocate-on-view kept by marcus m57800), but not here:
+ * assigning in this count would erase the gap on the first page load, and the gap is the signal
+ * -- a non-zero count is a direct SQL write that a human should be told about. */
 export async function countUnpseudonymedRowsForProvider(providerUserId: string): Promise<number> {
   try {
     const result = await pool.query<{ count: string }>(
