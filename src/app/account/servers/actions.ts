@@ -14,6 +14,14 @@ import {
 } from "@/lib/server-registration";
 import { isServerLocation } from "@/lib/server-locations";
 import { requestBlackTrial, requestBlackTrialConversion } from "@/lib/black-trials";
+import { blackAvailability } from "@/lib/marketplace-catalogue";
+
+/** Both Black trial actions refuse while the catalogue says Black is not available (coxwell
+ * 2026-10-02 via marcus: "not available at the moment"). Server-side, because hiding the card's
+ * buttons stops the click and not the POST. Runs before any read or write. */
+function requireBlackRequestable(): void {
+  if (blackAvailability() !== "available") throw new Error("Black isn't available to request right now.");
+}
 
 /** Validates the caller-supplied licenseId against the signed-in user's own active licenses —
  * every action below takes an explicit licenseId (bound server-side in the page, one per
@@ -100,6 +108,7 @@ export async function updateServerRegistrationAction(
 
 export async function requestBlackTrialAction(licenseId: string): Promise<ActionResult> {
   return runAction("Failed to request Black trial", async () => {
+    requireBlackRequestable();
     const session = await auth();
     if (!session?.user?.id) throw new Error("Not signed in");
 
@@ -117,6 +126,7 @@ export async function requestBlackTrialAction(licenseId: string): Promise<Action
 
 export async function requestBlackTrialConvertAction(licenseId: string): Promise<ActionResult> {
   return runAction("Failed to request conversion", async () => {
+    requireBlackRequestable();
     const { licenseId: validLicenseId } = await requireLicenseId(licenseId);
     await requestBlackTrialConversion(validLicenseId);
     revalidatePath("/account/servers");

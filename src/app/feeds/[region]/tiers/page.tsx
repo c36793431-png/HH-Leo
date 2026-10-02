@@ -10,6 +10,7 @@ import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { isScoreRegion, formatTierLatency, tierFigureHeading } from "@/lib/feed-provider-packages";
 import {
   tierAvailability,
+  blackAvailability,
   MARKETPLACE_AVAILABILITY_LABELS,
   type MarketplaceAvailability,
 } from "@/lib/marketplace-catalogue";
@@ -183,7 +184,9 @@ const INSTITUTIONAL_TIER_KEYS = new Set(["black", "ld-alpha-85", "ld-ultra"]);
  * /account/servers. This card is display-only here; its CTA hands off to that page
  * rather than duplicating the gated request logic. coxwell ruled 2026-09-10 that "Coming
  * Soon" (the old join-a-waitlist CTA, back when Black wasn't requestable yet) comes off now
- * that trials are live -- destination is "Request access" -> /account/servers. */
+ * that trials are live -- destination is "Request access" -> /account/servers. That CTA now
+ * follows Black's catalogue listing (blackAvailability(), coxwell 2026-10-02 via marcus): while
+ * it is not available the card shows the same pill as Alpha and Ultra, and no link. */
 const BLACK_TIER: FeedTierDetail = {
   regionKey: "london",
   tierKey: "black",
@@ -207,6 +210,10 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   if (!session?.user?.id) redirect("/login");
   const switchablePanels = getReachablePanels(session.user.roles);
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
+
+  // Same predicate as blockingAvailability(): anything other than "available" blocks.
+  const blackDeclared = blackAvailability();
+  const blackBlocked = blackDeclared !== "available" ? blackDeclared : null;
 
   const [tiers, otherRegions, activeLicenses] = await Promise.all([
     getTiersForRegion(region),
@@ -309,7 +316,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
 
       <div id="tiers" className="ftd-tier-row">
         {region === "london" && (
-          <div className="card ftd-tier-card ftd-flagship ftd-black ftd-institutional">
+          <div className={`card ftd-tier-card ftd-flagship ftd-black ftd-institutional${blackBlocked ? " ftd-unavailable" : ""}`}>
             <span className="ftd-rank-badge ftd-rank-black">#{BLACK_RANK}</span>
             <span className="ftd-flagship-badge ftd-badge-amber">INSTITUTIONAL LATENCY</span>
             <h3 className="ftd-name ftd-name-black">{BLACK_TIER.name}</h3>
@@ -319,11 +326,17 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               <span className="ftd-speed-unit">/100</span>
             </div>
             <p className="ftd-desc">{BLACK_TIER.description}</p>
-            <div className="ftd-black-ctas">
-              <Link href="/account/servers" className="btn amber sm ftd-unlock">
-                Request access
-              </Link>
-            </div>
+            {blackBlocked ? (
+              <span className={`mkt-pill mkt-pill-${blackBlocked} ftd-availability-pill`}>
+                {MARKETPLACE_AVAILABILITY_LABELS[blackBlocked]}
+              </span>
+            ) : (
+              <div className="ftd-black-ctas">
+                <Link href="/account/servers" className="btn amber sm ftd-unlock">
+                  Request access
+                </Link>
+              </div>
+            )}
           </div>
         )}
 

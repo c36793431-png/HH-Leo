@@ -24,15 +24,21 @@ export interface BlackTrialCardProps {
   // don't have; that's an open product question with coxwell (marcus, thread
   // leo-black-tiers-coming-soon-pass-2026-09-10). Until it's answered this states the fact and
   // stops, rather than promising a channel that doesn't exist.
-  // The copy deliberately makes no claim about what the portal offers generally: Black IS
-  // requestable here -- as a trial from the "none" state, and as paid access from the "active"
-  // state's "Upgrade to keep" (requestBlackTrialConversion, which enquires to coxwell). Only
-  // THIS reader can't, so the sentence stays scoped to the reader.
+  // The copy deliberately makes no claim about what the portal offers generally: when Black is
+  // requestable it is requestable here -- as a trial from the "none" state, and as paid access
+  // from the "active" state's "Upgrade to keep" (requestBlackTrialConversion, which enquires to
+  // coxwell). Only THIS reader can't, so the sentence stays scoped to the reader.
   endpoint: string | null;
   credentials: string | null;
   requestAction: Action;
   convertAction: Action;
+  // False while the catalogue says Black is not available (blackAvailability(), coxwell
+  // 2026-10-02 via marcus). Both buttons are then ABSENT, not disabled, with the marketplace's
+  // own "Not open for requests right now." in their place. The actions refuse server-side too.
+  requestable: boolean;
 }
+
+const NOT_OPEN = "Not open for requests right now.";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -47,7 +53,7 @@ function countdownLabel(expiresAtIso: string): string {
   return `${Math.ceil(ms / DAY_MS)} days left`;
 }
 
-export function BlackTrialCard({ status, expiresAt, spentAt, endpoint, credentials, requestAction, convertAction }: BlackTrialCardProps) {
+export function BlackTrialCard({ status, expiresAt, spentAt, endpoint, credentials, requestAction, convertAction, requestable }: BlackTrialCardProps) {
   const [pending, startTransition] = useTransition();
   const [localStatus, setLocalStatus] = useState(status);
   const [convertSent, setConvertSent] = useState(false);
@@ -85,7 +91,11 @@ export function BlackTrialCard({ status, expiresAt, spentAt, endpoint, credentia
         <h3>Black trial</h3>
       </div>
 
-      {localStatus === "none" && (
+      {localStatus === "none" && !requestable && (
+        <p style={{ color: "var(--hz-ink-2)", fontSize: 13 }}>{NOT_OPEN}</p>
+      )}
+
+      {localStatus === "none" && requestable && (
         <>
           <p style={{ color: "var(--hz-ink-2)", fontSize: 13, marginBottom: 16 }}>
             Black is the top-ranked feed on our leaderboard. One trial per client — first time
@@ -125,9 +135,13 @@ export function BlackTrialCard({ status, expiresAt, spentAt, endpoint, credentia
               {countdownLabel(expiresAt)}
             </p>
           )}
-          <button type="button" className="btn primary sm" disabled={pending || convertSent} onClick={convert}>
-            {pending ? "Sending…" : convertSent ? "Upgrade request sent" : "Upgrade to keep →"}
-          </button>
+          {requestable ? (
+            <button type="button" className="btn primary sm" disabled={pending || convertSent} onClick={convert}>
+              {pending ? "Sending…" : convertSent ? "Upgrade request sent" : "Upgrade to keep →"}
+            </button>
+          ) : (
+            <p style={{ color: "var(--hz-ink-2)", fontSize: 13 }}>{NOT_OPEN}</p>
+          )}
         </>
       )}
 

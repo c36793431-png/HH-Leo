@@ -18,6 +18,7 @@ import {
 import { getBlackTrialForUser } from "@/lib/black-trials";
 import { getPortalConfig } from "@/lib/portal-config";
 import { BlackTrialCard } from "@/components/account/black-trial-card";
+import { blackAvailability } from "@/lib/marketplace-catalogue";
 import {
   saveServerRegistrationAction,
   updateServerRegistrationAction,
@@ -200,6 +201,7 @@ export default async function ServersPage() {
               credentials={userTrial?.credentials ?? null}
               requestAction={requestBlackTrialAction.bind(null, trialProps.licenseId)}
               convertAction={requestBlackTrialConvertAction.bind(null, trialProps.licenseId)}
+              requestable={blackAvailability() === "available"}
             />
           )}
         </div>

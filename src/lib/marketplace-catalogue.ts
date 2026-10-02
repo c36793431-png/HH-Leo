@@ -164,9 +164,10 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     // The blurb's "Access is requested from your Servers page." and the trial/delivery lines are
     // dropped for that reason. The card and its comparison score stay.
     //
-    // THIS ONLY GOVERNS /marketplace AND /marketplace/black. The London tiers page's Black card
-    // (its own hard-coded "Request access" to /account/servers) and the Black trial card on
-    // /account/servers do not read this file, and coxwell's GO was for the marketplace only.
+    // The same state closes Black's other request paths (same ruling, marcus GO 2026-10-02): the
+    // London tiers page's Black card, the Black trial card on /account/servers, and both trial
+    // server actions read it through blackAvailability() below. Flipping this line reopens all
+    // of them together.
     key: "black",
     title: "Black",
     category: "feeds",
@@ -429,6 +430,14 @@ export function tierAvailability(tierKey: string): MarketplaceAvailability | nul
  */
 export function feedCardAvailability(slug: string): MarketplaceAvailability | null {
   return MARKETPLACE_LISTINGS.find((listing) => listing.feedSlug === slug)?.availability ?? null;
+}
+
+/** Black's declared availability, read from its listing above. Black has no feed_tiers row, so
+ * tierAvailability() never sees it; this is what its own request paths (the tiers-page card,
+ * the /account/servers trial card, requestBlackTrialAction and requestBlackTrialConvertAction)
+ * ask instead. FAILS CLOSED: a missing listing reads as "unavailable", not as on sale. */
+export function blackAvailability(): MarketplaceAvailability {
+  return listingByKey("black")?.availability ?? "unavailable";
 }
 
 /** The product page of a listing. Every listing has one, Not available ones included
