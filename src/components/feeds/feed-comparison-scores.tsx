@@ -79,8 +79,7 @@ export function FeedComparisonScores({
         <p className="fcs-caption-footnote">
           Speed/Consistency/Stream splits are confirmed for{" "}
           {marketplace ? "Black, Alpha and Delta" : "Black, Alpha, Delta and Epsilon"};
-          Ultra, Beta and Gamma splits are proportional estimates from their total score pending
-          FOC13&apos;s full per-feed breakdown.
+          Ultra, Beta and Gamma sub-scores are estimated from their total score.
         </p>
       </details>
     </div>

@@ -20,7 +20,7 @@ export default function FeedHealthPage() {
           <span className="bic">◇</span>
           <div>
             <b>No telemetry pipeline yet</b> — uptime, tick-rate, and gap detection aren&apos;t measured for any
-            feed today. Everything below is static preview data from Iris&apos;s mockup, not live.
+            feed today. Everything below is static preview data, not live.
           </div>
         </div>
 

@@ -139,6 +139,11 @@ export interface MarketplaceListing {
    * The terminal's lines are the exception to the products.json source: they come from FOC12's
    * read of the terminal's own code (m52904), and its comment says so. */
   included?: IncludedLine[];
+  /** The product page's Specification plate, "Coverage". Our public wording, NOT the row's
+   * feed_tiers.description: that is the provider's own text, which names the upstream vendor's
+   * dataset code, and no vendor name or code goes on a public page (marcus m56642 (b)). The row
+   * stays unedited because the provider's dashboard renders it. Absent = no plate. */
+  coverage?: string;
 }
 
 /**
@@ -318,7 +323,10 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     },
     mark: "flag-us",
     // No included list. Iris's FACT delivery, region and coverage are already on this page, from
-    // the blurb and the row's Specification plate. Her remaining FACT line is a pricing line.
+    // the blurb and the Specification plate. Her remaining FACT line is a pricing line.
+    // The row's description with the vendor dataset code taken out: GLBX.MDP3 is dropped and
+    // MBP-1 reads as top-of-book (marcus m56642 (b)). Re-read the row if its coverage changes.
+    coverage: "CME futures, 13 symbols, top-of-book, plus XAUGBP and XAUEUR, from US Central (Chicago).",
   },
   {
     key: "horizon-terminal",

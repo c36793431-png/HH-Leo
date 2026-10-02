@@ -41,15 +41,17 @@ import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
  * REQUEST, NOT BUY, AND NO PRICE. coxwell ruled no checkout, and prices are agreed over
  * Telegram (m52454 (a)).
  *
- * THE SPEC PLATE IS CHICAGO'S ROW AND NOBODY ELSE'S. Coverage is `description`, from marcus's
- * INSERT off provider_tiers dff16179, read back live (m52454). There is no Delivery row. `subtitle`
- * names the delivery protocol, which the public page does not (coxwell via marcus, m55723), and
- * the row stays unedited because the provider's own dashboard renders it.
- * The London and NY rows' subtitle and description are not that: they carry latency claims
- * ("Minimum achievable latency", "fastest fixed-latency") that no buyer surface added since may
- * repeat, and the London subtitles contradict the comparison scores. So the plate renders only
- * for a "request" listing, and every other feed page shows its comparison figures from the same
- * block as its shelf card. Host and port are fulfilment detail and never reach this page.
+ * THE SPEC PLATE IS CHICAGO'S AND NOBODY ELSE'S. Coverage is the listing's own `coverage` line,
+ * not the row's `description`: that one (marcus's INSERT off provider_tiers dff16179, m52454)
+ * names the upstream vendor's dataset code, which no public page shows (marcus m56642 (b)). There
+ * is no Delivery row. `subtitle` names the delivery protocol, which the public page does not
+ * (coxwell via marcus, m55723). Both stay unedited on the row because the provider's own dashboard
+ * renders them.
+ * The London and NY rows' subtitle and description carry latency claims ("Minimum achievable
+ * latency", "fastest fixed-latency") that no buyer surface added since may repeat, and the London
+ * subtitles contradict the comparison scores. So the plate renders only for a listing with a
+ * `coverage` line, and every other feed page shows its comparison figures from the same block as
+ * its shelf card. Host and port are fulfilment detail and never reach this page.
  *
  * LAYOUT follows Iris's 09-18 product-available.html (m52499–m52503): an identity block, then
  * the product on the left and the Access box on the right. The hero image (with its flag or
@@ -127,7 +129,7 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
   // With no image, spec, figures or included list, the left column is empty and the Access box
   // would float alone at the far right. It takes the left edge instead. No listing hits this since
   // every one carries an image; it guards the next listing added without one.
-  const leftEmpty = !listing.image && !request && !hasListingFigures(figures) && included.length === 0;
+  const leftEmpty = !listing.image && !listing.coverage && !hasListingFigures(figures) && included.length === 0;
   // Signing in returns the visitor to this product page, where the real control is.
   const signInHref = authPageHref("/login", listingDetailHref(listing));
 
@@ -151,12 +153,12 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
           <div className="mkd-col">
             <ListingMedia listing={listing} variant="hero" />
 
-            {request ? (
+            {listing.coverage ? (
               <div className="card">
                 <div className="mkd-plate-title">Specification</div>
                 <dl className="mkd-spec">
                   <dt>Coverage</dt>
-                  <dd>{request.row.description}</dd>
+                  <dd>{listing.coverage}</dd>
                 </dl>
               </div>
             ) : (
