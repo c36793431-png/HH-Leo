@@ -38,8 +38,8 @@ const MARKETPLACE_DETAIL_BASE = "/marketplace";
 /** What a listing's product page offers. The shelf card never renders it: every card's one
  * control is "See more →", bottom-right, into the product page (coxwell 2026-09-23 via marcus,
  * m52589). Three kinds, and none is a second copy of a flow:
- * - link: hands off to the existing portal page that owns the flow (Black's gate on
- *   /account/servers, a Base bundle's request on its tiers page).
+ * - link: hands off to the existing portal page that owns the flow (a Base bundle's request on
+ *   its tiers page).
  * - request: the shipped TierRequestControl on the product page itself. It submits one
  *   tier_key, so the page 404s unless the listing is backed by exactly one feed_tiers row.
  * - download: the terminal only. The link shows ONLY to an account with an active, unexpired
@@ -156,16 +156,25 @@ export interface MarketplaceListing {
 export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
   {
     // Not in feed_tiers at all — a separate paid-only, one-per-client gate (black-trials.ts)
-    // with its own request flow on /account/servers. The CTA hands off to that page rather
-    // than duplicating a gated request flow, exactly as the tiers page's Black card does.
+    // with its own request flow on /account/servers.
+    //
+    // NOT AVAILABLE (coxwell 2026-10-02 20:23Z via marcus, m58539: "not available at the
+    // moment", the provider does not offer Black yet). The same state as Alpha and Ultra, so the
+    // same shape: no action, and no sentence or included line that points at a way to get it.
+    // The blurb's "Access is requested from your Servers page." and the trial/delivery lines are
+    // dropped for that reason. The card and its comparison score stay.
+    //
+    // THIS ONLY GOVERNS /marketplace AND /marketplace/black. The London tiers page's Black card
+    // (its own hard-coded "Request access" to /account/servers) and the Black trial card on
+    // /account/servers do not read this file, and coxwell's GO was for the marketplace only.
     key: "black",
     title: "Black",
     category: "feeds",
-    availability: "available",
+    availability: "unavailable",
     tierKeys: [],
     feedSlug: null,
-    blurb: "Horizon's flagship institutional feed, ranked #1 on the Horizon Feed Comparison. Access is requested from your Servers page.",
-    action: { kind: "link", href: "/account/servers", label: "Request access →" },
+    blurb: "Horizon's flagship institutional feed, ranked #1 on the Horizon Feed Comparison.",
+    action: null,
     scoreTierKey: "black",
     image: {
       card: "/marketplace/black-card.jpg",
@@ -175,12 +184,9 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     // coxwell ruled Black is London (2026-09-23 via marcus, m52813), so it carries the GB flag
     // like the three London cards. Iris's plate-horizon was for an unruled region and is dropped.
     mark: "flag-gb",
-    // Both from the Black trial card on /account/servers (black-trial-card.tsx): "One trial per
-    // client — first time only", "Start 3-day trial", "we whitelist your IP".
-    included: [
-      "A 3-day trial, once per client — first time only",
-      "Delivered by IP allowlist to a server you register",
-    ],
+    // No included list while Not available, as for Alpha and Ultra. Its two lines ("A 3-day
+    // trial, once per client — first time only", "Delivered by IP allowlist to a server you
+    // register", from black-trial-card.tsx) describe how to get it. Restore them if it returns.
   },
   {
     // Membership is read from PACKAGE_TIER_KEYS, not re-listed, so this cannot drift from the
