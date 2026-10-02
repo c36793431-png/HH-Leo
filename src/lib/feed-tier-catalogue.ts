@@ -104,6 +104,19 @@ export const PACKAGE_DISPLAY_LABELS: Record<string, string> = {
   "ny-retail": "Base",
 };
 
+/** Institutional ($10k+) vs retail segment split (marcus/coxwell,
+ * leo-tiers-institutional-retail-labels-2026-08-21). feed_tiers has no price_cents
+ * populated yet, so this is a tier-key allowlist rather than a price/enum threshold --
+ * swap for a market_segment column once pricing lands in the DB. Alpha promoted into
+ * this set as #2 on the Feed Comparison score, bracketing top-3 as Institutional rather
+ * than just top-1 + flagship (coxwell, same thread, follow-up). "black" is the tiers page's
+ * own key for its Black card, which has no feed_tiers row.
+ *
+ * Hoisted out of tiers/page.tsx 2026-10-02 when /marketplace became the second surface to
+ * badge London's cards by segment (coxwell via marcus, m58671): both read this one set, so a
+ * tier moved between segments moves on both. London only -- every badge is gated on the region. */
+export const INSTITUTIONAL_TIER_KEYS: ReadonlySet<string> = new Set(["black", "ld-alpha-85", "ld-ultra"]);
+
 /** Only the entry tier and the flagship get a trial CTA (coxwell, trial feature add-on,
  * horizon-portal-v2051-polish-2026-08-13) -- middle tiers stay paid-only. NY has no middle
  * tier (2 tiers total), so both are trial-eligible (coxwell, leo-ny-feed-trial-option-2026-08-15).

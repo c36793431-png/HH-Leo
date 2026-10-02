@@ -1045,9 +1045,15 @@
 /* Iris's own spec for a card that is not on sale: the picture is dimmed by CSS, not by a second
    file. Stacks with the card's 0.75 opacity below. */
 .portal-shell .mkt-card:not(.mkt-available) .mkt-image { filter: saturate(0.3) brightness(0.7); }
-/* The pill sits right. The flags that used to sit left of it are on the image now. */
-.portal-shell .mkt-top { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+/* The pill sits right. The flags that used to sit left of it are on the image now. The row wraps
+   for a London card's segment badge (below): a badge and a long pill do not fit one row on a
+   narrow card, so the pill drops to its own line, still right, rather than both squeezing onto
+   several lines each. A card with only its pill is one item and is unchanged. */
+.portal-shell .mkt-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 2px; }
 .portal-shell .mkt-top .mkt-pill { margin-left: auto; }
+/* The London tiers page's segment badge (m58671), left of the pill. Its own rule pins it to the
+   tier card's top edge; here it sits in the row, and everything else about it is that rule's. */
+.portal-shell .mkt-top .ftd-segment-badge { position: static; white-space: nowrap; }
 .portal-shell .mkt-pill {
   font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 9px;
   border-radius: 999px; border: 1px solid transparent;

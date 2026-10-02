@@ -15,7 +15,9 @@ import {
   MARKETPLACE_CATEGORY_ORDER,
   MARKETPLACE_CATEGORY_LABELS,
   MARKETPLACE_AVAILABILITY_LABELS,
+  LATENCY_SEGMENT_LABELS,
   listingDetailHref,
+  listingLatencySegment,
 } from "@/lib/marketplace-catalogue";
 import {
   MarketplaceCategoryFilter,
@@ -109,12 +111,19 @@ export default async function MarketplacePage() {
             <div className="mkt-grid">
               {items.map(({ listing, members }) => {
                 const detailHref = listingDetailHref(listing);
+                const segment = listingLatencySegment(listing);
                 return (
                   <div key={listing.key} className={`card mkt-card mkt-${listing.availability}`}>
                     {/* Iris's card order (m52632 item 4): image with its flag or plate, then name,
                         one sentence and See more. The comparison score stays on the card. */}
                     <ListingMedia listing={listing} variant="card" />
                     <div className="mkt-top">
+                      {/* The London tiers page's segment badge, same words and classes (m58671). */}
+                      {segment && (
+                        <span className={`ftd-segment-badge${segment === "institutional" ? " ftd-badge-amber" : ""}`}>
+                          {LATENCY_SEGMENT_LABELS[segment]}
+                        </span>
+                      )}
                       <span className={`mkt-pill mkt-pill-${listing.availability}`}>
                         {MARKETPLACE_AVAILABILITY_LABELS[listing.availability]}
                       </span>

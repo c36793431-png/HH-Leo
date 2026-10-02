@@ -1,4 +1,10 @@
-import { FEED_REGION_LABELS, PACKAGE_DISPLAY_LABELS, PACKAGE_TIER_KEYS } from "./feed-tier-catalogue";
+import {
+  FEED_REGION_LABELS,
+  INSTITUTIONAL_TIER_KEYS,
+  PACKAGE_DISPLAY_LABELS,
+  PACKAGE_TIER_KEYS,
+  feedTierMeta,
+} from "./feed-tier-catalogue";
 
 /**
  * /marketplace — the catalogue of what Horizon sells: one listing per product, each with a
@@ -460,6 +466,28 @@ export function feedCardAvailability(slug: string): MarketplaceAvailability | nu
  * ask instead. FAILS CLOSED: a missing listing reads as "unavailable", not as on sale. */
 export function blackAvailability(): MarketplaceAvailability {
   return listingByKey("black")?.availability ?? "unavailable";
+}
+
+/** The /feeds/london/tiers segment badge, carried onto a listing's card (coxwell 2026-10-02 via
+ * marcus, m58671: "so different types of clients can pick theirs"). Same words as that page. */
+export type LatencySegment = "institutional" | "retail";
+
+export const LATENCY_SEGMENT_LABELS: Record<LatencySegment, string> = {
+  institutional: "INSTITUTIONAL LATENCY",
+  retail: "RETAIL LATENCY",
+};
+
+/** A listing's segment, by the tiers page's rule rather than a second list: INSTITUTIONAL if any
+ * of its tier keys is in INSTITUTIONAL_TIER_KEYS, RETAIL if every one is a London tier, otherwise
+ * none. The tiers page badges London only, so NY Base and CME get none, and so does software,
+ * which has no keys. Black has no tierKeys; its scoreTierKey is the tiers page's own key for its
+ * card ("black"), so it is read in their place. */
+export function listingLatencySegment(listing: MarketplaceListing): LatencySegment | null {
+  const keys =
+    listing.tierKeys.length > 0 ? listing.tierKeys : listing.scoreTierKey ? [listing.scoreTierKey] : [];
+  if (keys.some((key) => INSTITUTIONAL_TIER_KEYS.has(key))) return "institutional";
+  if (keys.length > 0 && keys.every((key) => feedTierMeta(key)?.region === "london")) return "retail";
+  return null;
 }
 
 /** The product page of a listing. Every listing has one, Not available ones included
