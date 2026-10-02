@@ -7,6 +7,7 @@ import { Logo } from "@/components/logo";
 import { PartnerLoginView } from "@/components/partner/partner-login-view";
 import { FeedLoginView } from "@/components/feed/feed-login-view";
 import { getPostAuthRedirect, safeCallbackPath } from "@/lib/post-auth-redirect";
+import { MAIN_SITE_URL } from "@/lib/main-site";
 
 // Kept in sync with proxy.ts / post-auth-redirect.ts / dashboard/layout.tsx's own
 // PARTNER_HOST/FEED_HOST checks (bus threads leo-partner-surface-p1-implementation-2026-08-22
@@ -42,8 +43,13 @@ export default async function LoginPage({
 
   return (
     <>
+      {/* The marketplace's Sign in lands here, so the way back to the main site comes too, as in
+          PublicShell (marcus m58375). */}
       <header className="flex items-center px-6 py-5">
-        <Logo size="nav" />
+        <Logo size="nav" href={MAIN_SITE_URL} />
+        <a href={MAIN_SITE_URL} className="ml-auto whitespace-nowrap text-sm text-zinc-400 hover:text-zinc-200">
+          ← horizonhft.com
+        </a>
       </header>
       <main className="flex flex-1 flex-col items-center justify-center gap-8 px-4 pb-16">
         <AuthCard mode="login" botUsername={botUsername} error={error} redirectTo={redirectTo} callbackPath={callbackPath} />

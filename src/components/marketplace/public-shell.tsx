@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/logo";
+import { MAIN_SITE_URL } from "@/lib/main-site";
 
 /**
  * The frame of the marketplace for a signed-out visitor (coxwell via marcus, m55542/m55551). The
@@ -13,8 +14,6 @@ import { Logo } from "@/components/logo";
  * The main site's header links here, so this header links back to it, from the logo and from a
  * text link (coxwell via marcus, m58346). Signed in, the logo stays the sidebar's /dashboard link.
  */
-const MAIN_SITE_URL = "https://www.horizonhft.com";
-
 export function PublicShell({ signInHref, children }: { signInHref: string; children: ReactNode }) {
   return (
     <div className="portal-shell public-shell">
