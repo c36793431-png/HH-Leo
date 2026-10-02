@@ -341,10 +341,13 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     // points at the dashboard's Downloads section, where a licensed account has the real build
     // list, the same destination the sidebar uses (sidebar.tsx PORTAL_LINKS).
     action: { kind: "download", href: "/dashboard#downloads", label: "Downloads →" },
+    // coxwell's own screenshot of a live client (2026-10-02, via marcus m58359), cropped at native
+    // pixels to the card and hero frames, in place of Iris's illustration. A placeholder until the
+    // 2.0.7 set.
     image: {
-      card: "/marketplace/horizon-terminal-card.jpg",
-      hero: "/marketplace/horizon-terminal-hero.jpg",
-      alt: "A dark trading desk at night; a single monitor showing the Horizon horizon line with sparse cyan ticks.",
+      card: "/marketplace/horizon-terminal-client-card.jpg",
+      hero: "/marketplace/horizon-terminal-client-hero.jpg",
+      alt: "The Horizon terminal on XAUUSD with the fast feed and the broker connected: strategy panel, datafeed analysis, an active signal and the price chart.",
     },
     // A plate, not a flag: software is not delivered from a region (coxwell via marcus, m52589).
     mark: "plate-desktop",
