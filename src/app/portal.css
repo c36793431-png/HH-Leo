@@ -243,8 +243,97 @@
 .portal-shell .content { flex: 1; overflow-y: auto; padding: 26px 28px 60px; max-width: 1160px; width: 100%; margin: 0 auto; }
 /* The signed-out marketplace (public-shell.tsx): the same frame with no sidebar column. */
 .portal-shell.public-shell .app { grid-template-columns: 1fr; }
-.portal-shell.public-shell .topbar .to-main { font-size: 13px; color: var(--hz-ink-2); white-space: nowrap; }
-.portal-shell.public-shell .topbar .to-main:hover { color: var(--hz-ink); }
+
+/* ---- MAIN SITE NAV (hub-nav.tsx) ----
+   The horizonhft.com header's rules (.hv3 .top, 2026-10-02) under hn- names, with its colours and
+   sizes; sticky here, where the main site's is not. */
+.hubnav {
+  --hn-line: #16203a; --hn-cyan: #00e5d4; --hn-blue: #2e70ff; --hn-green: #35ff8c;
+  --hn-text: #eef2f7; --hn-muted: #9ea9b8;
+  position: sticky; top: 0; z-index: 30;
+  border-bottom: 1px solid var(--hn-line);
+  background: rgba(3, 5, 9, 0.72); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  color: var(--hn-text); font-family: var(--hz-sans); font-size: 15px; line-height: 1.55;
+}
+.hubnav .hn-wrap {
+  max-width: 1180px; margin: 0 auto; padding: 0 40px; height: 68px;
+  display: flex; align-items: center; justify-content: space-between; gap: 28px;
+}
+.hubnav .hn-brand, .hubnav .hn-nav { flex-shrink: 0; }
+.hubnav .hn-brand { display: flex; align-items: center; gap: 10px; }
+.hubnav .hn-brand img { width: 34px; height: 34px; object-fit: contain; }
+.hubnav .hn-wm {
+  font-size: 17px; font-weight: 800; letter-spacing: 0.14em;
+  background: linear-gradient(90deg, var(--hn-cyan), var(--hn-blue) 55%, var(--hn-green));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hubnav .hn-wm small { font-size: 11px; letter-spacing: 0.2em; margin-left: 6px; }
+.hubnav .hn-nav { display: flex; align-items: center; gap: 18px; font-size: 14px; color: var(--hn-muted); }
+.hubnav .hn-nav a { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.hubnav .hn-nav a svg { flex-shrink: 0; opacity: 0.85; }
+.hubnav .hn-nav a.on { color: var(--hn-text); position: relative; }
+/* The one addition to the main site's look: the current section is underlined in its accent. */
+.hubnav .hn-nav a.on::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -8px; height: 2px; border-radius: 2px;
+  background: var(--acc);
+}
+.hubnav .hn-sep { width: 1px; height: 18px; background: var(--hn-line); }
+.hubnav .hn-login {
+  color: #02060c; background: var(--hn-cyan); border-radius: 6px; font-weight: 650;
+  box-shadow: 0 0 18px rgba(0, 229, 212, 0.35);
+}
+.hubnav .hn-nav .hn-login { padding: 7px 14px; }
+.hubnav .hn-right { display: none; align-items: center; gap: 10px; }
+.hubnav .hn-right .hn-login { padding: 6px 12px; font-size: 13px; }
+.hubnav .hn-menu {
+  display: block; list-style: none; cursor: pointer;
+  font-family: var(--hz-mono); font-size: 13px; color: var(--hn-muted);
+  border: 1px solid var(--hn-line); border-radius: 6px; padding: 6px 12px;
+}
+.hubnav .hn-menu::-webkit-details-marker { display: none; }
+.hubnav .hn-burger[open] .hn-menu { color: var(--hn-text); }
+.hubnav .hn-sheet {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 1;
+  background: #050912; border-bottom: 1px solid var(--hn-line); padding: 8px 20px 22px;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
+}
+.hubnav .hn-grp {
+  margin: 16px 0 4px; font-family: var(--hz-mono); font-size: 11px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--hn-muted);
+}
+.hubnav a.hn-it {
+  display: flex; align-items: center; justify-content: space-between; padding: 12px 0;
+  border-bottom: 1px solid var(--hn-line); font-size: 16px; font-weight: 600;
+}
+.hubnav a.hn-it small { font-family: var(--hz-mono); font-size: 11.5px; font-weight: 400; color: var(--hn-muted); }
+.hubnav .hn-it-l { display: inline-flex; align-items: center; gap: 10px; }
+.hubnav .hn-row2 { display: flex; gap: 10px; margin-top: 16px; }
+.hubnav .hn-row2 a {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 0;
+  border: 1px solid var(--hn-line); border-radius: 6px; font-size: 14px; color: var(--hn-muted);
+}
+.hubnav .hn-row2 a.on { color: var(--hn-text); border-color: color-mix(in srgb, var(--acc) 55%, transparent); }
+.hubnav .hn-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-top: 14px;
+  padding: 14px 24px; border-radius: 8px; font-size: 16px; font-weight: 650; color: #02060c;
+  background: linear-gradient(90deg, var(--hn-cyan), var(--hn-blue)); box-shadow: 0 0 26px rgba(0, 229, 212, 0.28);
+}
+.hubnav .hn-nav a.hn-sec svg, .hubnav .hn-sheet a.hn-sec svg { color: var(--acc); opacity: 1; }
+.hubnav .hn-sec-software { --acc: #00e5d4; }
+.hubnav .hn-sec-strategies { --acc: #8fb0ff; }
+.hubnav .hn-sec-feeds { --acc: #2dd4bf; }
+.hubnav .hn-sec-partners { --acc: #f5b547; }
+.hubnav .hn-sec-consulting { --acc: #9ea9b8; }
+.hubnav .hn-sec-education { --acc: #b18cff; }
+.hubnav .hn-sec-marketplace { --acc: #f472b6; }
+@media (max-width: 1180px) {
+  .hubnav .hn-wrap { height: 58px; }
+  .hubnav .hn-nav { display: none; }
+  .hubnav .hn-right { display: flex; }
+}
+@media (max-width: 600px) {
+  .hubnav .hn-wrap { padding: 0 20px; }
+}
 
 /* ---- BANNERS ---- */
 .portal-shell .banner { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 12px; margin-bottom: 22px; font-size: 14px; flex-wrap: wrap; }
