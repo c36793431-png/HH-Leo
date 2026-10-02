@@ -3,9 +3,7 @@
  * The admin queue's trial on the CME tier, and its length (marcus m57688 + m57759/m57767).
  * Real Postgres, no prod: an in-memory PGlite carries the REAL migration chain from
  * db/migrations, and the shipped lib functions run against it through db.ts's global._pgPool
- * seam. The repo has no PGlite dependency, so install it outside the repo:
- *   npm i --prefix /root/claudeclaw-leo/tmp/pgl @electric-sql/pglite
- * (PGLITE_ENTRY below; a repo-local @electric-sql/pglite is tried first.)
+ * seam. PGlite is a pinned devDependency, so `npm install` is all a clean clone needs.
  *
  * The chain replays every migration file except the rollbacks. Three files carry prod-data
  * preflights; each gets the minimum seed its preflight asserts, and none is edited:
@@ -20,8 +18,8 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { PGlite } from "@electric-sql/pglite";
 
-const PGLITE_ENTRY = "/root/claudeclaw-leo/tmp/pgl/node_modules/@electric-sql/pglite/dist/index.js";
 const MIGRATIONS = path.join(process.cwd(), "db/migrations");
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -71,8 +69,7 @@ async function sql(text: string, params: unknown[] = []) {
 }
 
 before(async () => {
-  const mod: any = await import("@electric-sql/pglite" as string).catch(() => import(PGLITE_ENTRY));
-  db = new mod.PGlite();
+  db = new PGlite();
   const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql") && !f.includes("rollback")).sort();
   for (const f of files) {
     if (SKIPPED.has(f)) continue;
