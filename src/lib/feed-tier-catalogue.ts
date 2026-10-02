@@ -114,8 +114,14 @@ export const PACKAGE_DISPLAY_LABELS: Record<string, string> = {
  *
  * Hoisted out of tiers/page.tsx 2026-10-02 when /marketplace became the second surface to
  * badge London's cards by segment (coxwell via marcus, m58671): both read this one set, so a
- * tier moved between segments moves on both. London only -- every badge is gated on the region. */
+ * tier moved between segments moves on both. Every badge is gated on SEGMENT_BADGED_REGIONS below. */
 export const INSTITUTIONAL_TIER_KEYS: ReadonlySet<string> = new Set(["black", "ld-alpha-85", "ld-ultra"]);
+
+/** Regions whose tiers carry a segment badge: INSTITUTIONAL LATENCY if the tier is in the set
+ * above, RETAIL LATENCY otherwise. London from the start; New York and CME added as Retail
+ * (coxwell 2026-10-02 via marcus, m58778: "both can be Retail labeled"). Read by the /feeds tiers
+ * pages and /marketplace alike, so a region added here is badged on both. Tokyo has no tiers. */
+export const SEGMENT_BADGED_REGIONS: ReadonlySet<FeedRegion> = new Set(["london", "ny", "cme"]);
 
 /** Only the entry tier and the flagship get a trial CTA (coxwell, trial feature add-on,
  * horizon-portal-v2051-polish-2026-08-13) -- middle tiers stay paid-only. NY has no middle

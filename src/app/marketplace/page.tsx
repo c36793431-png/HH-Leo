@@ -118,7 +118,7 @@ export default async function MarketplacePage() {
                         one sentence and See more. The comparison score stays on the card. */}
                     <ListingMedia listing={listing} variant="card" />
                     <div className="mkt-top">
-                      {/* The London tiers page's segment badge, same words and classes (m58671). */}
+                      {/* The tiers pages' segment badge, same words and classes (m58671, m58778). */}
                       {segment && (
                         <span className={`ftd-segment-badge${segment === "institutional" ? " ftd-badge-amber" : ""}`}>
                           {LATENCY_SEGMENT_LABELS[segment]}

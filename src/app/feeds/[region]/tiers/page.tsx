@@ -5,7 +5,12 @@ import { getReachablePanels } from "@/lib/user-roles";
 import { isPaidUser, getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { isFeedRegion, PACKAGE_DISPLAY_LABELS, INSTITUTIONAL_TIER_KEYS } from "@/lib/feed-tier-catalogue";
+import {
+  isFeedRegion,
+  PACKAGE_DISPLAY_LABELS,
+  INSTITUTIONAL_TIER_KEYS,
+  SEGMENT_BADGED_REGIONS,
+} from "@/lib/feed-tier-catalogue";
 import { getTiersForRegion, getMultiTierRegions } from "@/lib/feed-tiers";
 import { isScoreRegion, formatTierLatency, tierFigureHeading } from "@/lib/feed-provider-packages";
 import {
@@ -344,12 +349,8 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
                 key={group.packageKey}
                 className={`card ftd-tier-card ftd-package${blocked ? " ftd-unavailable" : ""}`}
               >
-                {region === "london" && (
-                  <>
-                    <span className="ftd-rank-badge">#{group.rank}</span>
-                    <span className="ftd-segment-badge">RETAIL LATENCY</span>
-                  </>
-                )}
+                {region === "london" && <span className="ftd-rank-badge">#{group.rank}</span>}
+                {SEGMENT_BADGED_REGIONS.has(region) && <span className="ftd-segment-badge">RETAIL LATENCY</span>}
                 <h3 className="ftd-name">{label}</h3>
                 <p className="ftd-desc">
                   {group.members.length} feeds from one provider, sold as a single bundle at one price.
@@ -430,7 +431,8 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
           }
 
           const t = group.members[0];
-          const isInstitutional = region === "london" && INSTITUTIONAL_TIER_KEYS.has(t.tierKey);
+          const segmentBadged = SEGMENT_BADGED_REGIONS.has(region);
+          const isInstitutional = segmentBadged && INSTITUTIONAL_TIER_KEYS.has(t.tierKey);
           const londonScore = region === "london" ? londonScoreDisplay(t.tierKey) : null;
           const blocked = blockingAvailability(group.members);
           return (
@@ -454,7 +456,7 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
               )
             ) : t.isFlagship ? (
               <span className="ftd-flagship-badge">{t.subtitle}</span>
-            ) : region === "london" ? (
+            ) : segmentBadged ? (
               <>
                 <span className="ftd-segment-badge">RETAIL LATENCY</span>
                 <span className="ftd-subtitle">{t.subtitle}</span>

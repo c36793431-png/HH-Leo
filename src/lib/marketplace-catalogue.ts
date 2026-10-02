@@ -3,6 +3,7 @@ import {
   INSTITUTIONAL_TIER_KEYS,
   PACKAGE_DISPLAY_LABELS,
   PACKAGE_TIER_KEYS,
+  SEGMENT_BADGED_REGIONS,
   feedTierMeta,
 } from "./feed-tier-catalogue";
 
@@ -478,15 +479,19 @@ export const LATENCY_SEGMENT_LABELS: Record<LatencySegment, string> = {
 };
 
 /** A listing's segment, by the tiers page's rule rather than a second list: INSTITUTIONAL if any
- * of its tier keys is in INSTITUTIONAL_TIER_KEYS, RETAIL if every one is a London tier, otherwise
- * none. The tiers page badges London only, so NY Base and CME get none, and so does software,
- * which has no keys. Black has no tierKeys; its scoreTierKey is the tiers page's own key for its
- * card ("black"), so it is read in their place. */
+ * of its tier keys is in INSTITUTIONAL_TIER_KEYS, RETAIL if every one is a tier of a
+ * SEGMENT_BADGED_REGIONS region, otherwise none. So London Base, NY Base and CME are RETAIL
+ * (m58778), and software, which has no keys, gets none. Black has no tierKeys; its scoreTierKey
+ * is the tiers page's own key for its card ("black"), so it is read in their place. */
 export function listingLatencySegment(listing: MarketplaceListing): LatencySegment | null {
   const keys =
     listing.tierKeys.length > 0 ? listing.tierKeys : listing.scoreTierKey ? [listing.scoreTierKey] : [];
   if (keys.some((key) => INSTITUTIONAL_TIER_KEYS.has(key))) return "institutional";
-  if (keys.length > 0 && keys.every((key) => feedTierMeta(key)?.region === "london")) return "retail";
+  const badged = (key: string) => {
+    const region = feedTierMeta(key)?.region;
+    return region != null && SEGMENT_BADGED_REGIONS.has(region);
+  };
+  if (keys.length > 0 && keys.every(badged)) return "retail";
   return null;
 }
 
