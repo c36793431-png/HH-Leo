@@ -85,7 +85,15 @@ export default async function MarketplacePage() {
   );
 
   const sections: MarketplaceSection[] = MARKETPLACE_CATEGORY_ORDER.flatMap((category) => {
-    const items = listings.filter(({ listing }) => listing.category === category);
+    const inCategory = listings.filter(({ listing }) => listing.category === category);
+    // Available first, then every other state (coxwell 2026-10-02 via marcus, m58658). Two
+    // filters rather than a sort so each group keeps the catalogue's order exactly. The test is
+    // the same listing.availability the card's pill renders below (Black's is the value
+    // blackAvailability() reads), so a listing that changes state moves with it.
+    const items = [
+      ...inCategory.filter(({ listing }) => listing.availability === "available"),
+      ...inCategory.filter(({ listing }) => listing.availability !== "available"),
+    ];
     // Same test as before the filter row existed: a category with nothing to show renders
     // nothing. It now also costs that category its chip — the chips come from this array.
     if (items.length === 0) return [];

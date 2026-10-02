@@ -159,8 +159,9 @@ export interface MarketplaceListing {
 }
 
 /**
- * Order is render order within a category. Rulings: packaging MIRRORS the tiers page (two
- * bundles, not five tiers — a marketplace selling five things where the tiers page sells two
+ * Order is render order within a category, after /marketplace puts the available listings ahead
+ * of the rest (m58658); within each of those two groups this order holds. Rulings: packaging
+ * MIRRORS the tiers page (two bundles, not five tiers — a marketplace selling five things where the tiers page sells two
  * bundles is a pricing misrepresentation, marcus m50717 #1); Black is INCLUDED as a declared
  * entry because the catalogue's whole point is completeness and it is the flagship (m50717 #6);
  * Chicago's state moves /feeds with it (m50717 #5).
