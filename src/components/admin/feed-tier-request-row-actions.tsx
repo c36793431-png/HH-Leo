@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import { emitToast } from "@/lib/toast-bus";
+import { ADMIN_TRIAL_DAY_OPTIONS, TRIAL_DURATION_DAYS } from "@/lib/feed-tier-catalogue";
 
 type Action = (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 
@@ -24,12 +25,13 @@ const INPUT =
 /** Approve/reject pair for one /admin/feed-tier-requests row. Approve opens the decision
  * form (0086 phase 2, docs/specs/0086-phase2-code.md section 4(d); coxwell notice C5): radio
  * trial | paid; the end date and invoice ref are shown and required for paid only -- a trial
- * always ends 7 days from approval (S4), so it takes no date. Reject prompts for an optional
- * reason (forwarded to the client's decline DM). */
+ * takes no date, only a length of 7, 14 or 30 days from approval (S4; m57759), default 7.
+ * Reject prompts for an optional reason (forwarded to the client's decline DM). */
 export function FeedTierRequestRowActions({ requestId, approveAction, rejectAction }: FeedTierRequestRowActionsProps) {
   const [pending, startTransition] = useTransition();
   const [approving, setApproving] = useState(false);
   const [decision, setDecision] = useState<Decision>("trial");
+  const [trialDays, setTrialDays] = useState(TRIAL_DURATION_DAYS);
   const [endsAt, setEndsAt] = useState("");
   const [invoiceRef, setInvoiceRef] = useState("");
   const [rejecting, setRejecting] = useState(false);
@@ -42,6 +44,8 @@ export function FeedTierRequestRowActions({ requestId, approveAction, rejectActi
     if (decision === "paid") {
       formData.append("endsAt", endsAt);
       formData.append("invoiceRef", invoiceRef);
+    } else {
+      formData.append("trialDays", String(trialDays));
     }
     startTransition(async () => {
       const result = await approveAction(null, formData);
@@ -100,8 +104,23 @@ export function FeedTierRequestRowActions({ requestId, approveAction, rejectActi
               onChange={() => setDecision("trial")}
               disabled={pending}
             />
-            Trial <span className="text-zinc-500">(7 days from approval)</span>
+            Trial
           </label>
+          {decision === "trial" && (
+            <select
+              value={trialDays}
+              onChange={(e) => setTrialDays(Number(e.target.value))}
+              disabled={pending}
+              aria-label="Trial length"
+              className={INPUT}
+            >
+              {ADMIN_TRIAL_DAY_OPTIONS.map((d) => (
+                <option key={d} value={d}>
+                  {d} days from approval
+                </option>
+              ))}
+            </select>
+          )}
           <label className="flex items-center gap-1">
             <input
               type="radio"

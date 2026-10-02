@@ -2,9 +2,24 @@ import { pool } from "./db";
 import { notifyFeedTierTrialStarted, notifyFeedTierTrialConverted } from "./telemetry-sink";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
 import { sendEmail } from "./email";
-import { feedTierMeta, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
+import {
+  feedTierMeta,
+  isFeedRegion,
+  isAdminTrialEligibleTier,
+  TRIAL_DURATION_DAYS,
+  type FeedRegion,
+} from "./feed-tier-catalogue";
 
-export const TRIAL_DURATION_DAYS = 7;
+// Defined in the catalogue, which has no server imports, so the admin queue's client form can
+// read them. Re-exported here for the existing importers.
+export { ADMIN_TRIAL_DAY_OPTIONS, TRIAL_DURATION_DAYS } from "./feed-tier-catalogue";
+
+/** Whole days between a trial's start and end, for the client's DM. An admin trial's end is the
+ * envelope's (set at approval) and its start is the mirror INSERT's now(), seconds later, so
+ * this rounds rather than floors. */
+export function trialLengthDays(row: Pick<FeedTierTrialRow, "trialStartedAt" | "trialEndsAt">): number {
+  return Math.round((row.trialEndsAt.getTime() - row.trialStartedAt.getTime()) / (24 * 60 * 60 * 1000));
+}
 export const TRIAL_STATUSES = ["active", "expired", "converted", "cancelled"] as const;
 export type TrialStatus = (typeof TRIAL_STATUSES)[number];
 
@@ -107,6 +122,10 @@ interface InsertTrialArgs {
   licenseId: string;
   region: FeedRegion;
   tierKey: string;
+  /** The grant's own end (the approved envelope's ends_at), so the mirror ends when the access
+   * does, whatever length the admin picked. Omitted = now() + TRIAL_DURATION_DAYS, the
+   * self-serve path's clock. */
+  trialEndsAt?: Date;
 }
 
 /** Pool or transaction client -- structural so a caller inside an open transaction can ask the
@@ -140,7 +159,9 @@ export async function hasClaimedTrial(q: TrialQueryable, userId: string, tierKey
  * the approval transaction (access-requests.ts, TrialAlreadyGrantedError). Reaching it here
  * means a row appeared in between; see activateTrialIfEligible (feed-tier-requests.ts). */
 export async function insertFeedTierTrial(args: InsertTrialArgs): Promise<FeedTierTrialRow> {
-  if (!isTrialEligibleTier(args.tierKey)) throw new TrialNotEligibleError();
+  // The admin list, the widest: the mirror records every tier any path can trial. The buyer
+  // paths are held to the narrow list before they get here (startSelfServeFeedTierTrial).
+  if (!isAdminTrialEligibleTier(args.tierKey)) throw new TrialNotEligibleError();
 
   if (await hasClaimedTrial(pool, args.userId, args.tierKey)) throw new TrialAlreadyClaimedError();
 
@@ -148,9 +169,9 @@ export async function insertFeedTierTrial(args: InsertTrialArgs): Promise<FeedTi
   try {
     const result = await pool.query<{ id: string }>(
       `insert into feed_tier_trials (user_id, license_id, region, tier_key, trial_ends_at)
-       values ($1, $2, $3, $4, now() + make_interval(days => $5))
+       values ($1, $2, $3, $4, coalesce($6::timestamptz, now() + make_interval(days => $5)))
        returning id`,
-      [args.userId, args.licenseId, args.region, args.tierKey, TRIAL_DURATION_DAYS]
+      [args.userId, args.licenseId, args.region, args.tierKey, TRIAL_DURATION_DAYS, args.trialEndsAt ?? null]
     );
     insertedId = result.rows[0].id;
   } catch (err) {
@@ -198,6 +219,8 @@ export async function startFeedTierTrial(args: StartTrialArgs): Promise<FeedTier
  * notified directly, not just the admin ping). Best-effort, never throws. */
 export async function notifyTrialClientActivated(row: FeedTierTrialRow): Promise<void> {
   const endsDate = row.trialEndsAt.toISOString().slice(0, 10);
+  // The row's own length, not TRIAL_DURATION_DAYS: an admin trial can run 14 or 30 days.
+  const days = trialLengthDays(row);
   const serverLine =
     row.serverRegistered && row.serverIp
       ? `${row.serverName ? `${row.serverName} (${row.serverIp})` : row.serverIp}`
@@ -207,7 +230,7 @@ export async function notifyTrialClientActivated(row: FeedTierTrialRow): Promise
     await sendEmail(
       row.userEmail,
       `Your ${row.tierName} trial is live`,
-      `Your ${TRIAL_DURATION_DAYS}-day trial of ${row.tierName} is now active.\n\n` +
+      `Your ${days}-day trial of ${row.tierName} is now active.\n\n` +
         `License: ****${row.licenseKeyTail ?? "----"}\n` +
         `Server: ${serverLine}\n` +
         `Trial ends: ${endsDate}\n\n` +
@@ -222,7 +245,7 @@ export async function notifyTrialClientActivated(row: FeedTierTrialRow): Promise
   if (row.telegramUserId) {
     await sendHftAlertMessage(
       row.telegramUserId,
-      `<b>🎁 Your ${TRIAL_DURATION_DAYS}-day trial of ${row.tierName} is live!</b>\n` +
+      `<b>🎁 Your ${days}-day trial of ${row.tierName} is live!</b>\n` +
         `License ****${row.licenseKeyTail ?? "----"}\n` +
         `Server: ${serverLine}\n` +
         `Ends ${endsDate}.`

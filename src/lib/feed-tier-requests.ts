@@ -1,6 +1,6 @@
 import { notifyFeedTierRequestSubmitted, notifyFeedTierTrialActivated } from "./telemetry-sink";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
-import { expandTierKey, feedTierMeta, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
+import { expandTierKey, feedTierMeta, isAdminTrialEligibleTier, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
 import {
   insertFeedTierTrial,
   notifyTrialClientActivated,
@@ -176,9 +176,10 @@ async function notifyClient(row: FeedTierRequestRow, text: string): Promise<void
 /** feed_tier_trials is NOT retired in this slice (Source H; feed-tier-trials.ts untouched):
  * EFFECTIVE_STATUS_SQL branch (4), the expire-trials cron and the provider Trials tab still
  * read it, so a trial decision on a trial-eligible tier still writes the row, best-effort,
- * after the envelope commit. Its own 7-day clock matches the envelope's derived ends_at to
- * within the after-commit gap (S4). A failure here must never fail the approve action itself --
- * the grant is already committed, so throwing would report a failure that did not happen.
+ * after the envelope commit. It ends at the envelope's own ends_at, so an admin trial of 14 or
+ * 30 days (m57759) is recorded at its real length and the cron expires it then. A failure here
+ * must never fail the approve action itself -- the grant is already committed, so throwing
+ * would report a failure that did not happen.
  *
  * "Already claimed" is no longer an ordinary outcome here: approveOnClient asks the same
  * predicate inside the approval transaction now (TrialAlreadyGrantedError, access-requests.ts),
@@ -194,6 +195,7 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
       licenseId: row.licenseId,
       region: row.region,
       tierKey: row.tierKey,
+      trialEndsAt: row.endsAt ?? undefined,
     });
     await notifyFeedTierTrialActivated({
       email: trial.userEmail,
@@ -224,13 +226,17 @@ export interface ApproveDecisionInput {
   decision: AccessDecision;
   endsAt: Date | null;
   invoiceRef: string | null;
+  /** trial only: the admin queue's chosen length (ADMIN_TRIAL_DAY_OPTIONS, m57759). */
+  trialDays?: number;
 }
 
 /** Approve ONE line (spec section 3). With a decision (the admin queue, section 4(d)) it is
- * passed through. Without one -- the Telegram card and the provider panel (spec 4(c), coxwell's
- * C2: provider approve enabled, trial-only) -- the trial-only rule applies: a trial-eligible
- * tier is approved as a 7-day trial, anything else is refused to the admin queue, because
- * neither surface can supply an end date or an invoice ref. */
+ * passed through, and a trial may be on any ADMIN-trial-eligible tier (CME included, m57688)
+ * at the length the admin picked. Without one -- the Telegram card and the provider panel
+ * (spec 4(c), coxwell's C2: provider approve enabled, trial-only) -- the trial-only rule
+ * applies on the BUYER list: a trial-eligible tier is approved as a 7-day trial, anything else
+ * (CME included) is refused to the admin queue, because neither surface can supply an end
+ * date, an invoice ref or a trial length. */
 export async function approveFeedTierRequest(
   id: string,
   actionedBy: string,
@@ -255,7 +261,8 @@ export async function approveFeedTierRequest(
   // sending both would double-DM the client (coxwell green-light,
   // leo-feed-activation-notification-2026-08-17 / m22397).
   if (input.decision === "trial") await activateTrialIfEligible(row, adminUrl);
-  if (!(input.decision === "trial" && isTrialEligibleTier(row.tierKey))) {
+  // The same list as activateTrialIfEligible's guard, so exactly one of the two DMs goes out.
+  if (!(input.decision === "trial" && isAdminTrialEligibleTier(row.tierKey))) {
     await notifyClient(row, `<b>✅ Feed access approved</b>\n${row.tierName} is approved on your account.`);
   }
   return row;

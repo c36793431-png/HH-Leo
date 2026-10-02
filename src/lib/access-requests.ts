@@ -1,7 +1,7 @@
 import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
-import { TRIAL_DURATION_DAYS, TrialAlreadyClaimedError, TrialNotEligibleError, hasClaimedTrial } from "./feed-tier-trials";
-import { isTrialEligibleTier } from "./feed-tier-catalogue";
+import { TrialAlreadyClaimedError, TrialNotEligibleError, hasClaimedTrial } from "./feed-tier-trials";
+import { ADMIN_TRIAL_DAY_OPTIONS, TRIAL_DURATION_DAYS, isAdminTrialEligibleTier, isTrialEligibleTier } from "./feed-tier-catalogue";
 import {
   assertNoLiveGrant,
   assignPseudonymSeq,
@@ -95,12 +95,15 @@ export class PaidApprovalNeedsQueueError extends Error {
 
 /** The invariant behind UntrackableTrialError, stated once so the guard and the writer cannot
  * drift: a trial leaves a trace only if activateTrialIfEligible (feed-tier-requests.ts) writes
- * its feed_tier_trials row, and that needs a trial-eligible tier AND the server row's licence.
+ * its feed_tier_trials row, and that needs a tier the mirror records AND the server row's licence.
+ * The tier test is the ADMIN list, insertFeedTierTrial's own (feed-tier-catalogue.ts): this
+ * guard asks whether the mirror WOULD record the trial, not whether a buyer may start one. The
+ * buyer and no-decision paths refuse a non-buyer tier before they reach it.
  * Narrows licenseId for the writer, which needs it non-null. Only the TRUE branch is sound:
  * false also covers "licence present, tier not trial-eligible", so licenseId is not really null
  * there -- neither call site reads it after a false. */
 export function trialRowWouldBeWritten(tierKey: string, licenseId: string | null): licenseId is string {
-  return isTrialEligibleTier(tierKey) && !!licenseId;
+  return isAdminTrialEligibleTier(tierKey) && !!licenseId;
 }
 
 /** A trial decision the mirror would not record -- the tier is not trial-eligible (Alpha and
@@ -288,6 +291,9 @@ export interface ApproveAccessRequestInput {
   endsAt: Date | null;
   /** paid: required non-empty. trial: must be empty (Source J/K). */
   invoiceRef: string | null;
+  /** trial only: its length, one of ADMIN_TRIAL_DAY_OPTIONS. Only the admin queue passes it
+   * (m57759); omitted = TRIAL_DURATION_DAYS, which is every other path. */
+  trialDays?: number;
 }
 
 export interface ApproveAccessRequestResult {
@@ -298,9 +304,11 @@ export interface ApproveAccessRequestResult {
   tierKey: string;
 }
 
-/** S4: a trial's end is always now() + TRIAL_DURATION_DAYS at approval time; the free date
- * exists for paid only. Runs before any transaction opens. */
-function resolveDecision(input: Pick<ApproveAccessRequestInput, "decision" | "endsAt" | "invoiceRef">): { endsAt: Date; invoiceRef: string | null } {
+/** S4: a trial's end is now() + its length at approval time, never a free date; the free date
+ * exists for paid only. The length is TRIAL_DURATION_DAYS unless the admin queue picked one of
+ * ADMIN_TRIAL_DAY_OPTIONS (m57759). Runs before any transaction opens, so a bad length writes
+ * nothing. */
+function resolveDecision(input: Pick<ApproveAccessRequestInput, "decision" | "endsAt" | "invoiceRef" | "trialDays">): { endsAt: Date; invoiceRef: string | null } {
   const invoiceRef = (input.invoiceRef ?? "").trim();
   if (input.decision === "paid") {
     if (!input.endsAt || Number.isNaN(input.endsAt.getTime())) throw new Error("Paid approval needs an end date");
@@ -309,7 +317,11 @@ function resolveDecision(input: Pick<ApproveAccessRequestInput, "decision" | "en
     return { endsAt: input.endsAt, invoiceRef };
   }
   if (invoiceRef) throw new Error("A trial has no invoice ref");
-  return { endsAt: new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000), invoiceRef: null };
+  const days = input.trialDays ?? TRIAL_DURATION_DAYS;
+  if (!ADMIN_TRIAL_DAY_OPTIONS.includes(days)) {
+    throw new Error(`A trial runs ${ADMIN_TRIAL_DAY_OPTIONS.join(", ")} days, not ${days}`);
+  }
+  return { endsAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000), invoiceRef: null };
 }
 
 interface EnvelopeRow {

@@ -51,7 +51,8 @@ export const FEED_TIERS: FeedTierMeta[] = [
    * is marcus's hand-applied INSERT from provider_tiers dff16179. submitFeedTierRequestAction
    * refuses a key that is not in this list. This name is the one the admin queue and the
    * Telegram DM show (feedTierMeta wins over the DB name), so it matches the row's `name`.
-   * NOT trial-eligible: a paid tier, approved from the admin queue only. */
+   * A paid tier: no buyer trial. The admin queue alone may grant it as a trial
+   * (ADMIN_TRIAL_ELIGIBLE_TIER_KEYS below). */
   { key: "cme-ctrader-fix", name: "CME Futures · cTrader FIX", region: "cme" },
   /** Pseudo-tier for the Base package card's single request button (tiers/page.tsx
    * TIER_PACKAGE_KEY, london-tiers-retail-package-card-2026-08-29). Not a real feed_tiers
@@ -130,12 +131,41 @@ export const PACKAGE_DISPLAY_LABELS: Record<string, string> = {
  * NOT DERIVED FROM marketplace-catalogue.ts, which is where availability otherwise has its one
  * home: that module imports this one, so reading it back here would be an import cycle. This
  * literal is the copy, and this comment is the pointer -- a tier listed there in any state other
- * than "available" (both are "unavailable" since 2026-09-21) has to be taken out here by hand. */
+ * than "available" (both are "unavailable" since 2026-09-21) has to be taken out here by hand.
+ *
+ * THIS IS THE BUYER AND NO-DECISION LIST: the self-serve trial (startSelfServeTrial,
+ * startSelfServeFeedTierTrial) and the two surfaces that approve with no decision input, the
+ * Telegram card and the provider panel (approveFeedTierRequest's no-decision branch). The admin
+ * queue's explicit trial decision reads ADMIN_TRIAL_ELIGIBLE_TIER_KEYS instead. */
 export const TRIAL_ELIGIBLE_TIER_KEYS: readonly string[] = ["ny-normal", "ny-fast"];
 
 export function isTrialEligibleTier(tierKey: string): boolean {
   return TRIAL_ELIGIBLE_TIER_KEYS.includes(tierKey);
 }
+
+/** Tiers the ADMIN QUEUE may grant as a trial: the list above plus the CME tier (coxwell via
+ * marcus, m57688). The admin decides case by case. Putting CME in the list above instead would
+ * also hand every buyer a self-serve trial of Pip Dealer's paid feed, and let the provider panel
+ * and the Telegram card turn a CME approve into a trial with no length chosen. Nobody has made
+ * that product decision.
+ * Also the mirror's list: trialRowWouldBeWritten and insertFeedTierTrial read it, because the
+ * mirror has to record every tier any path can trial. feed_tier_trials_tier_key_check has to
+ * allow each key here (0092 added cme-ctrader-fix); a key it refuses fails the mirror INSERT
+ * after the grant has committed. */
+export const ADMIN_TRIAL_ELIGIBLE_TIER_KEYS: readonly string[] = [...TRIAL_ELIGIBLE_TIER_KEYS, "cme-ctrader-fix"];
+
+export function isAdminTrialEligibleTier(tierKey: string): boolean {
+  return ADMIN_TRIAL_ELIGIBLE_TIER_KEYS.includes(tierKey);
+}
+
+/** Every trial's length except an admin-queue trial's: self-serve, the Telegram card and the
+ * provider panel are fixed at this. */
+export const TRIAL_DURATION_DAYS = 7;
+
+/** The lengths the admin queue may pick for a trial (coxwell via marcus, m57759: default 7, 30
+ * must be selectable). A fixed list, not a free integer, so the server refuses anything else
+ * (resolveDecision, access-requests.ts). */
+export const ADMIN_TRIAL_DAY_OPTIONS: readonly number[] = [7, 14, 30];
 
 const TIERS_BY_KEY: Map<string, FeedTierMeta> = new Map(FEED_TIERS.map((t) => [t.key, t]));
 

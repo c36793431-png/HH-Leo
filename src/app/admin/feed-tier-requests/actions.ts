@@ -14,8 +14,9 @@ async function requireAdmin(): Promise<string> {
 
 /** 0086 phase 2 (docs/specs/0086-phase2-code.md sections 3 and 4(d)): the admin decides trial
  * vs paid per line (Source K). paid carries the end date the invoice bought and the invoice
- * ref; trial carries neither -- its end is derived server-side as now() + 7 days (S4), so any
- * submitted date is ignored. The library re-validates; this only shapes the form input. */
+ * ref; trial carries neither -- its end is derived server-side as now() + its length (S4), so
+ * any submitted date is ignored. The length is the admin's pick of 7, 14 or 30 days (m57759).
+ * The library re-validates all of it; this only shapes the form input. */
 export async function approveFeedTierRequestAction(
   _prevState: ActionResult | null,
   formData: FormData
@@ -29,10 +30,12 @@ export async function approveFeedTierRequestAction(
     const invoiceRef = ((formData.get("invoiceRef") as string) ?? "").trim() || null;
     const endsAt = decision === "paid" ? (endsAtRaw ? new Date(endsAtRaw) : null) : null;
     if (decision === "paid" && (!endsAt || Number.isNaN(endsAt.getTime()))) throw new Error("Paid approval needs an end date");
+    const trialDaysRaw = ((formData.get("trialDays") as string) ?? "").trim();
     await approveFeedTierRequest(id, adminId, "https://feed.horizonhft.com/admin/feed-tier-trials", {
       decision,
       endsAt,
       invoiceRef: decision === "paid" ? invoiceRef : null,
+      trialDays: decision === "trial" && trialDaysRaw ? Number(trialDaysRaw) : undefined,
     });
     revalidatePath("/admin/feed-tier-requests");
   });
