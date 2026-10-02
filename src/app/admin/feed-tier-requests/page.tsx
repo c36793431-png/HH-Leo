@@ -1,36 +1,11 @@
 import Link from "next/link";
-import {
-  listFeedTierRequests,
-  FEED_TIER_REQUEST_STATUSES,
-  type FeedTierRequestRow,
-} from "@/lib/feed-tier-requests";
+import { listFeedTierRequests, FEED_TIER_REQUEST_STATUSES } from "@/lib/feed-tier-requests";
 import { listTierWaitlist } from "@/lib/tier-waitlist";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { FeedTierRequestRowActions } from "@/components/admin/feed-tier-request-row-actions";
+import { FeedTierRequestRows } from "@/components/admin/feed-tier-request-rows";
 import { approveFeedTierRequestAction, rejectFeedTierRequestAction } from "./actions";
 
-/** Status vocabulary is pending | approved | rejected since 0086 (Source G(d)); the
- * 'provisioned' filter, stat and style are gone with it. */
 type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number];
-
-const STATUS_STYLES: Record<FeedTierRequestStatus, string> = {
-  pending: "border-amber-500/40 bg-amber-500/15 text-amber-300",
-  approved: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
-  rejected: "border-red-500/40 bg-red-500/15 text-red-300",
-};
-
-function statusStyle(status: FeedTierRequestRow["status"]): string {
-  return STATUS_STYLES[status];
-}
-
-/** Decision cell (spec section 5, Source I + fable P8): copied envelopes carry decision NULL
- * and render "-"; a self-serve trial carries decision 'trial' with no decider and renders
- * "self-serve"; an admin decision shows trial | paid with the end date and invoice ref. */
-function decisionLabel(r: FeedTierRequestRow): string {
-  if (!r.decision) return "—";
-  if (r.decision === "trial" && r.decidedBy === null) return "self-serve";
-  return r.decision;
-}
 
 interface RawSearchParams {
   status?: string;
@@ -205,50 +180,11 @@ export default async function AdminFeedTierRequestsPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
-              {requests.map((r) => (
-                <tr key={r.id}>
-                  <td className="py-2 pr-4 text-zinc-400">
-                    {formatAbsoluteUtc(r.createdAt)} <span className="text-zinc-600">({formatRelative(r.createdAt)})</span>
-                  </td>
-                  <td className="py-2 pr-4 text-zinc-200">
-                    {r.userName ?? "—"}
-                    <div className="text-xs text-zinc-500">{r.userEmail ?? "—"}</div>
-                  </td>
-                  <td className="py-2 pr-4 text-zinc-400">{r.licenseKeyTail ? `…${r.licenseKeyTail}` : "—"}</td>
-                  <td className="py-2 pr-4 text-zinc-300">
-                    {r.tierName}
-                    <div className="text-xs text-zinc-500 uppercase">{r.region}</div>
-                  </td>
-                  <td className="py-2 pr-4 text-zinc-400">
-                    {r.serverName ?? "—"}
-                    <div className="text-xs text-zinc-500">{r.serverIp ?? "—"}</div>
-                  </td>
-                  <td className="py-2 pr-4">
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-xs font-semibold tracking-wide ${statusStyle(r.status)}`}
-                    >
-                      {r.status.toUpperCase()}
-                    </span>
-                    {r.reason && <div className="mt-1 max-w-[12rem] text-xs text-zinc-500">{r.reason}</div>}
-                  </td>
-                  <td className="py-2 pr-4 text-zinc-300">
-                    {decisionLabel(r)}
-                    {r.endsAt && <div className="text-xs text-zinc-500">ends {formatAbsoluteUtc(r.endsAt)}</div>}
-                    {r.invoiceRef && <div className="text-xs text-zinc-500">inv {r.invoiceRef}</div>}
-                  </td>
-                  <td className="py-2">
-                    {r.status === "pending" ? (
-                      <FeedTierRequestRowActions
-                        requestId={r.id}
-                        approveAction={approveFeedTierRequestAction}
-                        rejectAction={rejectFeedTierRequestAction}
-                      />
-                    ) : (
-                      <span className="text-xs text-zinc-600">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              <FeedTierRequestRows
+                requests={requests}
+                approveAction={approveFeedTierRequestAction}
+                rejectAction={rejectFeedTierRequestAction}
+              />
               {requests.length === 0 && (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-zinc-500">
