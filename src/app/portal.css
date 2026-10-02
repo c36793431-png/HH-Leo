@@ -243,6 +243,8 @@
 .portal-shell .content { flex: 1; overflow-y: auto; padding: 26px 28px 60px; max-width: 1160px; width: 100%; margin: 0 auto; }
 /* The signed-out marketplace (public-shell.tsx): the same frame with no sidebar column. */
 .portal-shell.public-shell .app { grid-template-columns: 1fr; }
+.portal-shell.public-shell .topbar .to-main { font-size: 13px; color: var(--hz-ink-2); white-space: nowrap; }
+.portal-shell.public-shell .topbar .to-main:hover { color: var(--hz-ink); }
 
 /* ---- BANNERS ---- */
 .portal-shell .banner { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 12px; margin-bottom: 22px; font-size: 14px; flex-wrap: wrap; }
