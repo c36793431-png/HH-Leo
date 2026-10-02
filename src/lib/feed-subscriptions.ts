@@ -411,6 +411,8 @@ export async function assignPseudonymSeq(
   providerUserId: string,
   subscriberUserId: string
 ): Promise<number> {
+  // Keep the lock and the existing-row SELECT as separate statements: in one query the snapshot
+  // predates the wait and the burn returns (Fable N1, m57824).
   await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
     `provider_client_pseudonyms:${providerUserId}:${subscriberUserId}`,
   ]);
