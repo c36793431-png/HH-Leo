@@ -88,14 +88,19 @@ type IdentityBearing = {
  * subscriber_user_id/email/display_name/telegram get replaced with the same per-(provider,
  * subscriber) pseudonym feed-subscriptions.ts's accounts view uses, per the no-provider-sees-
  * real-identity rule documented there. Falls back to a request/trial-id-derived label (never
- * the real identity) if 0071 hasn't landed yet. */
+ * the real identity) if 0071 hasn't landed yet.
+ * Allocates on view: pseudonymForSubscriber commits a seq for a requester who has none yet. One
+ * call per subscriber, not per row (marcus m57800): a package is one row per tier for the same
+ * requester. */
 async function maskIdentity<T extends IdentityBearing>(providerUserId: string, rows: T[]): Promise<T[]> {
-  return Promise.all(
-    rows.map(async (row) => {
-      const pseudonym = (await pseudonymForSubscriber(providerUserId, row.userId)) ?? `Client ${row.id.slice(0, 8)}`;
-      return { ...row, userEmail: pseudonym, userName: pseudonym, telegramUserId: null };
-    })
+  const subscriberIds = [...new Set(rows.map((row) => row.userId))];
+  const pseudonyms = new Map(
+    await Promise.all(subscriberIds.map(async (id) => [id, await pseudonymForSubscriber(providerUserId, id)] as const))
   );
+  return rows.map((row) => {
+    const pseudonym = pseudonyms.get(row.userId) ?? `Client ${row.id.slice(0, 8)}`;
+    return { ...row, userEmail: pseudonym, userName: pseudonym, telegramUserId: null };
+  });
 }
 
 export async function listPendingRequestsForProvider(providerUserId: string): Promise<FeedTierRequestRow[]> {

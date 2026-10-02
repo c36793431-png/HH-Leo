@@ -395,19 +395,25 @@ export function pseudonymLabel(seq: number): string {
 }
 
 /** Returns this provider-subscriber pair's stable seq, allocating one via a row-locked
- * counter increment on first contact. Must run inside the same open transaction as the
- * subscription insert (see createSubscription) so assignment is a side effect of the
- * subscription being created, never of it being viewed. The counter UPDATE takes a
- * row lock scoped to this provider, so two providers assigning concurrently never race;
- * two concurrent *first* subscriptions for the same (provider, subscriber) pair are
- * resolved by the final on-conflict re-select below rather than by the lock alone.
- * Exported for lib/access-requests.ts (0086 phase 2), which runs it on its own transaction
- * client before the approval insert. */
+ * counter increment on first contact. First contact can be a VIEW, not a grant
+ * (allocate-on-view, kept by marcus m57800): pseudonymForSubscriber below is a committing
+ * read-path caller, so a provider panel render gives a pending requester their HH number.
+ * The grant paths run it inside their own open transaction, before the subscription insert
+ * (createSubscription; approveOnClient in lib/access-requests.ts, 0086 phase 2), so a failed
+ * grant rolls back an allocation it made.
+ * Concurrency: a transaction-scoped advisory lock on the pair is taken before the
+ * existing-row select, so a second concurrent caller for the same pair waits, then sees the
+ * winner's row and returns without bumping the counter (no burned seq). The counter UPDATE
+ * takes a row lock scoped to this provider, so two providers never contend. Lock order is
+ * pair, then counter, and every caller allocates for one pair per transaction. */
 export async function assignPseudonymSeq(
   client: PoolClient,
   providerUserId: string,
   subscriberUserId: string
 ): Promise<number> {
+  await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+    `provider_client_pseudonyms:${providerUserId}:${subscriberUserId}`,
+  ]);
   const existing = await client.query<{ seq: number }>(
     `select seq from provider_client_pseudonyms where provider_user_id = $1 and subscriber_user_id = $2`,
     [providerUserId, subscriberUserId]
@@ -436,9 +442,9 @@ export async function assignPseudonymSeq(
   );
   if (inserted.rowCount) return candidateSeq;
 
-  // Lost the race against a concurrent first-subscription for the same pair --
-  // candidateSeq was burned (a harmless gap in the sequence) and the pair's real,
-  // already-committed seq belongs to whoever won.
+  // A writer that skipped the pair lock (hand SQL) got there first -- candidateSeq was
+  // burned (a harmless gap in the sequence) and the pair's real, already-committed seq
+  // belongs to that row.
   const authoritative = await client.query<{ seq: number }>(
     `select seq from provider_client_pseudonyms where provider_user_id = $1 and subscriber_user_id = $2`,
     [providerUserId, subscriberUserId]
