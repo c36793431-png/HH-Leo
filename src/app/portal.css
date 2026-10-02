@@ -1101,6 +1101,35 @@
 .portal-shell .mkd-included { margin: 0; padding-left: 18px; font-size: 13px; color: var(--hz-ink); line-height: 1.7; }
 .portal-shell .mkd-included ul { margin: 2px 0 6px; padding-left: 18px; list-style: circle; color: var(--hz-ink-2); }
 .portal-shell .mkd-included-label { font-weight: 600; }
+/* A laid-out What's included (included-sections.tsx, m58579 (a)): full width below the grid,
+   one block per section. Strategy cards three across, then two, then one; features two columns,
+   then one. The section icon slot is empty until Iris's set lands. */
+.portal-shell .mkd-included-wide { margin-top: 16px; display: flex; flex-direction: column; gap: 22px; }
+.portal-shell .mkd-included-wide > .mkd-plate-title { margin-bottom: -8px; }
+.portal-shell .mkd-included-line { margin: 0; font-size: 13px; color: var(--hz-ink); line-height: 1.6; }
+.portal-shell .mkd-section-head {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 12px;
+  font-family: var(--hz-disp); font-size: 17px; font-weight: 600; letter-spacing: 0.02em; color: var(--hz-ink);
+}
+.portal-shell .mkd-section-icon { width: 20px; height: 20px; flex: none; }
+.portal-shell .mkd-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.portal-shell .mkd-card {
+  padding: 14px 16px; border-radius: 10px; background: var(--hz-panel-2);
+  border: 1px solid var(--hz-line-soft); border-top: 2px solid var(--hz-card-line);
+}
+.portal-shell .mkd-card-title { font-size: 14px; font-weight: 700; color: var(--hz-ink); margin-bottom: 6px; }
+.portal-shell .mkd-card-body { margin: 0; font-size: 12.5px; color: var(--hz-ink-2); line-height: 1.55; }
+.portal-shell .mkd-card-body::first-letter { text-transform: uppercase; }
+.portal-shell .mkd-ticks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; }
+.portal-shell .mkd-tick { display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: var(--hz-ink-2); line-height: 1.5; }
+.portal-shell .mkd-tick b { font-weight: 600; color: var(--hz-ink); }
+.portal-shell .mkd-tick-mark { flex: none; color: var(--hz-ok); font-weight: 700; }
+@media (max-width: 1100px) {
+  .portal-shell .mkd-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .portal-shell .mkd-cards, .portal-shell .mkd-ticks { grid-template-columns: 1fr; }
+}
 .portal-shell .mkd-request { display: flex; flex-direction: column; gap: 10px; }
 .portal-shell .mkd-request .ftd-unlock,
 .portal-shell .mkd-request .mkd-action { align-self: flex-start; }

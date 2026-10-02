@@ -18,6 +18,7 @@ import { getTierRequestContext } from "@/lib/tier-request-context";
 import { TierRequestControl } from "@/components/feeds/tier-request-control";
 import { ListingFigures, hasListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
 import { ListingMedia } from "@/components/marketplace/listing-media";
+import { IncludedSections } from "@/components/marketplace/included-sections";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
 import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
 
@@ -56,7 +57,8 @@ import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
  * LAYOUT follows Iris's 09-18 product-available.html (m52499–m52503): an identity block, then
  * the product on the left and the Access box on the right. The hero image (with its flag or
  * plate) and What's included come from her 2026-09-23 delivery through the catalogue (m52632),
- * and each renders only when the listing carries it.
+ * and each renders only when the listing carries it. A What's included with laid-out sections
+ * (the terminal's strategy cards and features grid, m58579 (a)) goes full width below both instead.
  *
  * THE COMPARISON sits below both, full width, "for reference" (coxwell via marcus, m52822/m52875):
  * the whole London leaderboard with this listing's own row(s) highlighted, in its marketplace
@@ -123,13 +125,17 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
 
   const figures = listingFigureMembers(listing, members);
   const included = listing.included ?? [];
+  // A laid-out list (the terminal's, m58579 (a)) needs the page's width, so it leaves the left
+  // column for a block of its own below the Access box. Every other list stays where it was.
+  const includedWide = included.some((entry) => typeof entry !== "string" && entry.layout);
   const comparisonOwnRows = scoreNamesForTierKeys(
     listing.scoreTierKey ? [...listing.tierKeys, listing.scoreTierKey] : listing.tierKeys,
   );
   // With no image, spec, figures or included list, the left column is empty and the Access box
   // would float alone at the far right. It takes the left edge instead. No listing hits this since
   // every one carries an image; it guards the next listing added without one.
-  const leftEmpty = !listing.image && !listing.coverage && !hasListingFigures(figures) && included.length === 0;
+  const leftEmpty =
+    !listing.image && !listing.coverage && !hasListingFigures(figures) && (included.length === 0 || includedWide);
   // Signing in returns the visitor to this product page, where the real control is.
   const signInHref = authPageHref("/login", listingDetailHref(listing));
 
@@ -169,7 +175,7 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
               )
             )}
 
-            {included.length > 0 && (
+            {included.length > 0 && !includedWide && (
               <div className="card">
                 <div className="mkd-plate-title">What&apos;s included</div>
                 <ul className="mkd-included">
@@ -236,6 +242,14 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
           )}
         </div>
       </div>
+
+      {includedWide && <IncludedSections included={included} />}
+
+      {/* SLOT, EMPTY ON PURPOSE: the old main site's client feedback and screenshot carousel go
+          here, below What's included (coxwell via marcus, m58579 (b)). HELD by marcus m58607: the
+          extracted cards carry a real trader's first name, payout/PnL figures and @handles, and one
+          image stands for two members, which is coxwell's call. Nothing renders here until he
+          rules; no invented testimonial ever does. */}
 
       {comparisonOwnRows.length > 0 && <FeedComparisonScores variant="marketplace" highlight={comparisonOwnRows} />}
 

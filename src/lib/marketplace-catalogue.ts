@@ -97,7 +97,19 @@ export const MARKETPLACE_AVAILABILITY_LABELS: Record<MarketplaceAvailability, st
 
 /** One "What's included" entry: a line, or a labelled group of lines (the terminal's
  * strategies). */
-export type IncludedLine = string | { label: string; items: string[] };
+export type IncludedLine = string | IncludedSection;
+
+/** A labelled group of lines. `layout` is how the product page draws it, and only the terminal
+ * sets one (coxwell via marcus, m58579 (a)): "cards" is one card per line, the words before its
+ * first " — " as the card's title; "ticks" is a two-column ticked grid. Absent = the nested list.
+ * A listing with any laid-out section gets the whole block full width below the Access box.
+ * `icon` is a section icon under /public, for Iris's set (m58579 (c)). Absent renders nothing. */
+export interface IncludedSection {
+  label: string;
+  items: string[];
+  layout?: "cards" | "ticks";
+  icon?: string;
+}
 
 export interface MarketplaceListing {
   /** Stable render key. Deliberately not a tier_key — several listings have no feed_tiers row. */
@@ -370,9 +382,12 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     //   figure in it. No performance words.
     // - Brokers and feeds read "connects to", because the terminal does not include a feed
     //   licence or a broker account.
+    // Laid out as five strategy cards and a features grid (coxwell via marcus, m58579 (a)). The
+    // lines are the same words: only the "Features" label is new, and it carries no claim.
     included: [
       {
         label: "Strategies",
+        layout: "cards",
         items: [
           "1 Leg — one market order when the gap between the Horizon feed and your broker's price reaches your setting, with a virtual stop-loss, take-profit and trailing stop",
           "2 Leg Lock — on the same gap, a hedged pair with a pending lock leg; the losing leg is released and the other is trailed",
@@ -381,17 +396,23 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
           "Grid Arbitrage — opens a basket on the gap, adds levels at your step and multiplier up to your maximum, and closes the basket at its own take-profit or stop-loss",
         ],
       },
-      "Connects to brokers: MT5, MT4, Rithmic (CME futures) and BloFin (crypto)",
-      "Connects to feeds: Horizon London, New York and Chicago, cTrader FIX (with book depth) and Binance",
-      "Multi-instance: several accounts or symbols in one window, one per tab",
-      "Emergency Close per instance: closes everything on that tab",
-      "Set files: load and save your settings as profiles (.ini)",
-      "Tick recorder (CSV)",
-      "Auto-offset calibration",
-      "Automatic reconnect when a feed stalls",
-      "Lot sizing by risk %",
-      "Telegram alerts",
-      "Windows only — no .NET install needed",
+      {
+        label: "Features",
+        layout: "ticks",
+        items: [
+          "Connects to brokers: MT5, MT4, Rithmic (CME futures) and BloFin (crypto)",
+          "Connects to feeds: Horizon London, New York and Chicago, cTrader FIX (with book depth) and Binance",
+          "Multi-instance: several accounts or symbols in one window, one per tab",
+          "Emergency Close per instance: closes everything on that tab",
+          "Set files: load and save your settings as profiles (.ini)",
+          "Tick recorder (CSV)",
+          "Auto-offset calibration",
+          "Automatic reconnect when a feed stalls",
+          "Lot sizing by risk %",
+          "Telegram alerts",
+          "Windows only — no .NET install needed",
+        ],
+      },
     ],
   },
 ];
