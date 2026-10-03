@@ -226,12 +226,15 @@ export default async function FeedLandingPage() {
               <div className="fl-tl">Capability-graded distribution, L1–L5</div>
             </div>
             <div className="fl-tcell">
-              <div className="fl-tv">Open</div>
-              <div className="fl-tl">Benchmark methodology, published &amp; auditable</div>
+              <div className="fl-tv">Same</div>
+              <div className="fl-tl">One benchmark, run the same way for every feed</div>
             </div>
             <div className="fl-tcell">
               <div className="fl-tv">Measured</div>
-              <div className="fl-tl">Latency &amp; gaps by Horizon, not self-reported — benchmark run, 16 Aug 2026</div>
+              <div className="fl-tl">
+                Latency &amp; gaps by Horizon, not self-reported — Measured Fri 14 Aug 2026, 11:57–21:00 UTC (9
+                market-open hours, XAUUSD)
+              </div>
             </div>
           </div>
         </section>
@@ -265,9 +268,10 @@ export default async function FeedLandingPage() {
             </div>
             <h3>Measured, not claimed</h3>
             <p>
-              Tick rate and gaps are measured by Horizon and shown the same way in our open Feed Comparison
-              — your quality speaks for itself, no invented vendor numbers. Those scores come from a benchmark
-              run, not a continuous monitor: the published set was measured over 51h, 16 Aug 2026.
+              Tick rate and gaps are measured by Horizon and scored the same way for every feed in our{" "}
+              <a href="https://www.horizonhft.com/feeds">Feed Comparison</a> — your quality speaks for itself, no
+              invented vendor numbers. Those scores come from a benchmark run, not a continuous monitor: Measured
+              Fri 14 Aug 2026, 11:57–21:00 UTC (9 market-open hours, XAUUSD).
             </p>
           </div>
           <div className="fl-prop fl-money">

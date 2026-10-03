@@ -1,4 +1,5 @@
-// Static leaderboard from FOC13's 51h feed analysis (2026-08-16), authoritative per marcus.
+// Static leaderboard; scores per coxwell ruling 2026-10-02; public label = "Measured Fri 14 Aug
+// 2026, 11:57–21:00 UTC (9 market-open hours, XAUUSD)", the same everywhere it is shown.
 // Sub-component (Speed/Consistency/Stream) splits are only confirmed for Black, Alpha's
 // stream figure, Delta, and Epsilon — see notes. Do not invent splits for the rest.
 export type FeedScoreEntry = {

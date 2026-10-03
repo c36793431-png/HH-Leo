@@ -26,7 +26,7 @@ export function FeedComparisonScores({
   return (
     <div className={`card full fcs${marketplace ? " fcs-embed" : ""}`}>
       <h3 className="fp-section-title">🇬🇧 London Feed Comparison Scores</h3>
-      <p className="fcs-measured-on">Measured over 51h, 16 Aug 2026</p>
+      <p className="fcs-measured-on">Measured Fri 14 Aug 2026, 11:57–21:00 UTC (9 market-open hours, XAUUSD)</p>
 
       <div className="fcs-legend">
         <span className="fcs-legend-item">

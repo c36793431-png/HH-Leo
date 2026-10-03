@@ -178,6 +178,7 @@
 .fl-prop.fl-money .fl-pic { background: var(--fl-earn-soft); border-color: var(--fl-earn-line); color: var(--fl-earn); }
 .fl-prop h3 { font-family: var(--fl-disp); font-weight: 700; font-size: 19px; letter-spacing: 0.01em; display: flex; align-items: center; gap: 9px; }
 .fl-prop p { font-size: 13px; color: var(--fl-ink-2); line-height: 1.55; margin-top: 7px; }
+.fl-prop p a { color: var(--fl-cyan); text-decoration: underline; text-underline-offset: 2px; }
 
 /* programme band */
 .fl-provband { max-width: 1200px; width: 100%; margin: 40px auto 0; padding: 0 40px; }
