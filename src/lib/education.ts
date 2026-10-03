@@ -37,6 +37,10 @@ export type EducationLesson = {
   free: boolean;
   /** Manual section number, 1-12, per the Horizon HFT User Tutorial v1.91. */
   section: number;
+  /** Title/description for the public catalogue (publicEducationCatalogue), where they differ from
+   * the signed-in portal's. Set only where the portal copy carries a do-not-publish term. */
+  publicTitle?: string;
+  publicDescription?: string;
   /** Single intro paragraph — shown on locked cards and as the opener on full lessons. */
   intro: string;
   blocks: EducationBlock[];
@@ -330,13 +334,15 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     ],
   },
   {
-    slug: "timing-protection-and-stealth",
+    slug: "timing-protection",
     title: "Timing/Protection & Stealth",
     description: "Trade pacing, real vs. virtual stops, auto-offset, and the Order Mixer.",
     category: "advanced",
     minutes: 12,
     free: true,
     section: 11,
+    publicTitle: "Timing & Protection",
+    publicDescription: "Trade pacing, real vs. virtual stops, and auto-offset.",
     intro:
       "A cluster of protective settings governs how often Horizon trades, how it manages stops, and how it disguises its footprint with brokers.",
     blocks: [
@@ -420,6 +426,18 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
 
 export function getEducationLesson(slug: string): EducationLesson | undefined {
   return EDUCATION_LESSONS.find((lesson) => lesson.slug === slug);
+}
+
+/** Old slug -> current slug, for lessons that were renamed. /education/<old> 308s to the current
+ * page so bookmarks keep working. No lesson progress is stored anywhere (nothing in the DB is
+ * keyed by lesson slug), so a rename only has to carry the URL.
+ * - timing-protection-and-stealth: "stealth" is on the do-not-publish list (marcus, m59051). */
+const RENAMED_LESSON_SLUGS: ReadonlyMap<string, string> = new Map([
+  ["timing-protection-and-stealth", "timing-protection"],
+]);
+
+export function renamedLessonSlug(slug: string): string | undefined {
+  return RENAMED_LESSON_SLUGS.get(slug);
 }
 
 /** A lesson's page. Single spelling of the route so the catalogue's card link and the sign-in

@@ -1,17 +1,20 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getReachablePanels } from "@/lib/user-roles";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { LessonDetail } from "@/components/education/lesson-detail";
-import { getEducationLesson, lessonHref } from "@/lib/education";
+import { getEducationLesson, lessonHref, renamedLessonSlug } from "@/lib/education";
 import { authPageHref } from "@/lib/post-auth-redirect";
 
 export default async function EducationLessonPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const lesson = getEducationLesson(slug);
+  // Before the auth check, so a signed-out bookmark of the old URL lands on the new one after sign-in.
+  const renamed = renamedLessonSlug(slug);
+  const lesson = getEducationLesson(renamed ?? slug);
   if (!lesson) notFound();
+  if (renamed) permanentRedirect(lessonHref(lesson));
 
   const session = await auth();
   // Built from the catalogue object, not the URL param: an unknown slug has already 404'd above.

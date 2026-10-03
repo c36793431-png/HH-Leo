@@ -83,7 +83,7 @@ export default async function WhatsIncludedPage() {
   ]).concat(pickBlocks("fast-feed", ["What It Is", "Why the Data Advantage Matters"]));
 
   const riskBlocks = pickBlocks("risk-and-lot-sizing", ["FixedLot vs. Risk% (Auto-Lot)", "TrendFilter (EMA)"]).concat(
-    pickBlocks("timing-protection-and-stealth", ["Timing & Protection", "Order Mixer"]),
+    pickBlocks("timing-protection", ["Timing & Protection", "Order Mixer"]),
   );
 
   const toolsBlocks = pickBlocks("tools-and-troubleshooting", ["Tick Recorder"]).concat(
