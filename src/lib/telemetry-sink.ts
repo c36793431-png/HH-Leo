@@ -403,6 +403,38 @@ export async function notifyStrategySubmissionSubmitted(opts: {
   );
 }
 
+/** One card per basket submit (marcus m59146; draft m59142, trial moved to the basket level).
+ * No buttons: a basket request grants nothing, so there is nothing to approve. coxwell fulfils
+ * by hand and marks it handled on the admin page. */
+export async function notifyBasketRequestSubmitted(opts: {
+  reference: string;
+  email: string | null;
+  telegramUsername: string | null;
+  telegramUserId: string | null;
+  lines: { kind: string; name: string; servers?: number; note?: string }[];
+  hasTrial: boolean;
+  adminUrl: string;
+}): Promise<void> {
+  const lineText = opts.lines
+    .map((l) => {
+      const what = l.kind === "feed" ? `feed, ${l.servers ?? 1} server${(l.servers ?? 1) === 1 ? "" : "s"}` : l.kind;
+      // The strategy note ("included with a Horizon licence") is for the client; coxwell knows it.
+      const note = l.kind === "feed" && l.note ? `: ${l.note}` : "";
+      return `• ${l.name} (${what})${note}`;
+    })
+    .join("\n");
+  await sendApprovalsTopicMessage(
+    `🧺 new basket request ${opts.reference}\n` +
+      `email: ${opts.email ?? "-"}\n` +
+      `${telegramLine(opts.telegramUsername, opts.telegramUserId)}\n` +
+      `lines (${opts.lines.length}):\n` +
+      `${lineText}\n` +
+      `trial: ${opts.hasTrial ? "30-day trial requested (first on this account)" : "none"}\n` +
+      `nothing granted, fulfil by hand then mark handled:\n` +
+      `${opts.adminUrl}`
+  );
+}
+
 export async function notifyFeedTierRequestSubmitted(opts: {
   /** ONE envelope (the batch's first row). Both buttons below carry it, which is why a
    * bundle of more than one gets no buttons at all -- see memberTierNames. */
