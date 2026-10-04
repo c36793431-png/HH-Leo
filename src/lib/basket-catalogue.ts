@@ -1,4 +1,5 @@
 import { FEED_REGION_LABELS, feedTierMeta } from "./feed-tier-catalogue";
+import { MAIN_SITE_URL } from "./main-site";
 import { MARKETPLACE_LISTINGS, listingByKey, listingDetailHref, tierAvailability, type ListingMark } from "./marketplace-catalogue";
 import { STRATEGY_DISPLAY_META } from "./strategy-catalogue";
 import type { StrategyKey } from "./setfiles";
@@ -28,6 +29,9 @@ interface BasketStrategyEntry {
   strategyKeys: StrategyKey[];
   /** Overrides meta.name, for a package. Absent = the one strategy's meta.name. */
   name?: string;
+  /** The card's own image, a file under /public (marcus m59621: Iris is drawing one per
+   * strategy). Absent = the shared "Strategy" plate. */
+  image?: string;
 }
 
 export const BASKET_STRATEGY_ENTRIES: BasketStrategyEntry[] = [
@@ -56,6 +60,14 @@ export function strategyEntryKeyForSlug(slug: string | undefined): string | null
   return BASKET_STRATEGY_ENTRIES.find((e) => e.strategyKeys.includes(strategyKey))?.key ?? null;
 }
 
+/** The www page that explains a strategy entry (marcus m59621): one strategy -> its own
+ * /strategies/<slug>, from the slug map above; a package, or a key with no slug -> the list. */
+function strategyAboutHref(e: BasketStrategyEntry): string {
+  const only = e.strategyKeys.length === 1 ? e.strategyKeys[0] : null;
+  const slug = only ? [...STRATEGY_PUBLIC_SLUGS].find(([, k]) => k === only)?.[0] : undefined;
+  return slug ? `${MAIN_SITE_URL}/strategies/${slug}` : `${MAIN_SITE_URL}/strategies`;
+}
+
 /** A basket-able product as the shelf, the product page and the basket render it. Plain data. */
 export interface BasketEntry {
   kind: BasketLineKind;
@@ -70,6 +82,8 @@ export interface BasketEntry {
   image?: string;
   mark?: ListingMark;
   detailHref?: string;
+  /** A strategy's "See more" target on www. Not detailHref: that one also links the basket line. */
+  aboutHref?: string;
 }
 
 /** A strategy's type, as its meta.name spells it after the dash ("1 LEG — Latency Arbitrage" ->
@@ -89,6 +103,8 @@ function strategyEntry(e: BasketStrategyEntry): BasketEntry {
     name: e.name ?? first.name,
     chips: type ? [`Strategy ${type}`] : [],
     blurb: e.strategyKeys.length === 1 ? first.hook : e.strategyKeys.map((k) => STRATEGY_DISPLAY_META[k].name).join(" · "),
+    image: e.image,
+    aboutHref: strategyAboutHref(e),
   };
 }
 

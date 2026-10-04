@@ -1349,6 +1349,7 @@
     linear-gradient(transparent calc(50% - 1px), rgba(45, 226, 230, 0.55) calc(50% - 1px) calc(50% + 0px), transparent calc(50% + 0px)),
     linear-gradient(180deg, rgba(45, 226, 230, 0.10), rgba(4, 10, 14, 0.9));
 }
+.portal-shell .bk-strategy-image { display: block; width: 100%; object-fit: cover; background: none; }
 .portal-shell .bk-strategy-plate span {
   position: absolute; right: 12px; bottom: 10px; font-family: var(--hz-mono); font-size: 10px; letter-spacing: 0.18em;
   text-transform: uppercase; color: var(--hz-ink-3);

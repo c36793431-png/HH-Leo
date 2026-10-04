@@ -178,6 +178,24 @@ test("?strategy=: each of www's five slugs lands on its entry; anything else lan
   }
 });
 
+test("See more: each strategy card links to its own www page; the basket line stays unlinked; no card image yet", () => {
+  const strategies = cat.basketCatalogue().filter((e) => e.kind === "strategy");
+  assert.deepEqual(
+    strategies.map((e) => [e.key, e.aboutHref]),
+    [
+      ["1leg", "https://www.horizonhft.com/strategies/1-leg"],
+      ["2leg_lock", "https://www.horizonhft.com/strategies/2-leg-lock"],
+      ["trend_impulse", "https://www.horizonhft.com/strategies/trend-impulse"],
+      ["obi", "https://www.horizonhft.com/strategies/order-book-imbalance"],
+      ["grid", "https://www.horizonhft.com/strategies/grid-arbitrage"],
+    ],
+  );
+  for (const e of strategies) {
+    assert.equal(e.detailHref, undefined, e.key);
+    assert.equal(e.image, undefined, e.key);
+  }
+});
+
 // ---- trial predicate ----
 
 test("trial: a fresh account is eligible; each of the five sources alone makes it ineligible", async () => {

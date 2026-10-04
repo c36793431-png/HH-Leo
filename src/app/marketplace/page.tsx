@@ -182,7 +182,6 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
   // basket's strategy entries, data-driven so a "Base Strategy package" can replace them. Not a
   // MarketplaceCategory: the listings stay software|feeds, and this section is the basket's.
   const strategyEntries = catalogue.filter((e) => e.kind === "strategy");
-  const strategiesHref = user ? "/strategies" : `${MAIN_SITE_URL}/strategies`;
   // ?strategy=<www slug> (marcus m59280). Unknown or repeated params resolve to null: no effect.
   const preselectKey = strategyEntryKeyForSlug(typeof strategy === "string" ? strategy : undefined);
   if (strategyEntries.length > 0) {
@@ -197,13 +196,18 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
           <div className="mkt-grid">
             {strategyEntries.map((e) => (
               <div key={e.key} id={`strategy-${e.key}`} className="card mkt-card mkt-available bk-strategy-card">
-                <div className="bk-strategy-plate" aria-hidden="true">
-                  <span>Strategy</span>
-                </div>
+                {e.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="bk-strategy-plate bk-strategy-image" src={e.image} alt="" />
+                ) : (
+                  <div className="bk-strategy-plate" aria-hidden="true">
+                    <span>Strategy</span>
+                  </div>
+                )}
                 <h3 className="mkt-name">{e.name}</h3>
                 <p className="mkt-desc">{e.blurb}</p>
                 <div className="mkt-foot bk-foot">
-                  <Link href={strategiesHref} className="btn ghost sm mkt-cta">
+                  <Link href={e.aboutHref ?? `${MAIN_SITE_URL}/strategies`} className="btn ghost sm mkt-cta">
                     See more →
                   </Link>
                   <AddToBasketButton kind="strategy" keyName={e.key} name={e.name} />
