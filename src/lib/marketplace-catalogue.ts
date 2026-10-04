@@ -395,6 +395,12 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     //   Lock". OBI is "Order Book Imbalance" since 2.0.7 (NewUI.cs:335; "Block" was the 2.0.5
     //   label, renamed in 493bd69), and it reads prices only: START refuses it unless the fast
     //   feed is Horizon CME, which never delivers depth (FOC12 at 490b588, via marcus m59705).
+    // - 2 Leg Lock re-locks the remaining leg with broker pending orders (InjectPendingNetwork,
+    //   TradingTabInstance.cs:3277), and the client-side code skips 2 Leg Lock while
+    //   hedgeState != 4 (:3400). Horizon manages the leg with a disaster stop and a trailing
+    //   stop only when the broker refuses those orders (VIRTUAL MODE, :3361/:3380). The old
+    //   line ("the other is trailed") described only that fallback. FOC12 at 2.0.7 490b588,
+    //   via marcus m59733/m59736.
     // - No NinjaTrader: the code has no reference to it.
     // - Emergency Close is per instance, since ForceCloseAllTrades closes one tab.
     // - Set files are load and save only. They hold broker passwords in plaintext today, so
@@ -411,7 +417,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
         layout: "cards",
         items: [
           "1 Leg — one market order when the gap between the Horizon feed and your broker's price reaches your setting, with a virtual stop-loss, take-profit and trailing stop",
-          "2 Leg Lock — on the same gap, a hedged pair with a pending lock leg; the losing leg is released and the other is trailed",
+          "2 Leg Lock — On the same gap, a hedged pair: when the fast feed leads by your Exec Gap it closes the wrong side, then re-locks the remaining leg with broker pending orders at its target and stop. If the broker refuses those orders, Horizon manages the leg itself with a broker disaster stop and a trailing stop",
           "Trend Impulse — trades in the direction of a move in the Horizon feed that reaches your size within your time window, with an EMA trend filter",
           "Order Book Imbalance — trades the fast-feed price lead on one side of the book (bid or ask) while the other side holds; it does not read order-book volume",
           "Grid Arbitrage — opens a basket on the gap, adds levels at your step and multiplier up to your maximum, and closes the basket at its own take-profit or stop-loss",
