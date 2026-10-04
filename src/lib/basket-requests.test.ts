@@ -156,6 +156,16 @@ test("catalogue: what the basket offers is exactly the available listings plus t
   ]);
 });
 
+test("?strategy=: each of www's five slugs lands on its entry; anything else lands on nothing", () => {
+  assert.deepEqual(
+    ["1-leg", "2-leg-lock", "trend-impulse", "order-book-imbalance", "grid-arbitrage"].map(cat.strategyEntryKeyForSlug),
+    ["1leg", "2leg_lock", "trend_impulse", "obi", "grid"],
+  );
+  for (const slug of [undefined, "", "1leg", "obi", "1-Leg", "constructor", "__proto__", "grid-arbitrage "]) {
+    assert.equal(cat.strategyEntryKeyForSlug(slug), null, String(slug));
+  }
+});
+
 // ---- trial predicate ----
 
 test("trial: a fresh account is eligible; each of the five sources alone makes it ineligible", async () => {

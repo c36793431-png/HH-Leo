@@ -38,6 +38,24 @@ export const BASKET_STRATEGY_ENTRIES: BasketStrategyEntry[] = [
   { key: "grid", strategyKeys: ["grid"] },
 ];
 
+/** The main site's /software strategy cards link to /marketplace?strategy=<slug> (marcus m59280).
+ * Its slugs, as www spells them, to the portal's strategy keys. */
+const STRATEGY_PUBLIC_SLUGS = new Map<string, StrategyKey>([
+  ["1-leg", "1leg"],
+  ["2-leg-lock", "2leg_lock"],
+  ["trend-impulse", "trend_impulse"],
+  ["order-book-imbalance", "obi"],
+  ["grid-arbitrage", "grid"],
+]);
+
+/** The basket strategy entry a www slug lands on: the entry that carries that strategy, so a
+ * package entry takes over its strategies' links with no change here. Null for an unknown slug. */
+export function strategyEntryKeyForSlug(slug: string | undefined): string | null {
+  const strategyKey = slug ? STRATEGY_PUBLIC_SLUGS.get(slug) : undefined;
+  if (!strategyKey) return null;
+  return BASKET_STRATEGY_ENTRIES.find((e) => e.strategyKeys.includes(strategyKey))?.key ?? null;
+}
+
 /** A basket-able product as the shelf, the product page and the basket render it. Plain data. */
 export interface BasketEntry {
   kind: BasketLineKind;

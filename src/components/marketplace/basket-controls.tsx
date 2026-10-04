@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ShoppingBasket } from "lucide-react";
 import type { BasketLineKind } from "@/lib/basket-catalogue";
 import { basketPut, useBasket } from "@/lib/basket-store";
@@ -53,6 +53,19 @@ export function AddToBasketButton({ kind, keyName, name }: { kind: BasketLineKin
       + Add to basket
     </button>
   );
+}
+
+/** /marketplace?strategy=<slug> (marcus m59280): the main site's strategy cards land here with
+ * that strategy added and its card in view. The page resolves the slug, so an unknown one never
+ * mounts this. basketPut replaces a same-product line, so a reload doesn't add it twice. */
+export function StrategyPreselect({ keyName }: { keyName: string }) {
+  useEffect(() => {
+    basketPut({ kind: "strategy", key: keyName });
+    (document.getElementById(`strategy-${keyName}`) ?? document.getElementById("strategies"))?.scrollIntoView({
+      block: "center",
+    });
+  }, [keyName]);
+  return null;
 }
 
 /**

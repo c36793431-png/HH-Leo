@@ -25,8 +25,8 @@ import {
 } from "@/components/marketplace/marketplace-category-filter";
 import { ListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
 import { ListingMedia } from "@/components/marketplace/listing-media";
-import { AddToBasketButton } from "@/components/marketplace/basket-controls";
-import { basketCatalogue } from "@/lib/basket-catalogue";
+import { AddToBasketButton, StrategyPreselect } from "@/components/marketplace/basket-controls";
+import { basketCatalogue, strategyEntryKeyForSlug } from "@/lib/basket-catalogue";
 import { MAIN_SITE_URL } from "@/lib/main-site";
 
 /**
@@ -66,7 +66,8 @@ import { MAIN_SITE_URL } from "@/lib/main-site";
  * chip is a claim that a product is on its way, which is the same claim this catalogue already
  * declines to make about Tokyo without a ruling (marcus, m50723). It is coxwell's word to give.
  */
-export default async function MarketplacePage() {
+export default async function MarketplacePage({ searchParams }: { searchParams: Promise<{ strategy?: string | string[] }> }) {
+  const { strategy } = await searchParams;
   const session = await auth();
   // No account is a public visitor now, not a redirect to /login.
   const user = session?.user?.id ? session.user : null;
@@ -182,6 +183,8 @@ export default async function MarketplacePage() {
   // MarketplaceCategory: the listings stay software|feeds, and this section is the basket's.
   const strategyEntries = catalogue.filter((e) => e.kind === "strategy");
   const strategiesHref = user ? "/strategies" : `${MAIN_SITE_URL}/strategies`;
+  // ?strategy=<www slug> (marcus m59280). Unknown or repeated params resolve to null: no effect.
+  const preselectKey = strategyEntryKeyForSlug(typeof strategy === "string" ? strategy : undefined);
   if (strategyEntries.length > 0) {
     sections.push({
       key: "strategies",
@@ -193,7 +196,7 @@ export default async function MarketplacePage() {
           </h2>
           <div className="mkt-grid">
             {strategyEntries.map((e) => (
-              <div key={e.key} className="card mkt-card mkt-available bk-strategy-card">
+              <div key={e.key} id={`strategy-${e.key}`} className="card mkt-card mkt-available bk-strategy-card">
                 <div className="bk-strategy-plate" aria-hidden="true">
                   <span>Strategy</span>
                 </div>
@@ -208,6 +211,7 @@ export default async function MarketplacePage() {
               </div>
             ))}
           </div>
+          {preselectKey && <StrategyPreselect keyName={preselectKey} />}
         </div>
       ),
     });
