@@ -28,6 +28,9 @@ const CALLBACK_PARAM = "callbackUrl";
 const CALLBACK_ALLOWLIST: readonly string[] = [
   "/marketplace",
   ...MARKETPLACE_LISTINGS.map(listingDetailHref),
+  // The request basket's "Sign in to send →" and My requests (marcus m59146).
+  "/marketplace/basket",
+  "/marketplace/requests",
   "/education",
   ...EDUCATION_LESSONS.map(lessonHref),
 ];

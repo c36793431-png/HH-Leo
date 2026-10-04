@@ -21,6 +21,8 @@ import { ListingMedia } from "@/components/marketplace/listing-media";
 import { IncludedSections } from "@/components/marketplace/included-sections";
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
 import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
+import { basketEntry } from "@/lib/basket-catalogue";
+import { BasketAddBox } from "@/components/marketplace/basket-controls";
 
 /**
  * /marketplace/[key]: the product page behind every shelf card's "See more →" (coxwell
@@ -123,6 +125,7 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
         }))
       : null;
 
+  const basket = basketEntry(listing.category === "feeds" ? "feed" : "software", listing.key);
   const figures = listingFigureMembers(listing, members);
   const included = listing.included ?? [];
   // A laid-out list (the terminal's, m58579 (a)) needs the page's width, so it leaves the left
@@ -199,6 +202,7 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
           </div>
         )}
 
+        <div className="mkd-side">
         <div id="request" className="card mkd-request">
           <div className="mkd-plate-title">Access</div>
           {!user && action ? (
@@ -247,6 +251,12 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
               {listing.moreInfo.label}
             </a>
           )}
+        </div>
+        {/* The request basket (Iris sheet 2, marcus m59146), under the Access box rather than in
+            its place: the listing's own request stays the tracked path. Only a listing the basket
+            can carry gets it, so Black, Alpha and Ultra show none. Signed out too: a visitor adds
+            here and signs in at send. */}
+        {basket && <BasketAddBox kind={basket.kind} keyName={basket.key} name={basket.name} chips={basket.chips} />}
         </div>
       </div>
 

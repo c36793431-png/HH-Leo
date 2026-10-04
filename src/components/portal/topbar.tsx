@@ -2,6 +2,14 @@
 
 import { usePathname } from "next/navigation";
 import type { AdminSurface } from "./sidebar";
+import { BasketNavButton } from "@/components/marketplace/basket-controls";
+import { useBasket } from "@/lib/basket-store";
+
+function TopbarBasket({ alwaysShow }: { alwaysShow: boolean }) {
+  const count = useBasket().length;
+  if (!alwaysShow && count === 0) return null;
+  return <BasketNavButton />;
+}
 
 const TITLES: Record<string, { title: string; crumb: string }> = {
   "/dashboard": { title: "Dashboard", crumb: "dashboard" },
@@ -79,6 +87,9 @@ export function PortalTopbar({
       <div className="tconn">
         <span className="d" /> Live
       </div>
+      {/* The request basket (Iris sheet 1): on the marketplace pages, and on any page while the
+          basket holds something. Admins don't request. */}
+      {!isAdmin && <TopbarBasket alwaysShow={pathname === "/marketplace" || pathname.startsWith("/marketplace/")} />}
     </header>
   );
 }

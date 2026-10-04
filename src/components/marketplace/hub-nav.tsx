@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { MAIN_SITE_URL } from "@/lib/main-site";
+import { BasketNavButton } from "@/components/marketplace/basket-controls";
 
 /**
  * The main site's top nav, on the signed-out marketplace (coxwell via marcus, m58986): the main
@@ -146,11 +147,15 @@ export function HubNav({ signInHref }: { signInHref: string }) {
             Marketplace
           </Link>
           <a href={CHANGELOG_HREF}>Changelog</a>
+          <BasketNavButton className="hn-basket" />
           <Link href={signInHref} className="hn-login">
             Sign in
           </Link>
         </nav>
         <div className="hn-right">
+          {/* The request basket, signed out too: a visitor builds it here and signs in to send.
+              One copy in the full nav, one here for the narrow header; CSS shows one at a time. */}
+          <BasketNavButton className="hn-basket" />
           <Link href={signInHref} className="hn-login">
             Sign in
           </Link>

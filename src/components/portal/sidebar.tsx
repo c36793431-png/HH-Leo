@@ -37,6 +37,7 @@ import {
   UserPlus,
   ClipboardCheck,
   Store,
+  ShoppingBasket,
   type LucideIcon,
 } from "lucide-react";
 
@@ -85,6 +86,7 @@ const PORTAL_ADMIN_LINKS = [
   { href: "/admin/licenses", label: "Licenses", icon: Server },
   { href: "/admin/downloads", label: "Publish builds", icon: Upload },
   { href: "/admin/applications", label: "Applications", icon: ClipboardList },
+  { href: "/admin/basket-requests", label: "Basket requests", icon: ShoppingBasket },
   { href: "/admin/strategy-requests", label: "Strategy requests", icon: Zap },
   { href: "/admin/strategy-submissions", label: "Strategy submissions", icon: BookMarked },
   { href: "/admin/history", label: "History", icon: History },
@@ -106,6 +108,8 @@ const FEED_ADMIN_LINKS = [
   { href: "/admin/accounts", label: "Accounts", icon: CircleUser },
   { href: "/admin/feed-health", label: "Feed health", icon: Radar, soon: true },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
+
+const MY_REQUESTS_HREF = "/marketplace/requests";
 
 function isActive(pathname: string, href: string): boolean {
   const [path] = href.split("#");
@@ -148,6 +152,7 @@ export function PortalSidebar({
   switchablePanels?: PanelLink[];
 }) {
   const pathname = usePathname();
+  const myRequestsActive = isActive(pathname, MY_REQUESTS_HREF);
   const initial = (userName.trim()[0] ?? "?").toUpperCase();
   const tierLabel = tier === "admin" ? "Admin" : tier === "team" ? "Team" : tier === "trial" ? "Trial" : tier === "paid" ? "Active" : "Free";
   const tierClass = tier === "free" ? "" : tier;
@@ -218,11 +223,11 @@ export function PortalSidebar({
               const active = isActive(pathname, link.href);
               const isNew = "isNew" in link && link.isNew && TRADING_IS_NEW;
               const Icon = link.icon;
-              return (
+              const item = (
                 <Link
                   key={link.href}
                   href={locked && !lockedStaysOnPage ? "/dashboard#downloads" : link.href}
-                  className={locked ? "locked" : active ? "on" : undefined}
+                  className={locked ? "locked" : active && !(link.href === "/marketplace" && myRequestsActive) ? "on" : undefined}
                   style={{ "--item-color": link.color } as React.CSSProperties}
                 >
                   <span className="ic"><Icon size={18} strokeWidth={1.75} /></span> {link.label}
@@ -231,6 +236,19 @@ export function PortalSidebar({
                   {unlocked && <span className="crown" aria-label="Included in your plan">👑</span>}
                 </Link>
               );
+              // "My requests" sits under Marketplace (Iris r2 sheet 1): the client's sent baskets.
+              if (link.href !== "/marketplace") return item;
+              return [
+                item,
+                <Link
+                  key={MY_REQUESTS_HREF}
+                  href={MY_REQUESTS_HREF}
+                  className={`sub${myRequestsActive ? " on" : ""}`}
+                  style={{ "--item-color": link.color } as React.CSSProperties}
+                >
+                  My requests
+                </Link>,
+              ];
             })}
           </>
         )}

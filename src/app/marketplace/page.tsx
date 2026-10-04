@@ -25,6 +25,9 @@ import {
 } from "@/components/marketplace/marketplace-category-filter";
 import { ListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
 import { ListingMedia } from "@/components/marketplace/listing-media";
+import { AddToBasketButton } from "@/components/marketplace/basket-controls";
+import { basketCatalogue } from "@/lib/basket-catalogue";
+import { MAIN_SITE_URL } from "@/lib/main-site";
 
 /**
  * /marketplace — the catalogue of what Horizon sells (coxwell via marcus, 2026-09-14).
@@ -86,6 +89,11 @@ export default async function MarketplacePage() {
     ({ listing, members }) => listing.tierKeys.length === 0 || members.length > 0
   );
 
+  // What the request basket can carry today (available listings + strategies), from the same
+  // catalogue the submit action validates against.
+  const catalogue = basketCatalogue();
+  const basketable = new Set(catalogue.filter((e) => e.kind !== "strategy").map((e) => e.key));
+
   const sections: MarketplaceSection[] = MARKETPLACE_CATEGORY_ORDER.flatMap((category) => {
     const inCategory = listings.filter(({ listing }) => listing.category === category);
     // Available first, then every other state (coxwell 2026-10-02 via marcus, m58658). Two
@@ -139,14 +147,25 @@ export default async function MarketplacePage() {
 
                     <ListingFigures members={listingFigureMembers(listing, members)} />
 
-                    {/* ONE control per card, the same on every card and in the same place,
-                        bottom-right (coxwell via marcus, m52589). The listing's own action lives on
-                        its product page, so a Not available card still has See more but its page
-                        offers nothing to request. */}
-                    <div className="mkt-foot">
+                    {/* See more on every card, in the same place (coxwell via marcus, m52589). The
+                        request basket adds "+ Add to basket" beside it on a card the basket can
+                        carry (Iris sheet 1, marcus m59146); a card it can't carry gets a sentence,
+                        not a greyed-out button. The listing's own action stays on its product page. */}
+                    <div className="mkt-foot bk-foot">
                       <Link href={detailHref} className="btn ghost sm mkt-cta">
                         See more →
                       </Link>
+                      {basketable.has(listing.key) ? (
+                        <AddToBasketButton
+                          kind={listing.category === "feeds" ? "feed" : "software"}
+                          keyName={listing.key}
+                          name={listing.title}
+                        />
+                      ) : (
+                        <span className="bk-foot-note">
+                          {listing.availability === "maintenance" ? "Paused for maintenance." : "Nothing to add right now."}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -157,6 +176,42 @@ export default async function MarketplacePage() {
       },
     ];
   });
+
+  // Strategies as a live section under the shelf (Iris r2 sheet 1; marcus m59146/m59173): the
+  // basket's strategy entries, data-driven so a "Base Strategy package" can replace them. Not a
+  // MarketplaceCategory: the listings stay software|feeds, and this section is the basket's.
+  const strategyEntries = catalogue.filter((e) => e.kind === "strategy");
+  const strategiesHref = user ? "/strategies" : `${MAIN_SITE_URL}/strategies`;
+  if (strategyEntries.length > 0) {
+    sections.push({
+      key: "strategies",
+      label: "Strategies",
+      content: (
+        <div key="strategies" id="strategies" className="fp-section mkt-section">
+          <h2 className="fp-section-title">
+            Strategies <span className="bk-section-note">Included with a Horizon licence — add the ones you want and we&apos;ll set them up with you</span>
+          </h2>
+          <div className="mkt-grid">
+            {strategyEntries.map((e) => (
+              <div key={e.key} className="card mkt-card mkt-available bk-strategy-card">
+                <div className="bk-strategy-plate" aria-hidden="true">
+                  <span>Strategy</span>
+                </div>
+                <h3 className="mkt-name">{e.name}</h3>
+                <p className="mkt-desc">{e.blurb}</p>
+                <div className="mkt-foot bk-foot">
+                  <Link href={strategiesHref} className="btn ghost sm mkt-cta">
+                    See more →
+                  </Link>
+                  <AddToBasketButton kind="strategy" keyName={e.key} name={e.name} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    });
+  }
 
   const signInHref = authPageHref("/login", "/marketplace");
   const page = (
