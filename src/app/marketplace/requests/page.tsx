@@ -10,8 +10,8 @@ import { listBasketRequests } from "@/lib/basket-requests";
 import { formatAbsoluteUtc } from "@/lib/format-time";
 
 /**
- * /marketplace/requests: "My requests" (Iris r2 sheet 3; marcus m59173 item 6). /requests is the
- * feature board, so this lives under the marketplace. One row per basket sent, newest first, its
+ * /marketplace/requests: "My requests" (Iris r2 sheet 3; marcus m59173 item 6). Basket requests
+ * only; it is not a feature-request board. One row per basket sent, newest first, its
  * lines listed, status Sent (cyan) or Handled (neutral grey, never green: handled can include a
  * no). Read-only; signed-in only.
  */
