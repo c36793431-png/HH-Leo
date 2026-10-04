@@ -13,7 +13,7 @@ import { LicenseStatusCompact } from "@/components/license-status-card";
  *
  * Licensed (coxwell 2026-09-24 ~00:2xZ via marcus, m53069: "above the license still now missing so
  * they can pick like feeds"): the dashboard's licence card, compact; the dashboard's four Signal
- * Feed cards with their live state and the same Upgrade/See tiers links; and Downloads, kept as a
+ * Feed cards with their live state and the same See tiers / View feeds links; and Downloads, kept as a
  * button. Everyone else: Request access to Telegram, unchanged from 9c831bf (m53009 (a)).
  */
 export function TerminalAccessBox({
@@ -47,7 +47,7 @@ export function TerminalAccessBox({
         <div className="mkd-feeds-head">
           <span className="mkd-plate-title">Signal feeds</span>
           <span className="mkd-feeds-count">
-            {activeCount} of {feeds.length} active
+            {activeCount} of {feeds.length} activated
           </span>
         </div>
         {feeds.map((f) => (

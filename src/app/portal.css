@@ -483,15 +483,6 @@
 }
 .portal-shell .srv-srow:hover { background: var(--hz-panel-2); }
 .portal-shell .srv-srow + .srv-srow,
-.portal-shell .srv-seen + .srv-srow { border-top: 1px solid var(--hz-line-soft); }
-.portal-shell .srv-seen { display: flex; gap: 14px; padding: 0 12px 12px 40px; font-size: 12px; color: var(--hz-ink-2); }
-.portal-shell .srv-seen-h { flex: 0 0 auto; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--hz-ink-3); padding-top: 1px; }
-.portal-shell .srv-seen-none { color: var(--hz-ink-3); }
-.portal-shell .srv-seen-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 0; }
-.portal-shell .srv-seen-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-.portal-shell .srv-seen-ip { font-family: var(--hz-mono); color: var(--hz-ink); }
-.portal-shell .srv-seen-place, .portal-shell .srv-seen-at { color: var(--hz-ink-3); }
-.portal-shell .srv-seen-cur { font-size: 10.5px; font-weight: 600; color: var(--hz-ok); }
 .portal-shell .srv-srow .srv-ic { color: var(--hz-ink-3); font-size: 14px; }
 .portal-shell .srv-srow .srv-sname { font-weight: 600; font-size: 13.5px; flex: 0 0 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .portal-shell .srv-srow .srv-sprov { font-size: 12px; color: var(--hz-ink-2); flex: 0 0 150px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -504,6 +495,7 @@
 /* ---- GRID + CARDS ---- */
 .portal-shell .grid { display: grid; gap: 18px; }
 .portal-shell .g2 { grid-template-columns: 1fr 1fr; }
+.portal-shell .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .portal-shell .card { background: var(--hz-panel); border: 1.5px solid rgba(6, 182, 212, 0.85); border-radius: 14px; padding: 20px; box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.08), 0 4px 24px rgba(6, 182, 212, 0.1); }
 .portal-shell .card.plain { border-color: var(--hz-line-soft); box-shadow: none; }
 .portal-shell .card.admincard { border-color: var(--hz-amber-line); background: linear-gradient(180deg, rgba(39, 39, 42, 0.28), var(--hz-panel)); box-shadow: 0 0 0 1px rgba(255, 194, 75, 0.1), 0 4px 24px rgba(0, 0, 0, 0.2); }
@@ -860,7 +852,8 @@
 .portal-shell .fp-pill-active { background: var(--hz-ok); color: #04170f; border-color: var(--hz-ok); }
 .portal-shell .fp-pill-trial { background: rgba(255, 194, 75, 0.14); color: var(--hz-warn); border-color: var(--hz-amber-line); }
 .portal-shell .fp-pill-included { background: rgba(76, 141, 255, 0.14); color: var(--hz-blue-bright); border-color: rgba(76, 141, 255, 0.4); }
-.portal-shell .fp-pill-locked { background: rgba(255, 92, 122, 0.14); color: var(--hz-bad); border-color: rgba(255, 92, 122, 0.4); }
+/* status "locked" reads AVAILABLE (m59956): teal, not the old red. */
+.portal-shell .fp-pill-locked { background: rgba(45, 226, 230, 0.12); color: var(--hz-cyan); border-color: rgba(45, 226, 230, 0.4); }
 .portal-shell .fp-pill-coming_soon { background: rgba(138, 155, 160, 0.14); color: var(--hz-grey); border-color: rgba(138, 155, 160, 0.35); }
 /* Maintenance is amber, not the coming-soon grey: a product that exists and is temporarily
    down must not read as one that has never shipped. Same state as /marketplace's amber
@@ -1102,15 +1095,19 @@
 
 /* ---- MOBILE DRAWER ---- */
 .portal-shell .scrim { display: none; }
-.portal-shell .feed-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+/* minmax(0, …) and a wrapping top row: with plain 1fr the nowrap pills set each column's minimum,
+   and at 1280 the strip ran past its card (main: +38px; "2 ACTIVATED"/"AVAILABLE" made it +114px). */
+.portal-shell .feed-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .portal-shell .sf-card { display: flex; flex-direction: column; gap: 6px; border-radius: 10px; padding: 12px 14px; border: 1px solid var(--hz-line-soft); background: rgba(255, 255, 255, 0.02); }
-.portal-shell .sf-top { display: flex; align-items: center; gap: 8px; }
+.portal-shell .sf-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .portal-shell .sf-flag { flex: none; display: inline-block; width: 18px; height: 13px; border-radius: 2px; background-size: cover; background-position: center; }
 .portal-shell .sf-name { flex: 1 1 auto; min-width: 0; font-size: 12px; font-weight: 600; color: var(--hz-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .portal-shell .sf-pill { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; border: 1px solid; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; }
 .portal-shell .sf-pill-green { background: rgba(55, 245, 160, 0.14); color: var(--hz-ok); border-color: rgba(55, 245, 160, 0.4); }
 .portal-shell .sf-pill-cyan { background: rgba(45, 226, 230, 0.14); color: var(--hz-cyan); border-color: rgba(45, 226, 230, 0.4); }
-.portal-shell .sf-pill-red { background: rgba(255, 92, 122, 0.14); color: var(--hz-bad); border-color: rgba(255, 92, 122, 0.4); }
+.portal-shell .sf-pill-teal { background: rgba(45, 226, 230, 0.12); color: var(--hz-cyan); border-color: rgba(45, 226, 230, 0.4); }
+.portal-shell .act-avail { align-self: flex-start; margin-top: 4px; }
+.portal-shell .act-tile .sf-action { margin-top: auto; }
 .portal-shell .sf-stat { font-size: 11px; color: var(--hz-ink-3); }
 .portal-shell .sf-action { align-self: flex-end; font-size: 11px; font-weight: 600; color: var(--hz-blue-bright); }
 
@@ -1572,8 +1569,8 @@
   .portal-shell .topbar .crumb-host { display: none; }
   .portal-shell .topbar .crumb-seg:first-of-type .crumb-sep { display: none; }
   .portal-shell .topbar .crumb-sep { margin: 0 4px; }
-  .portal-shell .g2, .portal-shell .courses, .portal-shell .edu-grid { grid-template-columns: 1fr; }
-  .portal-shell .feed-grid { grid-template-columns: 1fr 1fr; }
+  .portal-shell .g2, .portal-shell .g3, .portal-shell .courses, .portal-shell .edu-grid { grid-template-columns: 1fr; }
+  .portal-shell .feed-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .portal-shell .metrics { margin-left: 0; width: 100%; justify-content: space-between; }
   .portal-shell .hero h2, .portal-shell .edu-hero h2 { font-size: 26px; }
   .portal-shell .hero { flex-wrap: wrap; }

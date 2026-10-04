@@ -12,8 +12,9 @@ import {
   FEED_TYPES,
   FEED_TYPE_META,
 } from "@/lib/licenses";
-import { computeSignalFeedCards } from "@/lib/signal-feed-cards";
-import { computeUnlockedFeedTypes } from "@/lib/feed-subscriptions";
+import { computeSignalFeedCards, countActivatedTiersByRegion } from "@/lib/signal-feed-cards";
+import { computeUnlockedFeedTypes, listLiveFeedTierGrantsForSubscriber } from "@/lib/feed-subscriptions";
+import { STRATEGY_ORDER, STRATEGY_DISPLAY_META, computeStrategyCardStatus } from "@/lib/strategy-catalogue";
 import { countUserActiveServers } from "@/lib/server-registration";
 import { getTierCountsByRegion, getBestLatencyByRegion } from "@/lib/feed-tiers";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -75,15 +76,23 @@ export default async function DashboardPage() {
   const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
   // Same feed_types ∪ live grants reader as /feeds (marcus,
   // leo-approval-invisible-to-client-2026-09-11) — this drives the cards below AND the
-  // "Feeds — N of 4 active" counters, so an approved request can't leave the first page a
+  // "Feeds — N of 4 activated" counters, so an approved request can't leave the first page a
   // client lands on contradicting the one it links to.
-  const [activeFeeds, activeServerCount] = await Promise.all([
+  const [activeFeeds, activeServerCount, liveTierGrants] = await Promise.all([
     computeUnlockedFeedTypes(session.user.id).catch((): typeof FEED_TYPES => []),
     countUserActiveServers(session.user.id).catch(() => 0),
+    listLiveFeedTierGrantsForSubscriber(session.user.id).catch(() => []),
   ]);
   const isAdmin = isAdminUser(session.user);
 
-  const signalFeedCards = computeSignalFeedCards({ activeFeeds, activeLicenses, isAdmin, feedTierCounts, feedBestLatency });
+  const signalFeedCards = computeSignalFeedCards({
+    activeFeeds,
+    activeLicenses,
+    isAdmin,
+    feedTierCounts,
+    feedBestLatency,
+    activatedTierCounts: countActivatedTiersByRegion(liveTierGrants),
+  });
   const [recentAlerts, distinctAlertLicenses] = await Promise.all([
     getRecentAlertsForUser(session.user.id, DASHBOARD_ALERTS_LIMIT).catch(() => []),
     countDistinctAlertLicenses(session.user.id).catch(() => 0),
@@ -102,6 +111,10 @@ export default async function DashboardPage() {
   const singleCardLicense = activeLicenses.length === 1 ? activeLicenses[0] : licenseDetail;
 
   const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
+  // The Strategies tile reads the SAME helper the /strategies cards do (marcus m59950), so the
+  // tile and the cards can't disagree. Strategy access is account-wide: a licence holds all five.
+  const strategyStatus = computeStrategyCardStatus({ paid, licenseTier: tier === "free" ? null : tier, isAdmin });
+  const activatedStrategies = strategyStatus === "locked" ? [] : STRATEGY_ORDER;
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   // Admin bypass: Downloads/Education render unlocked regardless of license, same as `paid`.
@@ -226,12 +239,12 @@ export default async function DashboardPage() {
             <h3>Activated</h3>
             <span className="cap">This account</span>
           </div>
-          <div className="grid g2">
+          <div className="grid g3">
             <div className="sf-card act-tile">
               <span className="act-tile-label">
-                Feeds — {activeFeeds.length} of {FEED_TYPES.length} active
+                Feeds — {activeFeeds.length} of {FEED_TYPES.length} activated
               </span>
-              {activeFeeds.length > 0 && (
+              {activeFeeds.length > 0 ? (
                 <div className="act-feed-list">
                   {activeFeeds.map((ft) => (
                     <span key={ft} className="act-feed-chip">
@@ -239,7 +252,31 @@ export default async function DashboardPage() {
                     </span>
                   ))}
                 </div>
+              ) : (
+                <span className="sf-pill sf-pill-teal act-avail">● AVAILABLE</span>
               )}
+              <Link className="sf-action" href="/feeds">
+                {activeFeeds.length > 0 ? "View feeds →" : "See feeds →"}
+              </Link>
+            </div>
+            <div className="sf-card act-tile">
+              <span className="act-tile-label">
+                Strategies — {activatedStrategies.length} of {STRATEGY_ORDER.length} activated
+              </span>
+              {activatedStrategies.length > 0 ? (
+                <div className="act-feed-list">
+                  {activatedStrategies.map((key) => (
+                    <span key={key} className="act-feed-chip">
+                      {STRATEGY_DISPLAY_META[key].name.split(" — ")[0]}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="sf-pill sf-pill-teal act-avail">● AVAILABLE</span>
+              )}
+              <Link className="sf-action" href="/strategies">
+                {activatedStrategies.length > 0 ? "View strategies →" : "See strategies →"}
+              </Link>
             </div>
             <div className="sf-card act-tile">
               <span className="act-tile-label">Servers</span>
@@ -255,7 +292,7 @@ export default async function DashboardPage() {
           <div className="chead">
             <span className="ic">◇</span>
             <h3>Signal Feeds</h3>
-            <span className="cap">{activeFeeds.length} of {FEED_TYPES.length} active</span>
+            <span className="cap">{activeFeeds.length} of {FEED_TYPES.length} activated</span>
           </div>
           <div className="feed-grid">
             {signalFeedCards.map((f) => (

@@ -4,8 +4,8 @@ import { auth } from "@/lib/auth";
 import { getReachablePanels } from "@/lib/user-roles";
 import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses, type FeedType } from "@/lib/licenses";
 import { getPortalConfig } from "@/lib/portal-config";
-import { computeUnlockedFeedTypes } from "@/lib/feed-subscriptions";
-import { computeSignalFeedCards } from "@/lib/signal-feed-cards";
+import { computeUnlockedFeedTypes, listLiveFeedTierGrantsForSubscriber } from "@/lib/feed-subscriptions";
+import { computeSignalFeedCards, countActivatedTiersByRegion } from "@/lib/signal-feed-cards";
 import { TerminalAccessBox } from "@/components/marketplace/terminal-access-box";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
@@ -118,10 +118,18 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
           licensed ? computeUnlockedFeedTypes(user.id).catch((): FeedType[] => []) : [],
           licensed ? getTierCountsByRegion().catch(() => ({}) as Awaited<ReturnType<typeof getTierCountsByRegion>>) : {},
           licensed ? getBestLatencyByRegion().catch(() => ({}) as Awaited<ReturnType<typeof getBestLatencyByRegion>>) : {},
-        ]).then(([config, activeFeeds, feedTierCounts, feedBestLatency]) => ({
+          licensed ? listLiveFeedTierGrantsForSubscriber(user.id).catch(() => []) : [],
+        ]).then(([config, activeFeeds, feedTierCounts, feedBestLatency, liveTierGrants]) => ({
           requestHref: config.telegramChannelUrl,
           feeds: licensed
-            ? computeSignalFeedCards({ activeFeeds, activeLicenses, isAdmin, feedTierCounts, feedBestLatency })
+            ? computeSignalFeedCards({
+                activeFeeds,
+                activeLicenses,
+                isAdmin,
+                feedTierCounts,
+                feedBestLatency,
+                activatedTierCounts: countActivatedTiersByRegion(liveTierGrants),
+              })
             : [],
         }))
       : null;

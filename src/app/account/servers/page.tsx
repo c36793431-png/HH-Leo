@@ -11,9 +11,7 @@ import { ServerRegistrationsGrouped, type GroupedServerEntry } from "@/component
 import {
   getServerRegistration,
   getLatestConnectionIp,
-  getConnectionHistory,
   type ServerRegistration,
-  type ConnectionHistoryEntry,
 } from "@/lib/server-registration";
 import { getBlackTrialForUser } from "@/lib/black-trials";
 import { getPortalConfig } from "@/lib/portal-config";
@@ -129,14 +127,11 @@ export default async function ServersPage() {
     ? await Promise.all(
         licenses.map(async (license) => {
           const registration = await getServerRegistration(license.id).catch(() => null);
-          const [latestIp, history]: [string | null, ConnectionHistoryEntry[]] = registration
-            ? await Promise.all([
-                getLatestConnectionIp(license.id).catch(() => null),
-                getConnectionHistory(license.id).catch(() => []),
-              ])
-            : [null, []];
+          const latestIp = registration ? await getLatestConnectionIp(license.id).catch(() => null) : null;
+          // Verified = the licence's most recent connection came from the declared IP. The IP
+          // history behind it is admin-only (/admin/connections), not shown here (m59952).
           const verified = !!(registration && latestIp && latestIp === registration.declaredIp);
-          return { license, registration, verified, history };
+          return { license, registration, verified };
         })
       )
     : [];
@@ -150,19 +145,12 @@ export default async function ServersPage() {
   const grouped = cards.length > 0;
 
   const groupedEntries: GroupedServerEntry[] = grouped
-    ? registeredCards.map(({ license, registration, verified, history }) => ({
+    ? registeredCards.map(({ license, registration, verified }) => ({
         registrationId: (registration as ServerRegistration).id,
         licenseId: license.id,
         licenseKey: license.licenseKey,
         registration: registration as ServerRegistration,
         verified,
-        // Observed IPs for this licence only -- `licenses` is the signed-in user's own
-        // active licences, so no other client's history can reach this list.
-        seenFrom: history.map((h) => ({
-          ip: h.ip,
-          seenAt: h.capturedAt.toISOString(),
-          place: [h.city, h.country].filter(Boolean).join(", ") || null,
-        })),
         action: updateServerRegistrationAction.bind(null, (registration as ServerRegistration).id),
       }))
     : [];

@@ -21,11 +21,12 @@ import {
 import { StrategyRequestForm } from "@/components/strategies/strategy-request-form";
 import { AddYourStrategyForm } from "@/components/strategies/add-your-strategy-form";
 
+// Same vocabulary as /feeds and /dashboard (coxwell 14:05Z via marcus m59956): Activated / Available.
 const STATUS_LABEL: Record<StrategyCardStatus, string> = {
-  active: "Active",
+  active: "Activated",
   trial: "Trial",
   included: "Included",
-  locked: "Locked",
+  locked: "Available",
 };
 
 function groupSetfiles(rows: SetfileRow[]): Partial<Record<StrategyKey, SetfileRow[]>> {
@@ -89,7 +90,7 @@ export default async function StrategiesPage() {
               <span className="fp-latency">{meta.marketFocus}</span>
 
               {status === "included" && <span className="fp-note">Admin access</span>}
-              {status === "locked" && <span className="fp-note">🔒 Upgrade to unlock</span>}
+              {status === "locked" && <span className="fp-note">Included with a Horizon licence · View strategy →</span>}
               {!rep && <span className="fp-note">Setfile detail coming soon</span>}
             </Link>
           );

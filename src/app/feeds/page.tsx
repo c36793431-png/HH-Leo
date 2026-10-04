@@ -7,7 +7,8 @@ import {
   getActiveLicenseDetailsForUser,
   computePortalTierFromLicenses,
 } from "@/lib/licenses";
-import { computeUnlockedFeedTypes } from "@/lib/feed-subscriptions";
+import { computeUnlockedFeedTypes, listLiveFeedTierGrantsForSubscriber } from "@/lib/feed-subscriptions";
+import { activatedLabel, countActivatedTiersByRegion } from "@/lib/signal-feed-cards";
 import { getPortalConfig } from "@/lib/portal-config";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
@@ -28,11 +29,13 @@ import { FeedRequestForm } from "@/components/feeds/feed-request-form";
 import { getAnyServerRegistrationForUser } from "@/lib/server-registration";
 import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
 
+// One vocabulary for every client surface (coxwell 14:05Z via marcus m59956): held is Activated
+// (with the held-tier count on a multi-tier feed), nothing held is Available, never Locked.
 const STATUS_LABEL: Record<FeedCardStatus, string> = {
-  active: "Active",
+  active: "Activated",
   trial: "Trial",
   included: "Included",
-  locked: "Locked",
+  locked: "Available",
   coming_soon: "Coming soon",
   maintenance: "Maintenance",
 };
@@ -51,7 +54,11 @@ export default async function FeedsPage() {
   // feed_types ∪ live grants — an approved tier request unlocks this card too, not just the
   // licence checkbox array (marcus, leo-approval-invisible-to-client-2026-09-11). Same reader
   // backs /dashboard's cards and counter so the two pages can't contradict each other.
-  const activeFeeds = await computeUnlockedFeedTypes(session.user.id).catch(() => []);
+  const [activeFeeds, liveTierGrants] = await Promise.all([
+    computeUnlockedFeedTypes(session.user.id).catch(() => []),
+    listLiveFeedTierGrantsForSubscriber(session.user.id).catch(() => []),
+  ]);
+  const activatedTierCounts = countActivatedTiersByRegion(liveTierGrants);
   const isAdmin = isAdminUser(session.user);
   // Same aggregation drives the card status below and the sidebar badge (thread
   // multi-license-visibility-2026-08-31, marcus) — a paying client must never see "Trial" on a
@@ -135,7 +142,9 @@ export default async function FeedsPage() {
                   <span className="fp-code">{entry.countryCode}</span>
                 </span>
                 <span>
-                  <span className={`fp-pill fp-pill-${status}`}>{STATUS_LABEL[status]}</span>
+                  <span className={`fp-pill fp-pill-${status}`}>
+                    {status === "active" ? activatedLabel(hasTiers && region ? activatedTierCounts[region] ?? 0 : 0) : STATUS_LABEL[status]}
+                  </span>
                   {hasTiers && <span className="fp-pill fp-pill-tiers">{tierCount} tiers</span>}
                 </span>
               </div>
@@ -172,8 +181,8 @@ export default async function FeedsPage() {
                 ))}
               {status === "included" && <span className="fp-note">Admin access</span>}
               {status === "locked" && !hasTiers && (
-                <a className="btn primary sm fp-cta" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
-                  🔒 Upgrade to unlock
+                <a className="btn ghost sm fp-cta" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
+                  Request access →
                 </a>
               )}
               {status === "coming_soon" && <span className="fp-note">Planned — not live yet</span>}
