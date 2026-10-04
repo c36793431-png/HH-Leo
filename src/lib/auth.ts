@@ -63,47 +63,132 @@ function partnerMagicLinkText(url: string, host: string) {
   return `Sign in to ${host}\n${url}\n\n`;
 }
 
-/** Member (portal.horizonhft.com) magic-link email — mirrors @auth/core's default Resend
- * template verbatim (that module isn't part of its public export map, so it can't be
- * imported directly). Left untouched by the partner branding above. */
-function memberMagicLinkHtml(url: string, host: string) {
+/** Subject for the member (portal) sign-in email; partner/feed keep "Sign in to <host>". */
+const MEMBER_MAGIC_LINK_SUBJECT = "Sign in to Horizon HFT";
+
+/** The portal's own nav mark (components/logo.tsx), already public on prod. Fixed to the
+ * portal host rather than the request host so the image also loads from preview/local sends. */
+const MEMBER_LOGO_URL = "https://portal.horizonhft.com/logo.png";
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** "24 hours (at 14:05 UTC on 5 October 2026)" from the token expiry Auth.js hands to
+ * sendVerificationRequest (provider maxAge, Resend default 24h). Hand-formatted so the
+ * wording doesn't depend on the runtime's ICU data. */
+function magicLinkExpiry(expires: Date, now = new Date()) {
+  const minutes = Math.max(1, Math.round((expires.getTime() - now.getTime()) / 60000));
+  const span = minutes >= 120 ? `${Math.round(minutes / 60)} hours` : `${minutes} minutes`;
+  const hh = String(expires.getUTCHours()).padStart(2, "0");
+  const mm = String(expires.getUTCMinutes()).padStart(2, "0");
+  const day = `${expires.getUTCDate()} ${MONTHS[expires.getUTCMonth()]} ${expires.getUTCFullYear()}`;
+  return `${span} (at ${hh}:${mm} UTC on ${day})`;
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** Horizon-branded member (portal.horizonhft.com) magic-link email (marcus m59909, coxwell
+ * yes 2026-10-04): the portal's dark zinc + cyan look, the nav mark and wordmark, one button,
+ * the raw link as fallback, expiry, ignore line. No web fonts, no tracking pixel, one image. */
+function memberMagicLinkHtml(url: string, host: string, expires: Date) {
   const escapedHost = host.replace(/\./g, "&#8203;.");
-  const brandColor = "#346df1";
-  return `
-<body style="background: #f9f9f9;">
-  <table width="100%" border="0" cellspacing="20" cellpadding="0"
-    style="background: #fff; max-width: 600px; margin: auto; border-radius: 10px;">
+  const href = escapeHtml(url);
+  const font = "Helvetica, Arial, sans-serif";
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${MEMBER_MAGIC_LINK_SUBJECT}</title>
+</head>
+<body style="margin: 0; padding: 0; background: #09090b;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background: #09090b;">
     <tr>
-      <td align="center"
-        style="padding: 10px 0px; font-size: 22px; font-family: Helvetica, Arial, sans-serif; color: #444;">
-        Sign in to <strong>${escapedHost}</strong>
-      </td>
-    </tr>
-    <tr>
-      <td align="center" style="padding: 20px 0;">
-        <table border="0" cellspacing="0" cellpadding="0">
+      <td align="center" style="padding: 32px 12px;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0"
+          style="max-width: 520px; background: #18181b; border: 1px solid #27272a; border-radius: 10px;">
           <tr>
-            <td align="center" style="border-radius: 5px;" bgcolor="${brandColor}"><a href="${url}"
-                target="_blank"
-                style="font-size: 18px; font-family: Helvetica, Arial, sans-serif; color: #fff; text-decoration: none; border-radius: 5px; padding: 10px 20px; border: 1px solid ${brandColor}; display: inline-block; font-weight: bold;">Sign
-                in</a></td>
+            <td align="center" style="padding: 32px 24px 8px 24px;">
+              <table border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="padding-right: 10px; vertical-align: middle;">
+                    <img src="${MEMBER_LOGO_URL}" alt="" width="36" height="36" style="display: block; border: 0;" />
+                  </td>
+                  <td style="vertical-align: middle; font-family: ${font}; font-size: 20px; font-weight: bold; letter-spacing: 1px; color: #fafafa;">
+                    HORIZON<span style="color: #22d3ee;"> HFT</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 16px 24px 0 24px; font-family: ${font}; font-size: 22px; color: #fafafa;">
+              Sign in to Horizon HFT
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 12px 24px 0 24px; font-family: ${font}; font-size: 15px; line-height: 22px; color: #a1a1aa;">
+              Hello, use the button below to sign in to your Horizon HFT account.
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 24px 24px;">
+              <table border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center" style="border-radius: 6px;" bgcolor="#22d3ee"><a href="${href}"
+                      target="_blank"
+                      style="font-size: 17px; font-family: ${font}; color: #09090b; text-decoration: none; border-radius: 6px; padding: 12px 28px; border: 1px solid #06b6d4; display: inline-block; font-weight: bold;">Sign in to Horizon</a></td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 0 24px; font-family: ${font}; font-size: 14px; line-height: 21px; color: #a1a1aa;">
+              This link expires in ${magicLinkExpiry(expires)} and can be used once.
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 24px 0 24px; font-family: ${font}; font-size: 13px; line-height: 19px; color: #71717a;">
+              If the button doesn't work, copy this link into your browser:<br />
+              <a href="${href}" target="_blank" style="color: #22d3ee; word-break: break-all;">${href}</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 24px 28px 24px; font-family: ${font}; font-size: 13px; line-height: 19px; color: #71717a;">
+              Didn't request this? You can safely ignore this email. Someone asked to sign in to
+              ${escapedHost} with this address.
+            </td>
+          </tr>
+        </table>
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 520px;">
+          <tr>
+            <td align="center" style="padding: 16px 24px 0 24px; font-family: ${font}; font-size: 12px; color: #52525b;">
+              Horizon HFT
+            </td>
           </tr>
         </table>
       </td>
     </tr>
-    <tr>
-      <td align="center"
-        style="padding: 0px 0px 10px 0px; font-size: 16px; line-height: 22px; font-family: Helvetica, Arial, sans-serif; color: #444;">
-        If you did not request this email you can safely ignore it.
-      </td>
-    </tr>
   </table>
 </body>
+</html>
 `;
 }
 
-function memberMagicLinkText(url: string, host: string) {
-  return `Sign in to ${host}\n${url}\n\n`;
+function memberMagicLinkText(url: string, host: string, expires: Date) {
+  return `Hello,
+
+Use this link to sign in to your Horizon HFT account:
+
+${url}
+
+The link expires in ${magicLinkExpiry(expires)} and can be used once.
+
+Didn't request this? You can safely ignore this email. Someone asked to sign in to ${host} with this address.
+
+Horizon HFT
+`;
 }
 
 /** Cyan/teal-branded magic-link email for feed.horizonhft.com sign-ins (bus thread
@@ -368,9 +453,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Resend({
       apiKey: process.env.AUTH_RESEND_KEY,
       from: process.env.EMAIL_FROM,
-      // Partner-branded (amber) template for partner.horizonhft.com sign-ins; every other
-      // host falls back to the provider's default member (blue) template, untouched.
-      async sendVerificationRequest({ identifier: to, provider, url }) {
+      // Partner-branded (amber) template for partner.horizonhft.com sign-ins, feed (teal) for
+      // feed.horizonhft.com; every other host gets the Horizon-branded member template.
+      async sendVerificationRequest({ identifier: to, provider, url, expires }) {
         const { host } = new URL(url);
         const isPartnerHost = host === PARTNER_HOST || host.startsWith(`${PARTNER_HOST}:`);
         const isFeedHost = host === FEED_HOST || host.startsWith(`${FEED_HOST}:`);
@@ -378,12 +463,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           ? partnerMagicLinkHtml(url, host)
           : isFeedHost
             ? feedMagicLinkHtml(url, host)
-            : memberMagicLinkHtml(url, host);
+            : memberMagicLinkHtml(url, host, expires);
         const text = isPartnerHost
           ? partnerMagicLinkText(url, host)
           : isFeedHost
             ? feedMagicLinkText(url, host)
-            : memberMagicLinkText(url, host);
+            : memberMagicLinkText(url, host, expires);
+        const subject = isPartnerHost || isFeedHost ? `Sign in to ${host}` : MEMBER_MAGIC_LINK_SUBJECT;
 
         const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -391,7 +477,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             Authorization: `Bearer ${provider.apiKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ from: provider.from, to, subject: `Sign in to ${host}`, html, text }),
+          body: JSON.stringify({ from: provider.from, to, subject, html, text }),
         });
         if (!res.ok) throw new Error("Resend error: " + JSON.stringify(await res.json()));
       },
