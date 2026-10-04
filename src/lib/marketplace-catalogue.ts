@@ -417,7 +417,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
         layout: "cards",
         items: [
           "1 Leg — one market order when the gap between the Horizon feed and your broker's price reaches your setting, with a virtual stop-loss, take-profit and trailing stop",
-          "2 Leg Lock — On the same gap, a hedged pair: when the fast feed leads by your Exec Gap it closes the wrong side, then re-locks the remaining leg with broker pending orders at its target and stop. If the broker refuses those orders, Horizon manages the leg itself with a broker disaster stop and a trailing stop",
+          "2 Leg Lock — Opens a locked pair at market as soon as the tab is flat; when the fast feed leads by your Exec Gap it closes the wrong side, then re-locks the remaining leg with broker pending orders at its target and stop. If the broker refuses those orders, Horizon manages the leg itself with a broker disaster stop and a trailing stop",
           "Trend Impulse — trades in the direction of a move in the Horizon feed that reaches your size within your time window, with an EMA trend filter",
           "Order Book Imbalance — trades the fast-feed price lead on one side of the book (bid or ask) while the other side holds; it does not read order-book volume",
           "Grid Arbitrage — opens a basket on the gap, adds levels at your step and multiplier up to your maximum, and closes the basket at its own take-profit or stop-loss",
