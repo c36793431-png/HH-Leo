@@ -156,6 +156,18 @@ test("catalogue: what the basket offers is exactly the available listings plus t
   ]);
 });
 
+test("chips: a strategy line's type comes from its catalogue name; feed chips are region and tier only", () => {
+  const chips = new Map(cat.basketCatalogue().map((e) => [`${e.kind}:${e.key}`, e.chips]));
+  assert.deepEqual(chips.get("strategy:1leg"), ["Strategy Latency Arbitrage"]);
+  assert.deepEqual(chips.get("strategy:2leg_lock"), ["Strategy Hedge Arbitrage"]);
+  assert.deepEqual(chips.get("strategy:trend_impulse"), ["Strategy Fast-Feed Momentum"]);
+  assert.deepEqual(chips.get("strategy:obi"), ["Strategy Order Block Imbalance"]);
+  assert.deepEqual(chips.get("strategy:grid"), ["Strategy Progressive Basket"]);
+  // No data-centre chip: no catalogue field holds a feed's location (marcus m59367).
+  assert.deepEqual(chips.get("feed:ld-base"), ["Region London", "Tier Base"]);
+  assert.deepEqual(chips.get("feed:ny-base"), ["Region New York", "Tier Base"]);
+});
+
 test("?strategy=: each of www's five slugs lands on its entry; anything else lands on nothing", () => {
   assert.deepEqual(
     ["1-leg", "2-leg-lock", "trend-impulse", "order-book-imbalance", "grid-arbitrage"].map(cat.strategyEntryKeyForSlug),

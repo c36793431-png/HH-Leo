@@ -61,7 +61,8 @@ export interface BasketEntry {
   kind: BasketLineKind;
   key: string;
   name: string;
-  /** Short facts shown as chips on the basket line: region and tier for a feed. */
+  /** Short facts shown as chips on the basket line: region and tier for a feed, the type for a
+   * strategy. */
   chips: string[];
   /** One sentence for the strategy card. */
   blurb?: string;
@@ -71,13 +72,22 @@ export interface BasketEntry {
   detailHref?: string;
 }
 
+/** A strategy's type, as its meta.name spells it after the dash ("1 LEG — Latency Arbitrage" ->
+ * "Latency Arbitrage"), for the line's chip (Iris r2 sheet 2, marcus m59367 d2). Null when the
+ * name has no dash part. */
+function strategyType(key: StrategyKey): string | null {
+  return STRATEGY_DISPLAY_META[key].name.split(" — ")[1] ?? null;
+}
+
 function strategyEntry(e: BasketStrategyEntry): BasketEntry {
   const first = STRATEGY_DISPLAY_META[e.strategyKeys[0]];
+  // A package names several strategies, so it gets no single type chip.
+  const type = e.strategyKeys.length === 1 ? strategyType(e.strategyKeys[0]) : null;
   return {
     kind: "strategy",
     key: e.key,
     name: e.name ?? first.name,
-    chips: [],
+    chips: type ? [`Strategy ${type}`] : [],
     blurb: e.strategyKeys.length === 1 ? first.hook : e.strategyKeys.map((k) => STRATEGY_DISPLAY_META[k].name).join(" · "),
   };
 }

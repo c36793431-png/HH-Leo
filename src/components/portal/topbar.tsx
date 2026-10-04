@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { AdminSurface } from "./sidebar";
 import { BasketNavButton } from "@/components/marketplace/basket-controls";
-import { useBasket } from "@/lib/basket-store";
+import { useBasket, useBasketStep } from "@/lib/basket-store";
 
 function TopbarBasket({ alwaysShow }: { alwaysShow: boolean }) {
   const count = useBasket().length;
@@ -21,6 +22,15 @@ const TITLES: Record<string, { title: string; crumb: string }> = {
   "/admin/licenses": { title: "Licenses", crumb: "admin / licenses" },
   "/admin/downloads": { title: "Downloads", crumb: "admin / downloads" },
   "/admin/history": { title: "History", crumb: "admin / history" },
+  "/marketplace/basket": { title: "Basket", crumb: "marketplace / basket" },
+  "/marketplace/requests": { title: "My requests", crumb: "marketplace / requests" },
+};
+
+// Where a phone's top-left control goes back to, in place of the menu (Iris r2 sheet 4: Basket and
+// My requests have a back arrow, Request sent keeps the menu). Desktop has no back control.
+const BACK_TO: Record<string, string> = {
+  "/marketplace/basket": "/marketplace",
+  "/marketplace/requests": "/marketplace",
 };
 
 // Segment-derived titles below capitalize each word — fine for plain words, wrong for acronyms
@@ -70,14 +80,24 @@ export function PortalTopbar({
   onBurgerClick: () => void;
 }) {
   const pathname = usePathname();
-  const { title, crumb } = resolveTitle(pathname, adminSurface);
+  const basketStep = useBasketStep();
+  const sent = pathname === "/marketplace/basket" && basketStep === "sent";
+  const resolved = resolveTitle(pathname, adminSurface);
+  const { title, crumb } = sent ? { ...resolved, title: "Request sent" } : resolved;
   const host = adminSurface === "feed" ? "feed.horizonhft.com" : "portal.horizonhft.com";
+  const backTo = sent ? undefined : BACK_TO[pathname];
 
   return (
     <header className="topbar">
-      <button type="button" className="burger" onClick={onBurgerClick} aria-label="Toggle navigation">
-        ☰
-      </button>
+      {backTo ? (
+        <Link href={backTo} className="burger" aria-label="Back to the marketplace">
+          ←
+        </Link>
+      ) : (
+        <button type="button" className="burger" onClick={onBurgerClick} aria-label="Toggle navigation">
+          ☰
+        </button>
+      )}
       <div>
         <h1>{title}</h1>
         <div className="crumb">{host} / {crumb}</div>

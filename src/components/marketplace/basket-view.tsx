@@ -4,7 +4,16 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { ShoppingBasket } from "lucide-react";
 import type { BasketEntry, BasketLine } from "@/lib/basket-catalogue";
-import { basketClear, basketKeepOnly, basketPut, basketRemove, useBasket, type StoredBasketLine } from "@/lib/basket-store";
+import {
+  basketClear,
+  basketKeepOnly,
+  basketPut,
+  basketRemove,
+  setBasketStep,
+  useBasket,
+  type BasketStep,
+  type StoredBasketLine,
+} from "@/lib/basket-store";
 import { submitBasketAction } from "@/app/marketplace/basket/actions";
 
 /**
@@ -20,6 +29,8 @@ import { submitBasketAction } from "@/app/marketplace/basket/actions";
  *   when ticked, shown only to an eligible signed-in account; on Review it is a read-only row.
  * - The Telegram field on Review is read-only when the account has one, required when not.
  * - Sent uses coxwell's line word for word, no reply time, and the count goes back to 0.
+ * - Phone (r2 sheet 4, marcus m59367 d4): on the basket step the summary card keeps only the trial
+ *   box, and a bar sticky at the bottom carries the next step.
  */
 
 export interface BasketAccount {
@@ -29,7 +40,7 @@ export interface BasketAccount {
   feedReady: boolean;
 }
 
-type Step = "basket" | "review" | "sent";
+type Step = BasketStep;
 
 const PRICE = (
   <div className="bk-price">
@@ -86,6 +97,12 @@ export function BasketView({
   useEffect(() => {
     basketKeepOnly((l) => byId.has(`${l.kind}:${l.key}`));
   }, [stored, byId]);
+
+  // The portal topbar titles the page by step ("Request sent").
+  useEffect(() => {
+    setBasketStep(step);
+  }, [step]);
+  useEffect(() => () => setBasketStep("basket"), []);
 
   const counts = {
     software: lines.filter((l) => l.entry.kind === "software").length,
@@ -243,7 +260,7 @@ export function BasketView({
                   <b>{entry.name}</b>
                   <div className="bk-sub">
                     {KIND_TAG[entry.kind]}
-                    {entry.chips.length > 0 && ` · ${entry.chips.join(" · ")}`}
+                    {entry.kind !== "strategy" && entry.chips.length > 0 && ` · ${entry.chips.join(" · ")}`}
                     {entry.kind === "feed" && ` · ${serversText(s.servers ?? 1)}`}
                     {entry.kind === "strategy" && " · Included with a Horizon licence"}
                   </div>
@@ -311,6 +328,16 @@ export function BasketView({
   }
 
   // ---- 1 · BASKET ----
+  // The summary card's button on desktop, the sticky bar's on a phone.
+  const nextStep = account ? (
+    <button type="button" className="btn primary bk-cta" onClick={() => setStep("review")}>
+      Review request →
+    </button>
+  ) : (
+    <Link href={signInHref} className="btn primary bk-cta">
+      Sign in to send →
+    </Link>
+  );
   return (
     <div className="bk-page">
       {steps}
@@ -391,6 +418,12 @@ export function BasketView({
                     ) : (
                       <span className="bk-sub">{entry.kind === "software" ? "One licence, for you" : "One strategy"}</span>
                     )}
+                    {/* The tier picker is the feed's own product page (marcus m59367 d1): no picker here. */}
+                    {entry.kind === "feed" && entry.detailHref && (
+                      <Link href={entry.detailHref} className="bk-link bk-link-strong">
+                        Change tier
+                      </Link>
+                    )}
                     <button type="button" className="bk-link" onClick={() => basketRemove(entry.kind, entry.key)}>
                       Remove
                     </button>
@@ -401,11 +434,13 @@ export function BasketView({
           })}
         </div>
 
-        <aside className="card bk-summary">
-          <h2>Your request</h2>
-          {summaryRows}
-          <div className="bk-nototal">
-            <b>No total.</b> Every line is priced by agreement.
+        <aside className={`card bk-summary${trialOffered ? "" : " bk-summary-notrial"}`}>
+          <div className="bk-desk">
+            <h2>Your request</h2>
+            {summaryRows}
+            <div className="bk-nototal">
+              <b>No total.</b> Every line is priced by agreement.
+            </div>
           </div>
           {trialOffered && (
             <label className={`bk-trial${wantTrial ? " on" : ""}`}>
@@ -418,23 +453,24 @@ export function BasketView({
               </span>
             </label>
           )}
-          {account ? (
-            <button type="button" className="btn primary bk-cta" onClick={() => setStep("review")}>
-              Review request →
-            </button>
-          ) : (
-            <Link href={signInHref} className="btn primary bk-cta">
-              Sign in to send →
+          <div className="bk-desk">
+            {nextStep}
+            <p className="fp-note">
+              {account ? "Next you check one summary and send it. " : "Your basket stays here while you sign in. "}
+              <b>Nothing is charged and nothing starts yet.</b>
+            </p>
+            <Link href="/marketplace" className="bk-link bk-keep">
+              ← Keep browsing
             </Link>
-          )}
-          <p className="fp-note">
-            {account ? "Next you check one summary and send it. " : "Your basket stays here while you sign in. "}
-            <b>Nothing is charged and nothing starts yet.</b>
-          </p>
-          <Link href="/marketplace" className="bk-link bk-keep">
-            ← Keep browsing
-          </Link>
+          </div>
         </aside>
+      </div>
+      <div className="bk-bar">
+        <div className="bk-bar-total">
+          <span>Total</span>
+          <b>Set when terms are agreed</b>
+        </div>
+        {nextStep}
       </div>
     </div>
   );

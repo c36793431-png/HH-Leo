@@ -1396,6 +1396,11 @@
 .portal-shell .bk-sub { font-family: var(--hz-mono); font-size: 11px; color: var(--hz-ink-3); }
 .portal-shell .bk-link { background: none; border: 0; padding: 0; font: inherit; font-size: 12.5px; color: var(--hz-ink-3); cursor: pointer; text-decoration: none; }
 .portal-shell .bk-link:hover { color: var(--hz-ink); }
+.portal-shell .bk-link-strong { color: var(--hz-ink-2); font-weight: 600; }
+/* The summary card's desktop-only parts; on a phone the sticky bar carries the next step. */
+.portal-shell .bk-desk { display: contents; }
+.portal-shell .bk-bar { display: none; }
+.portal-shell a.burger { text-decoration: none; }
 .portal-shell .bk-summary { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 16px; border-color: var(--hz-card-line); }
 .portal-shell .bk-summary h2 { font-family: var(--hz-disp); font-size: 19px; font-weight: 700; color: var(--hz-ink); }
 .portal-shell .bk-sum-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--hz-ink-3); padding-bottom: 8px; border-bottom: 1px solid var(--hz-line-soft); }
@@ -1473,6 +1478,20 @@
   .portal-shell .bk-price { text-align: left; }
   .portal-shell .bk-sent-actions { grid-template-columns: 1fr; }
   .portal-shell .topbar .bk-navbtn span:not(.bk-count) { display: none; }
+  /* Iris r2 sheet 4: the summary card keeps only the trial box; a bar sticks to the bottom. */
+  .portal-shell .bk-desk { display: none; }
+  .portal-shell .bk-summary-notrial { display: none; }
+  /* Fixed, not sticky: .content is overflow-y:auto without being the scroller, so sticky would
+     never stick. The body pad keeps the site footer clear of it at the bottom of the page. */
+  .portal-shell .bk-bar {
+    display: flex; flex-direction: column; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 25;
+    padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--hz-line-soft); background: rgba(5, 7, 11, 0.94); backdrop-filter: blur(12px);
+  }
+  body:has(.portal-shell .bk-bar) { padding-bottom: calc(118px + env(safe-area-inset-bottom)); }
+  .portal-shell .bk-bar-total { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--hz-ink-3); }
+  .portal-shell .bk-bar-total b { color: var(--hz-ink); font-weight: 600; }
+  .portal-shell .bk-bar .bk-cta { width: 100%; }
 }
 
 @media (max-width: 768px) {

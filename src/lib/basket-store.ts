@@ -103,3 +103,27 @@ export function basketKeepOnly(keep: (l: StoredBasketLine) => boolean) {
 export function basketClear() {
   writeLines([]);
 }
+
+// The basket page's step lives in its own component, but the portal topbar titles it ("Request
+// sent" once sent, Iris r2 sheet 4), so the page publishes it here. In memory only: a reload is
+// back on the basket step anyway.
+export type BasketStep = "basket" | "review" | "sent";
+let currentStep: BasketStep = "basket";
+const stepListeners = new Set<() => void>();
+
+export function setBasketStep(step: BasketStep) {
+  if (step === currentStep) return;
+  currentStep = step;
+  stepListeners.forEach((l) => l());
+}
+
+function subscribeStep(onChange: () => void) {
+  stepListeners.add(onChange);
+  return () => {
+    stepListeners.delete(onChange);
+  };
+}
+
+export function useBasketStep(): BasketStep {
+  return useSyncExternalStore(subscribeStep, () => currentStep, () => "basket" as BasketStep);
+}
