@@ -32,6 +32,5 @@ test("the parts match FOC13's table", () => {
     Beta: [42.4, 14.8, 14.4, 13.2],
     Gamma: [14.5, 0.9, 7.6, 6.0],
     Delta: [6.0, 0, 0, 6.0],
-    Epsilon: [0, 0, 0, 0],
   });
 });

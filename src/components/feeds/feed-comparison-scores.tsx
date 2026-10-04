@@ -1,15 +1,15 @@
 import { FEED_COMPARISON_SCORES, SCORE_TIER_NAMES } from "@/lib/feed-comparison-scores";
 
-/** Entries that are a Horizon product: every one with a tier_key. Epsilon has none. */
+/** Entries that are a Horizon product: every one with a tier_key. */
 const LISTED_NAMES = new Set(Object.values(SCORE_TIER_NAMES));
 
 /**
  * The London leaderboard. "tiers" is the /feeds/london/tiers board as it has always been.
- * "marketplace" is the product-page embed (marcus, m52875): it hides the rows that are not a
- * Horizon product (Epsilon, "Offline", has no listing) and drops the row notes, because Delta's
- * carries a latency figure and marketplace surfaces carry none. It is a variant, not an edit to
- * FEED_COMPARISON_SCORES, so the tiers page keeps both. The window line and the method caption
- * and the footnote are the same in both.
+ * "marketplace" is the product-page embed (marcus, m52875): it hides any row that is not a
+ * Horizon product (no tier_key; none since the seventh feed came off the board, m59548) and drops
+ * the row notes, because Delta's carries a latency figure and marketplace surfaces carry none. It
+ * is a variant, not an edit to FEED_COMPARISON_SCORES. The window line and the method caption and
+ * the footnote are the same in both.
  *
  * highlight: entry names to mark as the page's own product, e.g. Beta, Gamma and Delta on
  * London's Base bundle.

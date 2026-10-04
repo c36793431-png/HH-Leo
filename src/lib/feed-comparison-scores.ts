@@ -28,15 +28,7 @@ export const FEED_COMPARISON_SCORES: FeedScoreEntry[] = [
     streamQuality: 6.0,
     note: "Stream quality only — identical spread/gaps to Gamma, ~1.8ms slower.",
   },
-  {
-    rank: 7,
-    name: "Epsilon",
-    score: 0.0,
-    speed: 0,
-    consistency: 0,
-    streamQuality: 0,
-    note: "Offline — 3 ticks in 51 hours.",
-  },
+  // No seventh row: FOC13's methodology doesn't show the seventh feed (marcus m59548).
 ];
 
 /** tier_key -> FEED_COMPARISON_SCORES entry name, for London's score tiers plus the
