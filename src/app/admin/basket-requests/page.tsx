@@ -1,13 +1,17 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { listBasketRequests, BASKET_REQUEST_STATUSES, type BasketRequestStatus } from "@/lib/basket-requests";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
+import { listForwardServers, type ForwardServer } from "@/lib/basket-forward";
+import { BasketForwardForm } from "@/components/admin/basket-forward-form";
 import { setBasketRequestHandledAction } from "./actions";
 
 /**
  * Admin · Basket requests (marcus m59146). One row per basket a client sent: who, when, every
  * line as it was at submit, the trial choice. Nothing here grants anything: fulfil with the
  * existing tools (Issue licence, Assign feed tier on /admin/users), then mark it Handled. The
- * request is handled as a whole (New / Handled), never per line.
+ * request is handled as a whole (New / Handled), never per line. A New basket with feed lines
+ * can also forward them to the providers' Approvals (marcus m59987, lib/basket-forward.ts).
  */
 const STATUS_STYLES: Record<BasketRequestStatus, string> = {
   new: "border-cyan-500/40 bg-cyan-500/15 text-cyan-300",
@@ -22,6 +26,11 @@ export default async function AdminBasketRequestsPage({ searchParams }: { search
   const sp = await searchParams;
   const status = BASKET_REQUEST_STATUSES.includes(sp.status as BasketRequestStatus) ? (sp.status as BasketRequestStatus) : undefined;
   const requests = await listBasketRequests({ status });
+  const forwardable = requests.filter((r) => r.status === "new" && r.lines.some((l) => l.kind === "feed"));
+  const serversByUser = new Map<string, ForwardServer[]>();
+  for (const userId of new Set(forwardable.map((r) => r.userId))) {
+    serversByUser.set(userId, await listForwardServers(userId));
+  }
 
   return (
     <div className="flex flex-1 flex-col">
@@ -32,7 +41,8 @@ export default async function AdminBasketRequestsPage({ searchParams }: { search
         <h1 className="mt-2 text-lg font-medium text-zinc-100">Basket requests</h1>
         <p className="mt-1 text-sm text-zinc-400">
           What clients sent from the marketplace basket. Nothing is granted by a request: fulfil by hand (Issue licence,
-          Assign feed tier on Users), then mark it handled.
+          Assign feed tier on Users), then mark it handled. Feed lines can be forwarded to the providers&apos; Approvals;
+          strategy and software lines stay with you.
         </p>
       </header>
 
@@ -66,8 +76,11 @@ export default async function AdminBasketRequestsPage({ searchParams }: { search
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
-              {requests.map((r) => (
-                <tr key={r.id} className="align-top">
+              {requests.map((r) => {
+                const forward = r.status === "new" && r.lines.some((l) => l.kind === "feed") ? serversByUser.get(r.userId) : undefined;
+                return (
+                <Fragment key={r.id}>
+                <tr className={`align-top ${forward ? "border-b-0" : ""}`}>
                   <td className="py-3 pr-4 text-zinc-400">
                     {formatAbsoluteUtc(r.submittedAt)} <span className="text-zinc-600">({formatRelative(r.submittedAt)})</span>
                     <div className="font-mono text-xs text-zinc-500">{r.reference}</div>
@@ -118,7 +131,21 @@ export default async function AdminBasketRequestsPage({ searchParams }: { search
                     </form>
                   </td>
                 </tr>
-              ))}
+                {forward && (
+                  // Its own full-width row, so the forward control never widens the columns above.
+                  <tr>
+                    <td colSpan={6} className="pb-4">
+                      <BasketForwardForm
+                        requestId={r.id}
+                        feedLines={r.lines.filter((l) => l.kind === "feed").map((l) => ({ key: l.key, name: l.name }))}
+                        servers={forward}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+                );
+              })}
               {requests.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-zinc-500">

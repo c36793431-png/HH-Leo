@@ -200,6 +200,18 @@ export async function listBasketRequests(options: { status?: BasketRequestStatus
   return result.rows.map(mapRow);
 }
 
+export async function getBasketRequest(id: string): Promise<BasketRequestRow | null> {
+  const result = await pool.query(
+    `select ${SELECT_COLUMNS}
+     from basket_requests br
+     left join users u on u.id = br.user_id
+     left join users hb on hb.id = br.handled_by
+     where br.id = $1`,
+    [id]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
 /** Admin toggle. Handled stamps who and when; back to new clears both, so the 0093 check
  * (handled <=> handled_at) always holds. Returns the request's user for the admin log, or null
  * when no row changed (unknown id, or already in that state). */
