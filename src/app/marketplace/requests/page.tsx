@@ -6,23 +6,34 @@ import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { authPageHref } from "@/lib/post-auth-redirect";
-import { listBasketRequests } from "@/lib/basket-requests";
+import { listMyRequestsHistory, type HistoryStatus } from "@/lib/my-requests-history";
 import { formatAbsoluteUtc } from "@/lib/format-time";
 
+const PILL_CLASS: Record<HistoryStatus, string> = {
+  Sent: "bk-pill-sent",
+  "In review": "bk-pill-review",
+  Approved: "bk-pill-approved",
+  Declined: "bk-pill-declined",
+  Handled: "bk-pill-handled",
+  Active: "bk-pill-active",
+  Ended: "bk-pill-ended",
+};
+
 /**
- * /marketplace/requests: "My requests" (Iris r2 sheet 3; marcus m59173 item 6). Basket requests
- * only; it is not a feature-request board. One row per basket sent, newest first, its
- * lines listed, status Sent (cyan) or Handled (neutral grey, never green: handled can include a
- * no). Read-only; signed-in only.
+ * /marketplace/requests: "My requests" (Iris r2 sheet 3; marcus m59173 item 6), now the whole
+ * history (coxwell 14:06Z via marcus m59959 (B); rulings m59979): every basket, Request access
+ * click, feed and strategy idea, strategy pitch, trial and licence, newest first, one status
+ * vocabulary (lib/my-requests-history.ts). Read-only; signed-in only. Handled stays neutral grey,
+ * never green: handled can include a no.
  */
-export default async function MyBasketRequestsPage() {
+export default async function MyRequestsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect(authPageHref("/login", "/marketplace/requests"));
   const user = session.user;
   if (isAdminUser(user)) redirect("/admin/basket-requests");
 
-  const [requests, activeLicenses] = await Promise.all([
-    listBasketRequests({ userId: user.id }),
+  const [{ rows, failedSources }, activeLicenses] = await Promise.all([
+    listMyRequestsHistory(user.id),
     getActiveLicenseDetailsForUser(user.id).catch(() => []),
   ]);
   const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(false, activeLicenses);
@@ -38,10 +49,10 @@ export default async function MyBasketRequestsPage() {
     >
       <div className="comm-head">
         <h1>My requests</h1>
-        <p>Newest first · one row per request you sent.</p>
+        <p>Newest first · everything you&apos;ve asked for, and the licences and trials you hold or held.</p>
       </div>
 
-      {requests.length === 0 ? (
+      {rows.length === 0 && failedSources.length === 0 ? (
         <div className="card bk-empty">
           <h2>No requests yet</h2>
           <p>You haven&apos;t sent a request yet. Pick software, strategies or feeds in the marketplace and send them together.</p>
@@ -51,42 +62,34 @@ export default async function MyBasketRequestsPage() {
         </div>
       ) : (
         <div className="card bk-reqs">
-          {requests.map((r) => (
-            <div key={r.id} className="bk-req">
+          {rows.map((r) => (
+            <div key={r.key} className="bk-req">
               <div className="bk-req-when">
-                {formatAbsoluteUtc(r.submittedAt)}
+                {formatAbsoluteUtc(r.at)}
                 <small>{r.reference}</small>
               </div>
               <ul className="bk-req-lines">
-                {r.lines.map((l) => (
-                  <li key={`${l.kind}:${l.key}`}>
-                    {l.name}
-                    <span>
-                      {" · "}
-                      {l.kind === "feed" ? `${l.servers ?? 1} server${(l.servers ?? 1) === 1 ? "" : "s"}` : l.kind}
-                    </span>
+                <li className="bk-req-kind">{r.kind}</li>
+                {r.items.map((item, i) => (
+                  <li key={i} className={item === "Start with a 30-day trial" ? "bk-req-trial" : undefined}>
+                    {item}
+                    {r.itemStatuses?.[i] && <span>{`: ${r.itemStatuses[i]}`}</span>}
                   </li>
                 ))}
-                {r.hasTrial && <li className="bk-req-trial">Start with a 30-day trial</li>}
               </ul>
               <div className="bk-req-status">
-                {r.status === "handled" ? (
-                  <>
-                    <span className="bk-pill bk-pill-handled">✓ Handled</span>
-                    <small>We&apos;ve replied. See your email for what was agreed.</small>
-                  </>
-                ) : (
-                  <>
-                    <span className="bk-pill bk-pill-sent">● Sent</span>
-                    <small>We have it. We&apos;ll confirm by email.</small>
-                  </>
-                )}
+                <span className={`bk-pill ${PILL_CLASS[r.status]}`}>{r.status}</span>
+                {r.outcome && <small>{r.outcome}</small>}
               </div>
             </div>
           ))}
+          {failedSources.length > 0 && (
+            <p className="fp-note bk-req-foot">Part of your history couldn&apos;t be loaded just now. Refresh to try again.</p>
+          )}
           <p className="fp-note bk-req-foot">
-            One row per <b>request you sent</b>, not per product. <b>Sent</b> = we have it. <b>Handled</b>{" "}
-            = we&apos;ve replied. It does <b>not</b> say every line was granted. What you have shows on your account.
+            <b>Sent</b> = we have it. <b>In review</b> = we&apos;re looking at it. <b>Handled</b>{" "}
+            = we&apos;ve replied by email; it does <b>not</b> say every line was granted. <b>Active</b> / <b>Ended</b>{" "}
+            = a licence or trial you hold or held.
           </p>
         </div>
       )}
