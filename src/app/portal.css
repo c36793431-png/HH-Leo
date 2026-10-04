@@ -1225,6 +1225,44 @@
 @media (max-width: 600px) {
   .portal-shell .mkd-cards, .portal-shell .mkd-ticks { grid-template-columns: 1fr; }
 }
+/* The terminal's Member Success Stories (member-success-stories.tsx, m59186): one slide at a time,
+   picture left and words right, stacked under 700px. The pictures come in every shape (portrait
+   payout screens, wide certificates), so each sits whole in a fixed-height box. */
+.portal-shell .mkd-stories { margin-top: 16px; }
+.portal-shell .mkd-stories-viewport { overflow: hidden; border-radius: 10px; }
+.portal-shell .mkd-stories-track { list-style: none; margin: 0; padding: 0; display: flex; transition: transform 0.5s ease; }
+.portal-shell .mkd-story {
+  flex: 0 0 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 20px; align-items: center; padding: 16px; background: var(--hz-panel-2);
+  border: 1px solid var(--hz-line-soft); border-radius: 10px;
+}
+.portal-shell .mkd-story-media { height: 340px; display: flex; align-items: center; justify-content: center; background: var(--hz-bg-1); border-radius: 8px; overflow: hidden; }
+.portal-shell .mkd-story-media img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+.portal-shell .mkd-story-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--hz-cyan); margin-bottom: 8px; }
+.portal-shell .mkd-story-title { margin: 0; font-family: var(--hz-disp); font-size: 22px; font-weight: 600; color: var(--hz-ink); }
+.portal-shell .mkd-story-subtitle { font-size: 13px; color: var(--hz-ink-2); margin: 2px 0 10px; }
+.portal-shell .mkd-story-desc { margin: 0 0 12px; font-size: 13px; color: var(--hz-ink); line-height: 1.6; }
+.portal-shell .mkd-story-tags { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.portal-shell .mkd-story-tags li { font-family: var(--hz-mono); font-size: 11px; color: var(--hz-ink-2); padding: 2px 8px; border: 1px solid var(--hz-line); border-radius: 999px; }
+.portal-shell .mkd-story-date { font-size: 11px; color: var(--hz-ink-3); }
+.portal-shell .mkd-stories-controls { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 12px; }
+.portal-shell .mkd-stories-arrow {
+  width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--hz-line); background: var(--hz-panel-2);
+  color: var(--hz-ink); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.portal-shell .mkd-stories-arrow:hover { border-color: var(--hz-card-line); }
+.portal-shell .mkd-stories-dots { display: flex; gap: 8px; }
+.portal-shell .mkd-stories-dot { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: 0; background: var(--hz-ink-4); cursor: pointer; }
+.portal-shell .mkd-stories-dot[aria-current="true"] { background: var(--hz-cyan); }
+.portal-shell .mkd-stories-foot { margin: 12px 0 0; font-size: 11px; color: var(--hz-ink-3); text-align: center; }
+@media (max-width: 700px) {
+  .portal-shell .mkd-story { grid-template-columns: 1fr; gap: 12px; padding: 12px; }
+  .portal-shell .mkd-story-media { height: 240px; }
+  .portal-shell .mkd-story-title { font-size: 19px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-shell .mkd-stories-track { transition: none; }
+}
 .portal-shell .mkd-request { display: flex; flex-direction: column; gap: 10px; }
 .portal-shell .mkd-request .ftd-unlock,
 .portal-shell .mkd-request .mkd-action { align-self: flex-start; }

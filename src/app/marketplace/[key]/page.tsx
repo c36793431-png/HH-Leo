@@ -23,6 +23,7 @@ import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores"
 import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
 import { basketEntry } from "@/lib/basket-catalogue";
 import { BasketAddBox } from "@/components/marketplace/basket-controls";
+import { MemberSuccessStories } from "@/components/marketplace/member-success-stories";
 
 /**
  * /marketplace/[key]: the product page behind every shelf card's "See more →" (coxwell
@@ -262,13 +263,12 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
 
       {includedWide && <IncludedSections included={included} />}
 
-      {/* SLOT, EMPTY ON PURPOSE: the old main site's client feedback and screenshot carousel go
-          here, below What's included (coxwell via marcus, m58579 (b)). HELD by marcus m58607: the
-          extracted cards carry a real trader's first name, payout/PnL figures and @handles, and one
-          image stands for two members, which is coxwell's call. Nothing renders here until he
-          rules; no invented testimonial ever does. */}
-
       {comparisonOwnRows.length > 0 && <FeedComparisonScores variant="marketplace" highlight={comparisonOwnRows} />}
+
+      {/* The old main site's feedback carousel, at the END of the page after What's included
+          (coxwell via marcus, m59186; the m58607 hold is lifted by his ask, m59209). The terminal
+          has no comparison board, so nothing sits between the two. */}
+      {listing.memberStories && <MemberSuccessStories />}
 
       <div className="foot">HORIZON HFT · customer portal</div>
     </>

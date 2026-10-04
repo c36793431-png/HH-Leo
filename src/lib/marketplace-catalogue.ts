@@ -167,6 +167,9 @@ export interface MarketplaceListing {
   /** A secondary link in the product page's Access box, under the request control, for a
    * listing whose full description lives on the main site. Same tab. Absent = none. */
   moreInfo?: { href: string; label: string };
+  /** The old main site's Member Success Stories carousel (member-success-stories.ts) at the end
+   * of the product page. The terminal only (coxwell via marcus, m59186). Absent = none. */
+  memberStories?: true;
 }
 
 /**
@@ -375,6 +378,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     // coxwell 2026-10-03 23:40Z via marcus m59190: "button for more info on the software page if
     // someone wants to navigate there". Secondary, so the request stays the primary control.
     moreInfo: { href: `${MAIN_SITE_URL}/software`, label: "More about the software →" },
+    memberStories: true,
     // coxwell's own screenshot of a live client (2026-10-02, via marcus m58359), cropped at native
     // pixels to the card and hero frames, in place of Iris's illustration. A placeholder until the
     // 2.0.7 set.
