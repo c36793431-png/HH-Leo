@@ -58,7 +58,7 @@ const STRATEGIES: Array<{ slug: string; title: string; headings: string[] }> = [
   { slug: "1-leg-latency-arb", title: "1 Leg — Latency Arbitrage", headings: ["Core Parameters"] },
   { slug: "2-leg-lock-hedge-arb", title: "2 Leg Lock — Hedge Arbitrage", headings: ["Core Parameters", "Broker Requirement"] },
   { slug: "trend-impulse", title: "Trend Impulse", headings: ["Fast Feed Impulse Detection", "Core Parameters"] },
-  { slug: "obi", title: "OBI — Order Book Imbalance", headings: ["CME L2 Depth", "Core Parameters", "Feed Requirement"] },
+  { slug: "obi", title: "OBI — Order Book Imbalance", headings: ["One-Sided Price Lead", "Core Parameters", "Feed Requirement"] },
   { slug: "grid-arbitrage", title: "Grid Arbitrage", headings: ["Entry Logic", "Progressive Volume", "Basket Exits & Risk"] },
 ];
 

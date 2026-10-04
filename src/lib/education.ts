@@ -188,23 +188,23 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
   {
     slug: "2-leg-lock-hedge-arb",
     title: "2 Leg Lock (Hedge Arb)",
-    description: "Hedge-based arbitrage with trailing exits — requires a hedge-enabled broker.",
+    description: "Hedge-based arbitrage that re-locks at the broker — requires a hedge-enabled broker.",
     category: "strategy-deep-dives",
     minutes: 13,
     free: true,
     section: 6,
     intro:
-      "2 Leg Lock opens offsetting positions across two legs and manages them as a hedged pair with a trailing exit.",
+      "2 Leg Lock opens a BUY and a SELL at market as soon as the tab is flat, so it starts locked; there is no entry gap. After Min Time(s), when the Fast Feed leads the broker by your Exec Gap, it closes the wrong side and broker pending orders re-lock the remaining leg. Trailing is only the fallback, if the broker refuses those orders.",
     blocks: [
       {
         type: "setting",
         heading: "Core Parameters",
-        body: "Four parameters control entry and exit behavior:",
+        body: "Four parameters control the release and the exits:",
         items: [
-          "Gap — minimum price discrepancy required to open the hedge pair",
-          "TrailStart — profit level at which the trailing stop activates",
-          "TrailDist — distance the trailing stop maintains once active",
-          "StopLoss — hard stop applied to the combined position",
+          "Exec Gap — the release trigger: after Min Time(s), a Fast Feed lead of at least this (Shift and Auto Offset included) closes the wrong side",
+          "TrailStart — fallback only: profit from the release fill at which the trailing stop activates, if the broker refused the re-lock orders",
+          "TrailDist — fallback only: distance the trailing stop maintains once active",
+          "StopLoss — the cage distance: after the release, the broker stop that re-locks the remaining leg rests this far against it. It is not a stop on the combined position; while locked, the lock is the protection",
         ],
       },
       {
@@ -245,26 +245,26 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
   {
     slug: "obi",
     title: "OBI",
-    description: "Order book imbalance trading on CME L2 depth — needs the Horizon CME feed.",
+    description: "Trades a one-sided price lead of the fast feed over your broker — needs the Horizon CME feed.",
     category: "strategy-deep-dives",
     minutes: 14,
     free: true,
     section: 8,
-    intro: "OBI reads CME Level 2 depth to trade directional order book imbalances.",
+    intro: "OBI trades when one side of the book leads your broker by Imbal Gap while the other side stays within Max Counter. It reads prices, in points, not volume.",
     blocks: [
       {
         type: "info",
-        heading: "CME L2 Depth",
+        heading: "One-Sided Price Lead",
         body:
-          "OBI consumes full CME Level 2 order book depth to gauge buy/sell pressure beyond the top of book.",
+          "OBI compares raw Horizon CME prices with your broker's on each side of the book. It buys when the fast bid leads the broker bid by at least Imbal Gap while the broker ask stays less than Max Counter above the fast ask; selling is the mirror. Shift and Auto Offset do not apply, so any futures-vs-CFD basis between the two prices sits inside the gap.",
       },
       {
         type: "setting",
         heading: "Core Parameters",
         body: "Two parameters shape entries:",
         items: [
-          "Imbalance — the buy/sell depth ratio threshold required to trigger an entry",
-          "Counter — number of consecutive imbalanced updates required for confirmation",
+          "Imbal Gap — how far (points) the fast price must lead the broker on one side of the book to enter",
+          "Max Counter — the other side of the book must stay under this (points) for an entry",
         ],
       },
       {
