@@ -159,7 +159,7 @@ export default async function FeedsPage() {
 
               {(status === "active" || status === "trial") && grantingLicense && (
                 <span className="fp-expiry">
-                  {status === "trial" ? "Trial · expires " : "Active until "}
+                  {status === "trial" ? "Trial · expires " : "Activated until "}
                   {grantingLicense.expiresAt.toLocaleDateString()}
                 </span>
               )}

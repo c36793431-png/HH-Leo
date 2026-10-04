@@ -12,7 +12,6 @@ import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { listActiveSetfiles, type SetfileRow, type StrategyKey } from "@/lib/setfiles";
 import { CopySetfileButton } from "@/components/portal/copy-setfile-button";
-import { LockedLanding } from "@/components/portal/locked-landing";
 import {
   STRATEGY_ORDER,
   STRATEGY_DISPLAY_META,
@@ -69,13 +68,24 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
       </div>
 
       {status === "locked" ? (
+        // Strategy-only landing (marcus m59976 (2)): the AVAILABLE vocabulary, no 🔒 and no
+        // "Upgrade to Paid". Setfiles, Brokers, Prop Firm and Advanced Education keep the shared
+        // LockedLanding. The CTA goes where "Get another licence" goes on /account/servers.
         <div className="grid">
           <div className="card full">
-            <LockedLanding
-              feature={meta.name}
-              tease={meta.hook}
-              telegramChannelUrl={config.telegramChannelUrl}
-            />
+            <div className="empty">
+              <b>{meta.name} is included with a Horizon HFT licence.</b>
+              <p>{meta.hook}</p>
+              <a
+                className="btn primary sm"
+                href={config.telegramChannelUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ marginTop: 12 }}
+              >
+                Get a licence →
+              </a>
+            </div>
           </div>
         </div>
       ) : (
