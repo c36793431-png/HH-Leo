@@ -70,6 +70,24 @@ function resolveTitle(pathname: string, adminSurface: AdminSurface): { title: st
   return { title: titleCaseSegment(last), crumb };
 }
 
+// Breadcrumb segments are links (coxwell 14:06Z via marcus m59959): each one but the current page
+// goes to its own path. A prefix with no page.tsx of its own stays plain text; /feeds/[region] is
+// the only such prefix under this topbar (checked against src/app at 30053ac).
+const NO_INDEX_PAGE = [/^\/feeds\/[^/]+$/];
+
+function crumbTrail(pathname: string, crumb: string): { label: string; href: string | null; current: boolean }[] {
+  const labels = crumb.split(" / ").filter(Boolean);
+  const segments = pathname.split("/").filter(Boolean);
+  // TITLES crumbs mirror the path; if one ever doesn't, show it unlinked rather than guess.
+  const mirrors = labels.length === segments.length;
+  return labels.map((label, i) => {
+    const href = "/" + segments.slice(0, i + 1).join("/");
+    const current = i === labels.length - 1;
+    const linkable = mirrors && !current && !NO_INDEX_PAGE.some((re) => re.test(href));
+    return { label, href: linkable ? href : null, current };
+  });
+}
+
 export function PortalTopbar({
   isAdmin,
   adminSurface = "portal",
@@ -85,6 +103,8 @@ export function PortalTopbar({
   const resolved = resolveTitle(pathname, adminSurface);
   const { title, crumb } = sent ? { ...resolved, title: "Request sent" } : resolved;
   const host = adminSurface === "feed" ? "feed.horizonhft.com" : "portal.horizonhft.com";
+  const homeHref = !isAdmin ? "/dashboard" : adminSurface === "feed" ? "/admin" : "/admin/dashboard";
+  const trail = crumbTrail(pathname, crumb);
   const backTo = sent ? undefined : BACK_TO[pathname];
 
   return (
@@ -98,9 +118,19 @@ export function PortalTopbar({
           ☰
         </button>
       )}
-      <div>
+      <div className="tb-head">
         <h1>{title}</h1>
-        <div className="crumb">{host} / {crumb}</div>
+        <nav className="crumb" aria-label="Breadcrumb">
+          <Link href={homeHref} className="crumb-host">
+            {host}
+          </Link>
+          {trail.map((c) => (
+            <span key={`${c.label}:${c.href}`} className="crumb-seg">
+              <span className="crumb-sep" aria-hidden="true">/</span>
+              {c.href ? <Link href={c.href}>{c.label}</Link> : <span aria-current={c.current ? "page" : undefined}>{c.label}</span>}
+            </span>
+          ))}
+        </nav>
       </div>
       <div className="sp" />
       {isAdmin && <span className="adminchip">🛡 Admin mode</span>}

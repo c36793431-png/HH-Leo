@@ -239,7 +239,14 @@
   cursor: pointer; font-size: 18px;
 }
 .portal-shell .topbar h1 { font-family: var(--hz-disp); font-weight: 700; font-size: 26px; letter-spacing: 0.02em; }
-.portal-shell .topbar .crumb { font-size: 12px; color: var(--hz-ink-3); font-family: var(--hz-mono); }
+/* Breadcrumb (coxwell 14:06Z via marcus m59959): readable size in the body face, and every
+   segment but the current page is a link. */
+.portal-shell .topbar .tb-head { min-width: 0; }
+.portal-shell .topbar .crumb { margin-top: 2px; font-size: 14px; color: var(--hz-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.portal-shell .topbar .crumb a { color: var(--hz-cyan); text-decoration: none; }
+.portal-shell .topbar .crumb a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.portal-shell .topbar .crumb [aria-current="page"] { color: var(--hz-ink); font-weight: 600; }
+.portal-shell .topbar .crumb-sep { margin: 0 7px; color: var(--hz-ink-4); }
 .portal-shell .topbar .sp { flex: 1; }
 .portal-shell .topbar .adminchip {
   display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--hz-warn);
@@ -1560,7 +1567,11 @@
   .portal-shell .content { padding: 20px 16px 50px; }
   .portal-shell .topbar { padding: 0 16px; gap: 10px; }
   .portal-shell .topbar h1 { font-size: 21px; }
-  .portal-shell .topbar .crumb { display: none; }
+  /* Phone: the trail shows too (m59959), minus the host, which the title row has no room for. */
+  .portal-shell .topbar .crumb { font-size: 13px; margin-top: 0; }
+  .portal-shell .topbar .crumb-host { display: none; }
+  .portal-shell .topbar .crumb-seg:first-of-type .crumb-sep { display: none; }
+  .portal-shell .topbar .crumb-sep { margin: 0 4px; }
   .portal-shell .g2, .portal-shell .courses, .portal-shell .edu-grid { grid-template-columns: 1fr; }
   .portal-shell .feed-grid { grid-template-columns: 1fr 1fr; }
   .portal-shell .metrics { margin-left: 0; width: 100%; justify-content: space-between; }
