@@ -8,13 +8,13 @@ import {
   MEMBER_SUCCESS_STORIES,
 } from "@/lib/member-success-stories";
 
-const AUTOPLAY_MS = 5000;
+const AUTOPLAY_MS = 1000;
 
 /**
  * The terminal page's Member Success Stories, at the end of the page (coxwell via marcus, m59186).
  *
- * AUTOPLAY like the live homepage (marcus m59418): a slide every 5 s, paused while the pointer or
- * keyboard focus is inside, stopped for good after any click in it, and never started under
+ * AUTOPLAY (marcus m59418): a slide every 1 s (coxwell via marcus m59625, as on www), paused while
+ * the pointer or keyboard focus is inside, stopped for good after any click in it, and never started under
  * prefers-reduced-motion (checked after mount, so the server render and a reduced-motion visitor
  * both get a still carousel).
  *
