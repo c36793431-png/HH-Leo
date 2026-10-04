@@ -90,8 +90,10 @@ export interface BasketEntry {
   blurb?: string;
   /** The listing's card image and flag, for the line thumbnail. */
   image?: string;
-  /** A strategy card image's 2x file, for srcset. */
-  image2x?: string;
+  /** A strategy card's own image, 1x + 2x, on the /marketplace card only. Not image: a strategy
+   * basket line keeps the plain plate (marcus m59724, option b). */
+  cardImage?: string;
+  cardImage2x?: string;
   mark?: ListingMark;
   detailHref?: string;
   /** A strategy's "See more" target on www. Not detailHref: that one also links the basket line. */
@@ -115,8 +117,8 @@ function strategyEntry(e: BasketStrategyEntry): BasketEntry {
     name: e.name ?? first.name,
     chips: type ? [`Strategy ${type}`] : [],
     blurb: e.strategyKeys.length === 1 ? first.hook : e.strategyKeys.map((k) => STRATEGY_DISPLAY_META[k].name).join(" · "),
-    image: e.image?.src,
-    image2x: e.image?.src2x,
+    cardImage: e.image?.src,
+    cardImage2x: e.image?.src2x,
     aboutHref: strategyAboutHref(e),
   };
 }
