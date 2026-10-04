@@ -9,7 +9,7 @@ const LISTED_NAMES = new Set(Object.values(SCORE_TIER_NAMES));
  * Horizon product (Epsilon, "Offline", has no listing) and drops the row notes, because Delta's
  * carries a latency figure and marketplace surfaces carry none. It is a variant, not an edit to
  * FEED_COMPARISON_SCORES, so the tiers page keeps both. The window line and the method caption
- * are the same in both. The estimated-split footnote differs only in not naming Epsilon.
+ * and the footnote are the same in both.
  *
  * highlight: entry names to mark as the page's own product, e.g. Beta, Gamma and Delta on
  * London's Base bundle.
@@ -74,13 +74,9 @@ export function FeedComparisonScores({
           (share of gaps over 500 ms) and its worst-case gap. Note: Alpha edges Black on stream
           quality (15.2 vs 14.8); Black leads because it maxes speed and consistency.
         </p>
-        {/* The marketplace variant has no Epsilon row, so its footnote doesn't name it
-            (marcus, m52910). */}
-        <p className="fcs-caption-footnote">
-          Speed/Consistency/Stream splits are confirmed for{" "}
-          {marketplace ? "Black, Alpha and Delta" : "Black, Alpha, Delta and Epsilon"};
-          Ultra, Beta and Gamma sub-scores are estimated from their total score.
-        </p>
+        {/* FOC13's methodology line (feed-methodology-draft.md §2), now that every row's parts
+            are his (marcus m59293). */}
+        <p className="fcs-caption-footnote">Parts are rounded to one decimal so that each row adds up to its score.</p>
       </details>
     </div>
   );

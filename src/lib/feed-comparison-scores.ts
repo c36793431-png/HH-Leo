@@ -1,7 +1,8 @@
 // Static leaderboard; scores per coxwell ruling 2026-10-02; public label = "Measured Fri 14 Aug
 // 2026, 11:57–21:00 UTC (9 market-open hours, XAUUSD)", the same everywhere it is shown.
-// Sub-component (Speed/Consistency/Stream) splits are only confirmed for Black, Alpha's
-// stream figure, Delta, and Epsilon — see notes. Do not invent splits for the rest.
+// Speed/Consistency/Stream parts are FOC13's, computed from the inputs behind the ruled totals
+// (feed-methodology-draft.md §2, marcus m59293): one decimal, largest-remainder, so each row
+// sums to its score.
 export type FeedScoreEntry = {
   rank: number;
   name: string;
@@ -9,35 +10,15 @@ export type FeedScoreEntry = {
   speed: number; // /45
   consistency: number; // /35
   streamQuality: number; // /20
-  estimatedSplit?: boolean; // true if speed/consistency/streamQuality are proportional estimates, not confirmed sub-scores
   note?: string;
 };
 
-const SPEED_MAX = 45;
-const CONSISTENCY_MAX = 35;
-const STREAM_MAX = 20;
-
-function estimatedSplit(score: number): Pick<FeedScoreEntry, "speed" | "consistency" | "streamQuality"> {
-  return {
-    speed: Number(((score * SPEED_MAX) / 100).toFixed(1)),
-    consistency: Number(((score * CONSISTENCY_MAX) / 100).toFixed(1)),
-    streamQuality: Number(((score * STREAM_MAX) / 100).toFixed(1)),
-  };
-}
-
 export const FEED_COMPARISON_SCORES: FeedScoreEntry[] = [
   { rank: 1, name: "Black", score: 94.8, speed: 45, consistency: 35, streamQuality: 14.8 },
-  {
-    rank: 2,
-    name: "Alpha",
-    score: 76.4,
-    speed: 34.4,
-    consistency: 26.8,
-    streamQuality: 15.2,
-  },
-  { rank: 3, name: "Ultra", score: 73.2, ...estimatedSplit(73.2), estimatedSplit: true },
-  { rank: 4, name: "Beta", score: 42.4, ...estimatedSplit(42.4), estimatedSplit: true },
-  { rank: 5, name: "Gamma", score: 14.5, ...estimatedSplit(14.5), estimatedSplit: true },
+  { rank: 2, name: "Alpha", score: 76.4, speed: 35.7, consistency: 25.5, streamQuality: 15.2 },
+  { rank: 3, name: "Ultra", score: 73.2, speed: 35.1, consistency: 24.9, streamQuality: 13.2 },
+  { rank: 4, name: "Beta", score: 42.4, speed: 14.8, consistency: 14.4, streamQuality: 13.2 },
+  { rank: 5, name: "Gamma", score: 14.5, speed: 0.9, consistency: 7.6, streamQuality: 6.0 },
   {
     rank: 6,
     name: "Delta",

@@ -122,7 +122,8 @@ const MARKETPLACE_ICON = svg(
   </>,
 );
 
-const CHANGELOG_HREF = `${MAIN_SITE_URL}/software#releases`;
+// www renamed Changelog to Blog; its /changelog 301s to /blog/release-notes (marcus m59486).
+const BLOG_HREF = `${MAIN_SITE_URL}/blog`;
 
 export function HubNav({ signInHref }: { signInHref: string }) {
   return (
@@ -146,7 +147,7 @@ export function HubNav({ signInHref }: { signInHref: string }) {
             {MARKETPLACE_ICON}
             Marketplace
           </Link>
-          <a href={CHANGELOG_HREF}>Changelog</a>
+          <a href={BLOG_HREF}>Blog</a>
           <BasketNavButton className="hn-basket" />
           <Link href={signInHref} className="hn-login">
             Sign in
@@ -177,7 +178,7 @@ export function HubNav({ signInHref }: { signInHref: string }) {
                   {MARKETPLACE_ICON}
                   Marketplace
                 </Link>
-                <a href={CHANGELOG_HREF}>Changelog</a>
+                <a href={BLOG_HREF}>Blog</a>
               </div>
               <Link className="hn-btn" href={signInHref}>
                 Sign in <span>→</span>
