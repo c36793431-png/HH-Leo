@@ -197,8 +197,10 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
             {strategyEntries.map((e) => (
               <div key={e.key} id={`strategy-${e.key}`} className="card mkt-card mkt-available bk-strategy-card">
                 {e.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img className="bk-strategy-plate bk-strategy-image" src={e.image} alt="" />
+                  <div className="bk-strategy-plate bk-strategy-plate-img" aria-hidden="true">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={e.image} srcSet={e.image2x ? `${e.image} 1x, ${e.image2x} 2x` : undefined} alt="" width={316} height={120} />
+                  </div>
                 ) : (
                   <div className="bk-strategy-plate" aria-hidden="true">
                     <span>Strategy</span>

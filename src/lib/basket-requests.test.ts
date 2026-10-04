@@ -161,7 +161,7 @@ test("chips: a strategy line's type comes from its catalogue name; feed chips ar
   assert.deepEqual(chips.get("strategy:1leg"), ["Strategy Latency Arbitrage"]);
   assert.deepEqual(chips.get("strategy:2leg_lock"), ["Strategy Hedge Arbitrage"]);
   assert.deepEqual(chips.get("strategy:trend_impulse"), ["Strategy Fast-Feed Momentum"]);
-  assert.deepEqual(chips.get("strategy:obi"), ["Strategy Order Block Imbalance"]);
+  assert.deepEqual(chips.get("strategy:obi"), ["Strategy Order Book Imbalance"]);
   assert.deepEqual(chips.get("strategy:grid"), ["Strategy Progressive Basket"]);
   // No data-centre chip: no catalogue field holds a feed's location (marcus m59367).
   assert.deepEqual(chips.get("feed:ld-base"), ["Region London", "Tier Base"]);
@@ -178,7 +178,7 @@ test("?strategy=: each of www's five slugs lands on its entry; anything else lan
   }
 });
 
-test("See more: each strategy card links to its own www page; the basket line stays unlinked; no card image yet", () => {
+test("See more: each strategy card links to its own www page; the basket line stays unlinked; Iris's image per card", () => {
   const strategies = cat.basketCatalogue().filter((e) => e.kind === "strategy");
   assert.deepEqual(
     strategies.map((e) => [e.key, e.aboutHref]),
@@ -190,9 +190,14 @@ test("See more: each strategy card links to its own www page; the basket line st
       ["grid", "https://www.horizonhft.com/strategies/grid-arbitrage"],
     ],
   );
+  for (const e of strategies) assert.equal(e.detailHref, undefined, e.key);
+  // README card id -> file map (marcus m59654), and every file is in /public.
+  const files = { "1leg": "1-leg", "2leg_lock": "2-leg-lock", trend_impulse: "trend-impulse", obi: "obi", grid: "grid-arbitrage" };
   for (const e of strategies) {
-    assert.equal(e.detailHref, undefined, e.key);
-    assert.equal(e.image, undefined, e.key);
+    const f = files[e.key as keyof typeof files];
+    assert.equal(e.image, `/marketplace/strategies/${f}.png`, e.key);
+    assert.equal(e.image2x, `/marketplace/strategies/${f}@2x.png`, e.key);
+    for (const p of [e.image!, e.image2x!]) assert.ok(readdirSync(path.join("public", path.dirname(p))).includes(path.basename(p)), p);
   }
 });
 

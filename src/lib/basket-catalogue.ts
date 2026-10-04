@@ -29,17 +29,27 @@ interface BasketStrategyEntry {
   strategyKeys: StrategyKey[];
   /** Overrides meta.name, for a package. Absent = the one strategy's meta.name. */
   name?: string;
-  /** The card's own image, a file under /public (marcus m59621: Iris is drawing one per
-   * strategy). Absent = the shared "Strategy" plate. */
-  image?: string;
+  /** The card's own image, 1x + 2x files under /public. Absent = the shared "Strategy" plate. */
+  image?: StrategyCardImage;
 }
 
+/** Iris's schematics (marcus m59622, coxwell approved m59658): 316x120 masters, every mark in the
+ * central 222px, so object-fit: cover at the 222px 4-up slot crops only background. */
+interface StrategyCardImage {
+  src: string;
+  src2x: string;
+}
+const strategyImage = (file: string): StrategyCardImage => ({
+  src: `/marketplace/strategies/${file}.png`,
+  src2x: `/marketplace/strategies/${file}@2x.png`,
+});
+
 export const BASKET_STRATEGY_ENTRIES: BasketStrategyEntry[] = [
-  { key: "1leg", strategyKeys: ["1leg"] },
-  { key: "2leg_lock", strategyKeys: ["2leg_lock"] },
-  { key: "trend_impulse", strategyKeys: ["trend_impulse"] },
-  { key: "obi", strategyKeys: ["obi"] },
-  { key: "grid", strategyKeys: ["grid"] },
+  { key: "1leg", strategyKeys: ["1leg"], image: strategyImage("1-leg") },
+  { key: "2leg_lock", strategyKeys: ["2leg_lock"], image: strategyImage("2-leg-lock") },
+  { key: "trend_impulse", strategyKeys: ["trend_impulse"], image: strategyImage("trend-impulse") },
+  { key: "obi", strategyKeys: ["obi"], image: strategyImage("obi") },
+  { key: "grid", strategyKeys: ["grid"], image: strategyImage("grid-arbitrage") },
 ];
 
 /** The main site's /software strategy cards link to /marketplace?strategy=<slug> (marcus m59280).
@@ -80,6 +90,8 @@ export interface BasketEntry {
   blurb?: string;
   /** The listing's card image and flag, for the line thumbnail. */
   image?: string;
+  /** A strategy card image's 2x file, for srcset. */
+  image2x?: string;
   mark?: ListingMark;
   detailHref?: string;
   /** A strategy's "See more" target on www. Not detailHref: that one also links the basket line. */
@@ -103,7 +115,8 @@ function strategyEntry(e: BasketStrategyEntry): BasketEntry {
     name: e.name ?? first.name,
     chips: type ? [`Strategy ${type}`] : [],
     blurb: e.strategyKeys.length === 1 ? first.hook : e.strategyKeys.map((k) => STRATEGY_DISPLAY_META[k].name).join(" · "),
-    image: e.image,
+    image: e.image?.src,
+    image2x: e.image?.src2x,
     aboutHref: strategyAboutHref(e),
   };
 }

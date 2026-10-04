@@ -391,8 +391,10 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     mark: "plate-desktop",
     // From FOC12's read of the terminal's code at horizon-src 5b28079 (m52902), as marcus picked
     // the lines (m52904). Iris's products.json lines are not used here: they cite her mockup.
-    // - Names are the app's own (the strategy dropdown, NewUI.cs:307), not the website's: "1 Leg",
-    //   not "1 Leg Lock"; "Order Block Imbalance", not "Order Book".
+    // - Names are the app's own (the strategy dropdown), not the website's: "1 Leg", not "1 Leg
+    //   Lock". OBI is "Order Book Imbalance" since 2.0.7 (NewUI.cs:335; "Block" was the 2.0.5
+    //   label, renamed in 493bd69), and it reads prices only: START refuses it unless the fast
+    //   feed is Horizon CME, which never delivers depth (FOC12 at 490b588, via marcus m59705).
     // - No NinjaTrader: the code has no reference to it.
     // - Emergency Close is per instance, since ForceCloseAllTrades closes one tab.
     // - Set files are load and save only. They hold broker passwords in plaintext today, so
@@ -411,7 +413,7 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
           "1 Leg — one market order when the gap between the Horizon feed and your broker's price reaches your setting, with a virtual stop-loss, take-profit and trailing stop",
           "2 Leg Lock — on the same gap, a hedged pair with a pending lock leg; the losing leg is released and the other is trailed",
           "Trend Impulse — trades in the direction of a move in the Horizon feed that reaches your size within your time window, with an EMA trend filter",
-          "Order Block Imbalance — trades a gap on one side only, and checks order-book imbalance when book depth is available (cTrader FIX)",
+          "Order Book Imbalance — trades the fast-feed price lead on one side of the book (bid or ask) while the other side holds; it does not read order-book volume",
           "Grid Arbitrage — opens a basket on the gap, adds levels at your step and multiplier up to your maximum, and closes the basket at its own take-profit or stop-loss",
         ],
       },
