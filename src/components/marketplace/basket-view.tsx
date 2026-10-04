@@ -27,15 +27,16 @@ import { submitBasketAction } from "@/app/marketplace/basket/actions";
  *   runs at submit.
  * - The trial is ONE basket-level choice in the summary box (m59146/m59154), off by default, amber
  *   when ticked, shown only to an eligible signed-in account; on Review it is a read-only row.
- * - The Telegram field on Review is read-only when the account has one, required when not.
- * - Sent uses coxwell's line word for word, no reply time, and the count goes back to 0.
+ * - We confirm by email only (coxwell 13:54Z via marcus m59928): Review shows the account's email
+ *   read-only and asks for nothing; Telegram is not mentioned on any client step.
+ * - Sent uses the m59928 line word for word plus the support contact, no reply time, and the count
+ *   goes back to 0.
  * - Phone (r2 sheet 4, marcus m59367 d4): on the basket step the summary card keeps only the trial
  *   box, and a bar sticky at the bottom carries the next step.
  */
 
 export interface BasketAccount {
   email: string | null;
-  telegram: string | null;
   trialEligible: boolean;
   feedReady: boolean;
 }
@@ -82,7 +83,6 @@ export function BasketView({
   const stored = useBasket();
   const [step, setStep] = useState<Step>("basket");
   const [wantTrial, setWantTrial] = useState(false);
-  const [handle, setHandle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<{ reference: string; lines: BasketLine[]; hasTrial: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -112,7 +112,6 @@ export function BasketView({
   };
   const trialOffered = account?.trialEligible === true;
   const trialOn = trialOffered && wantTrial;
-  const needsHandle = account != null && !account.telegram;
 
   function send() {
     setError(null);
@@ -120,7 +119,6 @@ export function BasketView({
       const res = await submitBasketAction({
         lines: lines.map((l) => l.stored),
         wantTrial: trialOn,
-        telegramHandle: needsHandle ? handle : null,
       });
       if (!res.ok) {
         setError(res.error);
@@ -153,15 +151,18 @@ export function BasketView({
             <div className="bk-sent-mark" aria-hidden="true">✓</div>
             <div>
               <h2>Request sent</h2>
-              <p>We&apos;ll confirm on Telegram/email. Nothing has been charged and nothing has started yet.</p>
-              <div className="bk-chips">
-                {account?.telegram && account.telegram !== "linked" && <span className="bk-chip">Telegram {account.telegram}</span>}
-                {needsHandle && handle && <span className="bk-chip">Telegram @{handle.trim().replace(/^@/, "")}</span>}
-                {account?.email && <span className="bk-chip">{account.email}</span>}
-              </div>
+              <p>We&apos;ll confirm by email. Nothing has been charged and nothing has started yet.</p>
+              {account?.email && (
+                <div className="bk-chips">
+                  <span className="bk-chip">{account.email}</span>
+                </div>
+              )}
               <div className="bk-ref">
                 Reference <b>{sent.reference}</b>
               </div>
+              <p className="bk-contact">
+                Questions? <a href="mailto:support@horizonhft.com">support@horizonhft.com</a>
+              </p>
             </div>
           </div>
           <div className="card bk-list">
@@ -272,33 +273,9 @@ export function BasketView({
               ← Edit basket
             </button>
             <div className="bk-reply">
-              <div className="bk-label">We confirm on</div>
-              {needsHandle ? (
-                <>
-                  <input
-                    className="bk-input"
-                    value={handle}
-                    onChange={(e) => setHandle(e.target.value)}
-                    placeholder="@ your Telegram handle"
-                    aria-label="Your Telegram username"
-                    autoComplete="off"
-                    required
-                  />
-                  <p className="fp-note">
-                    Required: we don&apos;t have your Telegram yet. Email is always used as well.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="bk-input bk-input-ro">
-                    {account?.telegram && account.telegram !== "linked" ? `Telegram ${account.telegram}` : "Telegram (linked)"}
-                    {account?.email && ` · ${account.email}`}
-                  </div>
-                  <p className="fp-note">
-                    Read-only, from your account. <Link href="/account">Change in Account →</Link>
-                  </p>
-                </>
-              )}
+              <div className="bk-label">We confirm by email</div>
+              <div className="bk-input bk-input-ro">{account?.email ?? "The email on your account"}</div>
+              <p className="fp-note">Read-only, from your account.</p>
             </div>
           </div>
           <aside className="card bk-summary">
@@ -315,11 +292,11 @@ export function BasketView({
                 {error}
               </p>
             )}
-            <button type="button" className="btn primary bk-cta" disabled={pending || (needsHandle && handle.trim() === "")} onClick={send}>
+            <button type="button" className="btn primary bk-cta" disabled={pending} onClick={send}>
               {pending ? "Sending…" : "Send request →"}
             </button>
             <p className="fp-note">
-              <b>Nothing is charged and nothing starts yet.</b> We read your request and confirm on Telegram/email.
+              <b>Nothing is charged and nothing starts yet.</b> We read your request and confirm by email.
             </p>
           </aside>
         </div>

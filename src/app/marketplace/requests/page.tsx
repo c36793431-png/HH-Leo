@@ -73,12 +73,12 @@ export default async function MyBasketRequestsPage() {
                 {r.status === "handled" ? (
                   <>
                     <span className="bk-pill bk-pill-handled">✓ Handled</span>
-                    <small>We&apos;ve replied. See Telegram/email for what was agreed.</small>
+                    <small>We&apos;ve replied. See your email for what was agreed.</small>
                   </>
                 ) : (
                   <>
                     <span className="bk-pill bk-pill-sent">● Sent</span>
-                    <small>We have it. We&apos;ll confirm on Telegram/email.</small>
+                    <small>We have it. We&apos;ll confirm by email.</small>
                   </>
                 )}
               </div>

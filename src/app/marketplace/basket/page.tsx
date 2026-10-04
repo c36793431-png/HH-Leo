@@ -17,7 +17,7 @@ import { BasketView, type BasketAccount } from "@/components/marketplace/basket-
  *
  * The page passes the catalogue (what may be in a basket today, with names) and, signed in, the
  * account facts the sheets need: trial eligibility (the five-source predicate, re-checked at
- * submit), whether a feed line could be switched on today, and the Telegram on file.
+ * submit), whether a feed line could be switched on today, and the email we confirm on.
  */
 export default async function BasketPage() {
   const session = await auth();
@@ -29,7 +29,7 @@ export default async function BasketPage() {
   let account: BasketAccount | null = null;
   if (user) {
     const state = await getBasketAccountState(user.id);
-    account = { email: state.email, telegram: state.telegram, trialEligible: state.trialEligible, feedReady: state.feedReady };
+    account = { email: state.email, trialEligible: state.trialEligible, feedReady: state.feedReady };
   }
 
   const page = (

@@ -1,7 +1,7 @@
 /* Run: npx tsx --test src/lib/basket-requests.test.ts
  *
  * The marketplace request basket (coxwell via marcus m59124, rulings m59146): line validation,
- * the five-source trial predicate, the one-trial index, the Telegram field, the admin toggle and
+ * the five-source trial predicate, the one-trial index, no Telegram asked, the admin toggle and
  * 0093's rollback. Real Postgres, no prod: the same harness as access-requests-admin-trial.test.ts
  * (an in-memory PGlite carrying the REAL migration chain, the shipped lib through db.ts's
  * global._pgPool seam). The three prod-data preflights get the same minimum seeds, named there. */
@@ -340,21 +340,20 @@ test("trial: two trial baskets from one account: the second is refused, and the 
   await sql(`insert into basket_requests (user_id, lines) values ($1, '[{"kind":"strategy","key":"obi","name":"x"}]'), ($1, '[{"kind":"strategy","key":"obi","name":"x"}]')`, [u.id]);
 });
 
-test("Telegram: required (and valid) only when the account has none; stored on the row, never on users", async () => {
+test("Telegram: not asked for (m59928). An account with none sends fine, the row's handle stays null, the admin card says none on file", async () => {
   const u = await makeUser();
-  await assert.rejects(br.createBasketRequest({ userId: u.id, lines: LINES, wantTrial: false }), br.TelegramHandleRequiredError);
-  await assert.rejects(br.createBasketRequest({ userId: u.id, lines: LINES, wantTrial: false, telegramHandle: "@ab" }), br.TelegramHandleRequiredError);
-  await assert.rejects(br.createBasketRequest({ userId: u.id, lines: LINES, wantTrial: false, telegramHandle: "has space" }), br.TelegramHandleRequiredError);
-  const { id } = await br.createBasketRequest({ userId: u.id, lines: LINES, wantTrial: false, telegramHandle: " @Real_Handle1 " });
-  assert.equal((await sql(`select telegram_handle from basket_requests where id = $1`, [id])).rows[0].telegram_handle, "Real_Handle1");
-  assert.equal((await sql(`select telegram_username from users where id = $1`, [u.id])).rows[0].telegram_username, null);
-  assert.match(telegramSends.at(-1)!.text, /telegram: @Real_Handle1/);
+  const { id } = await br.createBasketRequest({ userId: u.id, lines: LINES, wantTrial: false });
+  assert.equal((await sql(`select telegram_handle from basket_requests where id = $1`, [id])).rows[0].telegram_handle, null);
+  assert.match(telegramSends.at(-1)!.text, /\ntelegram: none on file\n/);
+  assert.doesNotMatch(telegramSends.at(-1)!.text, /@null|@undefined|telegram: @\n/);
   const [listed] = await br.listBasketRequests({ userId: u.id });
-  assert.equal(listed.telegram, "Real_Handle1");
-  // A handle typed by an account that already has one is ignored.
-  const v = await makeUser({ telegram: true });
-  const r = await br.createBasketRequest({ userId: v.id, lines: LINES, wantTrial: false, telegramHandle: "someone_else" });
-  assert.equal((await sql(`select telegram_handle from basket_requests where id = $1`, [r.id])).rows[0].telegram_handle, null);
+  assert.equal(listed.telegram, null, "admin list: null, rendered 'none on file'");
+  // A row written before this change keeps its handle on the admin list (column kept, no schema change).
+  const v = await makeUser();
+  await sql(`insert into basket_requests (user_id, lines, telegram_handle) values ($1, '[{"kind":"strategy","key":"obi","name":"x"}]', 'Old_Handle1')`, [v.id]);
+  assert.equal((await br.listBasketRequests({ userId: v.id }))[0].telegram, "Old_Handle1");
+  // The account state the page passes to the client steps carries no Telegram at all.
+  assert.deepEqual(Object.keys(await br.getBasketAccountState(u.id)).sort(), ["email", "feedReady", "trialEligible"]);
 });
 
 // ---- admin ----

@@ -12,14 +12,13 @@ export type SubmitBasketResult =
 
 /**
  * Send the basket as ONE request (marcus m59146). Signed-in accounts only; admins don't request.
- * The lines, the trial and the Telegram field are all re-checked in createBasketRequest, so
- * nothing the client sends is trusted: Black, Alpha and Ultra are refused even when the POST
- * skips the button. Writes one basket_requests row and grants nothing.
+ * The lines and the trial are both re-checked in createBasketRequest, so nothing the client
+ * sends is trusted: Black, Alpha and Ultra are refused even when the POST skips the button.
+ * Writes one basket_requests row and grants nothing.
  */
 export async function submitBasketAction(input: {
   lines: unknown;
   wantTrial: boolean;
-  telegramHandle?: string | null;
 }): Promise<SubmitBasketResult> {
   try {
     const session = await auth();
@@ -29,7 +28,6 @@ export async function submitBasketAction(input: {
       userId: session.user.id,
       lines: input?.lines,
       wantTrial: input?.wantTrial === true,
-      telegramHandle: typeof input?.telegramHandle === "string" ? input.telegramHandle : null,
     });
     revalidatePath("/marketplace/requests");
     return { ok: true, reference: basketReference(created.id), lines: created.lines, hasTrial: input?.wantTrial === true };

@@ -25,19 +25,6 @@ export class TrialNotEligibleError extends Error {
     super("This account can't start a trial: a trial or licence is already on record");
   }
 }
-export class TelegramHandleRequiredError extends Error {
-  constructor() {
-    super("Add your Telegram username so we can reply");
-  }
-}
-
-/** A Telegram username as typed on the review step: an optional leading @, then Telegram's own
- * username shape (5-32 letters, digits or underscores). Returns it without the @, or null. */
-export function normaliseTelegramHandle(raw: string | null | undefined): string | null {
-  const s = (raw ?? "").trim().replace(/^@/, "");
-  return /^[A-Za-z0-9_]{5,32}$/.test(s) ? s : null;
-}
-
 /**
  * May this account choose the basket-level 30-day trial? Only if it has NEVER had any of the
  * five (m59142, ruled m59146):
@@ -69,10 +56,8 @@ export interface BasketAccountState {
   trialEligible: boolean;
   /** An active licence with a registered server: a feed line could be switched on today. */
   feedReady: boolean;
-  /** Telegram on file (users.telegram_user_id or telegram_username), so Review shows it read-only
-   * instead of asking. */
-  telegram: string | null;
-  hasTelegram: boolean;
+  /** Where we confirm: the client-facing steps confirm by email only (coxwell 13:54Z via marcus
+   * m59928). Telegram stays on the admin card, read from users at send time. */
   email: string | null;
 }
 
@@ -80,7 +65,7 @@ export async function getBasketAccountState(userId: string): Promise<BasketAccou
   const [trialEligible, other] = await Promise.all([
     isBasketTrialEligible(userId),
     pool.query(
-      `select email, telegram_username, telegram_user_id,
+      `select email,
          exists (select 1 from server_registrations sr join licenses l on l.id = sr.license_id
                  where l.user_id = users.id and l.status = 'active' and l.expires_at > now()) as feed_ready
        from users where id = $1`,
@@ -88,12 +73,9 @@ export async function getBasketAccountState(userId: string): Promise<BasketAccou
     ),
   ]);
   const row = other.rows[0] ?? {};
-  const hasTelegram = row.telegram_user_id != null || (row.telegram_username ?? "") !== "";
   return {
     trialEligible,
     feedReady: row.feed_ready === true,
-    telegram: row.telegram_username ? `@${row.telegram_username}` : hasTelegram ? "linked" : null,
-    hasTelegram,
     email: row.email ?? null,
   };
 }
@@ -102,24 +84,19 @@ const PG_UNIQUE_VIOLATION = "23505";
 
 /**
  * Stores one basket request and sends the one approvals-topic card. Everything is re-checked
- * here: lines against the catalogues, the trial against the five sources, the Telegram field
- * against the account. The partial unique index on (user_id) where has_trial is the backstop for
- * a double submit that passes the eligibility read twice.
+ * here: lines against the catalogues, the trial against the five sources. The partial unique
+ * index on (user_id) where has_trial is the backstop for a double submit that passes the
+ * eligibility read twice. basket_requests.telegram_handle is no longer written (the Review step
+ * stopped asking, m59928); the column stays for the rows that carry one.
  */
 export async function createBasketRequest(args: {
   userId: string;
   lines: unknown;
   wantTrial: boolean;
-  telegramHandle?: string | null;
 }): Promise<{ id: string; lines: BasketLine[] }> {
   const lines = resolveBasketLines(args.lines);
   const account = await getBasketAccountState(args.userId);
   if (args.wantTrial && !account.trialEligible) throw new TrialNotEligibleError();
-  let telegramHandle: string | null = null;
-  if (!account.hasTelegram) {
-    telegramHandle = normaliseTelegramHandle(args.telegramHandle);
-    if (!telegramHandle) throw new TelegramHandleRequiredError();
-  }
   const stamped = lines.map((l) =>
     l.kind === "feed" ? { ...l, note: account.feedReady ? BASKET_FEED_NOTE_READY : BASKET_FEED_NOTE_NOT_READY } : l
   );
@@ -127,9 +104,9 @@ export async function createBasketRequest(args: {
   let id: string;
   try {
     const result = await pool.query(
-      `insert into basket_requests (user_id, lines, has_trial, telegram_handle)
-       values ($1, $2::jsonb, $3, $4) returning id`,
-      [args.userId, JSON.stringify(stamped), args.wantTrial, telegramHandle]
+      `insert into basket_requests (user_id, lines, has_trial)
+       values ($1, $2::jsonb, $3) returning id`,
+      [args.userId, JSON.stringify(stamped), args.wantTrial]
     );
     id = result.rows[0].id;
   } catch (err) {
@@ -142,7 +119,7 @@ export async function createBasketRequest(args: {
   await notifyBasketRequestSubmitted({
     reference: basketReference(id),
     email: u.email ?? null,
-    telegramUsername: u.telegram_username ?? telegramHandle,
+    telegramUsername: u.telegram_username ?? null,
     telegramUserId: u.telegram_user_id != null ? String(u.telegram_user_id) : null,
     lines: stamped,
     hasTrial: args.wantTrial,
