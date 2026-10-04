@@ -6,6 +6,7 @@ import {
   SEGMENT_BADGED_REGIONS,
   feedTierMeta,
 } from "./feed-tier-catalogue";
+import { MAIN_SITE_URL } from "./main-site";
 
 /**
  * /marketplace — the catalogue of what Horizon sells: one listing per product, each with a
@@ -163,6 +164,9 @@ export interface MarketplaceListing {
    * dataset code, and no vendor name or code goes on a public page (marcus m56642 (b)). The row
    * stays unedited because the provider's dashboard renders it. Absent = no plate. */
   coverage?: string;
+  /** A secondary link in the product page's Access box, under the request control, for a
+   * listing whose full description lives on the main site. Same tab. Absent = none. */
+  moreInfo?: { href: string; label: string };
 }
 
 /**
@@ -368,6 +372,9 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     // points at the dashboard's Downloads section, where a licensed account has the real build
     // list, the same destination the sidebar uses (sidebar.tsx PORTAL_LINKS).
     action: { kind: "download", href: "/dashboard#downloads", label: "Downloads →" },
+    // coxwell 2026-10-03 23:40Z via marcus m59190: "button for more info on the software page if
+    // someone wants to navigate there". Secondary, so the request stays the primary control.
+    moreInfo: { href: `${MAIN_SITE_URL}/software`, label: "More about the software →" },
     // coxwell's own screenshot of a live client (2026-10-02, via marcus m58359), cropped at native
     // pixels to the card and hero frames, in place of Iris's illustration. A placeholder until the
     // 2.0.7 set.

@@ -240,6 +240,13 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
                control, not even a greyed one ("can be listed not requested"). */
             <p className="fp-note">Not open for requests right now.</p>
           )}
+          {/* Under whatever the request control is, in every state (signed out, unlicensed,
+              licensed): secondary, so the request stays primary (marcus m59190). */}
+          {listing.moreInfo && (
+            <a href={listing.moreInfo.href} className="btn ghost sm mkd-action">
+              {listing.moreInfo.label}
+            </a>
+          )}
         </div>
       </div>
 
