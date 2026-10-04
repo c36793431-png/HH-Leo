@@ -31,7 +31,7 @@ const img = (n: string, width: number, height: number, alt: string) => ({
 export const MEMBER_SUCCESS_STORIES: MemberSuccessStory[] = [
   {
     id: 1,
-    image: img("01", 902, 683, "Topstep Certified Funded Trader certificate, April 2026"),
+    image: img("01", 902, 683, "Topstep Certified Funded Trader certificate dated April 2, 2026, surname blurred"),
     title: "Topstep Funded Trader",
     subtitle: "Trading Combine Passed",
     description:
@@ -41,7 +41,7 @@ export const MEMBER_SUCCESS_STORIES: MemberSuccessStory[] = [
   },
   {
     id: 2,
-    image: img("02", 1280, 835, "Apex Trader Funding account certificate, 25k Rithmic EOD Trail Account"),
+    image: img("02", 1280, 835, "Apex Trader Funding account certificate for a 25k Rithmic EOD Trail Account, dated April 7, 2026, surname blurred"),
     title: "Apex Challenge Passed",
     subtitle: "25k Rithmic EOD Trail Account",
     description:
@@ -51,7 +51,7 @@ export const MEMBER_SUCCESS_STORIES: MemberSuccessStory[] = [
   },
   {
     id: 3,
-    image: img("03", 512, 604, "Withdrawal confirmation for $5,080.00"),
+    image: img("03", 512, 604, 'Message reading "Your request to withdraw $5,080.00 has been sent!"'),
     title: "$5,080 Withdrawal",
     subtitle: "Payout Confirmed",
     description:
@@ -61,7 +61,7 @@ export const MEMBER_SUCCESS_STORIES: MemberSuccessStory[] = [
   },
   {
     id: 5,
-    image: img("05", 1280, 591, "Horizon HFT v1.6 beside a chart and its trade history, account figures blurred"),
+    image: img("05", 1280, 591, "Horizon HFT v1.6 window next to a price chart and a trade list, settings and account fields blurred"),
     title: "Live Trading Session",
     subtitle: "Horizon HFT v1.6 in Action",
     description:
@@ -71,7 +71,7 @@ export const MEMBER_SUCCESS_STORIES: MemberSuccessStory[] = [
   },
   {
     id: 6,
-    image: img("06", 1264, 1280, "Wallet screen showing a $4,300 withdrawal, succeeded"),
+    image: img("06", 1264, 1280, "Wallet screen showing an available amount of $4,300.00 and a history row: Deposit wallet, $4,300, succeeded, 03/12/2026"),
     title: "$4,300 Withdrawal",
     subtitle: "Deposit Wallet - Succeeded",
     description:
@@ -81,7 +81,7 @@ export const MEMBER_SUCCESS_STORIES: MemberSuccessStory[] = [
   },
   {
     id: 7,
-    image: img("07", 1280, 910, "Trade history with per-trade profit"),
+    image: img("07", 1280, 910, "Trade list from 12 March 2026 with a profit per trade, a few of them negative, partly covered by the Horizon HFT logo"),
     title: "Consistent Trade Log",
     subtitle: "Multiple Winning Trades",
     description:
@@ -91,7 +91,7 @@ export const MEMBER_SUCCESS_STORIES: MemberSuccessStory[] = [
   },
   {
     id: 8,
-    image: img("08", 1205, 601, "Apex Trader Funding challenge passed: certificate and realized PnL"),
+    image: img("08", 1205, 601, 'Graphic headed "Apex Trader Funding, Challenge Passed": an account certificate beside a table with gross realized PnL of $911.00, $1,520.00 and $972.00 highlighted'),
     title: "Apex Challenge Passed",
     subtitle: "25k Rithmic EOD Trail Account",
     description:
@@ -101,7 +101,7 @@ export const MEMBER_SUCCESS_STORIES: MemberSuccessStory[] = [
   },
   {
     id: 9,
-    image: img("09", 1080, 1261, "Two payout requests via Wise, $7,800 net"),
+    image: img("09", 1080, 1261, "Two Wise payout requests, $3,700 on May 5, 2026 and $4,100 on May 14, 2026, each marked submitted, funds removed and funding approved, under a $7,800 member payout banner"),
     title: "$7,800 Member Payout",
     subtitle: "Dual Withdrawal via Wise",
     description:
