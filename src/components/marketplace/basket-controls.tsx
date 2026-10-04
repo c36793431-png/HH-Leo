@@ -17,7 +17,7 @@ export function BasketNavButton({ className = "" }: { className?: string }) {
   return (
     <Link href={BASKET_HREF} className={`bk-navbtn ${className}`} aria-label={`Basket, ${count} ${count === 1 ? "line" : "lines"}`}>
       <ShoppingBasket size={16} strokeWidth={1.9} aria-hidden="true" />
-      <span>Basket</span>
+      <span className="bk-navlbl">Basket</span>
       <span className={`bk-count${count > 0 ? " on" : ""}`}>{count}</span>
     </Link>
   );

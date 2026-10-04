@@ -1267,6 +1267,27 @@
 .portal-shell .topbar .bk-navbtn { margin-left: 12px; }
 .hubnav .hn-basket { padding: 6px 10px; border-color: var(--hn-line); color: var(--hn-text); }
 .hubnav .hn-basket .bk-count.on { background: var(--hn-cyan); border-color: var(--hn-cyan); }
+/* A phone's header holds logo, Basket, Sign in and Menu only if the button drops its word (the
+   icon and count stay; its aria-label still says "Basket", as on Iris's r2 phone sheet), the
+   wordmark drops its small "HFT" and the gaps close up. */
+@media (max-width: 600px) {
+  .hubnav .hn-wrap { gap: 10px; }
+  .hubnav .hn-right { gap: 6px; }
+  .hubnav .hn-wm small { display: none; }
+  .hubnav .hn-right .hn-login { white-space: nowrap; }
+  .hubnav .hn-right .hn-basket { gap: 6px; padding: 5px 8px; }
+  .hubnav .hn-right .hn-basket .bk-navlbl { display: none; }
+}
+@media (max-width: 420px) {
+  .hubnav .hn-wm { font-size: 15px; letter-spacing: 0.12em; }
+}
+@media (max-width: 389px) {
+  .hubnav .hn-wm { font-size: 14px; letter-spacing: 0.1em; }
+}
+/* Below 375 the wordmark goes and the logo stays (the link's aria-label names it). */
+@media (max-width: 374px) {
+  .hubnav .hn-wm { display: none; }
+}
 
 /* Shelf card footer: See more left, the basket control right. */
 .portal-shell .bk-foot { justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
