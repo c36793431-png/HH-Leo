@@ -1478,6 +1478,9 @@
   .portal-shell .bk-price { text-align: left; }
   .portal-shell .bk-sent-actions { grid-template-columns: 1fr; }
   .portal-shell .topbar .bk-navbtn span:not(.bk-count) { display: none; }
+  /* The topbar already titles the page (marcus m59382, as on Iris r2 sheet 4). Signed out there's
+     no topbar title, only the hub nav, so the heading stays. */
+  .portal-shell:not(.public-shell) .bk-page-head h1 { display: none; }
   /* Iris r2 sheet 4: the summary card keeps only the trial box; a bar sticks to the bottom. */
   .portal-shell .bk-desk { display: none; }
   .portal-shell .bk-summary-notrial { display: none; }

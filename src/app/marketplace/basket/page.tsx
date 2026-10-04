@@ -34,7 +34,7 @@ export default async function BasketPage() {
 
   const page = (
     <>
-      <div className="comm-head">
+      <div className="comm-head bk-page-head">
         <h1>Basket</h1>
         <p>Pick what you need and send it to us as one request. Nothing is charged.</p>
       </div>
