@@ -84,7 +84,7 @@ export function MemberSuccessStories() {
                   />
                 </div>
                 <div className="mkd-story-text">
-                  <div className="mkd-story-label">{MEMBER_SUCCESS_LABEL}</div>
+                  <div className="mkd-story-label">{s.label ?? MEMBER_SUCCESS_LABEL}</div>
                   <h3 className="mkd-story-title">{s.title}</h3>
                   <div className="mkd-story-subtitle">{s.subtitle}</div>
                   <p className="mkd-story-desc">{s.description}</p>

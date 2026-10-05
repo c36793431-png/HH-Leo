@@ -6,9 +6,11 @@
 // old "04 — Verified Performance" section text comes with it (m59274).
 // Images: foc16's shared set (m59267), under /public/marketplace/member-stories/. `alt` is ours,
 // a plain description of the picture; the old component had none.
+// Cards added since lead the set, each on coxwell's own OK (id 10+, see each card).
 export type MemberSuccessStory = {
-  id: number; // the old component's card number, 1-9
+  id: number; // the old component's card number, 1-9; 10+ are cards added since
   image: { src: string; width: number; height: number; alt: string };
+  label?: string; // the kicker; MEMBER_SUCCESS_LABEL when absent
   title: string;
   subtitle: string;
   description: string;
@@ -29,6 +31,24 @@ const img = (n: string, width: number, height: number, alt: string) => ({
 });
 
 export const MEMBER_SUCCESS_STORIES: MemberSuccessStory[] = [
+  {
+    // coxwell OK'd it (Horizon Clients #156, 2026-10-05 19:27Z) and marcus put it first (m61095).
+    // Image is Iris's r3 card (m61087), text her m61079 draft as approved. No profit or "powered by" wording.
+    id: 10,
+    image: {
+      src: "/marketplace/member-stories/client-feedback-aylrn_1440x960.png",
+      width: 1440,
+      height: 960,
+      alt: "Two phone screenshots from one client, their avatar blurred: a broker trade history from 30 Sep 2026 beside a chat, and one from 5 Oct 2026, losing trades shown in red",
+    },
+    label: "Client Feedback",
+    title: "Client trade logs, two days",
+    subtitle: "XAUUSD, 0.01 lots · 30 Sep and 5 Oct 2026",
+    description:
+      "One client's broker history from two days, as they sent it, with the losing trades left in. Asked which system it was, they answered in their own words.",
+    tags: ["ClientFeedback", "XAUUSD", "0.01lots"],
+    date: "October 2026",
+  },
   {
     id: 1,
     image: img("01", 902, 683, "Topstep Certified Funded Trader certificate dated April 2, 2026, surname blurred"),
