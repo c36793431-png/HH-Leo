@@ -535,15 +535,19 @@ export default async function DashboardPage() {
           <div className="chead">
             <span className="ic">◈</span>
             <h3>Education</h3>
-            <span className="cap">{paid ? "Full catalogue" : undefined}</span>
+            {paid && (
+              <Link className="cap" href="/education">
+                Full catalogue →
+              </Link>
+            )}
           </div>
-          <div className={paid ? "courses" : "courses two"}>
+          <div className="courses">
             {config.educationPreview.map((doc) => (
-              <a className="course" href="#" key={doc.title}>
+              <Link className="course" href={doc.href ?? "#"} key={doc.title}>
                 <div className="tag free">● Free intro</div>
                 <h4>{doc.title}</h4>
                 <p>{doc.summary}</p>
-              </a>
+              </Link>
             ))}
           </div>
           {!paid && (

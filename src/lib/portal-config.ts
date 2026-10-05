@@ -1,4 +1,5 @@
 import { pool } from "./db";
+import { getEducationLesson, lessonHref } from "./education";
 
 export interface PortalConfig {
   communityGroupUrl: string;
@@ -6,7 +7,13 @@ export interface PortalConfig {
   telegramFreeGroupUrl: string;
   testingGroupUrl: string;
   pricingDisplay: string;
-  educationPreview: { title: string; summary: string }[];
+  educationPreview: { title: string; summary: string; href?: string }[];
+}
+
+/** A dashboard Education card for a real /education lesson: its own title, description and link. */
+function lessonPreview(slug: string): PortalConfig["educationPreview"] {
+  const lesson = getEducationLesson(slug);
+  return lesson ? [{ title: lesson.title, summary: lesson.description, href: lessonHref(lesson) }] : [];
 }
 
 const DEFAULTS: PortalConfig = {
@@ -24,8 +31,12 @@ const DEFAULTS: PortalConfig = {
       title: "Connecting MT4/MT5/NinjaTrader 8",
       summary: "Bridge setup basics for each supported platform.",
     },
+    // The third slot (coxwell via marcus m60977): the catalogue's first lesson, manual section 1.
+    ...lessonPreview("getting-started"),
   ],
 };
+
+export const DEFAULT_EDUCATION_PREVIEW = DEFAULTS.educationPreview;
 
 /** Reads admin-editable overrides from portal_config; falls back to MVP defaults for unseeded keys/tables. */
 export async function getPortalConfig(): Promise<PortalConfig> {
