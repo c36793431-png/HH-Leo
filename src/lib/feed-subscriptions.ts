@@ -1681,6 +1681,10 @@ export interface FeedAssignmentRow {
    * was made). Never true for an already-lapsed subscription -- that's the separate
    * "Access ended" state. */
   entitlementLapsed: boolean;
+  /** Per tierKey, why the Grant button is disabled (panelGrantBlockers); empty = enabled. Computed
+   * here, server-side, because feed-tier-select-form.tsx is "use client" and may import only
+   * types from this module (it pulls in ./db). */
+  grantBlockers: Record<string, string[]>;
 }
 
 /** Single source of truth for which regions render on /admin/users/[id]'s feed-assignment
@@ -1713,12 +1717,17 @@ export function computeFeedAssignmentRows(
     // single representative is enough to decide the banner; individual rows still render their
     // own status independently below it.
     const mostRecent = regionSubscriptions[0] ?? null;
+    const regionTiers = tiers.filter((t) => t.regionKey === regionKey);
+    const entitlementLapsed = hasExistingSubscription && !isCurrentlyEntitled && mostRecent?.status !== "lapsed";
     rows.push({
       regionKey,
       kind: "assignable",
-      tiers: tiers.filter((t) => t.regionKey === regionKey),
+      tiers: regionTiers,
       subscriptions: regionSubscriptions,
-      entitlementLapsed: hasExistingSubscription && !isCurrentlyEntitled && mostRecent?.status !== "lapsed",
+      entitlementLapsed,
+      grantBlockers: Object.fromEntries(
+        regionTiers.map((t) => [t.tierKey, panelGrantBlockers(t, subscriptionForTier(regionSubscriptions, t.tierKey), entitlementLapsed)])
+      ),
     });
   }
 
@@ -1728,12 +1737,42 @@ export function computeFeedAssignmentRows(
     const regionKey = regionForFeedType(feedType);
     if (!regionKey || seen.has(regionKey)) continue;
     seen.add(regionKey);
-    rows.push({ regionKey, kind: "unavailable", tiers: [], subscriptions: [], entitlementLapsed: false });
+    rows.push({ regionKey, kind: "unavailable", tiers: [], subscriptions: [], entitlementLapsed: false, grantBlockers: {} });
   }
 
   return rows.sort(
     (a, b) => FEED_REGIONS.indexOf(a.regionKey as FeedRegion) - FEED_REGIONS.indexOf(b.regionKey as FeedRegion)
   );
+}
+
+/** The row a region's tier control shows for `tierKey`: the most recently started one, since
+ * getFeedTierSubscriptionsForSubscriber orders by started_at desc. Same rule as the form's own
+ * `subscriptions.find` (FeedRegionBlock), which can't import this. */
+export function subscriptionForTier(
+  subscriptions: SubscriberFeedTierSubscription[],
+  tierKey: string
+): SubscriberFeedTierSubscription | null {
+  return subscriptions.find((s) => s.tierKey === tierKey) ?? null;
+}
+
+/** Why the panel's Grant button for this tier is disabled; empty when it is enabled. The button
+ * (FeedTierRowControl, via FeedAssignmentRow.grantBlockers) and scripts/assign-feed.mts both read
+ * this one predicate, so the CLI cannot grant what the panel refuses (marcus ruling 1, fable
+ * m60813 S1/S2). */
+export function panelGrantBlockers(
+  tier: FeedTierPickerRow,
+  subscription: SubscriberFeedTierSubscription | null,
+  entitlementLapsed: boolean
+): string[] {
+  const reasons: string[] = [];
+  if (!tier.providerUserId) reasons.push(`${tier.name} has no provider account assigned yet`);
+  if (subscription && subscription.status !== "lapsed") {
+    reasons.push(`The client's ${tier.name} row is already live (${subscription.status}): the panel grants it again only after a Revoke`);
+  }
+  if (entitlementLapsed) {
+    reasons.push(`Entitlement lapsed: the client's current licences no longer carry region ${tier.regionKey}, so the panel grants no tier there`);
+  }
+  return reasons;
 }
 
 export class FeedTierNotAssignedError extends Error {

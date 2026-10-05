@@ -92,7 +92,7 @@ export function missingEnv(env: Record<string, string | undefined> = process.env
 }
 
 /** Reads only, plain SELECTs. Everything execute would do, and every reason it would refuse:
- * the refusals assignFeedTierSubscription makes, plus the panel picker's own gate. */
+ * the refusals assignFeedTierSubscription makes, plus the panel's own gates (picker and Grant button). */
 export async function planFeed(args: AssignFeedArgs, env: Record<string, string | undefined> = process.env): Promise<FeedPlan> {
   const u = await resolveUser(args.user);
   const user = { id: u.id, email: u.email, displayName: u.displayName, internal: u.internal };
@@ -153,9 +153,15 @@ export async function planFeed(args: AssignFeedArgs, env: Record<string, string 
   // already holds a row in, or an ungated region such as cme). Same function, same inputs.
   const entitled = [...new Set(currentLicences.flatMap((l) => l.feedTypes))];
   const rows = computeFeedAssignmentRows(await listFeedTiersForAdminPicker(), subscriptions, entitled);
-  const offered = rows.some((r) => r.kind === "assignable" && r.tiers.some((x) => x.tierKey === tier.tierKey));
-  if (!offered) {
+  const offeredIn = rows.find((r) => r.kind === "assignable" && r.tiers.some((x) => x.tierKey === tier.tierKey));
+  if (!offeredIn) {
     refusals.push(`The admin panel would not offer ${tier.name}: the client's licence feeds (${entitled.join(",") || "none"}) do not cover region ${tier.regionKey}`);
+  } else {
+    // Offered, but the Grant button may still be disabled (fable m60813 S1/S2): the button's own
+    // predicate, from the same rows. The no-provider reason is already refused above.
+    for (const reason of offeredIn.grantBlockers[tier.tierKey] ?? []) {
+      if (!refusals.includes(reason)) refusals.push(reason);
+    }
   }
 
   let server: FeedPlan["server"] = null;
@@ -199,7 +205,8 @@ export async function planFeed(args: AssignFeedArgs, env: Record<string, string 
           `select 1 from provider_client_pseudonyms where provider_user_id = $1 and subscriber_user_id = $2`,
           [tier.providerUserId, user.id]
         );
-        pseudonymExists = ps.rows.length > 0;      }
+        pseudonymExists = ps.rows.length > 0;
+      }
       const al = await pool.query(
         `select 1 from feed_allowlist_records
          where server_registration_id = $1 and feed_tier_id = $2 and ip = $3 and revoked_at is null`,

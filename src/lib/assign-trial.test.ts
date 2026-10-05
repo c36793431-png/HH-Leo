@@ -1,5 +1,9 @@
 /* Run: npx tsx --test src/lib/assign-trial.test.ts
  *
+ * Needs Node >= 22 (fable m60813 N6, marcus m60826). Under Node 20, `tsx --test` evaluates
+ * licenses.ts twice, so the script test's ping-before-pool.end check sees 0 pings. The shipped
+ * script (plain `npx tsx scripts/...`) loads it once on both versions.
+ *
  * The agent trial-assign CLI (marcus m60729, scope m60728): the panel's "Issue new license" and
  * scripts/assign-trial.mts write the same licence and admin_actions rows and send the same DM,
  * differing only in the actor; the dry run writes nothing; every refusal refuses before a write;

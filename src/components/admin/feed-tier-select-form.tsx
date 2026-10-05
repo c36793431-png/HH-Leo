@@ -51,6 +51,7 @@ export function FeedTierSelectForm({ assignAction, deactivateAction, priceAction
             tiers={row.tiers}
             subscriptions={row.subscriptions}
             entitlementLapsed={row.entitlementLapsed}
+            grantBlockers={row.grantBlockers}
             subjectName={subjectName}
           />
         )
@@ -80,6 +81,7 @@ function FeedRegionBlock({
   tiers,
   subscriptions,
   entitlementLapsed,
+  grantBlockers,
   subjectName,
 }: {
   assignAction: Action;
@@ -90,6 +92,7 @@ function FeedRegionBlock({
   tiers: FeedTierPickerRow[];
   subscriptions: SubscriberFeedTierSubscription[];
   entitlementLapsed: boolean;
+  grantBlockers: Record<string, string[]>;
   subjectName: string;
 }) {
   const regionLabel = REGION_LABELS[regionKey] ?? regionKey;
@@ -130,7 +133,7 @@ function FeedRegionBlock({
             regionLabel={regionLabel}
             tier={tier}
             subscription={subscriptions.find((s) => s.tierKey === tier.tierKey) ?? null}
-            entitlementLapsed={entitlementLapsed}
+            grantBlocked={(grantBlockers[tier.tierKey] ?? []).length > 0}
             subjectName={subjectName}
           />
         ))}
@@ -150,7 +153,7 @@ function FeedTierRowControl({
   regionLabel,
   tier,
   subscription,
-  entitlementLapsed,
+  grantBlocked,
   subjectName,
 }: {
   assignAction: Action;
@@ -159,7 +162,7 @@ function FeedTierRowControl({
   regionLabel: string;
   tier: FeedTierPickerRow;
   subscription: SubscriberFeedTierSubscription | null;
-  entitlementLapsed: boolean;
+  grantBlocked: boolean;
   subjectName: string;
 }) {
   const [assignState, assignFormAction, assignPending] = useActionState(assignAction, null);
@@ -199,7 +202,7 @@ function FeedTierRowControl({
         <input type="hidden" name="tierKey" value={tier.tierKey} />
         <button
           type="button"
-          disabled={pending || isActive || entitlementLapsed || !tier.providerUserId}
+          disabled={pending || grantBlocked}
           title={!tier.providerUserId ? "No provider assigned to this tier yet" : undefined}
           onClick={() => {
             if (!window.confirm(`Grant ${subjectName} access to ${tier.name} (${regionLabel})?`)) return;

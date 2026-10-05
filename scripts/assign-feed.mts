@@ -11,8 +11,9 @@
  * assignment" control on /admin/users/[id], as the marcus-agent@horizonhft.internal actor.
  * Refuses on: missing env, missing actor row, no user or several, an internal or test account
  * (the actor itself included) without --allow-internal, an unknown tier, a tier with no provider,
- * zero or several active licences, no registered server, a tier the panel would not offer, a live
- * row for this licence and tier on another server.
+ * zero or several active licences, no registered server, a tier the panel would not offer or whose
+ * Grant button it disables (the client's row is still live; the region's entitlement lapsed), a
+ * live row for this licence and tier on another server.
  * Nobody is notified, same as the panel: every run prints the IP the provider must allowlist. */
 import {
   allowlistReminder,

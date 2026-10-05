@@ -258,6 +258,8 @@ test("dry run: 0 writes, 0 transactions, no xid, and the plan says what execute 
   await t.test("re-point a row whose tier changed provider (the branch that allocates)", async () => {
     const c = await makeClient();
     await af.executeFeed(await plan(c.id, "ld-delta-18"));
+    // The panel re-grants a tier only after a Revoke (S2), so the re-point is from a lapsed row.
+    await fs.deactivateFeedTierSubscription(c.id, "ld-delta-18");
     await db.query(`update feed_tiers set provider_user_id = $1 where tier_key = 'ld-delta-18'`, [OTHER_PROVIDER]);
     try {
       const t0 = await tableCounts();
@@ -324,6 +326,36 @@ test("each refusal refuses before any write, and matches what the grant itself w
   await t.test("a tier the panel would not offer (licence feeds don't cover the region)", async () => {
     const c = await makeClient({ feeds: ["ny"] });
     await refuses("picker gate", c.id, "ld-beta-56", /would not offer/);
+  });
+  // fable m60813 S1/S2: the Grant button's own disable, not just the picker's region gate. Each
+  // case checks the panel's input too (the rows page.tsx renders from), so form and CLI agree.
+  const panelBlockers = async (userId: string, entitled: string[], tierKey: string) => {
+    const rows = fs.computeFeedAssignmentRows(
+      await fs.listFeedTiersForAdminPicker(),
+      await fs.getFeedTierSubscriptionsForSubscriber(userId),
+      entitled as Parameters<typeof fs.computeFeedAssignmentRows>[2]
+    );
+    return rows.find((r) => r.tiers.some((x) => x.tierKey === tierKey))?.grantBlockers[tierKey];
+  };
+  await t.test("entitlement lapsed: the licence dropped london, the client keeps a london row (S1)", async () => {
+    const c = await makeClient({ feeds: ["london", "ny"] });
+    await af.executeFeed(await plan(c.id, "ld-beta-56"));
+    await db.query(`update licenses set feed_types = array['ny'] where id = $1`, [c.licenceId]);
+    for (const tierKey of ["ld-gamma-19", "ld-beta-56"]) {
+      assert.ok((await panelBlockers(c.id, ["ny"], tierKey))?.some((r) => /Entitlement lapsed/.test(r)), `panel disables ${tierKey}`);
+      await refuses(`lapsed ${tierKey}`, c.id, tierKey, /Entitlement lapsed: .* region london/);
+    }
+    // The grant itself has no such check: before this gate the CLI CREATED a london row here.
+    await assert.doesNotReject(fs.assignFeedTierSubscription(c.id, "ld-gamma-19"), "the grant alone would have written");
+  });
+  await t.test("a live row: the panel grants it again only after a Revoke (S2)", async () => {
+    const c = await makeClient();
+    await af.executeFeed(await plan(c.id));
+    assert.ok((await panelBlockers(c.id, ["london", "ny"], "ld-beta-56"))?.some((r) => /already live \(active\)/.test(r)), "panel disables it");
+    await refuses("live", c.id, "ld-beta-56", /already live \(active\).*Revoke/);
+    await fs.deactivateFeedTierSubscription(c.id, "ld-beta-56");
+    assert.deepEqual(await panelBlockers(c.id, ["london", "ny"], "ld-beta-56"), [], "enabled after a Revoke");
+    assert.deepEqual((await plan(c.id)).refusals, []);
   });
   await t.test("a live row for this licence and tier on no server (0081 index)", async () => {
     const c = await makeClient();
