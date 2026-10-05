@@ -1,5 +1,5 @@
 import { pool } from "./db";
-import { FEED_TYPES, licenseNumberSql, type FeedType, type IssuedLicense } from "./licenses";
+import { FEED_TYPES, licenseNumberSql, notAClientSql, type FeedType, type IssuedLicense } from "./licenses";
 import { resolveExpiresAt } from "./duration";
 import { getPortalConfig } from "./portal-config";
 import {
@@ -43,10 +43,11 @@ export interface AssignTrialArgs {
   feeds: FeedType[];
   execute: boolean;
   allowRepeatTrial: boolean;
+  allowInternal: boolean;
 }
 
 export const USAGE =
-  "npx tsx scripts/assign-trial.mts --user <uuid|email> --days <N> --feeds <london,ny,...> [--allow-repeat-trial] [--execute]";
+  "npx tsx scripts/assign-trial.mts --user <uuid|email> --days <N> --feeds <london,ny,...> [--allow-repeat-trial] [--allow-internal] [--execute]";
 
 export function parseAssignTrialArgs(argv: string[]): AssignTrialArgs {
   let user: string | undefined;
@@ -54,6 +55,7 @@ export function parseAssignTrialArgs(argv: string[]): AssignTrialArgs {
   let feedsRaw: string | undefined;
   let execute = false;
   let allowRepeatTrial = false;
+  let allowInternal = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -68,6 +70,7 @@ export function parseAssignTrialArgs(argv: string[]): AssignTrialArgs {
     else if (flag === "--feeds") feedsRaw = value();
     else if (flag === "--execute" && inline === undefined) execute = true;
     else if (flag === "--allow-repeat-trial" && inline === undefined) allowRepeatTrial = true;
+    else if (flag === "--allow-internal" && inline === undefined) allowInternal = true;
     else throw new UsageError(`Unknown argument: ${arg}`);
   }
 
@@ -81,7 +84,7 @@ export function parseAssignTrialArgs(argv: string[]): AssignTrialArgs {
   if (unknown.length) throw new UsageError(`Unknown feed(s): ${unknown.join(", ")}. Known: ${FEED_TYPES.join(", ")}`);
   if (names.length === 0) throw new UsageError("--feeds needs at least one feed");
 
-  return { user, days: Number(daysRaw), feeds: [...new Set(names)] as FeedType[], execute, allowRepeatTrial };
+  return { user, days: Number(daysRaw), feeds: [...new Set(names)] as FeedType[], execute, allowRepeatTrial, allowInternal };
 }
 
 export interface LicenceHistoryRow {
@@ -96,7 +99,7 @@ export interface LicenceHistoryRow {
 }
 
 export interface TrialPlan {
-  user: { id: string; email: string | null; telegramUserId: string | null; displayName: string | null };
+  user: { id: string; email: string | null; telegramUserId: string | null; displayName: string | null; internal: boolean };
   actor: { id: string; email: string } | null;
   licences: LicenceHistoryRow[];
   expiresAt: Date;
@@ -115,9 +118,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 async function resolveUser(ref: string): Promise<TrialPlan["user"]> {
   const result = UUID_RE.test(ref)
-    ? await pool.query(`select id, email, telegram_user_id, display_name from users where id = $1`, [ref])
+    ? await pool.query(`select id, email, telegram_user_id, display_name, ${notAClientSql("users")} as internal from users where id = $1`, [ref])
     : await pool.query(
-        `select id, email, telegram_user_id, display_name from users where lower(email) = lower($1) order by created_at`,
+        `select id, email, telegram_user_id, display_name, ${notAClientSql("users")} as internal from users where lower(email) = lower($1) order by created_at`,
         [ref]
       );
   if (result.rows.length === 0) throw new RefusedError(`No user matches ${ref}`);
@@ -130,6 +133,7 @@ async function resolveUser(ref: string): Promise<TrialPlan["user"]> {
     email: r.email,
     telegramUserId: r.telegram_user_id !== null ? String(r.telegram_user_id) : null,
     displayName: r.display_name,
+    internal: Boolean(r.internal),
   };
 }
 
@@ -173,6 +177,11 @@ export async function planTrial(args: AssignTrialArgs, env: Record<string, strin
   const missing = missingEnv(env);
   if (missing.length) refusals.push(`Missing env: ${missing.join(", ")}`);
   if (!actor) refusals.push(`Actor ${AGENT_ACTOR_EMAIL} not found: apply scripts/seed-agent-actor.sql first`);
+  // The actor itself, *.internal and test accounts (fable N4, marcus m60768): their email is a dead
+  // address, so the key would go nowhere. A QA run on one has to say so.
+  if (user.internal && !args.allowInternal) {
+    refusals.push(`${user.email} is an internal or test account (licenses.ts notAClientSql). Pass --allow-internal to issue to it`);
+  }
   const live = licences.filter((l) => l.live);
   if (live.length) {
     refusals.push(`User already has an active licence (${live.map((l) => `HH${l.licenseNumber} ${l.tier}, expires ${l.expiresAt.toISOString()}`).join("; ")})`);

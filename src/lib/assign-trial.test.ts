@@ -54,9 +54,12 @@ let at: typeof import("./assign-trial");
 let inl: typeof import("./issue-new-license");
 let licenses: typeof import("./licenses");
 let admin: typeof import("./admin");
-const sends: { kind: "portal" | "telemetry" | "email"; to: string; text: string }[] = [];
+const sends: { kind: "portal" | "telemetry" | "email"; to: string; text: string; afterPoolEnd: boolean }[] = [];
 let actorId = "";
 let telemetryDelayMs = 0;
+let resendFails = false;
+// Set by the fake pool's end(), so a send can say whether it landed before the script ended the pool.
+let poolEnded = false;
 
 async function sql(text: string, params: unknown[] = []) {
   const r = await db.query(text, params);
@@ -71,19 +74,32 @@ before(async () => {
     if (SEEDS[f]) await db.exec(SEEDS[f]);
     await db.exec(readFileSync(path.join(MIGRATIONS, f), "utf8"));
   }
-  (globalThis as any)._pgPool = { query: sql, connect: async () => ({ query: sql, release() {} }), end: async () => {} };
+  (globalThis as any)._pgPool = {
+    query: sql,
+    connect: async () => ({ query: sql, release() {} }),
+    end: async () => {
+      poolEnded = true;
+    },
+  };
   Object.assign(process.env, ENV);
   // Capture every outbound send instead of making it: portal bot (the key DM), telemetry bot (the
   // ops ping) and Resend (the email fallback).
   (globalThis as any).fetch = async (url: string, init?: { body?: string }) => {
     const u = String(url);
     const body = init?.body ? JSON.parse(init.body) : {};
-    if (u.includes(`/bot${ENV.HORIZON_PORTAL_BOT_TOKEN}/sendMessage`)) sends.push({ kind: "portal", to: String(body.chat_id), text: body.text });
+    const afterPoolEnd = poolEnded;
+    if (u.includes(`/bot${ENV.HORIZON_PORTAL_BOT_TOKEN}/sendMessage`)) sends.push({ kind: "portal", to: String(body.chat_id), text: body.text, afterPoolEnd });
     else if (u.includes(`/bot${ENV.TELEMETRY_BOT_TOKEN}/sendMessage`)) {
       if (telemetryDelayMs) await new Promise((r) => setTimeout(r, telemetryDelayMs));
-      sends.push({ kind: "telemetry", to: String(body.chat_id), text: body.text });
+      sends.push({ kind: "telemetry", to: String(body.chat_id), text: body.text, afterPoolEnd: poolEnded });
     }
-    else if (u.includes("resend.com")) sends.push({ kind: "email", to: [body.to].flat().join(","), text: body.text });
+    else if (u.includes("resend.com")) {
+      if (resendFails) {
+        // What Resend answers for an unverified sending domain: a 403 with a JSON error, no throw.
+        return new Response(JSON.stringify({ statusCode: 403, name: "validation_error", message: "The example.invalid domain is not verified." }), { status: 403 });
+      }
+      sends.push({ kind: "email", to: [body.to].flat().join(","), text: body.text, afterPoolEnd });
+    }
     return new Response(JSON.stringify({ ok: true, result: {}, id: "email-id" }), { status: 200 });
   };
   at = await import("./assign-trial");
@@ -125,6 +141,7 @@ const args = (user: string, extra: Partial<import("./assign-trial").AssignTrialA
   feeds: ["london", "ny"] as import("./licenses").FeedType[],
   execute: true,
   allowRepeatTrial: false,
+  allowInternal: false,
   ...extra,
 });
 
@@ -207,6 +224,27 @@ test("an email-only user: the key goes by Resend, and the plan said so", async (
   await licenses.settleLicenseBackgroundTasks();
 });
 
+test("a rejected key email logs a sendEmail failed line on stderr, without the key (fable C1)", async () => {
+  const u = await makeUser({ telegram: false });
+  const errLines: string[] = [];
+  const error = console.error;
+  console.error = (...a: unknown[]) => void errLines.push(a.map(String).join(" "));
+  resendFails = true;
+  let r: Awaited<ReturnType<typeof at.executeTrial>>;
+  try {
+    r = await at.executeTrial(await at.planTrial(args(u.email!)));
+    await licenses.settleLicenseBackgroundTasks();
+  } finally {
+    resendFails = false;
+    console.error = error;
+  }
+  const failed = errLines.filter((l) => l.startsWith("sendEmail failed"));
+  assert.equal(failed.length, 1, errLines.join("\n"));
+  assert.match(failed[0], /validation_error The example\.invalid domain is not verified\./);
+  assert.ok(!errLines.join("\n").includes(r.license.licenseKey), "no key on stderr");
+  assert.equal((await licenceRow(r.license.id)).user_id, u.id, "the licence was still issued: the line is the only signal");
+});
+
 test("dry run: reads only; the plan shows history, expiry, channel, the masked DM and the admin row", async () => {
   const u = await makeUser();
   await sql(`insert into licenses (user_id, license_key, status, expires_at, tier, feed_types) values ($1, 'OLD-PAID', 'revoked', now() - interval '3 days', 'paid', array['london'])`, [u.id]);
@@ -259,6 +297,16 @@ test("each refusal refuses before any write", async (t) => {
     const u = await makeUser({ telegram: false, email: null });
     await refusesWithNoWrite("no channel", args(u.id), /could not be delivered/);
   });
+  await t.test("internal or test target without --allow-internal: the actor itself, *.internal, *test*; allowed with it", async () => {
+    await refusesWithNoWrite("actor", args(at.AGENT_ACTOR_EMAIL), /internal or test account/);
+    const internal = await makeUser({ email: `qa${seq + 1}@horizonhft.internal` });
+    await refusesWithNoWrite("internal", args(internal.id), /internal or test account/);
+    const tester = await makeUser({ email: `leo-test${seq + 1}@example.invalid` });
+    await refusesWithNoWrite("test", args(tester.id), /internal or test account/);
+    assert.deepEqual((await at.planTrial(args(tester.id, { allowInternal: true }))).refusals, []);
+    const client = await makeUser();
+    assert.deepEqual((await at.planTrial(args(client.id))).refusals, [], "an ordinary client is not caught");
+  });
   await t.test("user lookup: none, or several by case-insensitive email", async () => {
     await assert.rejects(at.planTrial(args("nobody@example.invalid")), at.RefusedError);
     await makeUser({ email: "Twin@example.invalid" });
@@ -276,8 +324,10 @@ test("argv: --days required, unknown feed refused, unknown flag refused", () => 
   assert.throws(() => p("--user x --days 7"), /--feeds is required/);
   assert.throws(() => p("--user x --days 7 --feeds london --force"), /Unknown argument/);
   assert.deepEqual(p("--user x --days=7 --feeds London,ny,london --execute"), {
-    user: "x", days: 7, feeds: ["london", "ny"], execute: true, allowRepeatTrial: false,
+    user: "x", days: 7, feeds: ["london", "ny"], execute: true, allowRepeatTrial: false, allowInternal: false,
   });
+  assert.equal(p("--user x --days 7 --feeds ny --allow-internal").allowInternal, true);
+  assert.throws(() => p("--user x --days 7 --feeds ny --allow-internal=yes"), /Unknown argument/);
   assert.equal(p("--user x --days 7 --feeds ny").execute, false, "dry run by default");
 });
 
@@ -302,19 +352,33 @@ test("the actor never falls back to coxwell: with the seed row gone, the CLI ref
 });
 
 // Last: the script runs once per process (its module is cached) and ends the pool on the way out.
-test("the script itself, --execute: prints the masked key, never the full one, and sets no failure code", async () => {
+test("the script itself, --execute: prints the masked key, never the full one, sets no failure code, and ends the pool only after the ops ping", async () => {
   const u = await makeUser();
   const lines: string[] = [];
-  const [argv, log] = [process.argv, console.log];
+  const errLines: string[] = [];
+  const [argv, log, error] = [process.argv, console.log, console.error];
   process.argv = [argv[0], "scripts/assign-trial.mts", "--user", u.email!, "--days", "14", "--feeds", "ny", "--execute"];
   console.log = (...a: unknown[]) => void lines.push(a.join(" "));
+  console.error = (...a: unknown[]) => void errLines.push(a.join(" "));
+  // Delayed, so the ping is still in flight when executeTrial returns: an end-before-settle drain
+  // would end the pool first (fable N2).
+  telemetryDelayMs = 300;
   try {
     await import("../../scripts/assign-trial.mjs");
   } finally {
     process.argv = argv;
     console.log = log;
+    console.error = error;
+    telemetryDelayMs = 0;
   }
   const out = lines.join("\n");
+  assert.ok(poolEnded, "the script ended the pool");
+  const ping = sends.filter((s) => s.kind === "telemetry" && s.text.includes(u.email!));
+  assert.equal(ping.length, 1, out);
+  assert.equal(ping[0].afterPoolEnd, false, "the ops ping landed BEFORE the pool was ended");
+  // fable N1: the caveat is on stderr with the failure lines it points at, not on stdout.
+  assert.ok(errLines.some((l) => /sendEmail failed.*did NOT reach the client/.test(l)), errLines.join("\n"));
+  assert.ok(!/did NOT reach/.test(out), out);
   const row = (await sql(`select id, license_key, tier, feed_types from licenses where user_id = $1`, [u.id])).rows;
   assert.equal(row.length, 1, out);
   assert.equal(row[0].tier, "trial");

@@ -33,7 +33,7 @@ export function licenseNumberSql(alias: string): string {
 /** Internal and test accounts, which get no client number. There is no flag column for this, so
  * it is the email rule marcus gave (m57729). coalesce keeps a Telegram-only account (email NULL)
  * a client: without it the NOT in clientNumberSql is NULL, and every such account drops out. */
-function notAClientSql(alias: string): string {
+export function notAClientSql(alias: string): string {
   return `(coalesce(${alias}.email, '') ilike '%horizonhft.internal' or coalesce(${alias}.email, '') ilike '%test%')`;
 }
 

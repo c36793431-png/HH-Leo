@@ -1,6 +1,6 @@
 /* Assign a client a trial licence from the command line (marcus m60729, scope m60728).
  *
- *   npx tsx scripts/assign-trial.mts --user <uuid|email> --days <N> --feeds <london,ny,...> [--allow-repeat-trial] [--execute]
+ *   npx tsx scripts/assign-trial.mts --user <uuid|email> --days <N> --feeds <london,ny,...> [--allow-repeat-trial] [--allow-internal] [--execute]
  *
  * Run from the repo root, with the env in the shell (src/lib/assign-trial.ts REQUIRED_ENV).
  * DRY RUN unless --execute: reads only, and prints the user, their licence history, the expiry,
@@ -8,8 +8,10 @@
  * --execute goes through issueNewLicenseForUser, the same function as "Issue new license" on
  * /admin/users, as the marcus-agent@horizonhft.internal actor. It prints the licence id, the HH
  * number and the MASKED key; the full key is never printed.
- * Refuses on: missing env, missing actor row, no user or several, an active licence, a past
- * trial without --allow-repeat-trial, no Telegram id and no email, an unknown feed.
+ * Refuses on: missing env, missing actor row, no user or several, an internal or test account
+ * (the actor itself included) without --allow-internal, an active licence, a past trial without
+ * --allow-repeat-trial, no Telegram id and no email, an unknown feed.
+ * A failed key send is a "sendTelegramMessage failed" or "sendEmail failed" line on STDERR.
  *
  * No process.exit: issueLicense's ops ping runs in the background, and exiting or ending the
  * pool under it would cut it off. The script waits for it (capped), then ends the pool. */
@@ -92,9 +94,9 @@ async function main() {
   }
   const { license, delivery } = result;
   console.log(`\nISSUED  licence ${license.id}  HH${license.licenseNumber}  key ${maskLicenseKey(license.licenseKey)}  expires ${license.expiresAt.toISOString()}`);
-  console.log(
-    `Key sent by ${delivery}. A "sendTelegramMessage failed" or "sendEmail" error line above means it did NOT reach the client.`
-  );
+  console.log(`Key sent by ${delivery}.`);
+  // On stderr, beside the failure lines it points at, so it shows without 2>&1.
+  console.error(`Check stderr: a "sendTelegramMessage failed" or "sendEmail failed" line means the key did NOT reach the client.`);
 }
 
 try {

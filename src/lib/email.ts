@@ -20,13 +20,16 @@ export async function sendEmail(
     return;
   }
   try {
-    await resendClient().emails.send({
+    // Resend returns { error } on a non-2xx or a network failure; it does not throw. The error
+    // carries Resend's name and message only, never the body, so the line holds no key.
+    const { error } = await resendClient().emails.send({
       from,
       to,
       subject,
       text,
       ...(options?.replyTo ? { replyTo: options.replyTo } : {}),
     });
+    if (error) console.error("sendEmail failed", error.name, error.message);
   } catch (err) {
     console.error("sendEmail failed", err);
   }
