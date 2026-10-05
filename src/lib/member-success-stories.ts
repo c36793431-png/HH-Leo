@@ -39,9 +39,9 @@ export const MEMBER_SUCCESS_STORIES: MemberSuccessStory[] = [
       src: "/marketplace/member-stories/client-feedback-aylrn_1440x960.png",
       width: 1440,
       height: 960,
-      alt: "Two phone screenshots from one client, their avatar blurred: a broker trade history from 30 Sep 2026 beside a chat, and one from 5 Oct 2026, losing trades shown in red",
+      alt: "Horizon card headed \"Straight from a client's phone.\": two phone screenshots one client sent, their avatar blurred. On the left, a broker trade history from 30 Sep 2026 above a chat; on the right, a history from 5 Oct 2026. Losing trades shown in red",
     },
-    label: "Client Feedback",
+    label: "CLIENT FEEDBACK",
     title: "Client trade logs, two days",
     subtitle: "XAUUSD, 0.01 lots · 30 Sep and 5 Oct 2026",
     description:
