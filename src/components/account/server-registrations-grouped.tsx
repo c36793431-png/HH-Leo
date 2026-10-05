@@ -85,7 +85,7 @@ export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl }: S
   const groupKeys: GroupKey[] = [...SERVER_LOCATIONS, ...(unspecified.length ? (["unspecified"] as const) : [])];
 
   return (
-    <div>
+    <div className="srv-groups">
       {groupKeys.map((key) => {
         const groupEntries = byGroup.get(key) ?? [];
         const label = key === "unspecified" ? "Unspecified location" : SERVER_LOCATION_LABELS[key];
