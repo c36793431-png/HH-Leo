@@ -8,7 +8,7 @@ import {
   type SubscriberFeedTierSubscription,
 } from "./feed-subscriptions";
 import { assignFeedTierForUser } from "./assign-feed-tier";
-import { findAgentActor, resolveUser, AGENT_ACTOR_EMAIL, RefusedError, UsageError } from "./assign-trial";
+import { findAgentActor, resolveUser, AGENT_ACTOR_EMAIL, RefusedError, UsageError, type GrantAudit } from "./assign-trial";
 
 /** The library behind scripts/assign-feed.mts (marcus m60735 scope, m60748 go): an agent grants
  * a client one Horizon-catalogue feed tier through the same assignFeedTierSubscription as the
@@ -240,11 +240,17 @@ export async function planFeed(args: AssignFeedArgs, env: Record<string, string 
 
 /** Writes. Refuses unless the plan has no refusals; assignFeedTierSubscription re-checks every
  * one of its own inside its transaction. */
-export async function executeFeed(plan: FeedPlan): Promise<FeedTierGrantResult> {
+export async function executeFeed(plan: FeedPlan, audit: GrantAudit = { via: "cli" }): Promise<FeedTierGrantResult> {
   if (plan.refusals.length || !plan.actor) {
     throw new RefusedError(`Refusing: ${plan.refusals.join("; ") || "no actor"}`);
   }
-  return assignFeedTierForUser({ actorUserId: plan.actor.id, userId: plan.user.id, tierKey: plan.tier.tierKey, via: "cli" });
+  return assignFeedTierForUser({
+    actorUserId: plan.actor.id,
+    userId: plan.user.id,
+    tierKey: plan.tier.tierKey,
+    via: audit.via,
+    idempotencyKey: audit.idempotencyKey,
+  });
 }
 
 /** Printed on every run: a grant tells nobody. */

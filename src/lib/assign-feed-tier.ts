@@ -6,7 +6,9 @@ export interface AssignFeedTierForUserArgs {
   userId: string;
   tierKey: string;
   /** Stamped into the admin_actions details. The panel passes nothing, so its rows are unchanged. */
-  via?: "cli";
+  via?: "cli" | "agent-api";
+  /** The agent API's idempotency key, stamped next to via (fable C7): the reconcile reads it back. */
+  idempotencyKey?: string;
 }
 
 /** "Feed provider assignment" after the auth check, shared by assignFeedSubscriptionAction
@@ -20,7 +22,7 @@ export async function assignFeedTierForUser(args: AssignFeedTierForUserArgs): Pr
     actorUserId,
     "admin_users_assign_feed_subscription",
     userId,
-    { tierKey, ...(args.via ? { via: args.via } : {}) },
+    { tierKey, ...(args.via ? { via: args.via } : {}), ...(args.idempotencyKey ? { idempotencyKey: args.idempotencyKey } : {}) },
     null
   );
   return result;

@@ -39,7 +39,9 @@ export interface IssueNewLicenseForUserArgs {
   feedTypes: FeedType[];
   tier?: LicenseTier;
   /** Stamped into the admin_actions details. The panel passes nothing, so its rows are unchanged. */
-  via?: "cli";
+  via?: "cli" | "agent-api";
+  /** The agent API's idempotency key, stamped next to via (fable C7): the reconcile reads it back. */
+  idempotencyKey?: string;
 }
 
 /** "Issue new license" after the auth check, shared by issueNewLicenseAction (/admin/users) and
@@ -62,6 +64,7 @@ export async function issueNewLicenseForUser(
       feedTypes,
       tier: tier ?? "paid",
       ...(args.via ? { via: args.via } : {}),
+      ...(args.idempotencyKey ? { idempotencyKey: args.idempotencyKey } : {}),
     },
     license.id
   );

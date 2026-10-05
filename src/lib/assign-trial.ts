@@ -217,8 +217,18 @@ export async function planTrial(args: AssignTrialArgs, env: Record<string, strin
   };
 }
 
+/** Who is executing, for the admin_actions details: the CLI by default, or the agent API with
+ * its idempotency key (src/lib/agent-api.ts). */
+export interface GrantAudit {
+  via: "cli" | "agent-api";
+  idempotencyKey?: string;
+}
+
 /** Writes. Refuses unless the plan has no refusals. */
-export async function executeTrial(plan: TrialPlan): Promise<{ license: IssuedLicense; delivery: KeyDelivery }> {
+export async function executeTrial(
+  plan: TrialPlan,
+  audit: GrantAudit = { via: "cli" }
+): Promise<{ license: IssuedLicense; delivery: KeyDelivery }> {
   if (plan.refusals.length || !plan.actor) {
     throw new RefusedError(`Refusing: ${plan.refusals.join("; ") || "no actor"}`);
   }
@@ -228,6 +238,7 @@ export async function executeTrial(plan: TrialPlan): Promise<{ license: IssuedLi
     expiresAt: plan.expiresAt,
     feedTypes: plan.feedTypes,
     tier: "trial",
-    via: "cli",
+    via: audit.via,
+    idempotencyKey: audit.idempotencyKey,
   });
 }

@@ -211,6 +211,29 @@ export async function notifyTrialIssued(opts: {
   );
 }
 
+/** Every agent-API execute that wrote or might have (fable m60833 C6): who acted, what, on whom,
+ * the outcome and the idempotency key's first 8 characters. A refused execute is a log line
+ * only, not a ping. Awaited by the route before it responds. */
+export async function notifyAgentGrant(opts: {
+  actorEmail: string;
+  action: "trial" | "feed";
+  what: string;
+  targetEmail: string | null;
+  targetUserId: string;
+  outcome: string;
+  idempotencyKey: string;
+  at: Date;
+}): Promise<void> {
+  await sendSinkMessage(
+    `agent-api ${opts.action}: ${opts.outcome}\n` +
+      `by: ${opts.actorEmail}\n` +
+      `what: ${opts.what}\n` +
+      `target: ${opts.targetEmail ?? "-"} (/admin/users/${opts.targetUserId})\n` +
+      `key: ${opts.idempotencyKey.slice(0, 8)}\n` +
+      `at: ${opts.at.toISOString()}`
+  );
+}
+
 export async function notifyLicenseUpgraded(opts: {
   email: string | null;
   licenseKey: string;
