@@ -34,7 +34,8 @@ import {
 } from "@/lib/config-summary";
 import { ALL_USER_ROLES, REVOKE_ONLY_ROLES, ROLE_LABELS, type UserRole } from "@/lib/admin-user-roles";
 import { pickPrimaryRole } from "@/lib/user-roles";
-import { assignFeedTierSubscription, deactivateFeedTierSubscription, setFeedSubscriptionPriceForPackage } from "@/lib/feed-subscriptions";
+import { deactivateFeedTierSubscription, setFeedSubscriptionPriceForPackage } from "@/lib/feed-subscriptions";
+import { assignFeedTierForUser } from "@/lib/assign-feed-tier";
 
 async function requireAdminUsersPanel(): Promise<string> {
   const session = await auth();
@@ -149,8 +150,7 @@ export async function assignFeedSubscriptionAction(
     const userId = formData.get("userId") as string;
     const tierKey = formData.get("tierKey") as string;
     if (!tierKey) throw new Error("Tier is required");
-    await assignFeedTierSubscription(userId, tierKey);
-    await logAdminAction(adminUserId, "admin_users_assign_feed_subscription", userId, { tierKey }, null);
+    await assignFeedTierForUser({ actorUserId: adminUserId, userId, tierKey });
     revalidateUsers(userId);
   });
 }

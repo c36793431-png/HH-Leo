@@ -1874,8 +1874,19 @@ export async function getFeedTierForAssignment(tierKey: string): Promise<FeedTie
  * registers a server first (Q25). Every branch writes ends_at = the licence's expires_at (the
  * rule 0086 section 4 seeded non-trial rows with) so no live row carries ends_at NULL into the
  * flip's preflight, and every branch writes the allowlist record (section 4(a)). No envelope is
- * written for a direct grant (access_request_id NULL; Source H mandates one for trials only). */
-export async function assignFeedTierSubscription(subscriberUserId: string, tierKey: string): Promise<void> {
+ * written for a direct grant (access_request_id NULL; Source H mandates one for trials only).
+ *
+ * Returns what it did, read from inside the transaction: which branch ran, and the server and
+ * declared IP the allowlist record was written for (the CLI prints them; the panel ignores it). */
+export interface FeedTierGrantResult {
+  outcome: "created" | "reactivated" | "repointed";
+  subscriptionId: string;
+  licenseNumber: number;
+  serverName: string;
+  declaredIp: string;
+}
+
+export async function assignFeedTierSubscription(subscriberUserId: string, tierKey: string): Promise<FeedTierGrantResult> {
   const { feedTierId, tierName, regionKey, providerUserId } = await getFeedTierForAssignment(tierKey);
   if (!providerUserId) throw new FeedTierNotAssignedError(tierName, regionKey);
 
@@ -1907,14 +1918,19 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
       [sr.id, feedTierId]
     );
 
+    let outcome: FeedTierGrantResult["outcome"];
+    let subscriptionId: string;
     if (existing.rowCount) {
       const row = existing.rows[0];
+      subscriptionId = row.id;
       if (row.provider_user_id === providerUserId) {
+        outcome = "reactivated";
         await client.query(
           `update feed_subscriptions set status = 'active', lapsed_at = null, ends_at = $2, updated_at = now() where id = $1`,
           [row.id, license.expiresAt]
         );
       } else {
+        outcome = "repointed";
         // Same tier, different provider_user_id -- the tier's provider assignment changed since
         // this row was created (feed_tiers.provider_user_id is reassignable). Follow the tier's
         // current owner rather than leaving the row pointed at a stale provider.
@@ -1927,8 +1943,9 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
         );
       }
     } else {
+      outcome = "created";
       try {
-        await createSubscription(
+        subscriptionId = await createSubscription(
           {
             providerUserId,
             subscriberUserId,
@@ -1948,6 +1965,7 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
 
     await insertAllowlistRecord(client, { serverRegistrationId: sr.id, feedTierId, ip: sr.declaredIp });
     await client.query("commit");
+    return { outcome, subscriptionId, licenseNumber: license.licenseNumber, serverName: sr.serverName, declaredIp: sr.declaredIp };
   } catch (err) {
     await client.query("rollback");
     throw err;

@@ -18,6 +18,12 @@ import {
  * unknown actor id to coxwell's row (resolveAdminUserId), which is exactly what this must not do. */
 export const AGENT_ACTOR_EMAIL = "marcus-agent@horizonhft.internal";
 
+/** The seeded actor row, or null. Exact email match: the seed writes it lower-case. */
+export async function findAgentActor(): Promise<{ id: string; email: string } | null> {
+  const result = await pool.query(`select id, email from users where email = $1`, [AGENT_ACTOR_EMAIL]);
+  return result.rows[0] ? { id: result.rows[0].id as string, email: result.rows[0].email as string } : null;
+}
+
 /** Every var the execute path reads. The key goes out AFTER the insert, so a missing one would
  * leave a licence the client was never sent. Checked before any write.
  * TELEMETRY_BOT_TOKEN is the ops "trial issued" ping; that ping goes to a fixed chat, so
@@ -116,7 +122,8 @@ export interface TrialPlan {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function resolveUser(ref: string): Promise<TrialPlan["user"]> {
+/** --user as a uuid, or an email matched case-insensitively. Refuses on none or several. */
+export async function resolveUser(ref: string): Promise<TrialPlan["user"]> {
   const result = UUID_RE.test(ref)
     ? await pool.query(`select id, email, telegram_user_id, display_name, ${notAClientSql("users")} as internal from users where id = $1`, [ref])
     : await pool.query(
@@ -141,8 +148,7 @@ async function resolveUser(ref: string): Promise<TrialPlan["user"]> {
 export async function planTrial(args: AssignTrialArgs, env: Record<string, string | undefined> = process.env): Promise<TrialPlan> {
   const user = await resolveUser(args.user);
 
-  const actorResult = await pool.query(`select id, email from users where email = $1`, [AGENT_ACTOR_EMAIL]);
-  const actor = actorResult.rows[0] ? { id: actorResult.rows[0].id as string, email: actorResult.rows[0].email as string } : null;
+  const actor = await findAgentActor();
 
   const licenceResult = await pool.query(
     `select id, tier, status, issued_at, expires_at, feed_types,
