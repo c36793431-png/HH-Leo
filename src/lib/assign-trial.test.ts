@@ -58,10 +58,13 @@ let at: typeof import("./assign-trial");
 let inl: typeof import("./issue-new-license");
 let licenses: typeof import("./licenses");
 let admin: typeof import("./admin");
-const sends: { kind: "portal" | "telemetry" | "email"; to: string; text: string; afterPoolEnd: boolean }[] = [];
+const sends: { kind: "portal" | "telemetry" | "email"; to: string; text: string; afterPoolEnd: boolean; subject?: string }[] = [];
 let actorId = "";
 let telemetryDelayMs = 0;
 let resendFails = false;
+// The key DM's failure modes: Telegram's non-2xx answer, or a throw (network, before any answer).
+let portalRefuses = false;
+let portalThrows = false;
 // Set by the fake pool's end(), so a send can say whether it landed before the script ended the pool.
 let poolEnded = false;
 
@@ -92,7 +95,13 @@ before(async () => {
     const u = String(url);
     const body = init?.body ? JSON.parse(init.body) : {};
     const afterPoolEnd = poolEnded;
-    if (u.includes(`/bot${ENV.HORIZON_PORTAL_BOT_TOKEN}/sendMessage`)) sends.push({ kind: "portal", to: String(body.chat_id), text: body.text, afterPoolEnd });
+    if (u.includes(`/bot${ENV.HORIZON_PORTAL_BOT_TOKEN}/sendMessage`)) {
+      if (portalThrows) throw new TypeError("fetch failed");
+      if (portalRefuses) {
+        return new Response(JSON.stringify({ ok: false, error_code: 403, description: "Forbidden: bot was blocked by the user" }), { status: 403 });
+      }
+      sends.push({ kind: "portal", to: String(body.chat_id), text: body.text, afterPoolEnd });
+    }
     else if (u.includes(`/bot${ENV.TELEMETRY_BOT_TOKEN}/sendMessage`)) {
       if (telemetryDelayMs) await new Promise((r) => setTimeout(r, telemetryDelayMs));
       sends.push({ kind: "telemetry", to: String(body.chat_id), text: body.text, afterPoolEnd: poolEnded });
@@ -102,9 +111,10 @@ before(async () => {
         // What Resend answers for an unverified sending domain: a 403 with a JSON error, no throw.
         return new Response(JSON.stringify({ statusCode: 403, name: "validation_error", message: "The example.invalid domain is not verified." }), { status: 403 });
       }
-      sends.push({ kind: "email", to: [body.to].flat().join(","), text: body.text, afterPoolEnd });
+      sends.push({ kind: "email", to: [body.to].flat().join(","), text: body.text, afterPoolEnd, subject: body.subject });
     }
-    return new Response(JSON.stringify({ ok: true, result: {}, id: "email-id" }), { status: 200 });
+    // Telegram's sendMessage answers result.message_id; Resend's emails.send answers { id }.
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 4242 }, id: "email-id" }), { status: 200 });
   };
   at = await import("./assign-trial");
   inl = await import("./issue-new-license");
@@ -136,7 +146,12 @@ async function licenceRow(id: string) {
 }
 
 async function actionRow(licenceId: string) {
-  return (await sql(`select admin_user_id, action_type, target_user_id, target_license_id, details_json from admin_actions where target_license_id = $1`, [licenceId])).rows;
+  return (await sql(`select admin_user_id, action_type, target_user_id, target_license_id, details_json from admin_actions where target_license_id = $1 and action_type = 'admin_users_issue_license'`, [licenceId])).rows;
+}
+
+/** The license_key_delivery rows for a licence (marcus m60934): what the key send answered. */
+async function deliveryRows(licenceId: string) {
+  return (await sql(`select admin_user_id, target_user_id, details_json from admin_actions where target_license_id = $1 and action_type = 'license_key_delivery'`, [licenceId])).rows;
 }
 
 const args = (user: string, extra: Partial<import("./assign-trial").AssignTrialArgs> = {}) => ({
@@ -199,6 +214,89 @@ test("UI vs CLI: the same licence row, admin_actions row and DM; only the actor 
   assert.equal(pings.length, 2);
   assert.ok(pings.some((p) => p.text.includes(b.email!)));
   assert.equal(cli.delivery, "telegram");
+
+  // Both record the send the same way, each under its own actor.
+  const [da, dc] = [await deliveryRows(ui.license.id), await deliveryRows(cli.license.id)];
+  assert.equal(da.length, 1);
+  assert.equal(dc.length, 1);
+  assert.deepEqual(da[0].details_json, { licenseId: ui.license.id, channel: "telegram", ok: true, telegramMessageId: 4242 });
+  assert.deepEqual(dc[0].details_json, { licenseId: cli.license.id, channel: "telegram", ok: true, telegramMessageId: 4242 });
+  assert.equal(da[0].admin_user_id, ADMIN);
+  assert.equal(dc[0].admin_user_id, actorId);
+  assert.equal(dc[0].target_user_id, b.id);
+});
+
+test("the key send leaves a license_key_delivery row for every outcome (marcus m60934)", async (t) => {
+  const issue = (userId: string) =>
+    inl.issueNewLicenseForUser({ actorUserId: ADMIN, userId, expiresAt: new Date(Date.now() + 7 * DAY), feedTypes: ["london"], tier: "trial" });
+  const only = async (licenceId: string) => {
+    const rows = await deliveryRows(licenceId);
+    assert.equal(rows.length, 1);
+    return rows[0].details_json;
+  };
+  const quiet = async <T,>(fn: () => Promise<T>) => {
+    const error = console.error;
+    console.error = () => {};
+    try {
+      return await fn();
+    } finally {
+      console.error = error;
+    }
+  };
+
+  await t.test("email accepted: Resend's id", async () => {
+    const u = await makeUser({ telegram: false });
+    const r = await issue(u.id);
+    assert.deepEqual(await only(r.license.id), { licenseId: r.license.id, channel: "email", ok: true, resendEmailId: "email-id" });
+  });
+  await t.test("email rejected: Resend's error name and message, no key", async () => {
+    const u = await makeUser({ telegram: false });
+    resendFails = true;
+    const r = await quiet(() => issue(u.id)).finally(() => (resendFails = false));
+    const d = await only(r.license.id);
+    assert.deepEqual(d, { licenseId: r.license.id, channel: "email", ok: false, error: "validation_error The example.invalid domain is not verified." });
+    assert.ok(!JSON.stringify(d).includes(r.license.licenseKey), "no key in the record");
+  });
+  await t.test("DM refused: Telegram's status and answer", async () => {
+    const u = await makeUser();
+    portalRefuses = true;
+    const r = await quiet(() => issue(u.id)).finally(() => (portalRefuses = false));
+    assert.deepEqual(await only(r.license.id), {
+      licenseId: r.license.id,
+      channel: "telegram",
+      ok: false,
+      error: '403 {"ok":false,"error_code":403,"description":"Forbidden: bot was blocked by the user"}',
+    });
+  });
+  await t.test("DM throws: recorded, then the throw propagates as before", async () => {
+    const u = await makeUser();
+    portalThrows = true;
+    try {
+      await assert.rejects(issue(u.id), /fetch failed/);
+    } finally {
+      portalThrows = false;
+    }
+    const lic = (await sql(`select id from licenses where user_id = $1`, [u.id])).rows;
+    assert.equal(lic.length, 1, "the licence was issued before the send");
+    assert.deepEqual(await only(lic[0].id), { licenseId: lic[0].id, channel: "telegram", ok: false, error: "threw TypeError" });
+  });
+  await t.test("the record failing does not fail the issue or skip the paid invite", async () => {
+    const u = await makeUser({ telegram: false });
+    const before = sends.length;
+    await sql(`create or replace function test_refuse_delivery() returns trigger language plpgsql as $$
+      begin if new.action_type = 'license_key_delivery' then raise exception 'refused for test'; end if; return new; end $$`);
+    await sql(`create trigger test_refuse_delivery before insert on admin_actions for each row execute function test_refuse_delivery()`);
+    let r: Awaited<ReturnType<typeof inl.issueNewLicenseForUser>>;
+    try {
+      r = await quiet(() => inl.issueNewLicenseForUser({ actorUserId: ADMIN, userId: u.id, expiresAt: new Date(Date.now() + 30 * DAY), feedTypes: ["london"] }));
+    } finally {
+      await sql(`drop trigger test_refuse_delivery on admin_actions`);
+    }
+    await licenses.settleLicenseBackgroundTasks();
+    assert.equal((await deliveryRows(r.license.id)).length, 0, "the trigger did refuse the record");
+    const mine = sends.slice(before).filter((s) => s.kind === "email" && s.to === u.email);
+    assert.equal(mine.length, 2, "the key email and the paid-group invite both went");
+  });
 });
 
 test("settleLicenseBackgroundTasks waits for the background ops ping (what the script awaits before ending the pool)", async () => {
@@ -225,7 +323,76 @@ test("an email-only user: the key goes by Resend, and the plan said so", async (
   assert.equal(emails.length, 1);
   assert.equal(emails[0].to, u.email);
   assert.ok(emails[0].text.includes(r.license.licenseKey));
+  assert.equal(emails[0].subject, "Your 7-day Horizon HFT trial is active");
   await licenses.settleLicenseBackgroundTasks();
+});
+
+test("the two key texts, exactly: trial (marcus m60927) and paid (unchanged)", () => {
+  const base = {
+    licenseKey: "HHFT-AAAAAA-BBBBBB-CCCCCC",
+    licenseNumber: 12,
+    showBadge: false,
+    communityGroupUrl: "https://t.me/+community",
+    issuedAt: new Date("2026-10-05T17:20:50.000Z"),
+    expiresAt: new Date("2026-10-12T17:20:50.000Z"),
+    feedTypes: ["london", "ny", "futures"] as import("./licenses").FeedType[],
+  };
+  const trial = inl.licenseNotification({ ...base, tier: "trial" });
+  assert.equal(trial.subject, "Your 7-day Horizon HFT trial is active");
+  assert.equal(
+    trial.message,
+    [
+      "Your 7-day Horizon HFT trial is active.",
+      "Ends: Mon 12 Oct 2026, 17:20 UTC",
+      "Feeds included: London, New York, CME Futures",
+      "",
+      "Your trial license key: HHFT-AAAAAA-BBBBBB-CCCCCC",
+      "",
+      "Next steps:",
+      "1. Log in at https://portal.horizonhft.com/login",
+      "2. Download the installer: https://portal.horizonhft.com/downloads",
+      "3. Register your server: https://portal.horizonhft.com/account/servers - we enable your feeds once your server is registered.",
+      "",
+      "Community: https://t.me/+community",
+    ].join("\n")
+  );
+  // The DM goes with parse_mode HTML, so the trial text adds no < > or &.
+  assert.doesNotMatch(trial.message, /[<>&]/);
+
+  // Paid, team and deal: the subject and text from before this change, byte for byte.
+  const paidText = "Your HH12 license key: HHFT-AAAAAA-BBBBBB-CCCCCC\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: https://t.me/+community";
+  for (const tier of ["paid", "team", "deal"] as const) {
+    const paid = inl.licenseNotification({ ...base, showBadge: true, tier });
+    assert.equal(paid.subject, "Your Horizon HFT license is ready", tier);
+    assert.equal(paid.message, paidText, tier);
+  }
+
+  // The badge, a trial measured in hours (no "0-day"), and a trial with no feeds (no empty line).
+  assert.match(inl.licenseNotification({ ...base, showBadge: true, tier: "trial" }).message, /\nYour HH12 trial license key: /);
+  const short = inl.licenseNotification({ ...base, tier: "trial", expiresAt: new Date("2026-10-05T23:20:50.000Z"), feedTypes: [] });
+  assert.equal(short.subject, "Your Horizon HFT trial is active");
+  assert.match(short.message, /^Your Horizon HFT trial is active\.\nEnds: Mon 05 Oct 2026, 23:20 UTC\n\nYour trial license key: /);
+});
+
+test("the panel by email: a trial gets the trial subject and text, a paid licence the paid ones", async () => {
+  const t = await makeUser({ telegram: false });
+  const p = await makeUser({ telegram: false });
+  const before = sends.length;
+  const t0 = Date.now();
+  const trial = await inl.issueNewLicenseForUser({ actorUserId: ADMIN, userId: t.id, expiresAt: new Date(t0 + 3 * DAY), feedTypes: ["crypto"], tier: "trial" });
+  const paid = await inl.issueNewLicenseForUser({ actorUserId: ADMIN, userId: p.id, expiresAt: new Date(t0 + 30 * DAY), feedTypes: ["london"] });
+  await licenses.settleLicenseBackgroundTasks();
+  const emails = sends.slice(before).filter((s) => s.kind === "email");
+  // A paid licence also emails the paid-group invite (sendPaidGroupInvite), after the key.
+  const [et, ep] = [emails.filter((e) => e.to === t.email), emails.filter((e) => e.to === p.email && e.text.includes(paid.license.licenseKey))];
+  assert.equal(et.length, 1, "a trial gets no group invite: the key email only");
+  assert.equal(ep.length, 1);
+  assert.equal(et[0].subject, "Your 3-day Horizon HFT trial is active");
+  assert.match(et[0].text, /^Your 3-day Horizon HFT trial is active\.\nEnds: .* UTC\nFeeds included: Crypto Tokyo\n/);
+  assert.ok(et[0].text.includes(`trial license key: ${trial.license.licenseKey}`));
+  assert.equal(ep[0].subject, "Your Horizon HFT license is ready");
+  assert.ok(ep[0].text.startsWith(`Your license key: ${paid.license.licenseKey}\n\nLog in at horizonhft.com`));
+  assert.ok(!ep[0].text.includes("trial"));
 });
 
 test("a rejected key email logs a sendEmail failed line on stderr, without the key (fable C1)", async () => {

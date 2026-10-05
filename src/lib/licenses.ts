@@ -668,6 +668,12 @@ export async function getActiveLicenseDetailsForUser(userId: string): Promise<Li
   }));
 }
 
+/** The paid-group invite rule (marcus m60963: never for a trial, on any path): the user holds an
+ * active paid, team or deal licence. The same check the dashboard button and the bot's /start make. */
+export async function hasActivePaidLicence(userId: string): Promise<boolean> {
+  return (await getActiveLicenseDetailsForUser(userId)).some((l) => isPaidTier(l.tier));
+}
+
 /** Bug 2 (marcus, thread overnight-builds-2026-08-30): once issueAdditionalLicense lets a
  * user hold more than one active license, expiring/revoking any single one of them must not
  * evict a client who is still paying via another. Call this instead of removeFromPaidGroup
@@ -1370,6 +1376,13 @@ export function maskLicenseKey(key: string): string {
 
 export type FeedType = "futures" | "london" | "ny" | "crypto";
 export const FEED_TYPES: FeedType[] = ["futures", "london", "ny", "crypto"];
+
+/** The feedTypes checkboxes (FeedCheckboxes) of an issue form, unknown values dropped. */
+export function readFeedTypesFromFormData(formData: FormData): FeedType[] {
+  return formData
+    .getAll("feedTypes")
+    .filter((f): f is string => typeof f === "string" && (FEED_TYPES as string[]).includes(f)) as FeedType[];
+}
 
 export interface FeedTypeMeta {
   id: FeedType;

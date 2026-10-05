@@ -11,6 +11,7 @@ import {
 } from "./feed-subscriptions";
 import { AGENT_ACTOR_EMAIL, executeTrial, planTrial, RefusedError, resolveUser, type TrialPlan } from "./assign-trial";
 import { executeFeed, planFeed, type FeedPlan } from "./assign-feed";
+import { LICENSE_KEY_DELIVERY_ACTION } from "./issue-new-license";
 import { notifyAgentGrant } from "./telemetry-sink";
 
 /** The agent API behind POST /api/agent/trial and /api/agent/feed (scope m60807, fable m60833
@@ -514,7 +515,8 @@ async function reconcileStale(r: AgentRequest, key: string, id: string, targetUs
 
 /** Did a grant for this key land? The admin_actions row carries the key (C7), so it is the first
  * proof. Without it (the grant committed, then the audit write died), the domain row written since
- * the ledger row is the second. Neither: nothing landed. Reads only. */
+ * the ledger row is the second. Neither: nothing landed. A landed trial also reports its key send
+ * from the license_key_delivery row: delivered, failed, or no-record. Reads only. */
 async function reconcile(
   q: Queryable,
   r: AgentRequest,
@@ -536,7 +538,7 @@ async function reconcile(
 
   if (r.action === "trial") {
     const lic = await q.query(
-      `select ${licenseNumberSql("l")} as license_number, l.expires_at, l.feed_types
+      `select l.id, ${licenseNumberSql("l")} as license_number, l.expires_at, l.feed_types
        from licenses l
        where l.user_id = $1 and l.tier = 'trial' and (l.id = $2::uuid or ($2::uuid is null and l.issued_at >= $3))
        order by l.issued_at desc limit 1`,
@@ -544,12 +546,33 @@ async function reconcile(
     );
     if (lic.rows.length) {
       const l = lic.rows[0];
-      const trial = { licenseNumber: Number(l.license_number), expiresAt: new Date(l.expires_at as string).toISOString(), tier: "trial", feeds: l.feed_types };
-      // The one case a reconcile cannot settle: the key goes out AFTER the insert.
+      // The key goes out AFTER the insert; its license_key_delivery row (marcus m60934) says how
+      // the send answered. No row: the request died before the send, or the record write failed.
+      const sent = await q.query(
+        `select details_json from admin_actions
+         where action_type = $1 and target_license_id = $2
+         order by created_at desc limit 1`,
+        [LICENSE_KEY_DELIVERY_ACTION, l.id]
+      );
+      const d = sent.rows[0]?.details_json as { channel?: string; ok?: boolean } | undefined;
+      const keyDelivery = !d ? "no-record" : d.ok === true ? "delivered" : "failed";
+      const trial = {
+        licenseNumber: Number(l.license_number),
+        expiresAt: new Date(l.expires_at as string).toISOString(),
+        tier: "trial",
+        feeds: l.feed_types,
+        ...(d ? { delivery: d.channel } : {}),
+        keyDelivery,
+      };
+      const issued = `${why}The trial licence WAS issued${audited ? "" : " (no admin_actions row for it)"}. `;
       const note =
-        `${why}The trial licence WAS issued${audited ? "" : " (no admin_actions row for it)"}. ` +
-        `Whether the key DM/email went out is not recorded: check /admin/users/${target.id} and resend from the panel if needed.`;
-      return { status: "granted", body: { ...base, status: "granted", trial, note }, ping: "LANDED, delivery unverified" };
+        keyDelivery === "delivered"
+          ? `${issued}The key ${d!.channel === "email" ? "email" : "DM"} was delivered.`
+          : keyDelivery === "failed"
+            ? `${issued}The key send FAILED (${d!.channel}): check /admin/users/${target.id} and resend from the panel.`
+            : `${issued}No key delivery is recorded: check /admin/users/${target.id} and resend from the panel if needed.`;
+      const pingText = { delivered: "LANDED, key delivered", failed: "LANDED, key send FAILED", "no-record": "LANDED, key delivery not recorded" }[keyDelivery];
+      return { status: "granted", body: { ...base, status: "granted", trial, note }, ping: pingText };
     }
   } else {
     const sub = await q.query(

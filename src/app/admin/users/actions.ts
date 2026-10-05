@@ -14,17 +14,15 @@ import {
   getGroupTarget,
   isPaidTier,
   LICENSE_TIERS,
-  FEED_TYPES,
+  readFeedTypesFromFormData,
   type LicenseTier,
-  type FeedType,
 } from "@/lib/licenses";
-import { issueNewLicenseForUser } from "@/lib/issue-new-license";
+import { issueNewLicenseForUser, recordKeyDelivery, sendKeyAndRecord, NO_USERS_ROW } from "@/lib/issue-new-license";
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { sendPaidGroupInvite } from "@/lib/group-membership";
-import { notifyUser } from "@/lib/notify";
 import { getPortalConfig } from "@/lib/portal-config";
 import {
   saveConfigSummary,
@@ -118,12 +116,6 @@ export async function setUserLicenseTierAction(
     await logAdminAction(adminUserId, "admin_users_set_tier", ownerId, { licenseId, tier }, licenseId);
     revalidateUsers(ownerId);
   });
-}
-
-function readFeedTypesFromFormData(formData: FormData): FeedType[] {
-  return formData
-    .getAll("feedTypes")
-    .filter((f): f is string => typeof f === "string" && (FEED_TYPES as string[]).includes(f)) as FeedType[];
 }
 
 export async function updateLicenseFeedsAction(
@@ -473,11 +465,15 @@ export async function issueAdditionalLicenseAction(
     if (target) {
       const config = await getPortalConfig();
       const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
-      await notifyUser(
-        { telegramUserId: target.telegramUserId, email: target.email },
+      await sendKeyAndRecord(
+        adminUserId,
+        license.id,
+        target,
         "Your additional Horizon HFT license is ready",
         `Your${showBadge ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
       );
+    } else {
+      await recordKeyDelivery(adminUserId, userId, license.id, NO_USERS_ROW);
     }
 
     revalidateUsers(userId);

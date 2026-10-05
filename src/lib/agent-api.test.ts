@@ -112,7 +112,7 @@ before(async () => {
     } else if (u.includes(`/bot${ENV.TELEMETRY_BOT_TOKEN}/sendMessage`)) sends.push({ kind: "telemetry", to: String(body.chat_id), text: body.text });
     else if (u.includes("resend.com")) sends.push({ kind: "email", to: [body.to].flat().join(","), text: body.text });
     else throw new Error(`unexpected outbound fetch: ${u}`);
-    return new Response(JSON.stringify({ ok: true, result: {}, id: "email-id" }), { status: 200 });
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 4242 }, id: "email-id" }), { status: 200 });
   };
   api = await import("./agent-api");
   inl = await import("./issue-new-license");
@@ -313,14 +313,22 @@ test("execute trial: granted once, stamped via agent-api + key, pinged, the key 
   assert.equal(lic.length, 1);
   assert.equal(lic[0].tier, "trial");
   assert.ok(!JSON.stringify(r.body).includes(lic[0].license_key));
-  const act = (await db.query(`select admin_user_id, details_json from admin_actions where target_license_id = $1`, [lic[0].id])).rows;
-  assert.equal(act.length, 1);
+  const act = (await db.query(`select admin_user_id, action_type, details_json from admin_actions where target_license_id = $1 order by created_at, action_type`, [lic[0].id])).rows;
+  assert.deepEqual(act.map((a: any) => a.action_type), ["admin_users_issue_license", "license_key_delivery"]);
   assert.equal(act[0].admin_user_id, actorId, "the seeded agent actor, never coxwell's row");
   assert.equal(act[0].details_json.via, "agent-api");
   assert.equal(act[0].details_json.idempotencyKey, body.idempotencyKey);
+  // The key DM's outcome (marcus m60934), under the same actor.
+  assert.equal(act[1].admin_user_id, actorId);
+  assert.deepEqual(act[1].details_json, { licenseId: lic[0].id, channel: "telegram", ok: true, telegramMessageId: 4242 });
 
   const mine = sends.slice(before);
-  assert.ok(mine.some((s) => s.kind === "portal" && s.to === c.telegramId), "the client got the key DM (the panel's path)");
+  const dm = mine.filter((s) => s.kind === "portal" && s.to === c.telegramId);
+  assert.equal(dm.length, 1, "the client got the key DM (the panel's path)");
+  // The trial text (marcus m60927), not the paid one: length, feeds, the key.
+  assert.match(dm[0].text, /^Your 14-day Horizon HFT trial is active\.\n/);
+  assert.ok(dm[0].text.includes("Feeds included: London, New York"));
+  assert.ok(dm[0].text.includes(`trial license key: ${lic[0].license_key}`));
   const ping = mine.find((s) => s.kind === "telemetry" && s.text.startsWith("agent-api trial: granted"));
   assert.ok(ping, mine.map((s) => s.text).join("\n---\n"));
   assert.equal(ping!.to, "7225949234");
@@ -374,18 +382,38 @@ test("idempotency: a fresh pending row is in flight (409, no grant); a stale one
     // Settled now: the next same-key request replays it.
     assert.equal((await call("trial", body)).body.replayed, true);
   });
-  await t.test("stale, the trial DID land (audit row with the key) -> granted, delivery unverified", async () => {
+  await t.test("stale, the trial DID land (audit row with the key) -> granted, key delivered (from its delivery row)", async () => {
     const c = await makeClient();
     const body = trialBody(c.email);
     await seedLedger(body.idempotencyKey, body, c.id, "pending", api.AGENT_STALE_PENDING_S + 5);
     // What the dead request got as far as: the panel's issue path, stamped with the key.
     await inl.issueNewLicenseForUser({ actorUserId: actorId, userId: c.id, expiresAt: new Date(Date.now() + 7 * 864e5), feedTypes: ["london"], tier: "trial", via: "agent-api", idempotencyKey: body.idempotencyKey });
     const t0 = await counts();
+    const before = sends.length;
     const r = await call("trial", body);
     assert.equal(r.body.status, "granted", JSON.stringify(r.body));
-    assert.match(r.body.note ?? "", /WAS issued\. Whether the key DM\/email went out is not recorded/);
+    assert.equal(r.body.trial?.keyDelivery, "delivered");
+    assert.equal(r.body.trial?.delivery, "telegram");
+    assert.match(r.body.note ?? "", /WAS issued\. The key DM was delivered\.$/);
+    assert.ok(sends.slice(before).some((s) => s.kind === "telemetry" && s.text.includes("LANDED, key delivered")));
     assert.equal((await ledger(body.idempotencyKey)).status, "granted");
     assert.equal((await counts()).licences, t0.licences, "no second licence");
+    assertTrimmed(r.body, c);
+  });
+  await t.test("stale, the trial landed but no license_key_delivery row -> granted, no-record", async () => {
+    const c = await makeClient();
+    const body = trialBody(c.email);
+    await seedLedger(body.idempotencyKey, body, c.id, "pending", api.AGENT_STALE_PENDING_S + 5);
+    await inl.issueNewLicenseForUser({ actorUserId: actorId, userId: c.id, expiresAt: new Date(Date.now() + 7 * 864e5), feedTypes: ["london"], tier: "trial", via: "agent-api", idempotencyKey: body.idempotencyKey });
+    // The request died between the insert and the send (or the record write failed).
+    await db.query(`delete from admin_actions where target_user_id = $1 and action_type = 'license_key_delivery'`, [c.id]);
+    const before = sends.length;
+    const r = await call("trial", body);
+    assert.equal(r.body.status, "granted", JSON.stringify(r.body));
+    assert.equal(r.body.trial?.keyDelivery, "no-record");
+    assert.ok(!("delivery" in (r.body.trial ?? {})), "no channel claimed without a row");
+    assert.match(r.body.note ?? "", /WAS issued\. No key delivery is recorded: check \/admin\/users\//);
+    assert.ok(sends.slice(before).some((s) => s.kind === "telemetry" && s.text.includes("LANDED, key delivery not recorded")));
     assertTrimmed(r.body, c);
   });
   await t.test("stale, the feed grant landed but its audit row did not -> granted from the subscription row", async () => {
@@ -408,10 +436,14 @@ test("the grant throws after the insert (key DM fails): reconciled at once under
   const r = await call("trial", body);
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.status, "granted");
-  assert.match(r.body.note ?? "", /The grant threw TypeError\. The trial licence WAS issued\. Whether the key DM\/email went out is not recorded/);
-  assert.ok(!(r.body.note ?? "").includes("fetch failed"), "an unlisted error is named, not quoted");
+  assert.match(r.body.note ?? "", /The grant threw TypeError\. The trial licence WAS issued\. The key send FAILED \(telegram\): check \/admin\/users\//);
+  assert.equal(r.body.trial?.keyDelivery, "failed", "read back from the delivery row the throw left");
+  assert.ok(!JSON.stringify(r.body).includes("fetch failed"), "an unlisted error is named, not quoted");
   assert.equal((await ledger(body.idempotencyKey)).status, "granted");
-  assert.ok(sends.slice(before).some((s) => s.kind === "telemetry" && s.text.includes("LANDED, delivery unverified")));
+  assert.ok(sends.slice(before).some((s) => s.kind === "telemetry" && s.text.includes("LANDED, key send FAILED")));
+  const delivery = (await db.query(`select details_json from admin_actions where target_user_id = $1 and action_type = 'license_key_delivery'`, [c.id])).rows;
+  assert.equal(delivery.length, 1);
+  assert.deepEqual({ ...delivery[0].details_json, licenseId: "x" }, { licenseId: "x", channel: "telegram", ok: false, error: "threw TypeError" });
 });
 
 test("in doubt: the outcome write fails after the grant -> 500 in_doubt, pinged, the row stays pending", async () => {

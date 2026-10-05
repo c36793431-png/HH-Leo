@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { listClients, maskLicenseKey, LICENSE_TIERS } from "@/lib/licenses";
 import { DurationForm } from "@/components/admin/duration-form";
+import { FeedCheckboxes } from "@/components/admin/feed-select-form";
 import { ActionButton } from "@/components/admin/action-button";
 import {
   issueLicenseAction,
@@ -491,6 +492,7 @@ async function PortalAdminOverview() {
                             ))}
                           </select>
                         </div>
+                        <FeedCheckboxes />
                       </DurationForm>
                       <DurationForm
                         action={issueLicenseAction}
@@ -505,7 +507,9 @@ async function PortalAdminOverview() {
                             ? `User has active license (expires ${new Date(c.expiresAt).toLocaleString()}). Revoke it first to issue a new one.`
                             : undefined
                         }
-                      />
+                      >
+                        <FeedCheckboxes />
+                      </DurationForm>
                       {c.licenseId && (
                         <>
                           <DurationForm

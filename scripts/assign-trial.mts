@@ -11,7 +11,8 @@
  * Refuses on: missing env, missing actor row, no user or several, an internal or test account
  * (the actor itself included) without --allow-internal, an active licence, a past trial without
  * --allow-repeat-trial, no Telegram id and no email, an unknown feed.
- * A failed key send is a "sendTelegramMessage failed" or "sendEmail failed" line on STDERR.
+ * A failed key send is a "sendTelegramMessage failed" or "sendEmail failed" line on STDERR. Either
+ * way the outcome is kept in admin_actions, action_type license_key_delivery (marcus m60934).
  *
  * No process.exit: issueLicense's ops ping runs in the background, and exiting or ending the
  * pool under it would cut it off. The script waits for it (capped), then ends the pool. */
@@ -96,7 +97,7 @@ async function main() {
   console.log(`\nISSUED  licence ${license.id}  HH${license.licenseNumber}  key ${maskLicenseKey(license.licenseKey)}  expires ${license.expiresAt.toISOString()}`);
   console.log(`Key sent by ${delivery}.`);
   // On stderr, beside the failure lines it points at, so it shows without 2>&1.
-  console.error(`Check stderr: a "sendTelegramMessage failed" or "sendEmail failed" line means the key did NOT reach the client.`);
+  console.error(`Check stderr: a "sendTelegramMessage failed" or "sendEmail failed" line means the key did NOT reach the client. The outcome is also in admin_actions, action_type license_key_delivery.`);
 }
 
 try {

@@ -6,8 +6,12 @@ function botToken(): string {
   return token;
 }
 
-/** Outbound-only: Vercel serverless can't hold a long-poll connection, so we just POST. */
-export async function sendTelegramMessage(chatId: number | string, text: string) {
+export type TelegramSendResult = { ok: true; messageId: number | null } | { ok: false; error: string };
+
+/** Outbound-only: Vercel serverless can't hold a long-poll connection, so we just POST.
+ * Returns what Telegram answered (message_id, or its error body) so a caller can record it;
+ * a network failure or a missing token still throws, as before. */
+export async function sendTelegramMessage(chatId: number | string, text: string): Promise<TelegramSendResult> {
   const res = await fetch(`${API_ROOT}/bot${botToken()}/sendMessage`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -19,8 +23,12 @@ export async function sendTelegramMessage(chatId: number | string, text: string)
     }),
   });
   if (!res.ok) {
-    console.error("sendTelegramMessage failed", await res.text());
+    const body = await res.text();
+    console.error("sendTelegramMessage failed", body);
+    return { ok: false, error: `${res.status} ${body}`.slice(0, 500) };
   }
+  const data = await res.json().catch(() => null);
+  return { ok: true, messageId: data?.result?.message_id ?? null };
 }
 
 let cachedUsername: string | null = null;
