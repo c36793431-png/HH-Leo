@@ -119,9 +119,9 @@ before(async () => {
 
 let seq = 0;
 /** A client with one active licence (feeds) and, unless server:false, its registered server. */
-async function makeClient(opts: { feeds?: string[]; server?: boolean; licence?: boolean } = {}) {
+async function makeClient(opts: { feeds?: string[]; server?: boolean; licence?: boolean; email?: string } = {}) {
   seq++;
-  const email = `feedclient${seq}@example.invalid`;
+  const email = opts.email ?? `feedclient${seq}@example.invalid`;
   const u = (await db.query(`insert into users (email) values ($1) returning id`, [email])).rows[0].id as string;
   if (opts.licence === false) return { id: u, email, licenceId: "", licenceKey: "", serverId: "", ip: "" };
   const key = `HHFT-FEED${seq}-SECRET-KEY${seq}`;
@@ -146,7 +146,7 @@ async function makeClient(opts: { feeds?: string[]; server?: boolean; licence?: 
   return { id: u, email, licenceId: l, licenceKey: key, serverId, ip };
 }
 
-const plan = (user: string, tierKey = "ld-beta-56") => af.planFeed({ user, tierKey, execute: false });
+const plan = (user: string, tierKey = "ld-beta-56", allowInternal = false) => af.planFeed({ user, tierKey, execute: false, allowInternal });
 
 async function subRow(userId: string, tierKey: string) {
   return (
@@ -287,7 +287,7 @@ test("dry run: 0 writes, 0 transactions, no xid, and the plan says what execute 
 test("each refusal refuses before any write, and matches what the grant itself would do", async (t) => {
   const refuses = async (label: string, userId: string, tierKey: string, match: RegExp, opts: { env?: Record<string, string>; real?: RegExp } = {}) => {
     const t0 = await tableCounts();
-    const p = await af.planFeed({ user: userId, tierKey, execute: true }, opts.env);
+    const p = await af.planFeed({ user: userId, tierKey, execute: true, allowInternal: false }, opts.env);
     assert.ok(p.refusals.some((r) => match.test(r)), `${label}: ${p.refusals.join(" | ")}`);
     await assert.rejects(af.executeFeed(p), /^Error: Refusing: /, label);
     assert.deepEqual(await tableCounts(), t0, `${label}: nothing written`);
@@ -343,6 +343,19 @@ test("each refusal refuses before any write, and matches what the grant itself w
       await db.query(`update users set email = 'marcus-agent@horizonhft.internal' where id = $1`, [actorId]);
     }
   });
+  await t.test("internal or test target without --allow-internal: the actor itself, *.internal, *test*; granted with it", async () => {
+    await refuses("actor", actorId, "ld-beta-56", /internal or test account/);
+    for (const email of [`qa-feed${seq + 1}@horizonhft.internal`, `feedtester${seq + 1}@example.invalid`]) {
+      const c = await makeClient({ email });
+      // Otherwise grantable: this rule is the only thing refusing it.
+      const p = await plan(c.id);
+      assert.equal(p.refusals.length, 1, p.refusals.join(" | "));
+      await refuses(email, c.id, "ld-beta-56", /internal or test account.*--allow-internal/);
+      const allowed = await plan(c.id, "ld-beta-56", true);
+      assert.deepEqual(allowed.refusals, []);
+      assert.equal((await af.executeFeed(allowed)).outcome, "created");
+    }
+  });
   await t.test("unknown tier, no user", async () => {
     const c = await makeClient();
     await assert.rejects(plan(c.id, "ld-nope"), /Unknown tier "ld-nope"\. Known: .*ld-beta-56/);
@@ -356,8 +369,10 @@ test("argv: --user and --tier required, unknown flag refused, dry run by default
   assert.throws(() => p("--user x"), /--tier is required/);
   assert.throws(() => p("--user x --tier ld-beta-56 --force"), /Unknown argument/);
   assert.throws(() => p("--user x --tier"), /--tier needs a value/);
-  assert.deepEqual(p("--user x --tier=ld-beta-56 --execute"), { user: "x", tierKey: "ld-beta-56", execute: true });
+  assert.deepEqual(p("--user x --tier=ld-beta-56 --execute"), { user: "x", tierKey: "ld-beta-56", execute: true, allowInternal: false });
   assert.equal(p("--user x --tier ld-beta-56").execute, false);
+  assert.equal(p("--user x --tier ld-beta-56 --allow-internal").allowInternal, true);
+  assert.throws(() => p("--user x --tier ld-beta-56 --allow-internal=yes"), /Unknown argument/);
 });
 
 async function runScript(argv: string[], tag: string) {

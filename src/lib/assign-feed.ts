@@ -25,14 +25,16 @@ export interface AssignFeedArgs {
   user: string;
   tierKey: string;
   execute: boolean;
+  allowInternal: boolean;
 }
 
-export const USAGE = "npx tsx scripts/assign-feed.mts --user <uuid|email> --tier <tier_key> [--execute]";
+export const USAGE = "npx tsx scripts/assign-feed.mts --user <uuid|email> --tier <tier_key> [--allow-internal] [--execute]";
 
 export function parseAssignFeedArgs(argv: string[]): AssignFeedArgs {
   let user: string | undefined;
   let tierKey: string | undefined;
   let execute = false;
+  let allowInternal = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -45,12 +47,13 @@ export function parseAssignFeedArgs(argv: string[]): AssignFeedArgs {
     if (flag === "--user") user = value().trim();
     else if (flag === "--tier") tierKey = value().trim();
     else if (flag === "--execute" && inline === undefined) execute = true;
+    else if (flag === "--allow-internal" && inline === undefined) allowInternal = true;
     else throw new UsageError(`Unknown argument: ${arg}`);
   }
 
   if (!user) throw new UsageError("--user is required");
   if (!tierKey) throw new UsageError("--tier is required (one tier_key per run, as in the panel)");
-  return { user, tierKey, execute };
+  return { user, tierKey, execute, allowInternal };
 }
 
 export interface FeedLicenceRow {
@@ -65,7 +68,7 @@ export interface FeedLicenceRow {
 export type FeedGrantOutcome = FeedTierGrantResult["outcome"];
 
 export interface FeedPlan {
-  user: { id: string; email: string | null; displayName: string | null };
+  user: { id: string; email: string | null; displayName: string | null; internal: boolean };
   actor: { id: string; email: string } | null;
   tier: { tierKey: string; name: string; regionKey: string; providerUserId: string | null; providerEmail: string | null };
   /** Unexpired, unrevoked licences: the set the panel's picker takes entitlement from. No keys. */
@@ -92,7 +95,7 @@ export function missingEnv(env: Record<string, string | undefined> = process.env
  * the refusals assignFeedTierSubscription makes, plus the panel picker's own gate. */
 export async function planFeed(args: AssignFeedArgs, env: Record<string, string | undefined> = process.env): Promise<FeedPlan> {
   const u = await resolveUser(args.user);
-  const user = { id: u.id, email: u.email, displayName: u.displayName };
+  const user = { id: u.id, email: u.email, displayName: u.displayName, internal: u.internal };
   const actor = await findAgentActor();
 
   const tierResult = await pool.query(
@@ -134,6 +137,12 @@ export async function planFeed(args: AssignFeedArgs, env: Record<string, string 
   const missing = missingEnv(env);
   if (missing.length) refusals.push(`Missing env: ${missing.join(", ")}`);
   if (!actor) refusals.push(`Actor ${AGENT_ACTOR_EMAIL} not found: apply scripts/seed-agent-actor.sql first`);
+  // Same rule as assign-trial (fable N4, marcus m60782): the grant allocates the pair a provider
+  // pseudonym, so an internal or test account would use up a number in that provider's sequence.
+  // A QA run has to say so.
+  if (user.internal && !args.allowInternal) {
+    refusals.push(`${user.email} is an internal or test account (licenses.ts notAClientSql). Pass --allow-internal to grant to it`);
+  }
   if (!tier.providerUserId) refusals.push(`${tier.name} has no provider account assigned yet`);
   if (active.length === 0) refusals.push("No active, unexpired licence: a feed grant binds to one. Issue or renew a licence first");
   if (active.length > 1) {
