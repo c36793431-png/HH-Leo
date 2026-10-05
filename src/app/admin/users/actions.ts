@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import {
-  issueLicense,
   issueAdditionalLicense,
   extendLicense,
   revokeLicenseAndSyncGroup,
@@ -19,6 +18,7 @@ import {
   type LicenseTier,
   type FeedType,
 } from "@/lib/licenses";
+import { issueNewLicenseForUser } from "@/lib/issue-new-license";
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 import { isAdminUser } from "@/lib/admin-users-panel";
@@ -409,29 +409,7 @@ export async function issueNewLicenseAction(
     const tierRaw = formData.get("tier") as string | null;
     if (tierRaw && !LICENSE_TIERS.includes(tierRaw as LicenseTier)) throw new Error("Invalid tier");
     const tier = (tierRaw as LicenseTier) || undefined;
-    const license = await issueLicense({ userId, expiresAt, feedTypes, tier });
-    await logAdminAction(
-      adminUserId,
-      "admin_users_issue_license",
-      userId,
-      { licenseId: license.id, expiresAt: expiresAt.toISOString(), feedTypes, tier: tier ?? "paid" },
-      license.id
-    );
-
-    const target = await getGroupTarget(userId);
-    if (target) {
-      const config = await getPortalConfig();
-      const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
-      await notifyUser(
-        { telegramUserId: target.telegramUserId, email: target.email },
-        "Your Horizon HFT license is ready",
-        `Your${showBadge ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
-      );
-      if (isPaidTier(tier ?? "paid")) {
-        await sendPaidGroupInvite(target);
-      }
-    }
-
+    await issueNewLicenseForUser({ actorUserId: adminUserId, userId, expiresAt, feedTypes, tier });
     revalidateUsers(userId);
   });
 }

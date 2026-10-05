@@ -160,6 +160,21 @@ export class NoActiveLicenseError extends Error {
   }
 }
 
+/** issueLicense's post-insert notify and auto-payment run fire-and-forget. That is right for a
+ * request handler, but a CLI has to end the pool before it can exit, and ending it under them
+ * cuts both off (scripts/assign-trial.mts). So they are tracked here and that caller awaits
+ * settleLicenseBackgroundTasks first. The server actions never call it; for them nothing changes. */
+const backgroundTasks = new Set<Promise<void>>();
+
+function runInBackground(task: Promise<void>): void {
+  const tracked: Promise<void> = task.catch(() => {}).finally(() => backgroundTasks.delete(tracked));
+  backgroundTasks.add(tracked);
+}
+
+export async function settleLicenseBackgroundTasks(): Promise<void> {
+  await Promise.allSettled([...backgroundTasks]);
+}
+
 /** Creates an active license row bound to an existing user, or pre-provisioned by claim_email/claim_telegram_user_id ahead of signup. */
 export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicense> {
   const expiresAt = args.expiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -187,23 +202,27 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
       );
       const row = result.rows[0];
 
-      notifyNewPaidActivation({
-        newLicenseId: row.id,
-        licenseKey: row.license_key,
-        tier: row.tier,
-        expiresAt: row.expires_at,
-        userId: args.userId,
-        claimEmail: args.claimEmail,
-        claimTelegramUserId: args.claimTelegramUserId,
-      }).catch(() => {});
+      runInBackground(
+        notifyNewPaidActivation({
+          newLicenseId: row.id,
+          licenseKey: row.license_key,
+          tier: row.tier,
+          expiresAt: row.expires_at,
+          userId: args.userId,
+          claimEmail: args.claimEmail,
+          claimTelegramUserId: args.claimTelegramUserId,
+        })
+      );
 
-      recordAutoPaymentForNewLicense({
-        newLicenseId: row.id,
-        tier: row.tier,
-        userId: args.userId,
-        claimEmail: args.claimEmail,
-        claimTelegramUserId: args.claimTelegramUserId,
-      }).catch(() => {});
+      runInBackground(
+        recordAutoPaymentForNewLicense({
+          newLicenseId: row.id,
+          tier: row.tier,
+          userId: args.userId,
+          claimEmail: args.claimEmail,
+          claimTelegramUserId: args.claimTelegramUserId,
+        })
+      );
 
       return {
         id: row.id,
