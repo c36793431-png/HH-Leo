@@ -14,8 +14,8 @@ export const BLOG_STRIP_MIN = 2;
 /** The www category that marks a feed post (FOC16, m60966). */
 export const FEEDS_CATEGORY = "Feeds";
 
-/** Words that tie a post to a region. A feed post on one of these is ordered first on that
- * region's page. Matched as whole words against the title and categories. */
+/** Words that tie a post to a region. A feed post on one of these leads that region's page,
+ * ahead of the other feed posts. Matched as whole words against the title and categories. */
 const REGION_WORDS: Record<FeedRegion, readonly string[]> = {
   london: ["London"],
   ny: ["New York", "NY"],
@@ -130,19 +130,23 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+export function isFeedPost(post: BlogPost): boolean {
+  return post.categories.some((c) => c.toLowerCase() === FEEDS_CATEGORY.toLowerCase());
+}
+
 export function isRegionFeedPost(post: BlogPost, region: FeedRegion): boolean {
-  if (!post.categories.some((c) => c.toLowerCase() === FEEDS_CATEGORY.toLowerCase())) return false;
+  if (!isFeedPost(post)) return false;
   const haystack = [post.title, ...post.categories].join(" \n ");
   return REGION_WORDS[region].some((w) => new RegExp(`\\b${escapeRegExp(w)}\\b`, "i").test(haystack));
 }
 
-/** m60947's order: this region's feed posts first (newest first), then the latest of the rest.
- * Fewer than BLOG_STRIP_MIN posts = nothing, so the strip hides. */
+/** Order (marcus m61071): this region's feed posts, then the other feed posts, then the latest
+ * of the rest; newest first within each. So a feed post leads on every region. Fewer than
+ * BLOG_STRIP_MIN posts = nothing, so the strip hides. */
 export function pickBlogStripPosts(posts: BlogPost[], region: FeedRegion): BlogPost[] {
   const byDate = [...posts].sort((a, b) => b.publishedAt - a.publishedAt);
-  const first = byDate.filter((p) => isRegionFeedPost(p, region));
-  const rest = byDate.filter((p) => !isRegionFeedPost(p, region));
-  const picked = [...first, ...rest].slice(0, BLOG_STRIP_MAX);
+  const rank = (p: BlogPost) => (isRegionFeedPost(p, region) ? 0 : isFeedPost(p) ? 1 : 2);
+  const picked = [0, 1, 2].flatMap((r) => byDate.filter((p) => rank(p) === r)).slice(0, BLOG_STRIP_MAX);
   return picked.length >= BLOG_STRIP_MIN ? picked : [];
 }
 

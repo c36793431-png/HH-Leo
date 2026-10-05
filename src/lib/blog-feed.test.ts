@@ -1,7 +1,8 @@
 /* Run: npx tsx --test src/lib/blog-feed.test.ts
  *
- * The tiers page's blog strip (m60947): parse www's RSS, put this region's feed posts first, fill
- * with the latest, hide below 2. The fixture items copy the live feed's shape at 18:3xZ 10-05. */
+ * The tiers page's blog strip (m60947): parse www's RSS, put this region's feed posts first, then the
+ * other feed posts (m61071), fill with the latest, hide below 2. The fixture items copy the live
+ * feed's shape at 18:3xZ 10-05. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -72,13 +73,30 @@ test("London: the London feed post leads, then the latest of the rest", () => {
   ]);
 });
 
-test("NY: no NY feed post, so plain newest first (the London feed post is not promoted)", () => {
+test("NY: no NY feed post, so the London feed post still leads, ahead of the newer 2.0.7 (m61071)", () => {
   const picked = pickBlogStripPosts(parseBlogRss(LIVE_SHAPE), "ny");
   assert.deepEqual(slugs(picked), [
-    "horizon-v2-0-7-release-notes",
     "how-we-compare-our-london-feeds",
+    "horizon-v2-0-7-release-notes",
     "horizon-v2-0-5-release-notes",
     "horizon-v2-0-4-release-notes",
+  ]);
+});
+
+test("NY: its own feed post, then the other feed posts newest first, then the latest of the rest (m61071)", () => {
+  // The NY post is the OLDEST feed post, so neither a date sort nor a feeds-first date sort puts it first.
+  const xml = feed(
+    item("new-york-feed-notes", "Sat, 01 Aug 2026 00:00:00 GMT", ["Feeds", "New York"]),
+    item("tokyo-feed-notes", "Tue, 01 Sep 2026 00:00:00 GMT", ["Feeds"]),
+    item("how-we-compare-our-london-feeds", "Sun, 04 Oct 2026 00:00:00 GMT", ["Research", "Feeds"]),
+    item("horizon-v2-0-7-release-notes", "Mon, 05 Oct 2026 00:00:00 GMT", ["Release notes", "Software"]),
+    item("horizon-v2-0-5-release-notes", "Thu, 13 Aug 2026 00:00:00 GMT", ["Release notes", "Software"]),
+  );
+  assert.deepEqual(slugs(pickBlogStripPosts(parseBlogRss(xml), "ny")), [
+    "new-york-feed-notes",
+    "how-we-compare-our-london-feeds",
+    "tokyo-feed-notes",
+    "horizon-v2-0-7-release-notes",
   ]);
 });
 
