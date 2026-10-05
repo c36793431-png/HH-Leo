@@ -112,7 +112,7 @@ before(async () => {
     } else if (u.includes(`/bot${ENV.TELEMETRY_BOT_TOKEN}/sendMessage`)) sends.push({ kind: "telemetry", to: String(body.chat_id), text: body.text });
     else if (u.includes("resend.com")) sends.push({ kind: "email", to: [body.to].flat().join(","), text: body.text });
     else throw new Error(`unexpected outbound fetch: ${u}`);
-    return new Response(JSON.stringify({ ok: true, result: {}, id: "email-id" }), { status: 200 });
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 4242 }, id: "email-id" }), { status: 200 });
   };
   api = await import("./agent-api");
   inl = await import("./issue-new-license");
@@ -313,11 +313,14 @@ test("execute trial: granted once, stamped via agent-api + key, pinged, the key 
   assert.equal(lic.length, 1);
   assert.equal(lic[0].tier, "trial");
   assert.ok(!JSON.stringify(r.body).includes(lic[0].license_key));
-  const act = (await db.query(`select admin_user_id, details_json from admin_actions where target_license_id = $1`, [lic[0].id])).rows;
-  assert.equal(act.length, 1);
+  const act = (await db.query(`select admin_user_id, action_type, details_json from admin_actions where target_license_id = $1 order by created_at, action_type`, [lic[0].id])).rows;
+  assert.deepEqual(act.map((a: any) => a.action_type), ["admin_users_issue_license", "license_key_delivery"]);
   assert.equal(act[0].admin_user_id, actorId, "the seeded agent actor, never coxwell's row");
   assert.equal(act[0].details_json.via, "agent-api");
   assert.equal(act[0].details_json.idempotencyKey, body.idempotencyKey);
+  // The key DM's outcome (marcus m60934), under the same actor.
+  assert.equal(act[1].admin_user_id, actorId);
+  assert.deepEqual(act[1].details_json, { licenseId: lic[0].id, channel: "telegram", ok: true, telegramMessageId: 4242 });
 
   const mine = sends.slice(before);
   const dm = mine.filter((s) => s.kind === "portal" && s.to === c.telegramId);
@@ -417,6 +420,9 @@ test("the grant throws after the insert (key DM fails): reconciled at once under
   assert.ok(!(r.body.note ?? "").includes("fetch failed"), "an unlisted error is named, not quoted");
   assert.equal((await ledger(body.idempotencyKey)).status, "granted");
   assert.ok(sends.slice(before).some((s) => s.kind === "telemetry" && s.text.includes("LANDED, delivery unverified")));
+  const delivery = (await db.query(`select details_json from admin_actions where target_user_id = $1 and action_type = 'license_key_delivery'`, [c.id])).rows;
+  assert.equal(delivery.length, 1);
+  assert.deepEqual({ ...delivery[0].details_json, licenseId: "x" }, { licenseId: "x", channel: "telegram", ok: false, error: "threw TypeError" });
 });
 
 test("in doubt: the outcome write fails after the grant -> 500 in_doubt, pinged, the row stays pending", async () => {

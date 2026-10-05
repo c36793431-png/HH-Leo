@@ -9,7 +9,7 @@ import {
   type LicenseTier,
 } from "./licenses";
 import { logAdminAction } from "./admin";
-import { notifyUser } from "./notify";
+import { notifyUser, type NotifyOutcome } from "./notify";
 import { getPortalConfig } from "./portal-config";
 import { sendPaidGroupInvite } from "./group-membership";
 
@@ -90,6 +90,11 @@ export function licenseNotification(opts: {
 
 export type KeyDelivery = "telegram" | "email" | "none";
 
+/** The admin_actions row that proves the key send (marcus m60934): one per issue, after the
+ * send, never an update of the issue row. details_json = { licenseId, channel, ok, and
+ * telegramMessageId | resendEmailId | error }. A Vercel log line ages out in 1h; this does not. */
+export const LICENSE_KEY_DELIVERY_ACTION = "license_key_delivery";
+
 /** Which channel notifyUser will use for this recipient: same precedence, read without sending. */
 export function keyDeliveryChannel(target: { telegramUserId: string | null; email: string | null } | null): KeyDelivery {
   if (target?.telegramUserId) return "telegram";
@@ -111,7 +116,8 @@ export interface IssueNewLicenseForUserArgs {
 
 /** "Issue new license" after the auth check, shared by issueNewLicenseAction (/admin/users) and
  * scripts/assign-trial.mts so the two can't drift: insert (refuses on an active licence), the
- * admin_actions row, the key DM or email, and the paid-group invite for paid tiers.
+ * admin_actions row, the key DM or email and its license_key_delivery row, and the paid-group
+ * invite for paid tiers.
  * The key is delivered AFTER the insert. A throw from there on leaves a licence the client may
  * not have been sent, which is why the CLI preflights its env before calling this. */
 export async function issueNewLicenseForUser(
@@ -136,6 +142,11 @@ export async function issueNewLicenseForUser(
   );
 
   const target = await getGroupTarget(userId);
+  // Best-effort: a failed record must not turn a delivered key into an error, or skip the invite.
+  const recordDelivery = (outcome: NotifyOutcome) =>
+    logAdminAction(actorUserId, LICENSE_KEY_DELIVERY_ACTION, userId, { licenseId: license.id, ...outcome }, license.id).catch(
+      (err) => console.error("license_key_delivery record failed", license.id, err instanceof Error ? err.message : err)
+    );
   if (target) {
     const config = await getPortalConfig();
     const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
@@ -149,10 +160,21 @@ export async function issueNewLicenseForUser(
       expiresAt: new Date(license.expiresAt),
       feedTypes,
     });
-    await notifyUser({ telegramUserId: target.telegramUserId, email: target.email }, subject, message);
+    let outcome: NotifyOutcome;
+    try {
+      outcome = await notifyUser({ telegramUserId: target.telegramUserId, email: target.email }, subject, message);
+    } catch (err) {
+      // A throw (network, missing token) still propagates as before; it is recorded first.
+      const channel = keyDeliveryChannel(target);
+      await recordDelivery({ channel, ok: false, error: `threw ${err instanceof Error ? err.name : typeof err}` } as NotifyOutcome);
+      throw err;
+    }
+    await recordDelivery(outcome);
     if (isPaidTier(tier ?? "paid")) {
       await sendPaidGroupInvite(target);
     }
+  } else {
+    await recordDelivery({ channel: "none", ok: false, error: "no users row for the licence's user" });
   }
 
   return { license, delivery: keyDeliveryChannel(target) };

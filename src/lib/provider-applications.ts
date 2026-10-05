@@ -8,8 +8,8 @@ const FEED_HOST = "feed.horizonhft.com";
 
 /** Best-effort applicant email -- a failed send must never fail the caller's action,
  * same pattern as partner-applications.ts's notifyApplicant. */
-function notifyApplicantEmail(email: string, subject: string, text: string): Promise<void> {
-  return sendEmail(email, subject, text, { replyTo: process.env.SUPPORT_EMAIL }).catch(() => {});
+async function notifyApplicantEmail(email: string, subject: string, text: string): Promise<void> {
+  await sendEmail(email, subject, text, { replyTo: process.env.SUPPORT_EMAIL }).catch(() => {});
 }
 
 export const PROVIDER_APPLICATION_STATUSES = ["pending", "approved", "declined"] as const;
