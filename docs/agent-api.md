@@ -78,7 +78,9 @@ therefore reuses the key and cannot grant twice.
 
 The answer carries `status` and, where relevant, `refusals`, `userId`, `capRemainingToday` and
 `note`, plus one summary:
-- `trial`: expiry, feeds, the delivery channel name, licence numbers and status.
+- `trial`: expiry, feeds, the delivery channel name, licence numbers and status. A reconciled
+  trial also carries `keyDelivery` (`delivered` / `failed` / `no-record`); its `delivery` is the
+  channel the send record names, absent when there is no record.
 - `feed`: tier, would-be outcome, licence number and expiry, whether a server is registered,
   and the existing row's status.
 
@@ -109,9 +111,13 @@ A same-key request after a settled answer gets that answer back, with `"replayed
   or `not_granted`.
 - If even the outcome write fails, the answer is `in_doubt` and the row stays `pending`. Send the
   **same** key again after 120 s (2 x maxDuration): that reconciles it the same way and pings coxwell.
-- **What a reconcile cannot settle:** a trial was issued, but whether the key DM/email went out is
-  not recorded, because the key is sent after the insert. The answer says so. Check
-  `/admin/users/<id>` and resend from the panel.
+- **The key send, on a reconcile:** the key goes out after the insert, and each send writes a
+  `license_key_delivery` row in `admin_actions` (by `target_license_id`). A reconcile that finds
+  the trial reads the latest such row: `ok: true` is `delivered`, any other row is `failed`, no
+  row is `no-record` (the request died before the send, or the record write failed). The note and
+  the coxwell ping say which ("LANDED, key delivered" / "LANDED, key send FAILED" / "LANDED, key
+  delivery not recorded"); on `failed` or `no-record`, check `/admin/users/<id>` and resend from
+  the panel. The send's error text stays out of the answer and the ping.
 
 ## Limits
 
