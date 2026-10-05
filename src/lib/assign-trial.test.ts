@@ -58,7 +58,7 @@ let at: typeof import("./assign-trial");
 let inl: typeof import("./issue-new-license");
 let licenses: typeof import("./licenses");
 let admin: typeof import("./admin");
-const sends: { kind: "portal" | "telemetry" | "email"; to: string; text: string; afterPoolEnd: boolean }[] = [];
+const sends: { kind: "portal" | "telemetry" | "email"; to: string; text: string; afterPoolEnd: boolean; subject?: string }[] = [];
 let actorId = "";
 let telemetryDelayMs = 0;
 let resendFails = false;
@@ -102,7 +102,7 @@ before(async () => {
         // What Resend answers for an unverified sending domain: a 403 with a JSON error, no throw.
         return new Response(JSON.stringify({ statusCode: 403, name: "validation_error", message: "The example.invalid domain is not verified." }), { status: 403 });
       }
-      sends.push({ kind: "email", to: [body.to].flat().join(","), text: body.text, afterPoolEnd });
+      sends.push({ kind: "email", to: [body.to].flat().join(","), text: body.text, afterPoolEnd, subject: body.subject });
     }
     return new Response(JSON.stringify({ ok: true, result: {}, id: "email-id" }), { status: 200 });
   };
@@ -225,7 +225,77 @@ test("an email-only user: the key goes by Resend, and the plan said so", async (
   assert.equal(emails.length, 1);
   assert.equal(emails[0].to, u.email);
   assert.ok(emails[0].text.includes(r.license.licenseKey));
+  assert.equal(emails[0].subject, "Your 7-day Horizon HFT trial is active");
   await licenses.settleLicenseBackgroundTasks();
+});
+
+test("the two key texts, exactly: trial (marcus m60927) and paid (unchanged)", () => {
+  const base = {
+    licenseKey: "HHFT-AAAAAA-BBBBBB-CCCCCC",
+    licenseNumber: 12,
+    showBadge: false,
+    communityGroupUrl: "https://t.me/+community",
+    issuedAt: new Date("2026-10-05T17:20:50.000Z"),
+    expiresAt: new Date("2026-10-12T17:20:50.000Z"),
+    feedTypes: ["london", "ny", "futures"] as import("./licenses").FeedType[],
+  };
+  const trial = inl.licenseNotification({ ...base, tier: "trial" });
+  assert.equal(trial.subject, "Your 7-day Horizon HFT trial is active");
+  assert.equal(
+    trial.message,
+    [
+      "Your 7-day Horizon HFT trial is active.",
+      "Ends: Mon 12 Oct 2026, 17:20 UTC",
+      "Feeds included: London, New York, CME Futures",
+      "",
+      "Your trial license key: HHFT-AAAAAA-BBBBBB-CCCCCC",
+      "",
+      "Next steps:",
+      "1. Log in at https://portal.horizonhft.com/login",
+      "2. Download the installer: https://portal.horizonhft.com/downloads",
+      "3. Register your server: https://portal.horizonhft.com/account/servers",
+      "   Feeds can only be connected once your server is registered.",
+      "",
+      "Community: https://t.me/+community",
+    ].join("\n")
+  );
+  // The DM goes with parse_mode HTML, so the trial text adds no < > or &.
+  assert.doesNotMatch(trial.message, /[<>&]/);
+
+  // Paid, team and deal: the subject and text from before this change, byte for byte.
+  const paidText = "Your HH12 license key: HHFT-AAAAAA-BBBBBB-CCCCCC\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: https://t.me/+community";
+  for (const tier of ["paid", "team", "deal"] as const) {
+    const paid = inl.licenseNotification({ ...base, showBadge: true, tier });
+    assert.equal(paid.subject, "Your Horizon HFT license is ready", tier);
+    assert.equal(paid.message, paidText, tier);
+  }
+
+  // The badge, a trial measured in hours (no "0-day"), and a trial with no feeds (no empty line).
+  assert.match(inl.licenseNotification({ ...base, showBadge: true, tier: "trial" }).message, /\nYour HH12 trial license key: /);
+  const short = inl.licenseNotification({ ...base, tier: "trial", expiresAt: new Date("2026-10-05T23:20:50.000Z"), feedTypes: [] });
+  assert.equal(short.subject, "Your Horizon HFT trial is active");
+  assert.match(short.message, /^Your Horizon HFT trial is active\.\nEnds: Mon 05 Oct 2026, 23:20 UTC\n\nYour trial license key: /);
+});
+
+test("the panel by email: a trial gets the trial subject and text, a paid licence the paid ones", async () => {
+  const t = await makeUser({ telegram: false });
+  const p = await makeUser({ telegram: false });
+  const before = sends.length;
+  const t0 = Date.now();
+  const trial = await inl.issueNewLicenseForUser({ actorUserId: ADMIN, userId: t.id, expiresAt: new Date(t0 + 3 * DAY), feedTypes: ["crypto"], tier: "trial" });
+  const paid = await inl.issueNewLicenseForUser({ actorUserId: ADMIN, userId: p.id, expiresAt: new Date(t0 + 30 * DAY), feedTypes: ["london"] });
+  await licenses.settleLicenseBackgroundTasks();
+  const emails = sends.slice(before).filter((s) => s.kind === "email");
+  // A paid licence also emails the paid-group invite (sendPaidGroupInvite), after the key.
+  const [et, ep] = [emails.filter((e) => e.to === t.email), emails.filter((e) => e.to === p.email && e.text.includes(paid.license.licenseKey))];
+  assert.equal(et.length, 1, "a trial gets no group invite: the key email only");
+  assert.equal(ep.length, 1);
+  assert.equal(et[0].subject, "Your 3-day Horizon HFT trial is active");
+  assert.match(et[0].text, /^Your 3-day Horizon HFT trial is active\.\nEnds: .* UTC\nFeeds included: Crypto Tokyo\n/);
+  assert.ok(et[0].text.includes(`trial license key: ${trial.license.licenseKey}`));
+  assert.equal(ep[0].subject, "Your Horizon HFT license is ready");
+  assert.ok(ep[0].text.startsWith(`Your license key: ${paid.license.licenseKey}\n\nLog in at horizonhft.com`));
+  assert.ok(!ep[0].text.includes("trial"));
 });
 
 test("a rejected key email logs a sendEmail failed line on stderr, without the key (fable C1)", async () => {

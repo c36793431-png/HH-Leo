@@ -5,8 +5,7 @@ import { getPortalConfig } from "./portal-config";
 import {
   issueNewLicenseForUser,
   keyDeliveryChannel,
-  licenseReadyMessage,
-  LICENSE_READY_SUBJECT,
+  licenseNotification,
   type KeyDelivery,
 } from "./issue-new-license";
 
@@ -169,14 +168,19 @@ export async function planTrial(args: AssignTrialArgs, env: Record<string, strin
     live: Boolean(r.live),
   }));
 
+  const issuedAt = new Date();
   const expiresAt = resolveExpiresAt({ mode: "duration", amount: args.days, unit: "days" });
   const delivery = keyDeliveryChannel(user);
   const config = await getPortalConfig();
-  const maskedMessage = licenseReadyMessage({
+  const { subject, message: maskedMessage } = licenseNotification({
+    tier: "trial",
     licenseKey: "HHFT-XXXXXX-XXXXXX-XXXXXX",
     licenseNumber: licences.length + 1,
     showBadge: false,
     communityGroupUrl: config.communityGroupUrl,
+    issuedAt,
+    expiresAt,
+    feedTypes: args.feeds,
   });
 
   const refusals: string[] = [];
@@ -205,7 +209,7 @@ export async function planTrial(args: AssignTrialArgs, env: Record<string, strin
     expiresAt,
     feedTypes: args.feeds,
     delivery,
-    subject: LICENSE_READY_SUBJECT,
+    subject,
     maskedMessage,
     adminAction: {
       admin_user_id: actor?.id ?? null,

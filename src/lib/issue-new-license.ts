@@ -3,6 +3,7 @@ import {
   getGroupTarget,
   getActiveLicensesForUser,
   isPaidTier,
+  FEED_TYPE_META,
   type FeedType,
   type IssuedLicense,
   type LicenseTier,
@@ -21,6 +22,70 @@ export function licenseReadyMessage(opts: {
   communityGroupUrl: string;
 }): string {
   return `Your${opts.showBadge ? ` HH${opts.licenseNumber}` : ""} license key: ${opts.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${opts.communityGroupUrl}`;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const PORTAL = "https://portal.horizonhft.com";
+
+/** "7-day " from the issue time to the expiry, rounded; "" under half a day (an hours-long trial). */
+function trialLength(issuedAt: Date, expiresAt: Date): string {
+  const days = Math.round((expiresAt.getTime() - issuedAt.getTime()) / DAY_MS);
+  return days >= 1 ? `${days}-day ` : "";
+}
+
+/** "Mon 12 Oct 2026, 17:20 UTC". No < > or &: the Telegram DM is sent with parse_mode HTML. */
+function formatUtc(d: Date): string {
+  const [wd, day, mon, year, time] = d.toUTCString().replace(",", "").split(" ");
+  return `${wd} ${day} ${mon} ${year}, ${time.slice(0, 5)} UTC`;
+}
+
+export function trialReadySubject(opts: { issuedAt: Date; expiresAt: Date }): string {
+  return `Your ${trialLength(opts.issuedAt, opts.expiresAt)}Horizon HFT trial is active`;
+}
+
+/** The trial's key DM / email (coxwell via marcus m60927): says it is a trial, when it ends,
+ * which feeds it carries, and that a feed needs a registered server before it can connect. */
+export function trialReadyMessage(opts: {
+  licenseKey: string;
+  licenseNumber: number;
+  showBadge: boolean;
+  communityGroupUrl: string;
+  issuedAt: Date;
+  expiresAt: Date;
+  feedTypes: FeedType[];
+}): string {
+  const feeds = opts.feedTypes.map((f) => FEED_TYPE_META[f]?.name.replace(/ Feed$/, "") ?? f);
+  return [
+    `${trialReadySubject(opts)}.`,
+    `Ends: ${formatUtc(opts.expiresAt)}`,
+    ...(feeds.length ? [`Feeds included: ${feeds.join(", ")}`] : []),
+    "",
+    `Your${opts.showBadge ? ` HH${opts.licenseNumber}` : ""} trial license key: ${opts.licenseKey}`,
+    "",
+    "Next steps:",
+    `1. Log in at ${PORTAL}/login`,
+    `2. Download the installer: ${PORTAL}/downloads`,
+    `3. Register your server: ${PORTAL}/account/servers`,
+    "   Feeds can only be connected once your server is registered.",
+    "",
+    `Community: ${opts.communityGroupUrl}`,
+  ].join("\n");
+}
+
+/** The subject and text for a new licence's key: the trial text for tier 'trial', otherwise the
+ * paid text, unchanged. One function so the panel, the CLI's dry run and the agent API agree. */
+export function licenseNotification(opts: {
+  tier: LicenseTier;
+  licenseKey: string;
+  licenseNumber: number;
+  showBadge: boolean;
+  communityGroupUrl: string;
+  issuedAt: Date;
+  expiresAt: Date;
+  feedTypes: FeedType[];
+}): { subject: string; message: string } {
+  if (opts.tier === "trial") return { subject: trialReadySubject(opts), message: trialReadyMessage(opts) };
+  return { subject: LICENSE_READY_SUBJECT, message: licenseReadyMessage(opts) };
 }
 
 export type KeyDelivery = "telegram" | "email" | "none";
@@ -53,6 +118,7 @@ export async function issueNewLicenseForUser(
   args: IssueNewLicenseForUserArgs
 ): Promise<{ license: IssuedLicense; delivery: KeyDelivery }> {
   const { actorUserId, userId, expiresAt, feedTypes, tier } = args;
+  const issuedAt = new Date();
   const license = await issueLicense({ userId, expiresAt, feedTypes, tier });
   await logAdminAction(
     actorUserId,
@@ -73,16 +139,17 @@ export async function issueNewLicenseForUser(
   if (target) {
     const config = await getPortalConfig();
     const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
-    await notifyUser(
-      { telegramUserId: target.telegramUserId, email: target.email },
-      LICENSE_READY_SUBJECT,
-      licenseReadyMessage({
-        licenseKey: license.licenseKey,
-        licenseNumber: license.licenseNumber,
-        showBadge,
-        communityGroupUrl: config.communityGroupUrl,
-      })
-    );
+    const { subject, message } = licenseNotification({
+      tier: tier ?? "paid",
+      licenseKey: license.licenseKey,
+      licenseNumber: license.licenseNumber,
+      showBadge,
+      communityGroupUrl: config.communityGroupUrl,
+      issuedAt,
+      expiresAt: new Date(license.expiresAt),
+      feedTypes,
+    });
+    await notifyUser({ telegramUserId: target.telegramUserId, email: target.email }, subject, message);
     if (isPaidTier(tier ?? "paid")) {
       await sendPaidGroupInvite(target);
     }

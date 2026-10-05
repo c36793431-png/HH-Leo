@@ -320,7 +320,12 @@ test("execute trial: granted once, stamped via agent-api + key, pinged, the key 
   assert.equal(act[0].details_json.idempotencyKey, body.idempotencyKey);
 
   const mine = sends.slice(before);
-  assert.ok(mine.some((s) => s.kind === "portal" && s.to === c.telegramId), "the client got the key DM (the panel's path)");
+  const dm = mine.filter((s) => s.kind === "portal" && s.to === c.telegramId);
+  assert.equal(dm.length, 1, "the client got the key DM (the panel's path)");
+  // The trial text (marcus m60927), not the paid one: length, feeds, the key.
+  assert.match(dm[0].text, /^Your 14-day Horizon HFT trial is active\.\n/);
+  assert.ok(dm[0].text.includes("Feeds included: London, New York"));
+  assert.ok(dm[0].text.includes(`trial license key: ${lic[0].license_key}`));
   const ping = mine.find((s) => s.kind === "telemetry" && s.text.startsWith("agent-api trial: granted"));
   assert.ok(ping, mine.map((s) => s.text).join("\n---\n"));
   assert.equal(ping!.to, "7225949234");
