@@ -9,7 +9,8 @@ import {
   listClients,
   getGroupTarget,
   getLicenseExpiresAt,
-  getActiveLicensesForUser,
+  hasActivePaidLicence,
+  readFeedTypesFromFormData,
   LICENSE_TIERS,
   type LicenseTier,
 } from "@/lib/licenses";
@@ -18,6 +19,7 @@ import { sendPaidGroupInvite, removeFromPaidGroup } from "@/lib/group-membership
 import { logAdminAction } from "@/lib/admin";
 import { notifyUser } from "@/lib/notify";
 import { getPortalConfig } from "@/lib/portal-config";
+import { issueNewLicenseForUser } from "@/lib/issue-new-license";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
 
@@ -41,30 +43,29 @@ export async function issueLicenseAction(
     if (tierRaw && !LICENSE_TIERS.includes(tierRaw as LicenseTier)) throw new Error("Invalid tier");
     const tier = tierRaw as LicenseTier | undefined;
 
-    const license = await issueLicense({
-      userId,
-      claimEmail: !userId ? email : undefined,
-      claimTelegramUserId: !userId && telegramUserIdRaw ? Number(telegramUserIdRaw) : undefined,
-      expiresAt,
-      tier,
-    });
-
-    await logAdminAction(session.user.id, "issue_license", userId ?? null, {
-      licenseId: license.id,
-      tier: tier ?? "paid",
-    });
-
     if (userId) {
-      const client = (await listClients()).find((c) => c.userId === userId);
-      const config = await getPortalConfig();
-      const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
-      await notifyUser(
-        { telegramUserId: client?.telegramUserId, email: client?.email },
-        "Your Horizon HFT license is ready",
-        `Your${showBadge ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
-      );
-      const target = await getGroupTarget(userId);
-      if (target) await sendPaidGroupInvite(target);
+      // A signed-up client: the /admin/users path (marcus m60963), so a trial gets the trial
+      // text and no paid-group invite, the feeds picked here, and a license_key_delivery row.
+      await issueNewLicenseForUser({
+        actorUserId: session.user.id,
+        userId,
+        expiresAt,
+        feedTypes: readFeedTypesFromFormData(formData),
+        tier,
+        via: "admin-dashboard",
+      });
+    } else {
+      // Pre-provision: a claim licence, nobody to send a key to until they sign up.
+      const license = await issueLicense({
+        claimEmail: email,
+        claimTelegramUserId: telegramUserIdRaw ? Number(telegramUserIdRaw) : undefined,
+        expiresAt,
+        tier,
+      });
+      await logAdminAction(session.user.id, "issue_license", null, {
+        licenseId: license.id,
+        tier: tier ?? "paid",
+      });
     }
 
     revalidatePath("/admin");
@@ -84,7 +85,8 @@ export async function extendLicenseAction(
     await extendLicense(licenseId, expiresAt);
     await logAdminAction(session.user.id, "extend_license", null, { licenseId, expiresAt: expiresAt.toISOString() });
 
-    if (userId) {
+    // No paid-group invite for a trial (marcus m60963): only when the user holds a paid licence.
+    if (userId && (await hasActivePaidLicence(userId))) {
       const target = await getGroupTarget(userId);
       if (target) await sendPaidGroupInvite(target);
     }
@@ -114,6 +116,9 @@ export async function resendGroupInviteAction(
   return runAction("Failed to resend invite", async () => {
     const session = await requireAdmin();
     const userId = formData.get("userId") as string;
+    if (!(await hasActivePaidLicence(userId))) {
+      throw new Error("No active paid, team or deal licence: the paid-group invite is not sent to trials.");
+    }
     const target = await getGroupTarget(userId);
     const result = target ? await sendPaidGroupInvite(target) : { sent: false as const, reason: "invite_link_failed" as const };
     await logAdminAction(session.user.id, "resend_group_invite", userId, result);

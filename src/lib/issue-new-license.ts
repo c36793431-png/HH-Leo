@@ -44,7 +44,8 @@ export function trialReadySubject(opts: { issuedAt: Date; expiresAt: Date }): st
 }
 
 /** The trial's key DM / email (coxwell via marcus m60927): says it is a trial, when it ends,
- * which feeds it carries, and that a feed needs a registered server before it can connect. */
+ * which feeds it carries, and that we enable the feeds once a server is registered (m60963: the
+ * basket flow forwards feed lines only after that; "can only be connected" was not verified). */
 export function trialReadyMessage(opts: {
   licenseKey: string;
   licenseNumber: number;
@@ -65,8 +66,7 @@ export function trialReadyMessage(opts: {
     "Next steps:",
     `1. Log in at ${PORTAL}/login`,
     `2. Download the installer: ${PORTAL}/downloads`,
-    `3. Register your server: ${PORTAL}/account/servers`,
-    "   Feeds can only be connected once your server is registered.",
+    `3. Register your server: ${PORTAL}/account/servers - we enable your feeds once your server is registered.`,
     "",
     `Community: ${opts.communityGroupUrl}`,
   ].join("\n");
@@ -108,8 +108,9 @@ export interface IssueNewLicenseForUserArgs {
   expiresAt: Date;
   feedTypes: FeedType[];
   tier?: LicenseTier;
-  /** Stamped into the admin_actions details. The panel passes nothing, so its rows are unchanged. */
-  via?: "cli" | "agent-api";
+  /** Stamped into the admin_actions details. The panel passes nothing, so its rows are unchanged;
+   * /admin's per-client buttons pass "admin-dashboard" (marcus m60963). */
+  via?: "cli" | "agent-api" | "admin-dashboard";
   /** The agent API's idempotency key, stamped next to via (fable C7): the reconcile reads it back. */
   idempotencyKey?: string;
 }
@@ -142,11 +143,6 @@ export async function issueNewLicenseForUser(
   );
 
   const target = await getGroupTarget(userId);
-  // Best-effort: a failed record must not turn a delivered key into an error, or skip the invite.
-  const recordDelivery = (outcome: NotifyOutcome) =>
-    logAdminAction(actorUserId, LICENSE_KEY_DELIVERY_ACTION, userId, { licenseId: license.id, ...outcome }, license.id).catch(
-      (err) => console.error("license_key_delivery record failed", license.id, err instanceof Error ? err.message : err)
-    );
   if (target) {
     const config = await getPortalConfig();
     const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
@@ -160,22 +156,44 @@ export async function issueNewLicenseForUser(
       expiresAt: new Date(license.expiresAt),
       feedTypes,
     });
-    let outcome: NotifyOutcome;
-    try {
-      outcome = await notifyUser({ telegramUserId: target.telegramUserId, email: target.email }, subject, message);
-    } catch (err) {
-      // A throw (network, missing token) still propagates as before; it is recorded first.
-      const channel = keyDeliveryChannel(target);
-      await recordDelivery({ channel, ok: false, error: `threw ${err instanceof Error ? err.name : typeof err}` } as NotifyOutcome);
-      throw err;
-    }
-    await recordDelivery(outcome);
+    await sendKeyAndRecord(actorUserId, license.id, target, subject, message);
     if (isPaidTier(tier ?? "paid")) {
       await sendPaidGroupInvite(target);
     }
   } else {
-    await recordDelivery({ channel: "none", ok: false, error: "no users row for the licence's user" });
+    await recordKeyDelivery(actorUserId, userId, license.id, NO_USERS_ROW);
   }
 
   return { license, delivery: keyDeliveryChannel(target) };
+}
+
+export const NO_USERS_ROW: NotifyOutcome = { channel: "none", ok: false, error: "no users row for the licence's user" };
+
+/** Writes the license_key_delivery row. Best-effort: a failed record must not turn a delivered
+ * key into an error, or skip the invite after it. */
+export async function recordKeyDelivery(actorUserId: string, userId: string, licenseId: string, outcome: NotifyOutcome): Promise<void> {
+  await logAdminAction(actorUserId, LICENSE_KEY_DELIVERY_ACTION, userId, { licenseId, ...outcome }, licenseId).catch((err) =>
+    console.error("license_key_delivery record failed", licenseId, err instanceof Error ? err.message : err)
+  );
+}
+
+/** The key DM or email, then its license_key_delivery row. A throw (network, missing token) is
+ * recorded as "threw <Name>" (the name only, as the agent API does), then propagates as before. */
+export async function sendKeyAndRecord(
+  actorUserId: string,
+  licenseId: string,
+  target: { userId: string; telegramUserId: string | null; email: string | null },
+  subject: string,
+  message: string
+): Promise<void> {
+  let outcome: NotifyOutcome;
+  try {
+    outcome = await notifyUser({ telegramUserId: target.telegramUserId, email: target.email }, subject, message);
+  } catch (err) {
+    const channel = keyDeliveryChannel(target);
+    const error = `threw ${err instanceof Error ? err.name : typeof err}`;
+    await recordKeyDelivery(actorUserId, target.userId, licenseId, { channel, ok: false, error } as NotifyOutcome);
+    throw err;
+  }
+  await recordKeyDelivery(actorUserId, target.userId, licenseId, outcome);
 }
