@@ -467,8 +467,9 @@
 }
 .portal-shell .srv-glic .srv-glic-a:hover { opacity: 0.85; }
 .portal-shell .srv-gadd {
-  margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600;
-  color: var(--hz-ok); cursor: pointer; white-space: nowrap; padding: 4px 2px; background: none; border: none; font: inherit;
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  color: var(--hz-ok); cursor: pointer; white-space: nowrap; padding: 4px 2px; background: none; border: none;
+  font: inherit; font-size: 11.5px; font-weight: 600;
 }
 .portal-shell .srv-gadd:hover { opacity: 0.85; }
 .portal-shell .srv-gadd-icon {
@@ -482,7 +483,7 @@
   background: transparent; border: none; text-align: left; font: inherit; color: inherit; cursor: pointer;
 }
 .portal-shell .srv-srow:hover { background: var(--hz-panel-2); }
-.portal-shell .srv-srow + .srv-srow,
+.portal-shell .srv-srow + .srv-srow { border-top: 1px solid var(--hz-line-soft); }
 .portal-shell .srv-srow .srv-ic { color: var(--hz-ink-3); font-size: 14px; }
 .portal-shell .srv-srow .srv-sname { font-weight: 600; font-size: 13.5px; flex: 0 0 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .portal-shell .srv-srow .srv-sprov { font-size: 12px; color: var(--hz-ink-2); flex: 0 0 150px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
