@@ -22,17 +22,11 @@ const DEFAULTS: PortalConfig = {
   telegramFreeGroupUrl: "https://t.me/+2LSFHZbapbNlODhk",
   testingGroupUrl: "https://t.me/horizonhft",
   pricingDisplay: "Contact partner — full access to Horizon HFT",
+  // Three real catalogue lessons (marcus m61034, on coxwell's m60977): titles, summaries and links come from education.ts.
   educationPreview: [
-    {
-      title: "Getting started with arbitrage execution",
-      summary: "How Horizon's 5 core strategies identify and act on cross-venue spreads.",
-    },
-    {
-      title: "Connecting MT4/MT5/NinjaTrader 8",
-      summary: "Bridge setup basics for each supported platform.",
-    },
-    // The third slot (coxwell via marcus m60977): the catalogue's first lesson, manual section 1.
     ...lessonPreview("getting-started"),
+    ...lessonPreview("1-leg-latency-arb"),
+    ...lessonPreview("broker-connections"),
   ],
 };
 
