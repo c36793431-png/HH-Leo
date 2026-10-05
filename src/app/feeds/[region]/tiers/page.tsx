@@ -27,6 +27,8 @@ import { ServerRegistrationBand } from "@/components/feeds/server-registration-b
 import { FeedComparisonScores } from "@/components/feeds/feed-comparison-scores";
 import { scoreForTierKey } from "@/lib/feed-comparison-scores";
 import { SectionPills } from "@/components/shared/section-pills";
+import { TiersBlogStrip } from "@/components/feeds/tiers-blog-strip";
+import { getBlogStripCards } from "@/lib/blog-feed";
 import type { FeedTierDetail } from "@/lib/feed-tiers";
 
 /** The latency row's label is NOT this literal on a score region — it comes from
@@ -212,10 +214,12 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
   const blackDeclared = blackAvailability();
   const blackBlocked = blackDeclared !== "available" ? blackDeclared : null;
 
-  const [tiers, otherRegions, activeLicenses] = await Promise.all([
+  // getBlogStripCards never throws: on any failure it is [] and the strip hides (m60947).
+  const [tiers, otherRegions, activeLicenses, blogCards] = await Promise.all([
     getTiersForRegion(region),
     getMultiTierRegions(),
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
+    getBlogStripCards(region),
   ]);
   if (tiers.length < 2) notFound();
 
@@ -561,6 +565,8 @@ export default async function FeedTiersPage({ params }: { params: Promise<{ regi
           ))}
         {otherRegions.filter((r) => r !== region).length === 0 && "more regions as they light up."}
       </p>
+
+      {blogCards.length > 0 && <TiersBlogStrip cards={blogCards} />}
 
       <div className="foot">HORIZON HFT · customer portal</div>
     </PortalShell>

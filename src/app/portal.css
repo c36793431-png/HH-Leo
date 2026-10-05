@@ -1289,6 +1289,46 @@
 @media (prefers-reduced-motion: reduce) {
   .portal-shell .mkd-stories-track { transition: none; }
 }
+/* "From the blog" at the bottom of /feeds/<region>/tiers (m60947): a scroll-snap row, three cards
+   across on desktop, one and a peek on mobile so the swipe is discoverable. */
+.portal-shell .tbs { margin-top: 24px; }
+.portal-shell .tbs-head { display: flex; align-items: center; gap: 12px; }
+.portal-shell .tbs-head .fp-section-title { margin-bottom: 12px; }
+.portal-shell .tbs-arrows { margin-left: auto; margin-bottom: 12px; display: flex; gap: 8px; }
+.portal-shell .tbs-arrow {
+  width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--hz-line); background: var(--hz-panel-2);
+  color: var(--hz-ink); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.portal-shell .tbs-arrow:hover:not(:disabled) { border-color: var(--hz-card-line); }
+.portal-shell .tbs-arrow:disabled { opacity: 0.35; cursor: default; }
+.portal-shell .tbs-row {
+  list-style: none; margin: 0; padding: 0 0 4px; display: flex; gap: 14px;
+  overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.portal-shell .tbs-row::-webkit-scrollbar { display: none; }
+.portal-shell .tbs-card { flex: 0 0 calc((100% - 28px) / 3); min-width: 0; scroll-snap-align: start; }
+.portal-shell .tbs-link {
+  display: flex; flex-direction: column; height: 100%; text-decoration: none; color: inherit;
+  background: var(--hz-panel-2); border: 1px solid var(--hz-line-soft); border-radius: 10px; overflow: hidden;
+}
+.portal-shell .tbs-link:hover, .portal-shell .tbs-link:focus-visible { border-color: var(--hz-card-line); }
+.portal-shell .tbs-cover { aspect-ratio: 1200 / 630; background: var(--hz-bg-1); }
+.portal-shell .tbs-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.portal-shell .tbs-body { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px 14px; flex: 1; }
+.portal-shell .tbs-date { font-size: 11px; color: var(--hz-ink-3); }
+.portal-shell .tbs-title { margin: 0; font-family: var(--hz-disp); font-size: 15px; font-weight: 600; color: var(--hz-ink); line-height: 1.35; }
+.portal-shell .tbs-excerpt {
+  margin: 0; font-size: 12.5px; color: var(--hz-ink-2); line-height: 1.55;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.portal-shell .tbs-read { margin-top: auto; padding-top: 4px; font-size: 12px; font-weight: 600; color: var(--hz-cyan); }
+@media (max-width: 700px) {
+  .portal-shell .tbs-card { flex-basis: 82%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-shell .tbs-row { scroll-behavior: auto; }
+}
 .portal-shell .mkd-request { display: flex; flex-direction: column; gap: 10px; }
 .portal-shell .mkd-request .ftd-unlock,
 .portal-shell .mkd-request .mkd-action { align-self: flex-start; }
