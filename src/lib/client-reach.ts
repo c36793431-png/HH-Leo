@@ -181,8 +181,8 @@ export const ONBOARDING_GOALS = {
 } as const;
 export type OnboardingGoal = keyof typeof ONBOARDING_GOALS;
 
-/** greet: false for a Telegram signup, which already got auth.ts sendWelcomeDm ("Welcome to Horizon HFT, <name>!" +
- * community links); then this is only the one question, so nobody is welcomed twice. */
+/** greet: false for a Telegram signup, which already got auth.ts sendWelcomeDm (its own welcome
+ * line + community links); then this is only the one question, so nobody is welcomed twice. */
 export function welcomeMessage(opts: { greet?: boolean } = {}): { subject: string; message: string } {
   const greet = opts.greet !== false;
   return {
