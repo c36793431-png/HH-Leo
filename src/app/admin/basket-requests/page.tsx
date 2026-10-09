@@ -5,6 +5,7 @@ import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { listForwardServers, type ForwardServer } from "@/lib/basket-forward";
 import { BasketForwardForm } from "@/components/admin/basket-forward-form";
 import { setBasketRequestHandledAction } from "./actions";
+import { AdminClientContact } from "@/components/admin/client-contact";
 
 /**
  * Admin · Basket requests (marcus m59146). One row per basket a client sent: who, when, every
@@ -89,8 +90,16 @@ export default async function AdminBasketRequestsPage({ searchParams }: { search
                     <Link href={`/admin/users/${r.userId}`} className="hover:underline">
                       {r.userName ?? r.userEmail ?? "—"}
                     </Link>
-                    <div className="text-xs text-zinc-500">{r.userEmail ?? "—"}</div>
-                    <div className="text-xs text-zinc-500">telegram: {r.telegram ? `@${r.telegram}` : "none on file"}</div>
+                    <AdminClientContact
+                      email={r.userEmail}
+                      telegramUsername={r.contact?.telegramUsername ?? r.telegram}
+                      typedHandle={r.contact?.typedHandle}
+                      telegramUserId={r.contact?.telegramUserId ?? null}
+                      botStartedAt={r.contact?.botStartedAt ?? null}
+                      tgLastDmAt={r.contact?.tgLastDmAt ?? null}
+                      tgLastDmOk={r.contact?.tgLastDmOk ?? null}
+                      tgLastDmError={r.contact?.tgLastDmError ?? null}
+                    />
                   </td>
                   <td className="py-3 pr-4 text-zinc-300">
                     <ul className="space-y-0.5">

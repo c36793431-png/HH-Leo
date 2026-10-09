@@ -356,6 +356,12 @@
 .portal-shell .banner.warn { background: rgba(255, 194, 75, 0.08); border: 1px solid rgba(255, 194, 75, 0.34); color: var(--hz-ink); }
 .portal-shell .banner.ok { background: rgba(55, 245, 160, 0.07); border: 1px solid rgba(55, 245, 160, 0.3); color: var(--hz-ink); }
 .portal-shell .banner .bic { font-size: 18px; }
+/* Welcome quick-pick (marcus m61849 part 6) and the banner's Dismiss form (part 4). */
+.portal-shell .banner form { margin: 0; }
+.portal-shell .banner form button.baction { background: none; border: 0; cursor: pointer; font: inherit; }
+.portal-shell .qp { margin-bottom: 22px; padding: 16px 18px; }
+.portal-shell .qp p { margin-top: 4px; font-size: 14px; color: var(--hz-ink-2); }
+.portal-shell .qp-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .portal-shell .banner b { color: var(--hz-ink); }
 .portal-shell .banner .baction { margin-left: auto; font-weight: 600; color: var(--hz-cyan); white-space: nowrap; }
 .portal-shell .banner.warn .baction { color: var(--hz-warn); }

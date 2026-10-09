@@ -31,6 +31,8 @@ import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { humanizeTimeUntil } from "@/lib/format-time";
 import { getRecentAlertsForUser, countDistinctAlertLicenses } from "@/lib/trading-alerts";
+import { listOpenNotices, getClientContact, ONBOARDING_GOALS, FEEDER_GUIDE_URL } from "@/lib/client-reach";
+import { dismissNoticeAction, setOnboardingGoalAction } from "./actions";
 
 const DASHBOARD_ALERTS_LIMIT = 10;
 
@@ -115,6 +117,11 @@ export default async function DashboardPage() {
   // tile and the cards can't disagree. Strategy access is account-wide: a licence holds all five.
   const strategyStatus = computeStrategyCardStatus({ paid, licenseTier: tier === "free" ? null : tier, isAdmin });
   const activatedStrategies = strategyStatus === "locked" ? [] : STRATEGY_ORDER;
+  // Client reach (marcus m61849 parts 4 and 6): open approval notices, and the welcome question until answered.
+  const [notices, reach] = await Promise.all([
+    listOpenNotices(session.user.id).catch(() => []),
+    getClientContact(session.user.id).catch(() => null),
+  ]);
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
   // Admin bypass: Downloads/Education render unlocked regardless of license, same as `paid`.
@@ -133,6 +140,42 @@ export default async function DashboardPage() {
           <a className="baction" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
             Renew →
           </a>
+        </div>
+      )}
+
+      {notices.map((n) => (
+        <div key={n.id} className="banner ok">
+          <span className="bic">✅</span>
+          <div>
+            <b>Your request is approved — next step.</b> {n.what}. Register your server, then follow the guides to connect
+            your feed. Your connection details are here in the portal, never in a message.
+          </div>
+          <a className="baction" href="/account/servers">
+            Register your server →
+          </a>
+          <a className="baction" href={FEEDER_GUIDE_URL} target="_blank" rel="noopener noreferrer">
+            Guides →
+          </a>
+          <form action={dismissNoticeAction}>
+            <input type="hidden" name="id" value={n.id} />
+            <button type="submit" className="baction">
+              Dismiss
+            </button>
+          </form>
+        </div>
+      ))}
+
+      {reach && !reach.onboardingGoal && (
+        <div className="card qp">
+          <b>What are you looking to do with Horizon?</b>
+          <p>One tap, so we can help you with the right things.</p>
+          <form action={setOnboardingGoalAction} className="qp-row">
+            {(Object.keys(ONBOARDING_GOALS) as (keyof typeof ONBOARDING_GOALS)[]).map((k) => (
+              <button key={k} type="submit" name="goal" value={k} className="btn ghost">
+                {ONBOARDING_GOALS[k]}
+              </button>
+            ))}
+          </form>
         </div>
       )}
 

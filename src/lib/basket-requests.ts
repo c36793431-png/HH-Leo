@@ -154,11 +154,23 @@ export interface BasketRequestRow {
   handledAt: Date | null;
   handledByEmail: string | null;
   submittedAt: Date;
+  /** For the admin contact block (marcus m61859 part 7). Admin list and the client's own history only. */
+  contact?: {
+    telegramUsername: string | null;
+    typedHandle: string | null;
+    telegramUserId: string | null;
+    botStartedAt: Date | null;
+    tgLastDmAt: Date | null;
+    tgLastDmOk: boolean | null;
+    tgLastDmError: string | null;
+  };
 }
 
 const SELECT_COLUMNS = `br.id, br.user_id, u.display_name as user_name, u.email as user_email,
        coalesce(u.telegram_username, br.telegram_handle) as telegram, br.lines, br.has_trial,
-       br.status, br.handled_at, hb.email as handled_by_email, br.submitted_at`;
+       br.status, br.handled_at, hb.email as handled_by_email, br.submitted_at,
+       u.telegram_username as account_telegram, br.telegram_handle as typed_handle, u.telegram_user_id,
+       u.telegram_bot_started_at, u.tg_last_dm_at, u.tg_last_dm_ok, u.tg_last_dm_error`;
 
 function mapRow(row: Record<string, unknown>): BasketRequestRow {
   const id = row.id as string;
@@ -175,6 +187,15 @@ function mapRow(row: Record<string, unknown>): BasketRequestRow {
     handledAt: (row.handled_at as Date | null) ?? null,
     handledByEmail: (row.handled_by_email as string | null) ?? null,
     submittedAt: row.submitted_at as Date,
+    contact: {
+      telegramUsername: (row.account_telegram as string | null) ?? null,
+      typedHandle: (row.typed_handle as string | null) ?? null,
+      telegramUserId: row.telegram_user_id != null ? String(row.telegram_user_id) : null,
+      botStartedAt: (row.telegram_bot_started_at as Date | null) ?? null,
+      tgLastDmAt: (row.tg_last_dm_at as Date | null) ?? null,
+      tgLastDmOk: (row.tg_last_dm_ok as boolean | null) ?? null,
+      tgLastDmError: (row.tg_last_dm_error as string | null) ?? null,
+    },
   };
 }
 

@@ -9,6 +9,7 @@ import { sendGroupInvite, sendPaidGroupInvite } from "@/lib/group-membership";
 import { notifyTelegramLinked } from "@/lib/telemetry-sink";
 import type { ActionResult } from "@/lib/action-result";
 import { clientRefForUser } from "@/lib/client-ref";
+import { dismissNotice, setOnboardingGoal, ONBOARDING_GOALS, type OnboardingGoal } from "@/lib/client-reach";
 
 const INVITE_RATE_LIMIT_MS = 60_000;
 
@@ -142,4 +143,24 @@ export async function requestFreeGroupInviteAction(): Promise<ActionResult> {
   revalidatePath("/dashboard");
   revalidatePath("/community");
   return { ok: true };
+}
+
+/** Dismiss one "approved — next step" banner (marcus m61849 part 4). Only the signed-in client's own notice. */
+export async function dismissNoticeAction(formData: FormData): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) return;
+  const id = String(formData.get("id") ?? "");
+  if (!/^[0-9a-f-]{36}$/.test(id)) return;
+  await dismissNotice(session.user.id, id);
+  revalidatePath("/dashboard");
+}
+
+/** The welcome question's one-tap answer (marcus m61849 part 6), stored on the user; admins see it on the user page. */
+export async function setOnboardingGoalAction(formData: FormData): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) return;
+  const goal = String(formData.get("goal") ?? "");
+  if (!Object.prototype.hasOwnProperty.call(ONBOARDING_GOALS, goal)) return;
+  await setOnboardingGoal(session.user.id, goal as OnboardingGoal);
+  revalidatePath("/dashboard");
 }

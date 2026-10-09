@@ -22,6 +22,8 @@ import { ConfigSummaryForm } from "@/components/admin/config-summary-form";
 import { FEED_TYPE_META } from "@/lib/licenses";
 import { getConfigSummary } from "@/lib/config-summary";
 import { FeedTierSelectForm } from "@/components/admin/feed-tier-select-form";
+import { AdminClientContact } from "@/components/admin/client-contact";
+import { getClientContact } from "@/lib/client-reach";
 import {
   computeFeedAssignmentRows,
   getFeedTierSubscriptionsForSubscriber,
@@ -207,6 +209,7 @@ export default async function AdminUserDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const reach = await getClientContact(id).catch(() => null);
   const [session, user, payments, configSummary, feedTiers, feedSubscriptions] = await Promise.all([
     auth(),
     getUserDetail(id),
@@ -502,6 +505,21 @@ export default async function AdminUserDetailPage({
 
       <section className="rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">
         <h2 className="text-sm font-medium text-sky-400">Telegram</h2>
+        {reach && (
+          <div className="mt-3">
+            <div className="text-xs text-zinc-500">Contact and reach</div>
+            <AdminClientContact
+              email={reach.email}
+              telegramUsername={reach.telegramUsername}
+              telegramUserId={reach.telegramUserId}
+              botStartedAt={reach.botStartedAt}
+              tgLastDmAt={reach.tgLastDmAt}
+              tgLastDmOk={reach.tgLastDmOk}
+              tgLastDmError={reach.tgLastDmError}
+              onboardingGoal={reach.onboardingGoal}
+            />
+          </div>
+        )}
         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
           <div>
             <dt className="text-xs text-zinc-500">Telegram user ID</dt>
