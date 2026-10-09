@@ -6,6 +6,8 @@
  * compromised portal: that residual is the box's delta caps and protected set (Fable m62433 items 1 and 3). */
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { pool } from "./db";
+
+type Queryable = { query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
 import { EFFECTIVE_STATUS_SQL } from "./feed-subscriptions";
 import { signResponse, type SignedEnvelope } from "./response-signing";
 import { followUpIfUnreached } from "./client-reach";
@@ -159,8 +161,13 @@ export interface AllowlistEntry {
   record_id: string;
   ip: string;
   tier_key: string;
+  /** The expiry job's first sighting of a lapse (in grace), else null. Informational: the box's day-one report can
+   * show "in grace" rows; it changes nothing the box does (Fable m62985 S1). */
+  lapsed_since: string | null;
 }
 export interface AllowlistBody {
+  /** Domain separation: the same Ed25519 key also signs /v1/validate (Fable m62985 Q1). The box must require it. */
+  purpose: "feed-box-allowlist";
   box: string;
   issued_at: string;
   serial: number;
@@ -169,36 +176,64 @@ export interface AllowlistBody {
   skipped: { record_id: string; tier_key: string; reason: string }[];
 }
 
-/** The EFFECTIVE active set (Fable m62433 item 3e): an open allowlist record (revoked_at null) on one of this box's
- * tiers whose (server, tier) subscription is live by the portal's own predicate, EFFECTIVE_STATUS_SQL from
- * feed-subscriptions.ts, the one the subscriber lists use. One entry per record; the same IP on two records appears
- * twice (the box de-duplicates). Provider and admin grants look the same here. */
-export async function listEffectiveAllowlist(boxId: string): Promise<{ records: AllowlistEntry[]; skipped: AllowlistBody["skipped"] }> {
-  const r = await pool.query(
-    `select ar.id as record_id, ar.ip, ft.tier_key
+/** The served set is the OPEN set (Fable m62985 S1, clarifying her item 3e): every allowlist record on this box's
+ * tiers with revoked_at null. Liveness is NOT tested here: a GET never cuts anyone. Only the expiry job turns a lapse
+ * into a cut, with a stamp, a message to the client and a 3-day grace, then an explicit revoked_at. One entry per
+ * record; the same IP on two records appears twice (the box de-duplicates). Provider and admin grants look the same. */
+export async function listEffectiveAllowlist(
+  boxId: string,
+  q: Queryable = pool
+): Promise<{ records: AllowlistEntry[]; skipped: AllowlistBody["skipped"] }> {
+  const r = await q.query(
+    `select ar.id as record_id, ar.ip, ft.tier_key, ar.lapse_seen_at
        from feed_allowlist_records ar
        join feed_box_tiers bt on bt.feed_tier_id = ar.feed_tier_id and bt.box_id = $1
        join feed_tiers ft on ft.id = ar.feed_tier_id
-      where ar.revoked_at is null and ${LIVE_SQL}
+      where ar.revoked_at is null
       order by ar.told_at, ar.id`,
     [boxId]
   );
   const records: AllowlistEntry[] = [];
   const skipped: AllowlistBody["skipped"] = [];
-  for (const row of r.rows as { record_id: string; ip: string; tier_key: string }[]) {
+  for (const row of r.rows as { record_id: string; ip: string; tier_key: string; lapse_seen_at: Date | null }[]) {
     const problem = hostIpProblem(row.ip);
     if (problem) skipped.push({ record_id: row.record_id, tier_key: row.tier_key, reason: problem });
-    else records.push({ record_id: row.record_id, ip: row.ip.trim(), tier_key: row.tier_key });
+    else
+      records.push({
+        record_id: row.record_id,
+        ip: row.ip.trim(),
+        tier_key: row.tier_key,
+        lapsed_since: row.lapse_seen_at ? new Date(row.lapse_seen_at).toISOString() : null,
+      });
   }
   return { records, skipped };
 }
 
-/** One signed response. The serial is taken first (atomic bump) so two overlapping polls never share one. null when
- * no signing key is configured: the route answers 503, it never serves an unsigned list. */
-export async function buildSignedAllowlist(box: AuthedBox, now: Date = new Date()): Promise<SignedEnvelope<AllowlistBody> | null> {
-  const s = await pool.query(`update feed_boxes set serial = serial + 1, last_seen_at = now() where id = $1 returning serial`, [box.id]);
-  const { records, skipped } = await listEffectiveAllowlist(box.id);
-  return signResponse<AllowlistBody>({ box: box.name, issued_at: now.toISOString(), serial: Number(s.rows[0].serial), records, skipped });
+/** One signed response. The box row is locked, the serial bumped and the list read in ONE transaction (Fable m62985
+ * S2), so a higher serial always carries data at least as new: two overlapping polls queue on the lock instead of
+ * interleaving (A bumps, B bumps, B lists, A lists). issued_at is the database clock of that transaction. null when no
+ * signing key is configured: the route answers 503 and never serves an unsigned list. */
+export async function buildSignedAllowlist(box: AuthedBox): Promise<SignedEnvelope<AllowlistBody> | null> {
+  const client = await pool.connect();
+  let body: AllowlistBody;
+  try {
+    await client.query("begin");
+    await client.query(`select serial from feed_boxes where id = $1 for update`, [box.id]);
+    const s = await client.query(
+      `update feed_boxes set serial = serial + 1, last_seen_at = now() where id = $1 returning serial, now() as issued_at`,
+      [box.id]
+    );
+    const { records, skipped } = await listEffectiveAllowlist(box.id, client);
+    await client.query("commit");
+    const row = s.rows[0] as { serial: string | number; issued_at: Date };
+    body = { purpose: "feed-box-allowlist", box: box.name, issued_at: new Date(row.issued_at).toISOString(), serial: Number(row.serial), records, skipped };
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  return signResponse<AllowlistBody>(body);
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -267,6 +302,7 @@ const ymd = (d: Date) => new Date(d).toISOString().slice(0, 16).replace("T", " "
 export function recordState(r: {
   live: boolean;
   revokedAt: Date | null;
+  lapseSeenAt?: Date | null;
   appliedAt: Date | null;
   applyResult: ApplyResult | null;
   applyReason: string | null;
@@ -274,7 +310,10 @@ export function recordState(r: {
 }): RecordState {
   if (r.revokedAt || !r.live) {
     if (r.applyResult === "removed" && r.appliedAt) return { kind: "removed", label: `removed from the box ${ymd(r.appliedAt)}` };
-    return { kind: "ending", label: r.revokedAt ? "revoked; waiting for the box to remove it" : "subscription lapsed; the box will drop it" };
+    if (r.revokedAt) return { kind: "ending", label: "revoked; waiting for the box to remove it" };
+    // Fable m62985 S1: a lapse never drops anything by itself; only the expiry job revokes, after its grace.
+    const told = r.lapseSeenAt ? ` (client told ${ymd(r.lapseSeenAt)})` : "";
+    return { kind: "ending", label: `subscription lapsed; the expiry job revokes it 3 days after it first sees it${told}` };
   }
   if (r.ipProblem) return { kind: "rejected", label: `rejected by the portal: ${r.ipProblem}` };
   if (r.applyResult === "rejected") return { kind: "rejected", label: `rejected by the box: ${r.applyReason ?? "no reason"}` };
@@ -296,7 +335,7 @@ export interface BoxRecordRow {
 /** Every allowlist record on a box's tiers, open or recently revoked (30 days), with its state. Admin only. */
 export async function listBoxRecords(boxId: string): Promise<BoxRecordRow[]> {
   const r = await pool.query(
-    `select ar.id, ar.ip, ft.tier_key, sr.server_name, u.email, ar.told_at, ar.revoked_at,
+    `select ar.id, ar.ip, ft.tier_key, sr.server_name, u.email, ar.told_at, ar.revoked_at, ar.lapse_seen_at,
             ar.applied_at, ar.apply_result, ar.apply_reason,
             ${LIVE_SQL} as live
        from feed_allowlist_records ar
@@ -318,6 +357,7 @@ export async function listBoxRecords(boxId: string): Promise<BoxRecordRow[]> {
     state: recordState({
       live: Boolean(x.live),
       revokedAt: (x.revoked_at as Date | null) ?? null,
+      lapseSeenAt: (x.lapse_seen_at as Date | null) ?? null,
       appliedAt: (x.applied_at as Date | null) ?? null,
       applyResult: (x.apply_result as ApplyResult | null) ?? null,
       applyReason: (x.apply_reason as string | null) ?? null,
@@ -394,7 +434,7 @@ export async function runAllowlistExpiry(env: Record<string, string | undefined>
       subject: `Your ${x.tier_name} feed access ends in ${EXPIRY_GRACE_DAYS} days`,
       message:
         `Your ${x.tier_name} subscription is no longer active, so your server's access to this feed will be removed in ` +
-        `${EXPIRY_GRACE_DAYS} days. To keep it, renew from your dashboard. Questions: ${SUPPORT_HANDLE} on Telegram.`,
+        `${EXPIRY_GRACE_DAYS} days. To keep it, message us on Telegram to renew: ${SUPPORT_HANDLE}.`,
     });
   }
 
