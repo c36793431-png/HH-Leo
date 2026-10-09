@@ -24,7 +24,8 @@ const CALLBACK_PARAM = "callbackUrl";
  * (coxwell via marcus, m55542/m55551), and /education and its lesson pages (marcus, m55682).
  * Built from the catalogues, so a listing or lesson that is removed stops being a destination in
  * the same commit. /education/advanced is deliberately absent (m55682 ruling 1): its bounce
- * stays a bare /login. */
+ * stays a bare /login. /community too (marcus m62918): the main site's "Join the Telegram group"
+ * goes through sign-in to the page whose bot sends the group invite. */
 const CALLBACK_ALLOWLIST: readonly string[] = [
   "/marketplace",
   ...MARKETPLACE_LISTINGS.map(listingDetailHref),
@@ -33,6 +34,7 @@ const CALLBACK_ALLOWLIST: readonly string[] = [
   "/marketplace/requests",
   "/education",
   ...EDUCATION_LESSONS.map(lessonHref),
+  "/community",
 ];
 
 /**

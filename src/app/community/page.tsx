@@ -13,6 +13,7 @@ import { RequestInviteButton } from "@/components/request-invite-button";
 import { requestFreeGroupInviteAction } from "@/app/dashboard/actions";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
+import { authPageHref } from "@/lib/post-auth-redirect";
 
 /** Public channels/supergroups accept "@username" as chat_id; invite-only chats need a
  * numeric chat_id the bot already knows (configured separately per chat). */
@@ -29,7 +30,7 @@ function formatMemberCount(count: number | null): string | null {
 
 export default async function CommunityPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+  if (!session?.user?.id) redirect(authPageHref("/login", "/community"));
   const switchablePanels = getReachablePanels(session.user.roles);
   if (isAdminUser(session.user)) redirect("/admin/dashboard");
 
