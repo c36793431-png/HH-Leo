@@ -125,7 +125,12 @@ const MARKETPLACE_ICON = svg(
 // www renamed Changelog to Blog; its /changelog 301s to /blog/release-notes (marcus m59486).
 const BLOG_HREF = `${MAIN_SITE_URL}/blog`;
 
-export function HubNav({ signInHref }: { signInHref: string }) {
+/** The section this page belongs to, marked current. The signed-out Academy pages (m62822) are
+ * Education's; every other caller is the marketplace's. */
+export type HubNavCurrent = "marketplace" | "education";
+
+export function HubNav({ signInHref, current = "marketplace" }: { signInHref: string; current?: HubNavCurrent }) {
+  const marketplaceOn = current === "marketplace";
   return (
     <header className="hubnav">
       <div className="hn-wrap">
@@ -137,13 +142,22 @@ export function HubNav({ signInHref }: { signInHref: string }) {
         </a>
         <nav className="hn-nav" aria-label="Horizon HFT">
           {SECTIONS.map((s) => (
-            <a key={s.key} href={`${MAIN_SITE_URL}${s.path}`} className={`hn-sec hn-sec-${s.key}`}>
+            <a
+              key={s.key}
+              href={`${MAIN_SITE_URL}${s.path}`}
+              className={`hn-sec hn-sec-${s.key}${s.key === current ? " on" : ""}`}
+              aria-current={s.key === current ? "page" : undefined}
+            >
               {s.icon}
               {s.label}
             </a>
           ))}
           <span className="hn-sep" />
-          <Link href="/marketplace" className="hn-sec hn-sec-marketplace on" aria-current="page">
+          <Link
+            href="/marketplace"
+            className={`hn-sec hn-sec-marketplace${marketplaceOn ? " on" : ""}`}
+            aria-current={marketplaceOn ? "page" : undefined}
+          >
             {MARKETPLACE_ICON}
             Marketplace
           </Link>
@@ -174,7 +188,11 @@ export function HubNav({ signInHref }: { signInHref: string }) {
                 </a>
               ))}
               <div className="hn-row2">
-                <Link href="/marketplace" className="hn-sec hn-sec-marketplace on" aria-current="page">
+                <Link
+                  href="/marketplace"
+                  className={`hn-sec hn-sec-marketplace${marketplaceOn ? " on" : ""}`}
+                  aria-current={marketplaceOn ? "page" : undefined}
+                >
                   {MARKETPLACE_ICON}
                   Marketplace
                 </Link>

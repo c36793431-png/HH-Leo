@@ -52,7 +52,11 @@ export default async function EducationPage() {
   // component, so whatever it is given is in the page's HTML: it gets the public catalogue's card
   // fields, never the lessons themselves (intro, blocks), and lesson 11 under its public copy.
   if (!session?.user?.id) {
-    return <PublicShell signInHref={authPageHref("/login", "/education")}>{page(publicEducationCatalogue().lessons)}</PublicShell>;
+    return (
+      <PublicShell signInHref={authPageHref("/login", "/education")} current="education">
+        {page(publicEducationCatalogue().lessons)}
+      </PublicShell>
+    );
   }
 
   const switchablePanels = getReachablePanels(session.user.roles);

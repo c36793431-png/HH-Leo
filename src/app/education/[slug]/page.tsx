@@ -25,7 +25,7 @@ export default async function EducationLessonPage({ params }: { params: Promise<
   if (!session?.user?.id) {
     const signInHref = authPageHref("/login", lessonHref(lesson));
     return (
-      <PublicShell signInHref={signInHref}>
+      <PublicShell signInHref={signInHref} current="education">
         <LessonPreview
           lesson={signedOutLesson(lesson)}
           signInHref={signInHref}
