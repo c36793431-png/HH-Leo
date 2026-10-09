@@ -115,12 +115,15 @@ const SECTIONS = [
   },
 ] as const;
 
-const MARKETPLACE_ICON = svg(
+export const MARKETPLACE_ICON = svg(
   <>
     <path d="M5.2 8h13.6l-.9 11.2a1.8 1.8 0 0 1-1.8 1.6H7.9a1.8 1.8 0 0 1-1.8-1.6z" />
     <path d="M9 10.5V7a3 3 0 0 1 6 0v3.5" />
   </>,
 );
+
+/** The main site's Feeds icon, for the feed landing's header (m62857). */
+export const FEEDS_ICON = SECTIONS.find((s) => s.key === "feeds")!.icon;
 
 // www renamed Changelog to Blog; its /changelog 301s to /blog/release-notes (marcus m59486).
 const BLOG_HREF = `${MAIN_SITE_URL}/blog`;

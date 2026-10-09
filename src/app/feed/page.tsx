@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isFeedProviderUser } from "@/lib/admin-users-panel";
 import { FeedAuthNavStatus } from "@/components/feed/feed-auth-nav-status";
+import { MethodCharts } from "@/components/feed/method-charts";
+import { FeedLandingMenu } from "@/components/feed/feed-landing-menu";
+import { FEEDS_ICON, MARKETPLACE_ICON } from "@/components/marketplace/hub-nav";
+import { MAIN_SITE_URL } from "@/lib/main-site";
 import "./feed-landing.css";
 
 /** Public landing for feed.horizonhft.com's root -- mirrors src/app/partner/page.tsx's shape
@@ -42,6 +46,15 @@ import "./feed-landing.css";
 // copied from the method post's text -- change the post first, then these.
 const METHOD_SUMMARY_URL = "https://horizonhft.com/feeds#how-we-measure";
 const METHOD_POST_URL = "https://horizonhft.com/blog/how-we-compare-our-london-feeds";
+const MARKETPLACE_URL = "https://portal.horizonhft.com/marketplace";
+
+// The chart-line icon of the "Measured, not claimed" card below, at the header's icon size.
+const MEASURE_ICON = (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    <path d="M3 3v18h18" />
+    <path d="m7 15 3-4 3 2 4-6" />
+  </svg>
+);
 
 export default async function FeedLandingPage() {
   const session = await auth();
@@ -55,16 +68,37 @@ export default async function FeedLandingPage() {
     <div className="feed-landing-v1">
       <div className="fl-wrap">
         {/* TOP BAR */}
+        {/* The way back to the main site and a small menu fill the middle (coxwell via marcus, m62857/
+            m62859); the three items on the right are unchanged. Below 1340px the three section links move into
+            the Menu sheet, which carries every item, so nothing is out of reach at any width; the way
+            back stays in the bar down to phone widths. */}
         <nav className="fl-nav">
-          <a className="fl-brand" href="#">
+          <a className="fl-brand" href={MAIN_SITE_URL} aria-label="Horizon HFT main site">
             <span className="fl-glyph">
-              <Image src="/logo-feed.png" alt="Horizon HFT" width={42} height={42} priority />
+              <Image src="/logo-feed.png" alt="" width={42} height={42} priority />
             </span>
             <span className="fl-txt">
               HORIZON
               <small>HFT <span className="fl-net">· FEED NETWORK</span></small>
             </span>
           </a>
+          <span className="fl-nav-mid">
+            <a className="fl-back" href={MAIN_SITE_URL}>
+              ← horizonhft.com
+            </a>
+            <a className="fl-mid" href="#how-we-measure">
+              {MEASURE_ICON}
+              How we measure
+            </a>
+            <a className="fl-mid" href={`${MAIN_SITE_URL}/feeds`}>
+              {FEEDS_ICON}
+              Feeds
+            </a>
+            <a className="fl-mid" href={MARKETPLACE_URL}>
+              {MARKETPLACE_ICON}
+              Marketplace
+            </a>
+          </span>
           <span className="fl-sp" />
           <span className="fl-nav-links">
             <FeedAuthNavStatus
@@ -86,6 +120,33 @@ export default async function FeedLandingPage() {
               Apply to publish
             </a>
           </span>
+          <FeedLandingMenu>
+            <a className="fl-sh-it" href={MAIN_SITE_URL}>
+              ← horizonhft.com
+            </a>
+            <a className="fl-sh-it" href="#how-we-measure">
+              {MEASURE_ICON}
+              How we measure
+            </a>
+            <a className="fl-sh-it" href={`${MAIN_SITE_URL}/feeds`}>
+              {FEEDS_ICON}
+              Feeds
+            </a>
+            <a className="fl-sh-it" href={MARKETPLACE_URL}>
+              {MARKETPLACE_ICON}
+              Marketplace
+            </a>
+            <span className="fl-sh-sep" />
+            <a className="fl-sh-it" href="https://portal.horizonhft.com">
+              Looking to subscribe?
+            </a>
+            <a className="fl-sh-it" href="/dashboard">
+              Provider login
+            </a>
+            <a className="fl-btn fl-primary fl-small" href="/providers/apply">
+              Apply to publish <span className="fl-ar">→</span>
+            </a>
+          </FeedLandingMenu>
         </nav>
 
         {/* HERO */}
@@ -407,6 +468,7 @@ export default async function FeedLandingPage() {
               </p>
             </li>
           </ol>
+          <MethodCharts />
           <p className="fl-ms-note">
             <b>One run:</b> Fri 14 Aug 2026, 11:57–21:00 UTC, XAUUSD, one machine in London. Scores are relative to
             that run. Being first is not the same as being right, and none of this is a latency guarantee.
