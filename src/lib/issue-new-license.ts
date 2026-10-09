@@ -10,7 +10,7 @@ import {
 } from "./licenses";
 import { logAdminAction } from "./admin";
 import { notifyUser, type NotifyOutcome } from "./notify";
-import { addApprovedNotice, reportUnreachable, FEEDER_GUIDE_URL } from "./client-reach";
+import { addApprovedNotice, reportUnreachable } from "./client-reach";
 import { getPortalConfig } from "./portal-config";
 import { sendPaidGroupInvite } from "./group-membership";
 
@@ -68,7 +68,6 @@ export function trialReadyMessage(opts: {
     `1. Log in at ${PORTAL}/login`,
     `2. Download the installer: ${PORTAL}/downloads`,
     `3. Register your server: ${PORTAL}/account/servers - we enable your feeds once your server is registered.`,
-    `4. Connect the feeder, step by step: ${FEEDER_GUIDE_URL}`,
     "",
     `Community: ${opts.communityGroupUrl}`,
   ].join("\n");

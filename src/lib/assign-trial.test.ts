@@ -357,7 +357,6 @@ test("the two key texts, exactly: trial (marcus m60927) and paid (unchanged)", (
       "1. Log in at https://portal.horizonhft.com/login",
       "2. Download the installer: https://portal.horizonhft.com/downloads",
       "3. Register your server: https://portal.horizonhft.com/account/servers - we enable your feeds once your server is registered.",
-      "4. Connect the feeder, step by step: https://horizonhft.com/education/connect-the-feeder",
       "",
       "Community: https://t.me/+community",
     ].join("\n")

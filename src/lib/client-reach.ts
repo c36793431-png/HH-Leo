@@ -8,7 +8,9 @@ import { clientRefForUser } from "./client-ref";
 
 const PORTAL = "https://portal.horizonhft.com";
 export const SERVERS_URL = `${PORTAL}/account/servers`;
-export const FEEDER_GUIDE_URL = "https://horizonhft.com/education/connect-the-feeder";
+/** The feeder guide (www /education/connect-the-feeder) is not live yet (404 on 10-09; held for FOC12's steps), so
+ * messages point at the live Education page. Switch to the guide URL in the same push that makes it live. */
+export const FEEDER_GUIDE_URL = "https://horizonhft.com/education";
 export const SUPPORT_HANDLE = "@Coxwell2";
 
 export interface ClientContact {
@@ -84,7 +86,7 @@ export function approvalMessage(what: string): { subject: string; message: strin
       "",
       "Next step:",
       `1. Register your server: ${SERVERS_URL}`,
-      `2. Connect the feeder, step by step: ${FEEDER_GUIDE_URL}`,
+      `2. Guides for connecting your feed: ${FEEDER_GUIDE_URL}`,
       "",
       `Your connection details are in the portal after you log in; we never send them in a message. Questions: ${SUPPORT_HANDLE} on Telegram.`,
     ].join("\n"),
@@ -114,7 +116,7 @@ export async function notifyRequestHandled(userId: string, reference: string): P
   const message = [
     `Your request ${reference} is complete.`,
     `Whatever we set up for you is on your dashboard: ${PORTAL}/dashboard`,
-    `If it includes a feed, the next step is to register your server (${SERVERS_URL}) and connect the feeder: ${FEEDER_GUIDE_URL}`,
+    `If it includes a feed, the next step is to register your server (${SERVERS_URL}); guides for connecting it: ${FEEDER_GUIDE_URL}`,
     "",
     `Questions: ${SUPPORT_HANDLE} on Telegram.`,
   ].join("\n");

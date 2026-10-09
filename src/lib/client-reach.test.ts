@@ -216,7 +216,7 @@ test("part 4: approval -> client message with the next step + dashboard notice; 
   await reach.notifyApproved(c.id, "London trial, 30 days");
   const dm = sends.find((s) => s.kind === "portal");
   assert.ok(dm, "client DM sent");
-  assert.match(dm!.text, /connect-the-feeder/);
+  assert.match(dm!.text, /horizonhft\.com\/education/);
   assert.match(dm!.text, /\/servers/);
   assert.doesNotMatch(dm!.text, IPV4);
   const n = (await sql(`select kind, what from client_notices where user_id = $1 and dismissed_at is null`, [c.id])).rows;
