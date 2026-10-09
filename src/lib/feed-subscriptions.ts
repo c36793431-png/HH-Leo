@@ -141,7 +141,7 @@ const REGION_TO_FEED_TYPE_SQL = `case ft.region_key when 'london' then 'london' 
  * here reads permanently active. Movers verified against the live 29-row table before this
  * landed: 2 rows flip lapsed->active (a bound license was live but had never carried the
  * region's feed_types tick), 0 flip active->lapsed. */
-const EFFECTIVE_STATUS_SQL = `
+export const EFFECTIVE_STATUS_SQL = `
   case
     when s.status = 'lapsed' then 'lapsed'
     when ft.region_key is null then s.status
