@@ -1,5 +1,6 @@
 import { pool } from "./db";
 import { notifyStrategySubmissionSubmitted } from "./telemetry-sink";
+import { clientRefForUser } from "./client-ref";
 
 export const STRATEGY_CATEGORIES = ["arbitrage", "momentum", "grid", "scalping", "custom"] as const;
 export type StrategyCategory = (typeof STRATEGY_CATEGORIES)[number];
@@ -110,7 +111,7 @@ export async function createStrategySubmission(
   if (!row) throw new Error("failed to load created strategy submission");
 
   notifyStrategySubmissionSubmitted({
-    email: row.authorEmail,
+    client: await clientRefForUser(row.authorUserId, row.authorEmail),
     summary: row.name,
     adminUrl: "https://portal.horizonhft.com/admin/strategy-submissions",
   }).catch(() => {});

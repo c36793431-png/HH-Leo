@@ -1,5 +1,6 @@
 import { pool } from "./db";
 import { notifyStrategyRequestSubmitted } from "./telemetry-sink";
+import { clientRefForUser } from "./client-ref";
 
 export const STRATEGY_REQUEST_STATUSES = ["new", "reviewing", "declined", "scoping", "shipped"] as const;
 export type StrategyRequestStatus = (typeof STRATEGY_REQUEST_STATUSES)[number];
@@ -69,7 +70,7 @@ export async function createStrategyRequest(args: CreateStrategyRequestArgs): Pr
   if (!row) throw new Error("failed to load created strategy request");
 
   notifyStrategyRequestSubmitted({
-    email: row.userEmail,
+    client: await clientRefForUser(row.userId, row.userEmail),
     summary: row.ideaText,
     adminUrl: "https://portal.horizonhft.com/admin/strategy-requests",
   }).catch(() => {});

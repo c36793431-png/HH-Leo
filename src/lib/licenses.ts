@@ -7,6 +7,7 @@ import {
   notifyLicenseRevoked,
 } from "./telemetry-sink";
 import { insertPayment } from "./payments";
+import { clientRefForUser } from "./client-ref";
 import type { UserRole } from "./admin-user-roles";
 import { maybeCreateReferralEarning } from "./referrals";
 import { removeFromPaidGroup } from "./group-membership";
@@ -308,15 +309,11 @@ async function sendActivationNotification(args: {
   userId?: string;
   claimEmail?: string;
 }): Promise<void> {
-  let email = args.claimEmail ?? null;
-  if (!email && args.userId) {
-    const result = await pool.query<{ email: string | null }>("select email from users where id = $1", [args.userId]);
-    email = result.rows[0]?.email ?? null;
-  }
+  const client = await clientRefForUser(args.userId, args.claimEmail ?? null);
 
   if (args.tier === "trial") {
     await notifyTrialIssued({
-      email,
+      client,
       licenseKey: args.licenseKey,
       issuedAt: new Date(),
       expiresAt: args.expiresAt,
@@ -325,7 +322,7 @@ async function sendActivationNotification(args: {
   }
 
   await notifyPaidActivation({
-    email,
+    client,
     licenseKey: args.licenseKey,
     activatedAt: new Date(),
     tier: args.tier,
@@ -432,11 +429,17 @@ export async function getLicenseExpiresAt(licenseId: string): Promise<Date | nul
 }
 
 export async function revokeLicense(licenseId: string): Promise<void> {
-  const result = await pool.query<{ license_key: string; tier: string; user_id: string | null; email: string | null }>(
+  const result = await pool.query<{
+    license_key: string;
+    tier: string;
+    user_id: string | null;
+    email: string | null;
+    telegram_username: string | null;
+  }>(
     `update licenses l set status = 'revoked', lifecycle_state = 'expired_processed'
      from users u
      where l.id = $1 and l.user_id = u.id
-     returning l.license_key, l.tier, l.user_id, u.email`,
+     returning l.license_key, l.tier, l.user_id, u.email, u.telegram_username`,
     [licenseId]
   );
   const row = result.rows[0];
@@ -450,7 +453,7 @@ export async function revokeLicense(licenseId: string): Promise<void> {
   }
 
   notifyLicenseRevoked({
-    email: row.email,
+    client: { email: row.email, telegramUsername: row.telegram_username, userId: row.user_id },
     licenseKey: row.license_key,
     tier: row.tier,
     revokedAt: new Date(),
@@ -494,12 +497,8 @@ export async function setLicenseTier(licenseId: string, tier: LicenseTier): Prom
     );
 
     if (before.user_id) {
-      const userResult = await pool.query<{ email: string | null }>(
-        "select email from users where id = $1",
-        [before.user_id]
-      );
       notifyLicenseUpgraded({
-        email: userResult.rows[0]?.email ?? null,
+        client: await clientRefForUser(before.user_id),
         licenseKey: before.license_key,
         fromTier: before.tier,
         toTier: tier,

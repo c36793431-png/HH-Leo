@@ -1,5 +1,6 @@
 import { pool } from "./db";
 import { notifyFeedTierTrialStarted, notifyFeedTierTrialConverted } from "./telemetry-sink";
+import { clientRefForUser } from "./client-ref";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
 import { sendEmail } from "./email";
 import {
@@ -198,7 +199,7 @@ export async function startFeedTierTrial(args: StartTrialArgs): Promise<FeedTier
   const row = await insertFeedTierTrial(args);
 
   await notifyFeedTierTrialStarted({
-    email: row.userEmail,
+    client: await clientRefForUser(row.userId, row.userEmail),
     tierName: row.tierName,
     licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
     trialEndsAt: row.trialEndsAt,
@@ -294,16 +295,19 @@ export async function cancelFeedTierTrial(id: string): Promise<FeedTierTrialRow>
  * the trial state; it's called from wherever a paid grant for the same tier lands, not from
  * any trial-internal flow. */
 export async function markFeedTierTrialConverted(userId: string, tierKey: string): Promise<void> {
-  const result = await pool.query<TrialRow>(
+  const result = await pool.query<{ id: string }>(
     `update feed_tier_trials set trial_status = 'converted', converted_at = now()
      where user_id = $1 and tier_key = $2 and trial_status = 'active'
-     returning *`,
+     returning id`,
     [userId, tierKey]
   );
   if (!result.rowCount) return;
-  const row = mapRow(result.rows[0]);
+  // Re-read through SELECT_BASE: a bare `returning *` carries none of its joins, so this alert
+  // used to print `email: -` and `license: …nown` on every conversion.
+  const row = await getFeedTierTrial(result.rows[0].id);
+  if (!row) return;
   await notifyFeedTierTrialConverted({
-    email: row.userEmail,
+    client: await clientRefForUser(row.userId, row.userEmail),
     tierName: row.tierName,
     licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
   }).catch(() => {});

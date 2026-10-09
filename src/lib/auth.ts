@@ -8,6 +8,7 @@ import { claimPendingLicense, recordSigninEvent } from "./licenses";
 import { sendTelegramMessage } from "./telegram-bot";
 import { getPortalConfig } from "./portal-config";
 import { notifyFreeSignup, notifyFirstLogin } from "./telemetry-sink";
+import { clientRefForUser } from "./client-ref";
 import { getOrCreateReferralCode } from "./referrals";
 import { attributeReferralFromCookie } from "./referrals-cookie";
 import { pickPrimaryRole } from "./user-roles";
@@ -327,7 +328,8 @@ async function recordLoginWrites(args: { userId: string; email: string | null; p
       await notifyBounded(
         "notifyFirstLogin",
         ctx,
-        notifyFirstLogin({ email, loggedInAt: new Date(), source: provider })
+        // The lookup sits inside the bound too, so a slow users read cannot hold the sign-in.
+        clientRefForUser(userId, email).then((client) => notifyFirstLogin({ client, loggedInAt: new Date(), source: provider }))
       );
     }
   });

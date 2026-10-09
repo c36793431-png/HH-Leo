@@ -1,5 +1,6 @@
 import { pool } from "./db";
 import { notifyBlackTrialRequested, notifyBlackTrialConvertRequested } from "./telemetry-sink";
+import { clientRefForUser } from "./client-ref";
 import { sendTelegramMessage } from "./telegram-bot";
 
 export const BLACK_TRIAL_STATUSES = ["requested", "active", "declined", "converted"] as const;
@@ -211,7 +212,7 @@ export async function requestBlackTrial(args: RequestArgs): Promise<BlackTrialRo
     if (!row) throw new Error("failed to load created Black trial request");
 
     await notifyBlackTrialRequested({
-      email: row.userEmail,
+      client: await clientRefForUser(row.userId, row.userEmail),
       licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
       serverName: row.serverName,
       serverIp: row.serverIp,
@@ -316,7 +317,7 @@ export async function requestBlackTrialConversion(licenseId: string): Promise<Bl
   if (row.status !== "active") throw new Error("Trial isn't active");
 
   await notifyBlackTrialConvertRequested({
-    email: row.userEmail,
+    client: await clientRefForUser(row.userId, row.userEmail),
     licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
     expiresAt: row.expiresAt,
   }).catch(() => {});

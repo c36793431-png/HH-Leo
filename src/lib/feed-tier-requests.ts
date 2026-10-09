@@ -1,4 +1,5 @@
 import { notifyFeedTierRequestSubmitted, notifyFeedTierTrialActivated } from "./telemetry-sink";
+import { clientRefForUser } from "./client-ref";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
 import { expandTierKey, feedTierMeta, isAdminTrialEligibleTier, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
 import {
@@ -128,7 +129,7 @@ export async function createFeedTierRequest(args: CreateArgs): Promise<FeedTierR
   const first = rows[0];
   await notifyFeedTierRequestSubmitted({
     id: first.id,
-    email: first.userEmail,
+    client: await clientRefForUser(args.userId, first.userEmail),
     tierName: feedTierMeta(args.tierKey)?.name ?? args.tierKey,
     memberTierNames: rows.map((r) => r.tierName),
     licenseKey: first.licenseKeyTail ? `****${first.licenseKeyTail}` : "unknown",
@@ -198,7 +199,7 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
       trialEndsAt: row.endsAt ?? undefined,
     });
     await notifyFeedTierTrialActivated({
-      email: trial.userEmail,
+      client: await clientRefForUser(trial.userId, trial.userEmail),
       tierName: trial.tierName,
       licenseKey: trial.licenseKeyTail ? `****${trial.licenseKeyTail}` : "unknown",
       activatedAt: trial.trialStartedAt,

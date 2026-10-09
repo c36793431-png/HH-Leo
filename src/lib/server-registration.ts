@@ -1,6 +1,7 @@
 import { pool } from "./db";
 import { resolveGeoIp } from "./geoip";
-import { notifyServerRegistered, notifyIpMismatch, notifyCountryChange } from "./telemetry-sink";
+import { notifyServerRegistered, notifyIpMismatch, notifyCountryChange, type ClientRef } from "./telemetry-sink";
+import { clientRefForUser } from "./client-ref";
 import { FEED_TYPE_META, getActiveLicensesForUser, type FeedType } from "./licenses";
 import { SERVER_LOCATION_LABELS, type ServerLocation } from "./server-locations";
 import { countLiveGrantsForServer } from "./feed-subscriptions";
@@ -240,6 +241,7 @@ export async function saveServerRegistration(
     previousDeclaredIp: row.inserted ? null : row.old_ip,
     input,
     serverLocationLabel,
+    userId,
     ownerEmail,
     adminUrl,
   });
@@ -268,12 +270,16 @@ async function alertServerIp(opts: {
   previousDeclaredIp: string | null;
   input: ServerRegistrationInput;
   serverLocationLabel: string;
+  /** The server row's owner. With ownerEmail, the alert's who-line (clientLine): a Telegram-only
+   * owner has no email, which is how dmuzs's IP change printed `email: -` (marcus m62102 item 6). */
+  userId: string;
   ownerEmail: string | null;
   adminUrl: string;
 }): Promise<void> {
   try {
     const { licenseId, input } = opts;
-    const [license, observed, liveGrants] = await Promise.all([
+    const [client, license, observed, liveGrants] = await Promise.all([
+      clientRefForUser(opts.userId, opts.ownerEmail),
       licenseId
         ? pool.query<{ feed_types: string[] }>(`select feed_types from licenses where id = $1`, [licenseId])
         : Promise.resolve(null),
@@ -290,7 +296,7 @@ async function alertServerIp(opts: {
     ]);
     await notifyServerRegistered({
       kind: opts.kind,
-      email: opts.ownerEmail,
+      client,
       serverName: input.serverName,
       vpsProvider: input.vpsProviderOther ? `${input.vpsProvider} (${input.vpsProviderOther})` : input.vpsProvider,
       oldIp: opts.previousDeclaredIp ?? observed?.rows[0]?.ip ?? null,
@@ -381,6 +387,7 @@ export async function updateServerRegistrationById(
       previousDeclaredIp: row.old_ip,
       input,
       serverLocationLabel,
+      userId,
       ownerEmail,
       adminUrl: row.license_id ? adminUrlForLicence(row.license_id) : "",
     });
@@ -473,18 +480,24 @@ export async function captureConnectionIp(
     getServerRegistration(licenseId),
     resolveGeoIp(ip),
     previous ? resolveGeoIp(previous.ip) : Promise.resolve(null),
-    pool.query<{ email: string | null; feed_types: string[] }>(
-      `select u.email, l.feed_types from licenses l join users u on u.id = l.user_id where l.id = $1`,
+    pool.query<{ user_id: string; email: string | null; telegram_username: string | null; feed_types: string[] }>(
+      `select u.id as user_id, u.email, u.telegram_username, l.feed_types
+       from licenses l join users u on u.id = l.user_id where l.id = $1`,
       [licenseId]
     ),
   ]);
-  const ownerEmail = owner.rows[0]?.email ?? null;
-  const feeds = feedLabels(owner.rows[0]?.feed_types);
+  const ownerRow = owner.rows[0];
+  const client: ClientRef = {
+    email: ownerRow?.email ?? null,
+    telegramUsername: ownerRow?.telegram_username ?? null,
+    userId: ownerRow?.user_id ?? null,
+  };
+  const feeds = feedLabels(ownerRow?.feed_types);
   if (!registration || registration.multipleIpsOk) return;
 
   if (registration.declaredIp && registration.declaredIp !== ip && !mismatchAlertWindowed) {
     await notifyIpMismatch({
-      email: ownerEmail,
+      client,
       serverName: registration.serverName,
       declaredIp: registration.declaredIp,
       actualIp: ip,
@@ -496,7 +509,7 @@ export async function captureConnectionIp(
 
   if (prevGeo?.country && geo?.country && prevGeo.country !== geo.country) {
     await notifyCountryChange({
-      email: ownerEmail,
+      client,
       serverName: registration.serverName,
       fromCountry: prevGeo.country,
       toCountry: geo.country,

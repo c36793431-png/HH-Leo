@@ -62,7 +62,11 @@ let lib: {
   trials: typeof import("./feed-tier-trials");
   providers: typeof import("./feed-providers");
   cron: typeof import("../app/api/cron/expire-trials/route");
+  sink: typeof import("./telemetry-sink");
+  srv: typeof import("./server-registration");
 };
+/** The admin sink chat (telemetry-sink.ts SIGNUP_NOTIFY_CHAT_ID): every sendSinkMessage lands here. */
+const SINK_CHAT = "7225949234";
 const telegramSends: { chatId: string; text: string }[] = [];
 
 async function sql(text: string, params: unknown[] = []) {
@@ -85,6 +89,7 @@ before(async () => {
   (globalThis as any)._pgPool = { query: sql, connect: async () => ({ query: sql, release() {} }) };
   // Capture Telegram sends instead of making them; email has no key and fails closed (best-effort).
   process.env.TELEGRAM_HFT_ALERT_BOT_TOKEN = "test-token";
+  process.env.TELEMETRY_BOT_TOKEN = "test-sink-token";
   process.env.CRON_SECRET = "test-cron";
   delete process.env.AUTH_RESEND_KEY;
   (globalThis as any).fetch = async (url: string, init?: { body?: string }) => {
@@ -101,6 +106,8 @@ before(async () => {
     trials: await import("./feed-tier-trials"),
     providers: await import("./feed-providers"),
     cron: await import("../app/api/cron/expire-trials/route"),
+    sink: await import("./telemetry-sink"),
+    srv: await import("./server-registration"),
   };
 
   await sql(`insert into users (id, email, role) values ($1, 'pip@example.invalid', 'feed_provider'), ($2, 'admin@example.invalid', 'admin')`, [PIP, ADMIN]);
@@ -114,10 +121,16 @@ before(async () => {
 });
 
 let buyerSeq = 0;
-/** A buyer with a live licence, a Telegram id and one registered server. */
-async function makeBuyer() {
+/** A buyer with a live licence, a Telegram id and one registered server. identity overrides the
+ * email (null = a Telegram-only client) and sets a telegram_username. */
+async function makeBuyer(identity: { email?: string | null; telegramUsername?: string | null } = {}) {
   buyerSeq++;
-  const u = await sql(`insert into users (email, telegram_user_id) values ($1, $2) returning id`, [`buyer${buyerSeq}@example.invalid`, 9000 + buyerSeq]);
+  const email = identity.email === undefined ? `buyer${buyerSeq}@example.invalid` : identity.email;
+  const u = await sql(`insert into users (email, telegram_user_id, telegram_username) values ($1, $2, $3) returning id`, [
+    email,
+    9000 + buyerSeq,
+    identity.telegramUsername ?? null,
+  ]);
   const userId = u.rows[0].id as string;
   const l = await sql(
     `insert into licenses (user_id, license_key, expires_at) values ($1, $2, now() + interval '60 days') returning id`,
@@ -353,6 +366,64 @@ test("a second admin trial on the same LD Base tier is refused inside the transa
   assert.equal(s.envelope.status, "pending");
   assert.equal(s.grants.length, 0);
   assert.equal(s.trials.length, 1, "still only the first trial's row");
+});
+
+// Item 6 (coxwell 2026-10-08, marcus m62102): an admin alert names the client by email, else
+// Telegram @username, else users.id short -- never `email: -` while anything is known.
+const sinkSince = (mark: number) => telegramSends.slice(mark).filter((m) => m.chatId === SINK_CHAT).map((m) => m.text);
+
+test("clientLine falls back email -> @username -> id short", () => {
+  const id = "0d5672ca-1111-4222-8333-444455556666";
+  assert.equal(lib.sink.clientLine({ email: "a@b.c", telegramUsername: "x", userId: id }), "email: a@b.c");
+  assert.equal(lib.sink.clientLine({ email: null, telegramUsername: "dmuzsrdfx", userId: id }), "client: @dmuzsrdfx (no email)");
+  assert.equal(lib.sink.clientLine({ email: null, telegramUsername: null, userId: id }), "client: user 0d5672ca (no email, no telegram username)");
+  assert.equal(lib.sink.clientLine({ email: null, telegramUsername: null, userId: null }), "client: unknown");
+});
+
+const ipEdit = (declaredIp: string) => ({ serverName: "srv", vpsProvider: "other", vpsProviderOther: null, location: "london" as const, declaredIp });
+
+test("server ip changed: a Telegram-only owner is named by @username, not `email: -` (the dmuzs alert)", async () => {
+  const b = await makeBuyer({ email: null, telegramUsername: "tgonly_owner" });
+  const mark = telegramSends.length;
+  // ownerEmail null: the session email of a Telegram-only client, as account/servers passes it.
+  assert.equal(await lib.srv.updateServerRegistrationById(b.serverId, b.userId, ipEdit("203.0.113.9"), null, (l) => `https://x/${l}`), true);
+  const [alert] = sinkSince(mark).filter((t) => t.startsWith("🔁 server ip changed"));
+  assert.ok(alert, "the alert went out");
+  assert.match(alert, /^client: @tgonly_owner \(no email\)$/m);
+  assert.doesNotMatch(alert, /email: -/);
+});
+
+test("server ip changed: no email and no username falls back to the users.id short; an email owner is unchanged", async () => {
+  const bare = await makeBuyer({ email: null });
+  let mark = telegramSends.length;
+  await lib.srv.updateServerRegistrationById(bare.serverId, bare.userId, ipEdit("203.0.113.10"), null, () => "u");
+  assert.match(sinkSince(mark).join("\n"), new RegExp(`^client: user ${bare.userId.slice(0, 8)} \\(no email, no telegram username\\)$`, "m"));
+
+  const withEmail = await makeBuyer({ telegramUsername: "has_both" });
+  mark = telegramSends.length;
+  await lib.srv.updateServerRegistrationById(withEmail.serverId, withEmail.userId, ipEdit("203.0.113.11"), null, () => "u");
+  assert.match(sinkSince(mark).join("\n"), /^email: buyer\d+@example\.invalid$/m);
+});
+
+test("trial activated names a Telegram-only client by @username", async () => {
+  const b = await makeBuyer({ email: null, telegramUsername: "tgonly_trial" });
+  const mark = telegramSends.length;
+  await adminApprove(await requestOne(b, "ny-normal"));
+  const [alert] = sinkSince(mark).filter((t) => t.startsWith("✅ trial activated"));
+  assert.ok(alert, "the alert went out");
+  assert.match(alert, /^client: @tgonly_trial \(no email\)$/m);
+});
+
+test("trial converted reads the joined row: the client's email and licence tail, not `email: -` / `…nown`", async () => {
+  const b = await makeBuyer();
+  await adminApprove(await requestOne(b, "ny-fast"));
+  const mark = telegramSends.length;
+  await lib.trials.markFeedTierTrialConverted(b.userId, "ny-fast");
+  const [alert] = sinkSince(mark).filter((t) => t.startsWith("💳 trial converted"));
+  assert.ok(alert, "the alert went out");
+  assert.match(alert, /^email: buyer\d+@example\.invalid$/m);
+  const key = (await sql(`select license_key from licenses where id = $1`, [b.licenseId])).rows[0].license_key as string;
+  assert.match(alert, new RegExp(`^license: …${key.slice(-4)}$`, "m"));
 });
 
 // Last two: they run DDL against the shared database (each fails and rolls back).

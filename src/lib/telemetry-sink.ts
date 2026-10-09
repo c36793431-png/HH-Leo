@@ -93,7 +93,7 @@ export async function notifyFreeSignup(opts: {
 
 /** Best-effort, non-blocking: a failed notify must never block license issuance. */
 export async function notifyPaidActivation(opts: {
-  email: string | null;
+  client: ClientRef;
   licenseKey: string;
   activatedAt: Date;
   tier?: string;
@@ -104,7 +104,7 @@ export async function notifyPaidActivation(opts: {
   const keyTail = opts.licenseKey.length > 4 ? opts.licenseKey.slice(-4) : opts.licenseKey;
   const text =
     `💰 new paid signup\n` +
-    `email: ${opts.email ?? "-"}\n` +
+    `${clientLine(opts.client)}\n` +
     `license: …${keyTail}\n` +
     `activated: ${opts.activatedAt.toISOString()}` +
     (opts.tier ? `\ntier: ${opts.tier}` : "");
@@ -188,6 +188,24 @@ function keyTail(licenseKey: string): string {
   return licenseKey.length > 4 ? licenseKey.slice(-4) : licenseKey;
 }
 
+/** Who an admin alert is about. The alerts that used to name a client by email alone take one
+ * of these instead, because a Telegram-only client has no email: dmuzs's server-IP alert printed
+ * `email: -` (coxwell 2026-10-08, marcus m62102 item 6). Built by clientRefForUser (client-ref.ts). */
+export interface ClientRef {
+  email: string | null;
+  telegramUsername: string | null;
+  userId: string | null;
+}
+
+/** The alert's who-line: the email, else the Telegram @username, else the users.id short (its
+ * first 8, as in an /admin/users URL). Never a bare `-` while anything is known. */
+export function clientLine(c: ClientRef): string {
+  if (c.email) return `email: ${c.email}`;
+  if (c.telegramUsername) return `client: @${c.telegramUsername} (no email)`;
+  if (c.userId) return `client: user ${c.userId.slice(0, 8)} (no email, no telegram username)`;
+  return `client: unknown`;
+}
+
 /** Bare `@handle` auto-links in Telegram plain text; a `tg://user?id=` deep link covers
  * users with no username set. Never emits a bare `@` or `@None`. */
 function telegramLine(telegramUsername: string | null, telegramUserId: string | null): string {
@@ -197,14 +215,14 @@ function telegramLine(telegramUsername: string | null, telegramUserId: string | 
 }
 
 export async function notifyTrialIssued(opts: {
-  email: string | null;
+  client: ClientRef;
   licenseKey: string;
   issuedAt: Date;
   expiresAt: Date;
 }): Promise<void> {
   await sendSinkMessage(
     `🎁 trial issued\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `issued: ${opts.issuedAt.toISOString()}\n` +
       `expires: ${opts.expiresAt.toISOString()}`
@@ -235,14 +253,14 @@ export async function notifyAgentGrant(opts: {
 }
 
 export async function notifyLicenseUpgraded(opts: {
-  email: string | null;
+  client: ClientRef;
   licenseKey: string;
   fromTier: string;
   toTier: string;
 }): Promise<void> {
   await sendSinkMessage(
     `⬆️ license upgraded\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `from: ${opts.fromTier}\n` +
       `to: ${opts.toTier}`
@@ -286,14 +304,14 @@ export async function notifyLicenseExpired(opts: {
 }
 
 export async function notifyLicenseRevoked(opts: {
-  email: string | null;
+  client: ClientRef;
   licenseKey: string;
   tier: string;
   revokedAt: Date;
 }): Promise<void> {
   await sendSinkMessage(
     `🚫 license revoked\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `tier: ${opts.tier}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `revoked: ${opts.revokedAt.toISOString()}`
@@ -314,13 +332,13 @@ export async function notifyTelegramLinked(opts: {
 }
 
 export async function notifyFirstLogin(opts: {
-  email: string | null;
+  client: ClientRef;
   loggedInAt: Date;
   source?: string;
 }): Promise<void> {
   await sendSinkMessage(
     `👋 first login\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `first login: ${opts.loggedInAt.toISOString()}` +
       (opts.source ? `\nsource: ${opts.source}` : "")
   );
@@ -331,7 +349,7 @@ export async function notifyFirstLogin(opts: {
  * lookup failed, said so rather than read as "no". */
 export async function notifyServerRegistered(opts: {
   kind: "registered" | "edited";
-  email: string | null;
+  client: ClientRef;
   serverName: string;
   vpsProvider: string;
   oldIp: string | null;
@@ -349,7 +367,7 @@ export async function notifyServerRegistered(opts: {
         : "none";
   await sendSinkMessage(
     `${opts.kind === "registered" ? "🖥 new server registration" : "🔁 server ip changed"}\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `feed: ${opts.feeds.length ? opts.feeds.join(", ") : "-"}\n` +
       `server: ${opts.serverName}\n` +
       `provider: ${opts.vpsProvider}\n` +
@@ -361,7 +379,7 @@ export async function notifyServerRegistered(opts: {
 }
 
 export async function notifyIpMismatch(opts: {
-  email: string | null;
+  client: ClientRef;
   serverName: string;
   declaredIp: string;
   actualIp: string;
@@ -371,7 +389,7 @@ export async function notifyIpMismatch(opts: {
 }): Promise<void> {
   await sendSinkMessage(
     `🚩 declared/actual IP mismatch\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `feed: ${opts.feeds.length ? opts.feeds.join(", ") : "-"}\n` +
       `server: ${opts.serverName}\n` +
       `declared ip: ${opts.declaredIp}\n` +
@@ -381,7 +399,7 @@ export async function notifyIpMismatch(opts: {
 }
 
 export async function notifyCountryChange(opts: {
-  email: string | null;
+  client: ClientRef;
   serverName: string;
   fromCountry: string;
   toCountry: string;
@@ -391,7 +409,7 @@ export async function notifyCountryChange(opts: {
 }): Promise<void> {
   await sendSinkMessage(
     `🌍 captured IP changed country\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `feed: ${opts.feeds.length ? opts.feeds.join(", ") : "-"}\n` +
       `server: ${opts.serverName}\n` +
       `${opts.fromCountry} -> ${opts.toCountry}\n` +
@@ -401,26 +419,26 @@ export async function notifyCountryChange(opts: {
 }
 
 export async function notifyStrategyRequestSubmitted(opts: {
-  email: string | null;
+  client: ClientRef;
   summary: string;
   adminUrl: string;
 }): Promise<void> {
   await sendSinkMessage(
     `🧠 new strategy request\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `${opts.summary}\n` +
       `${opts.adminUrl}`
   );
 }
 
 export async function notifyStrategySubmissionSubmitted(opts: {
-  email: string | null;
+  client: ClientRef;
   summary: string;
   adminUrl: string;
 }): Promise<void> {
   await sendSinkMessage(
     `🧠 new add your strategy submission\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `${opts.summary}\n` +
       `${opts.adminUrl}`
   );
@@ -462,7 +480,7 @@ export async function notifyFeedTierRequestSubmitted(opts: {
   /** ONE envelope (the batch's first row). Both buttons below carry it, which is why a
    * bundle of more than one gets no buttons at all -- see memberTierNames. */
   id: string;
-  email: string | null;
+  client: ClientRef;
   tierName: string;
   /** Every envelope in the batch this DM announces; length 1 for a single tier. */
   memberTierNames: string[];
@@ -481,7 +499,7 @@ export async function notifyFeedTierRequestSubmitted(opts: {
   const isBundle = opts.memberTierNames.length > 1;
   const text =
     `📡 new feed request\n` +
-    `email: ${opts.email ?? "-"}\n` +
+    `${clientLine(opts.client)}\n` +
     `tier: ${opts.tierName}\n` +
     (isBundle ? `tiers: ${opts.memberTierNames.join(", ")}\n` : "") +
     `license: …${keyTail(opts.licenseKey)}\n` +
@@ -601,7 +619,7 @@ export async function notifyMigrationDrift(versions: string[]): Promise<void> {
 }
 
 export async function notifyFeedTierTrialStarted(opts: {
-  email: string | null;
+  client: ClientRef;
   tierName: string;
   licenseKey: string;
   trialEndsAt: Date;
@@ -618,7 +636,7 @@ export async function notifyFeedTierTrialStarted(opts: {
   }
   await sendSinkMessage(
     `🧪 trial started\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `tier: ${opts.tierName}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `server: ${server}\n` +
@@ -628,7 +646,7 @@ export async function notifyFeedTierTrialStarted(opts: {
 }
 
 export async function notifyFeedTierTrialActivated(opts: {
-  email: string | null;
+  client: ClientRef;
   tierName: string;
   licenseKey: string;
   activatedAt: Date;
@@ -646,7 +664,7 @@ export async function notifyFeedTierTrialActivated(opts: {
   }
   await sendSinkMessage(
     `✅ trial activated\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `tier: ${opts.tierName}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `server: ${server}\n` +
@@ -657,20 +675,20 @@ export async function notifyFeedTierTrialActivated(opts: {
 }
 
 export async function notifyFeedTierTrialConverted(opts: {
-  email: string | null;
+  client: ClientRef;
   tierName: string;
   licenseKey: string;
 }): Promise<void> {
   await sendSinkMessage(
     `💳 trial converted\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `tier: ${opts.tierName}\n` +
       `license: …${keyTail(opts.licenseKey)}`
   );
 }
 
 export async function notifyBlackTrialRequested(opts: {
-  email: string | null;
+  client: ClientRef;
   licenseKey: string;
   serverName: string | null;
   serverIp: string | null;
@@ -678,7 +696,7 @@ export async function notifyBlackTrialRequested(opts: {
 }): Promise<void> {
   await sendSinkMessage(
     `⚫️ Black trial requested\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `server: ${opts.serverName ?? "-"} (${opts.serverIp ?? "-"})\n` +
       `${opts.adminUrl}`
@@ -686,13 +704,13 @@ export async function notifyBlackTrialRequested(opts: {
 }
 
 export async function notifyBlackTrialConvertRequested(opts: {
-  email: string | null;
+  client: ClientRef;
   licenseKey: string;
   expiresAt: Date | null;
 }): Promise<void> {
   await sendSinkMessage(
     `⬆️ Black trial convert requested\n` +
-      `email: ${opts.email ?? "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `license: …${keyTail(opts.licenseKey)}` +
       (opts.expiresAt ? `\ntrial expires: ${opts.expiresAt.toISOString()}` : "")
   );
