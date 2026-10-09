@@ -7,6 +7,7 @@ import { PublicShell } from "@/components/marketplace/public-shell";
 import { EducationCatalog, type EducationLessonCard } from "@/components/education/education-catalog";
 import { EDUCATION_CATEGORIES, EDUCATION_LESSONS } from "@/lib/education";
 import { publicEducationCatalogue } from "@/lib/education-public";
+import { withCardImages } from "@/lib/education-cards";
 import { authPageHref } from "@/lib/post-auth-redirect";
 
 export default async function EducationPage() {
@@ -42,7 +43,7 @@ export default async function EducationPage() {
         </div>
       </div>
 
-      <EducationCatalog lessons={lessons} isPaidTier={isPaidTier} />
+      <EducationCatalog lessons={withCardImages(lessons)} isPaidTier={isPaidTier} />
 
       <div className="foot">HORIZON HFT · customer portal</div>
     </>

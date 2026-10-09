@@ -741,6 +741,9 @@
   display: flex; align-items: center; justify-content: center; margin-bottom: 12px;
 }
 .portal-shell .lthumb .glyph { font-size: 24px; color: var(--emerald); }
+/* A strategy lesson's card: the marketplace diagram (m62977), at its own 316:120 ratio so no mark is cropped. */
+.portal-shell .lthumb-img { height: auto; aspect-ratio: 316 / 120; overflow: hidden; background: none; }
+.portal-shell .lthumb-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .portal-shell .lesson.locked .lthumb { filter: grayscale(1) blur(1.5px); opacity: 0.5; }
 .portal-shell .lthumb .veil { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; filter: none; opacity: 1; }
 .portal-shell .lesson .tag.free { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--emerald); margin-bottom: 4px; }

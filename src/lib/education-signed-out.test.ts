@@ -8,6 +8,8 @@ import assert from "node:assert/strict";
 import { EDUCATION_LESSONS, type EducationLesson } from "./education";
 import { signedOutLesson } from "./education-signed-out";
 import { strategyCardImage } from "./basket-catalogue";
+import { publicEducationCatalogue } from "./education-public";
+import { withCardImages } from "./education-cards";
 
 // Written out, not imported: the test should fail if someone shortens the code's list.
 const BANNED = ["stealth", "order mixer", "disguis", "footprint"];
@@ -114,6 +116,23 @@ test("each strategy lesson carries its marketplace card diagram, and only those"
     obi: "/marketplace/strategies/obi.png",
     "grid-arbitrage": "/marketplace/strategies/grid-arbitrage.png",
   });
+});
+
+test("index cards: the 5 strategy lessons show their diagram, signed out and in; the rest keep the glyph (m62977)", () => {
+  const thumbs = (cards: { slug: string; image: { src: string } | null }[]) =>
+    Object.fromEntries(cards.filter((c) => c.image).map((c) => [c.slug, c.image!.src]));
+  const expected = {
+    "1-leg-latency-arb": "/marketplace/strategies/1-leg.png",
+    "2-leg-lock-hedge-arb": "/marketplace/strategies/2-leg-lock.png",
+    "trend-impulse": "/marketplace/strategies/trend-impulse.png",
+    obi: "/marketplace/strategies/obi.png",
+    "grid-arbitrage": "/marketplace/strategies/grid-arbitrage.png",
+  };
+  assert.deepEqual(thumbs(withCardImages(publicEducationCatalogue().lessons)), expected);
+  assert.deepEqual(thumbs(withCardImages(EDUCATION_LESSONS)), expected);
+  // Signed out, a card is still the catalogue's fields plus the image: no intro, no blocks.
+  const signedOut = withCardImages(publicEducationCatalogue().lessons);
+  assert.ok(signedOut.every((c) => !("intro" in c) && !("blocks" in c)));
 });
 
 test("a do-not-publish word in the shown part throws", () => {

@@ -2,9 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { EDUCATION_CATEGORIES, lessonHref, type EducationCategoryKey, type EducationLesson } from "@/lib/education";
+import type { StrategyCardImage } from "@/lib/basket-catalogue";
 
-/** What a card renders. The signed-out page passes the public catalogue's card fields only. */
-export type EducationLessonCard = Pick<EducationLesson, "slug" | "title" | "description" | "category" | "minutes" | "free">;
+/** What a card renders. The signed-out page passes the public catalogue's card fields only.
+ * `image`: the strategy diagram thumbnail (education-cards.ts); none = the diamond glyph. */
+export type EducationLessonCard = Pick<EducationLesson, "slug" | "title" | "description" | "category" | "minutes" | "free"> & {
+  image?: StrategyCardImage | null;
+};
 
 export function EducationCatalog({
   lessons,
@@ -73,16 +77,28 @@ export function EducationCatalog({
   );
 }
 
+function LessonThumb({ image, locked }: { image?: StrategyCardImage | null; locked?: boolean }) {
+  return (
+    <div className={image ? "lthumb lthumb-img" : "lthumb"}>
+      {image ? (
+        // Decorative, as on the marketplace card: the title says what the lesson is.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={image.src} srcSet={`${image.src} 1x, ${image.src2x} 2x`} alt="" width={316} height={120} />
+      ) : (
+        <span className="glyph">◈</span>
+      )}
+      {locked && <span className="veil">🔒</span>}
+    </div>
+  );
+}
+
 function LessonCard({ lesson, isPaidTier }: { lesson: EducationLessonCard; isPaidTier: boolean }) {
   const locked = !lesson.free && !isPaidTier;
 
   if (locked) {
     return (
       <div className="lesson locked">
-        <div className="lthumb">
-          <span className="glyph">◈</span>
-          <span className="veil">🔒</span>
-        </div>
+        <LessonThumb image={lesson.image} locked />
         <h4>{lesson.title}</h4>
         <p>{lesson.description}</p>
         <div className="lfoot">
@@ -95,9 +111,7 @@ function LessonCard({ lesson, isPaidTier }: { lesson: EducationLessonCard; isPai
 
   return (
     <a className="lesson" href={lessonHref(lesson)}>
-      <div className="lthumb">
-        <span className="glyph">◈</span>
-      </div>
+      <LessonThumb image={lesson.image} />
       {lesson.free && <div className="tag free">● Free</div>}
       <h4>{lesson.title}</h4>
       <p>{lesson.description}</p>
