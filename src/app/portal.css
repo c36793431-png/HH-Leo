@@ -766,6 +766,11 @@
 }
 .portal-shell .lesson-head-txt h1 { font-family: var(--hz-disp); font-weight: 800; font-size: 26px; line-height: 1.1; }
 .portal-shell .lesson-head-txt span { font-size: 12px; color: var(--hz-ink-3); font-family: var(--hz-mono); }
+/* The strategy's marketplace card diagram under the title (m62840). */
+.portal-shell .lesson-diagram {
+  max-width: 632px; margin-bottom: 20px; border-radius: 12px; overflow: hidden; border: 1px solid var(--hz-card-line);
+}
+.portal-shell .lesson-diagram img { display: block; width: 100%; height: auto; }
 .portal-shell .lesson-intro { font-size: 15px; color: var(--hz-ink-2); line-height: 1.6; max-width: 640px; margin-bottom: 26px; }
 .portal-shell .lesson-blocks { display: flex; flex-direction: column; gap: 14px; }
 .portal-shell .lesson-block {

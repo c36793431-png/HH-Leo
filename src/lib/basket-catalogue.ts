@@ -35,7 +35,7 @@ interface BasketStrategyEntry {
 
 /** Iris's schematics (marcus m59622, coxwell approved m59658): 316x120 masters, every mark in the
  * central 222px, so object-fit: cover at the 222px 4-up slot crops only background. */
-interface StrategyCardImage {
+export interface StrategyCardImage {
   src: string;
   src2x: string;
 }
@@ -51,6 +51,13 @@ export const BASKET_STRATEGY_ENTRIES: BasketStrategyEntry[] = [
   { key: "obi", strategyKeys: ["obi"], image: strategyImage("obi") },
   { key: "grid", strategyKeys: ["grid"], image: strategyImage("grid-arbitrage") },
 ];
+
+/** The marketplace card's diagram for one strategy, from the entry that is that strategy alone, so
+ * the Academy lesson shows the same picture as the card (coxwell via marcus, m62840). Null when no
+ * single-strategy entry carries an image. */
+export function strategyCardImage(key: StrategyKey): StrategyCardImage | null {
+  return BASKET_STRATEGY_ENTRIES.find((e) => e.strategyKeys.length === 1 && e.strategyKeys[0] === key)?.image ?? null;
+}
 
 /** The main site's /software strategy cards link to /marketplace?strategy=<slug> (marcus m59280).
  * Its slugs, as www spells them, to the portal's strategy keys. */

@@ -6,6 +6,7 @@ import {
   type EducationLesson,
 } from "@/lib/education";
 import type { SignedOutLesson } from "@/lib/education-signed-out";
+import { strategyCardImage } from "@/lib/basket-catalogue";
 
 const BLOCK_LABEL: Record<EducationBlock["type"], string> = {
   info: "Info",
@@ -31,6 +32,20 @@ function LessonHeader({ lesson }: { lesson: Pick<EducationLesson, "title" | "sec
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The strategy's marketplace card diagram, under the title (coxwell via marcus, m62840): the same
+ * file the /marketplace card shows, drawn larger. Decorative, as on the card: the lesson's text
+ * carries the meaning. */
+function LessonDiagram({ lesson }: { lesson: Pick<EducationLesson, "strategy"> }) {
+  const image = lesson.strategy ? strategyCardImage(lesson.strategy) : null;
+  if (!image) return null;
+  return (
+    <div className="lesson-diagram" aria-hidden="true">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={image.src2x} srcSet={`${image.src} 316w, ${image.src2x} 632w`} sizes="(max-width: 700px) 100vw, 632px" alt="" width={632} height={240} />
     </div>
   );
 }
@@ -79,6 +94,7 @@ export function LessonDetail({ lesson, isPaidTier }: { lesson: EducationLesson; 
   return (
     <div className="lesson-detail">
       <LessonHeader lesson={lesson} />
+      <LessonDiagram lesson={lesson} />
       <p className="lesson-intro">{lesson.intro}</p>
       <div className="lesson-blocks">
         {lesson.blocks.map((block) => (
@@ -114,6 +130,7 @@ export function LessonPreview({
   return (
     <div className="lesson-detail">
       <LessonHeader lesson={lesson} />
+      <LessonDiagram lesson={lesson} />
       <p className="lesson-intro">{lesson.intro}</p>
       {lesson.shownBlocks.length > 0 && (
         <div className="lesson-blocks">

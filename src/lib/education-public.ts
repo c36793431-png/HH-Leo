@@ -2,8 +2,8 @@ import { EDUCATION_CATEGORIES, EDUCATION_LESSONS, type EducationCategory, type E
 
 /** Words that must never reach the public catalogue (marcus, m59051). Matched case-insensitively
  * against the whole serialised payload, keys included. Also guards the signed-out lesson preview
- * (education-signed-out.ts). */
-export const DO_NOT_PUBLISH = ["stealth", "order mixer"];
+ * (education-signed-out.ts), which added the "disguises its footprint" class (marcus, m62833). */
+export const DO_NOT_PUBLISH = ["stealth", "order mixer", "disguis", "footprint"];
 
 export type PublicEducationLesson = Pick<
   EducationLesson,

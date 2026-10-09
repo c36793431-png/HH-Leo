@@ -6,10 +6,10 @@ import { DO_NOT_PUBLISH } from "./education-public";
  * under the blur. The rest of the lesson is not in this object, so the page cannot render it:
  * view-source and reader mode only find the placeholder.
  *
- * A public surface, so lesson 11 shows its public title and the do-not-publish words are checked
+ * A public surface, so lesson 11 shows its public title and intro and the do-not-publish words are checked
  * here as in the public catalogue (marcus, m59051/m59062). Fields are copied by name, so a field
  * added to EducationLesson or EducationBlock later stays private until it is added here. */
-export type SignedOutLesson = Pick<EducationLesson, "slug" | "title" | "category" | "section" | "intro"> & {
+export type SignedOutLesson = Pick<EducationLesson, "slug" | "title" | "category" | "section" | "intro" | "strategy"> & {
   shownBlocks: EducationBlock[];
   /** Blocks the visitor doesn't see. Drawn as that many placeholder blocks; no text from them. */
   hiddenBlockCount: number;
@@ -37,7 +37,8 @@ export function signedOutLesson(lesson: EducationLesson): SignedOutLesson {
     title: lesson.publicTitle ?? lesson.title,
     category: lesson.category,
     section: lesson.section,
-    intro: lesson.intro,
+    intro: lesson.publicIntro ?? lesson.intro,
+    strategy: lesson.strategy,
     shownBlocks: shown,
     hiddenBlockCount: hidden,
   };

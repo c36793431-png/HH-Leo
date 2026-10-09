@@ -7,12 +7,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EDUCATION_LESSONS, type EducationLesson } from "./education";
 import { signedOutLesson } from "./education-signed-out";
+import { strategyCardImage } from "./basket-catalogue";
+
+// Written out, not imported: the test should fail if someone shortens the code's list.
+const BANNED = ["stealth", "order mixer", "disguis", "footprint"];
 
 /** Every string a member sees that the visitor must not: the hidden blocks whole, and the items of
  * a one-block lesson's block. */
 function hiddenText(lesson: EducationLesson, shownCount: number): string[] {
   const hidden = lesson.blocks.slice(shownCount).flatMap((b) => [b.heading, b.body, ...(b.items ?? [])]);
   if (lesson.blocks.length === 1) hidden.push(...(lesson.blocks[0].items ?? []));
+  // A lesson with a public intro keeps its member intro for members.
+  if (lesson.publicIntro) hidden.push(lesson.intro);
   return hidden;
 }
 
@@ -83,22 +89,36 @@ test("a lesson that is not free shows no blocks", () => {
   assert.equal(view.hiddenBlockCount, EDUCATION_LESSONS[0].blocks.length);
 });
 
-test("lesson 11 shows its public title, and the Order Mixer block is in the hidden part", () => {
+test("lesson 11 shows its public title and intro, and the Order Mixer block is in the hidden part", () => {
   const view = signedOutLesson(EDUCATION_LESSONS.find((l) => l.section === 11)!);
   assert.equal(view.title, "Timing & Protection");
+  assert.equal(view.intro, "How Horizon times entries and protects open positions.");
   assert.deepEqual(view.shownBlocks.map((b) => b.heading), ["Timing & Protection"]);
 });
 
 test("no do-not-publish word in any lesson's signed-out view", () => {
   for (const lesson of EDUCATION_LESSONS) {
     const text = JSON.stringify(signedOutLesson(lesson)).toLowerCase();
-    assert.ok(!text.includes("stealth") && !text.includes("order mixer"), lesson.slug);
+    for (const word of BANNED) assert.ok(!text.includes(word), `${lesson.slug}: ${word}`);
   }
+});
+
+test("each strategy lesson carries its marketplace card diagram, and only those", () => {
+  const withDiagram = Object.fromEntries(
+    EDUCATION_LESSONS.filter((l) => l.strategy).map((l) => [l.slug, strategyCardImage(signedOutLesson(l).strategy!)?.src])
+  );
+  assert.deepEqual(withDiagram, {
+    "1-leg-latency-arb": "/marketplace/strategies/1-leg.png",
+    "2-leg-lock-hedge-arb": "/marketplace/strategies/2-leg-lock.png",
+    "trend-impulse": "/marketplace/strategies/trend-impulse.png",
+    obi: "/marketplace/strategies/obi.png",
+    "grid-arbitrage": "/marketplace/strategies/grid-arbitrage.png",
+  });
 });
 
 test("a do-not-publish word in the shown part throws", () => {
   const base = EDUCATION_LESSONS[0];
-  for (const intro of ["STEALTH mode", "the Order Mixer"]) {
+  for (const intro of ["STEALTH mode", "the Order Mixer", "it disguises orders", "a smaller footprint"]) {
     assert.throws(() => signedOutLesson({ ...base, intro }), /do-not-publish/);
   }
   // In the hidden part it is fine: the visitor never gets it.

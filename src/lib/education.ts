@@ -1,3 +1,5 @@
+import type { StrategyKey } from "./setfiles";
+
 export type EducationCategoryKey =
   | "getting-started"
   | "connecting-brokers"
@@ -41,8 +43,13 @@ export type EducationLesson = {
    * the signed-in portal's. Set only where the portal copy carries a do-not-publish term. */
   publicTitle?: string;
   publicDescription?: string;
+  /** Intro for the signed-out lesson page (education-signed-out.ts), where the member intro carries
+   * a do-not-publish term (marcus, m62833). */
+  publicIntro?: string;
   /** Single intro paragraph — shown on locked cards and as the opener on full lessons. */
   intro: string;
+  /** The strategy this lesson teaches: its marketplace card diagram heads the lesson (m62840). */
+  strategy?: StrategyKey;
   blocks: EducationBlock[];
 };
 
@@ -168,6 +175,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     minutes: 12,
     free: true,
     section: 5,
+    strategy: "1leg",
     intro: "1 Leg trades the gap between Fast Feed and your broker feed the moment a price discrepancy opens up.",
     blocks: [
       {
@@ -193,6 +201,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     minutes: 13,
     free: true,
     section: 6,
+    strategy: "2leg_lock",
     intro:
       "2 Leg Lock opens a BUY and a SELL at market as soon as the tab is flat, so it starts locked; there is no entry gap. After Min Time(s), when the Fast Feed leads the broker by your Exec Gap, it closes the wrong side and broker pending orders re-lock the remaining leg. Trailing is only the fallback, if the broker refuses those orders.",
     blocks: [
@@ -223,6 +232,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     minutes: 10,
     free: true,
     section: 7,
+    strategy: "trend_impulse",
     intro: "Trend Impulse watches Fast Feed for sudden directional moves and enters in the direction of the impulse.",
     blocks: [
       {
@@ -250,6 +260,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     minutes: 14,
     free: true,
     section: 8,
+    strategy: "obi",
     intro: "OBI trades when one side of the book leads your broker by Imbal Gap while the other side stays within Max Counter. It reads prices, in points, not volume.",
     blocks: [
       {
@@ -282,6 +293,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     minutes: 16,
     free: true,
     section: 9,
+    strategy: "grid",
     intro:
       "Grid Arbitrage enters on candle momentum confirmed by a trend filter, then scales a progressive grid as price moves against the basket.",
     blocks: [
@@ -343,6 +355,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     section: 11,
     publicTitle: "Timing & Protection",
     publicDescription: "Trade pacing, real vs. virtual stops, and auto-offset.",
+    publicIntro: "How Horizon times entries and protects open positions.",
     intro:
       "A cluster of protective settings governs how often Horizon trades, how it manages stops, and how it disguises its footprint with brokers.",
     blocks: [
