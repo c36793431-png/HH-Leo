@@ -70,9 +70,9 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     blocks: [
       {
         type: "info",
-        heading: "20-Character License Key",
+        heading: "Your License Key",
         body:
-          "Your terminal ships with a 20-character license key tied to your account. Enter it in the activation dialog on first launch to unlock the app.",
+          "Your license key looks like HHFT-XXXXXX-XXXXXX-XXXXXX. On first launch, paste it into the LICENSE KEY box and press ACTIVATE LICENSE; the terminal checks it online and opens.",
       },
       {
         type: "setting",
@@ -84,31 +84,31 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
         type: "info",
         heading: "First-Run Flow",
         body:
-          "The first run walks you through, in order: license key entry, hardware lock confirmation, and the broker connection wizard. No separate installer step once the key validates.",
+          "First launch asks for your license key, then opens the main window. Connect your broker and your fast feed in ⚙ Connections, choose a strategy in the STRATEGY panel, and press START TRADING once the Feed and Broker dots in the header are lit.",
       },
     ],
   },
   {
     slug: "interface",
     title: "Interface",
-    description: "Tour the tab layout — Strategy controls on the left, Connections on the right.",
+    description: "Tour the tab layout: settings on the left, live data and charts in the middle, the Trade Log on the right.",
     category: "getting-started",
     minutes: 6,
     free: true,
     section: 2,
-    intro: "Get oriented with Horizon's dual-pane layout before you touch a single setting.",
+    intro: "Get oriented with Horizon's layout before you touch a single setting.",
     blocks: [
       {
         type: "info",
         heading: "Tab Layout",
         body:
-          "The terminal splits into two primary panes: Strategy controls live on the left, Connection status and broker management live on the right.",
+          "Each tab has three columns. On the left, the STRATEGY panel holds every setting and the START TRADING button. In the middle, DATAFEED ANALYSE compares the fast feed with your broker, above the price and gap charts and the session figures. On the right, the TRADE LOG records everything the tab does. Broker and feed connections are set in the ⚙ Connections window in the header.",
       },
       {
         type: "setting",
         heading: "Multi-Tab Workspaces",
         body:
-          "Open multiple strategy tabs side by side to run several instruments or configurations at once without losing your place.",
+          "Each tab runs on its own: its own strategy, broker and feed connections, and settings. Add a tab with the + after the last one, and double-click a tab to rename it. Tabs on the same broker login share one broker session, so disconnecting one tab leaves it open for the others.",
       },
     ],
   },
@@ -183,12 +183,11 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
         heading: "Core Parameters",
         body: "Tune these six parameters to shape entry sensitivity and risk:",
         items: [
-          "Gap — minimum Fast Feed/broker price discrepancy required to trigger an entry",
-          "Shift — offset applied to the trigger price before comparison",
-          "SL — stop loss distance",
-          "TP — take profit distance",
-          "MaxSpread — maximum broker spread allowed before the strategy stands down",
-          "TradePause — cooldown enforced between trades",
+          "Exec Gap — the lead, in points, the fast feed needs over your broker to open a trade: fast bid above broker ask for BUY, broker bid above fast ask for SELL",
+          "Shift — a fixed offset, in points, applied to that comparison; a positive Shift makes BUY entries need a bigger lead and SELL entries a smaller one",
+          "Stop Loss / Take Profit — distances from the entry, in points",
+          "Max Spread — no new entry while your broker's spread is wider than this, in points",
+          "Trade Pause — seconds to wait after a trade closes, or after your broker rejects an order, before the next entry",
         ],
       },
     ],
@@ -239,15 +238,16 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
         type: "info",
         heading: "Fast Feed Impulse Detection",
         body:
-          "The strategy monitors Fast Feed for rapid price movement that outpaces the broker feed, treating it as an early signal of directional momentum.",
+          "The strategy watches the fast feed's mid price over a short rolling window. When the price has moved far enough inside that window, it treats the move as an impulse and trades in its direction.",
       },
       {
         type: "setting",
         heading: "Core Parameters",
-        body: "Two parameters control sensitivity:",
+        body:
+          "Two parameters control sensitivity. After a feed pause of more than 2 seconds the window starts again, so a reconnect is not read as an impulse:",
         items: [
-          "TrendGap — minimum Fast Feed movement required to qualify as an impulse",
-          "TrendTime — window over which that movement must occur",
+          "Impulse Gap — how far, in points, the fast feed's mid price must move inside the window",
+          "Time(ms) — the length of that window, in milliseconds",
         ],
       },
     ],
@@ -288,35 +288,43 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
   {
     slug: "grid-arbitrage",
     title: "Grid Arbitrage",
-    description: "Candle-momentum entries with progressive grid sizing and basket-level exits.",
+    description: "Fast-feed entries, legs that grow by Lot Mult, and exits for the whole basket.",
     category: "strategy-deep-dives",
     minutes: 16,
     free: true,
     section: 9,
     strategy: "grid",
     intro:
-      "Grid Arbitrage enters on candle momentum confirmed by a trend filter, then scales a progressive grid as price moves against the basket.",
+      "Grid Arbitrage opens a first leg when the fast feed leads your broker, adds larger legs as the price moves against the basket, and closes the whole basket together.",
     blocks: [
       {
         type: "info",
         heading: "Entry Logic",
-        body: "Entries trigger on candle momentum, gated by a trend filter to avoid fading a strong move.",
+        body:
+          "Leg 1 opens when the fast feed leads your broker by at least Trigger Gap points, on the side of the lead. At Trigger Gap 0 the lead test is off: the Trend Filter's EMA sets the side, and a new basket opens when the price crosses to a new side. With the filter off, leg 1 takes the side with the larger lead, and equal leads open nothing. With the Trend Filter on, no leg ever opens on the side it blocks.",
       },
       {
         type: "setting",
         heading: "Progressive Volume",
-        body:
-          "Each grid step increases position size by roughly 1.4x the prior step, scaling lot size upward as the basket adds legs:",
-        items: ["0.05 → 0.07 → 0.10 → 0.14 → 0.20 → 0.28 → 0.39 → 0.55"],
+        body: "Each added leg is larger than the last, and it is added only after a real move against the basket:",
+        items: [
+          "Lot Mult — each added leg is the previous leg's size times this, rounded up to the next 0.01 lot (0.01, 0.02, 0.04 at 2.0)",
+          "Grid Step — how far, in points, the price must move against the last leg before the next leg is added",
+          "Leg 2+ Gap — when set, an added leg also needs the fast feed to lead by this many points; at 0 the fast price only has to reach the broker's price",
+          "Max Legs — the most legs one basket can hold",
+          "Grid Vol. — holds every new leg, leg 1 included, while the fast feed is moving faster than half a Grid Step",
+        ],
       },
       {
         type: "setting",
         heading: "Basket Exits & Risk",
-        body: "The full basket is managed together, not leg by leg:",
+        body: "The basket closes as one, and each exit measures something different:",
         items: [
-          "Basket TP / Basket SL — combined take-profit and stop-loss across the whole grid",
-          "MaxDD% — maximum drawdown percentage before the basket is force-closed",
-          "TrailStart / TrailDist — trailing stop activation level and distance once the basket is in profit",
+          "Basket TP / Basket SL — points from the FIRST leg's entry price, not from the basket's average or its money result",
+          "Trail Start / Trail Dist — once the basket's average profit reaches Trail Start points, profit is locked in Trail Dist steps behind the best level reached",
+          "Max DD % — closes the basket when the account's equity falls this far below its balance; it counts the whole account, other tabs and manual trades included",
+          "Hard SL — closes any single leg that is this many points against its own entry",
+          "Broker safety stop — on MT5 and MT4 every leg also carries a stop at the broker, beyond these levels, that only acts if the terminal cannot",
         ],
       },
     ],
@@ -324,7 +332,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
   {
     slug: "risk-and-lot-sizing",
     title: "Risk & Lot Sizing",
-    description: "FixedLot vs. Risk%-based auto-lot, plus the EMA trend filter.",
+    description: "Fixed Lot Size or Risk % sizing, plus the EMA Trend Filter.",
     category: "advanced",
     minutes: 11,
     free: true,
@@ -333,15 +341,15 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
     blocks: [
       {
         type: "setting",
-        heading: "FixedLot vs. Risk% (Auto-Lot)",
+        heading: "Lot Size vs. Risk %",
         body:
-          "FixedLot trades a constant lot size on every entry. Risk% instead auto-calculates lot size from your account balance and a target risk percentage per trade — sizing adapts as your account grows or shrinks.",
+          "With Use Risk % off, every entry uses Lot Size. With it on, the terminal sizes each entry so that a loss at Stop Loss costs Risk % of the account balance, using the broker's contract details for the symbol. The size is rounded down to the broker's lot step, never up. Risk % works on MT5 and BloFin; on MT4 and Rithmic the terminal refuses START with Use Risk % ticked. If it cannot size a trade (unknown contract details, a profit currency other than the account's, a size below the broker's minimum or above its maximum), START is refused, or while running the entry is held, and the Trade Log says why; with Stop Loss at 0 it trades the fixed Lot Size and says so.",
       },
       {
         type: "setting",
-        heading: "TrendFilter (EMA)",
+        heading: "Trend Filter (EMA)",
         body:
-          "TrendFilter uses an exponential moving average to confirm the prevailing trend before allowing entries, reducing counter-trend trades.",
+          "With Trend Filter ticked, new trades open only on the EMA's side: BUY while your broker's mid price is above it, SELL while below. By default no new trade opens while the price is more than 200 points from the EMA, and exits are never blocked. EMA Period and EMA Source (closed broker candles of Candle (min) minutes, or the last N broker ticks) set how quickly it turns. Ticking 2nd EMA changes the rule: BUY only while the price is above BOTH EMAs, SELL only while below both, nothing in between, with the safe zone measured against the slower EMA. Band adds a dead zone in points around the EMA before a side is taken; Dwell is how many broker ticks the side must hold. The EMA: line under the boxes shows when it is still warming up. 2 Leg Lock does not use it.",
       },
     ],
   },
@@ -362,11 +370,12 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
       {
         type: "setting",
         heading: "Timing & Protection",
-        body: "These parameters pace trading and protect against bad fills:",
+        body: "These settings pace trading and protect open trades:",
         items: [
-          "TradePause — minimum cooldown enforced between trades",
-          "MinTradeTime / MaxTradeTime — minimum and maximum time a position may stay open",
-          "MaxSpread — spread ceiling above which the strategy will not trade",
+          "Trade Pause — seconds to wait after a trade closes, or after your broker rejects an order, before the next entry; 0 still keeps a short built-in pause of a few seconds",
+          "Min Time(s) — a stop or target reached before the trade is this old is held, and the trade closes once it reaches this age",
+          "Max Time(s) — closes a trade once it is this old; 0 = off",
+          "Max Spread — no new entry while your broker's spread is wider than this, in points",
           "RealSL vs. Virtual — whether the stop-loss is sent to the broker or managed internally by the terminal",
           "AutoOffset — automatic adjustment applied to entry/exit levels to account for broker-specific slippage",
         ],
