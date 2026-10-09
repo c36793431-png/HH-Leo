@@ -12,6 +12,7 @@
  */
 
 import { sendTelegramMessageWithButtons, type InlineKeyboardButton } from "./telegram-bot";
+import { packageLabelForTierKey } from "./feed-provider-packages";
 
 const API_ROOT = "https://api.telegram.org";
 
@@ -204,6 +205,19 @@ export function clientLine(c: ClientRef): string {
   if (c.telegramUsername) return `client: @${c.telegramUsername} (no email)`;
   if (c.userId) return `client: user ${c.userId.slice(0, 8)} (no email, no telegram username)`;
   return `client: unknown`;
+}
+
+/** `package: NY Base` ahead of the tier line, when every tier named belongs to the same package
+ * (packageLabelForTierKey); nothing for a tier with no package. coxwell read a bare `tier: NY
+ * Alpha` as a stray product (#458; marcus m62102 item 5). Ends in a newline when present. */
+function packageLine(tierKeys: string[]): string {
+  const labels = new Set(tierKeys.map((k) => packageLabelForTierKey(k)));
+  const [only] = labels;
+  return labels.size === 1 && only ? `package: ${only}\n` : "";
+}
+
+function tierLine(tierNames: string[]): string {
+  return tierNames.length === 1 ? `tier: ${tierNames[0]}` : `tiers: ${tierNames.join(", ")}`;
 }
 
 /** Bare `@handle` auto-links in Telegram plain text; a `tg://user?id=` deep link covers
@@ -484,6 +498,8 @@ export async function notifyFeedTierRequestSubmitted(opts: {
   tierName: string;
   /** Every envelope in the batch this DM announces; length 1 for a single tier. */
   memberTierNames: string[];
+  /** The same envelopes' tier keys, for the package line. */
+  memberTierKeys: string[];
   licenseKey: string;
   serverName: string | null;
   serverIp: string | null;
@@ -497,11 +513,18 @@ export async function notifyFeedTierRequestSubmitted(opts: {
     server = `${opts.serverIp} (unregistered)`;
   }
   const isBundle = opts.memberTierNames.length > 1;
+  const pkg = packageLine(opts.memberTierKeys);
+  // A package names itself on the package line, so its pseudo-tier name ("NY Base Package (NY
+  // Alpha / NY Beta)") would only repeat it; a bundle with no common package keeps the old pair.
+  const tiers =
+    isBundle && pkg
+      ? `${tierLine(opts.memberTierNames)}\n`
+      : `tier: ${opts.tierName}\n` + (isBundle ? `tiers: ${opts.memberTierNames.join(", ")}\n` : "");
   const text =
     `📡 new feed request\n` +
     `${clientLine(opts.client)}\n` +
-    `tier: ${opts.tierName}\n` +
-    (isBundle ? `tiers: ${opts.memberTierNames.join(", ")}\n` : "") +
+    pkg +
+    tiers +
     `license: …${keyTail(opts.licenseKey)}\n` +
     `server: ${server}\n` +
     (isBundle ? `decide each tier in the admin queue:\n` : "") +
@@ -620,6 +643,7 @@ export async function notifyMigrationDrift(versions: string[]): Promise<void> {
 
 export async function notifyFeedTierTrialStarted(opts: {
   client: ClientRef;
+  tierKey: string;
   tierName: string;
   licenseKey: string;
   trialEndsAt: Date;
@@ -637,7 +661,8 @@ export async function notifyFeedTierTrialStarted(opts: {
   await sendSinkMessage(
     `🧪 trial started\n` +
       `${clientLine(opts.client)}\n` +
-      `tier: ${opts.tierName}\n` +
+      packageLine([opts.tierKey]) +
+      `${tierLine([opts.tierName])}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `server: ${server}\n` +
       `ends: ${opts.trialEndsAt.toISOString()}\n` +
@@ -645,44 +670,57 @@ export async function notifyFeedTierTrialStarted(opts: {
   );
 }
 
+/** One alert per package request, not one per tier (coxwell #458 ~18:50Z: "Ny base as 1 is
+ * good enough also"; marcus m62102 item 5): `trials` is every trial one request batch granted,
+ * sent once by alertTrialsWhenBatchDecided (feed-tier-requests.ts). Members approved minutes
+ * apart end minutes apart, so one `expires` (the earliest) stands for all of them unless they
+ * differ by more than an hour, i.e. the admin picked different lengths -- then each is named. */
 export async function notifyFeedTierTrialActivated(opts: {
   client: ClientRef;
-  tierName: string;
+  trials: { tierKey: string; tierName: string; trialStartedAt: Date; trialEndsAt: Date }[];
   licenseKey: string;
-  activatedAt: Date;
-  trialEndsAt: Date;
   serverName: string | null;
   serverIp: string | null;
   serverRegistered: boolean;
   adminUrl: string;
 }): Promise<void> {
+  if (opts.trials.length === 0) return;
   let server = "-";
   if (opts.serverRegistered && opts.serverIp) {
     server = opts.serverName ? `${opts.serverName} (${opts.serverIp})` : opts.serverIp;
   } else if (opts.serverIp) {
     server = `${opts.serverIp} (unregistered)`;
   }
+  const started = Math.min(...opts.trials.map((t) => t.trialStartedAt.getTime()));
+  const ends = opts.trials.map((t) => t.trialEndsAt.getTime());
+  const expires =
+    Math.max(...ends) - Math.min(...ends) <= 60 * 60 * 1000
+      ? new Date(Math.min(...ends)).toISOString()
+      : opts.trials.map((t) => `${t.tierName} ${t.trialEndsAt.toISOString()}`).join(", ");
   await sendSinkMessage(
     `✅ trial activated\n` +
       `${clientLine(opts.client)}\n` +
-      `tier: ${opts.tierName}\n` +
+      packageLine(opts.trials.map((t) => t.tierKey)) +
+      `${tierLine(opts.trials.map((t) => t.tierName))}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `server: ${server}\n` +
-      `activated: ${opts.activatedAt.toISOString()}\n` +
-      `expires: ${opts.trialEndsAt.toISOString()}\n` +
+      `activated: ${new Date(started).toISOString()}\n` +
+      `expires: ${expires}\n` +
       `${opts.adminUrl}`
   );
 }
 
 export async function notifyFeedTierTrialConverted(opts: {
   client: ClientRef;
+  tierKey: string;
   tierName: string;
   licenseKey: string;
 }): Promise<void> {
   await sendSinkMessage(
     `💳 trial converted\n` +
       `${clientLine(opts.client)}\n` +
-      `tier: ${opts.tierName}\n` +
+      packageLine([opts.tierKey]) +
+      `${tierLine([opts.tierName])}\n` +
       `license: …${keyTail(opts.licenseKey)}`
   );
 }

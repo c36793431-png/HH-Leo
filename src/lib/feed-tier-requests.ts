@@ -4,6 +4,7 @@ import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
 import { expandTierKey, feedTierMeta, isAdminTrialEligibleTier, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
 import {
   insertFeedTierTrial,
+  listFeedTierTrials,
   notifyTrialClientActivated,
   startFeedTierTrial,
   TrialAlreadyClaimedError,
@@ -132,6 +133,7 @@ export async function createFeedTierRequest(args: CreateArgs): Promise<FeedTierR
     client: await clientRefForUser(args.userId, first.userEmail),
     tierName: feedTierMeta(args.tierKey)?.name ?? args.tierKey,
     memberTierNames: rows.map((r) => r.tierName),
+    memberTierKeys: rows.map((r) => r.tierKey),
     licenseKey: first.licenseKeyTail ? `****${first.licenseKeyTail}` : "unknown",
     serverName: first.serverName,
     serverIp: first.serverIp,
@@ -187,8 +189,11 @@ async function notifyClient(row: FeedTierRequestRow, text: string): Promise<void
  * so an approve that reaches this point had no trial row when it committed. Seeing one means a
  * row appeared in the gap, and that leaves a grant with no mirror row -- it is logged, not
  * swallowed, because nothing else records it. TrialNotEligibleError still cannot fire: the
- * trialRowWouldBeWritten guard above already required an eligible tier. */
-async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string): Promise<void> {
+ * trialRowWouldBeWritten guard above already required an eligible tier.
+ *
+ * The admin's "✅ trial activated" is not sent from here: it goes once per request batch, from
+ * alertTrialsWhenBatchDecided below. The client's own DM is still per tier. */
+async function activateTrialIfEligible(row: FeedTierRequestRow): Promise<void> {
   if (!trialRowWouldBeWritten(row.tierKey, row.licenseId)) return;
   try {
     const trial = await insertFeedTierTrial({
@@ -198,17 +203,6 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
       tierKey: row.tierKey,
       trialEndsAt: row.endsAt ?? undefined,
     });
-    await notifyFeedTierTrialActivated({
-      client: await clientRefForUser(trial.userId, trial.userEmail),
-      tierName: trial.tierName,
-      licenseKey: trial.licenseKeyTail ? `****${trial.licenseKeyTail}` : "unknown",
-      activatedAt: trial.trialStartedAt,
-      trialEndsAt: trial.trialEndsAt,
-      serverName: trial.serverName,
-      serverIp: trial.serverIp,
-      serverRegistered: trial.serverRegistered,
-      adminUrl,
-    }).catch(() => {});
     await notifyTrialClientActivated(trial);
   } catch (err) {
     if (err instanceof TrialAlreadyClaimedError) {
@@ -220,6 +214,47 @@ async function activateTrialIfEligible(row: FeedTierRequestRow, adminUrl: string
     }
     if (err instanceof TrialNotEligibleError) return;
     console.error("approveFeedTierRequest: failed to activate trial", err);
+  }
+}
+
+/** The admin trials page: where the batch's trial alert points, whichever surface made the last
+ * decision (the provider panel passes its own relative path, and a decline passes none). */
+const FEED_TRIALS_ADMIN_URL = "https://feed.horizonhft.com/admin/feed-tier-trials";
+
+/** ONE "✅ trial activated" per request batch, not one per tier (coxwell #458 ~18:50Z: "Ny base
+ * as 1 is good enough also"; marcus m62102 item 5). Both batch writers make one batch per package
+ * or single tier on one server (createFeedTierRequest; basket-forward.ts, one per line x server),
+ * so a batch is one package request. Its members are decided one at a time, so the alert waits
+ * for the batch's LAST decision -- approve or decline, whichever lands last -- and then names
+ * every member that became a trial and has its mirror row.
+ *
+ * Two edges, both deliberate. A member left pending holds the alert for the rest until someone
+ * decides it; the grant itself is unaffected and visible in the queue and on the Trials tab. Two
+ * final decisions landing in the same instant can each see the batch complete and both send:
+ * a duplicate alert, never a missing one. Never throws -- the decisions have committed. */
+async function alertTrialsWhenBatchDecided(batchId: string): Promise<void> {
+  try {
+    const batch = (await listAccessRequests({ batchId })).map(mapRow);
+    if (batch.length === 0 || batch.some((r) => r.status === "pending")) return;
+    const trialKeys = new Set(batch.filter((r) => r.status === "approved" && r.decision === "trial").map((r) => r.tierKey));
+    if (trialKeys.size === 0) return;
+    // (user, tier) holds at most one mirror row (Rule #2, feed_tier_trials_user_tier_uidx).
+    const trials = (await listFeedTierTrials({ userId: batch[0].userId }))
+      .filter((t) => trialKeys.has(t.tierKey))
+      .sort((a, b) => a.tierName.localeCompare(b.tierName));
+    if (trials.length === 0) return;
+    const first = trials[0];
+    await notifyFeedTierTrialActivated({
+      client: await clientRefForUser(first.userId, first.userEmail),
+      trials: trials.map((t) => ({ tierKey: t.tierKey, tierName: t.tierName, trialStartedAt: t.trialStartedAt, trialEndsAt: t.trialEndsAt })),
+      licenseKey: first.licenseKeyTail ? `****${first.licenseKeyTail}` : "unknown",
+      serverName: first.serverName,
+      serverIp: first.serverIp,
+      serverRegistered: first.serverRegistered,
+      adminUrl: FEED_TRIALS_ADMIN_URL,
+    });
+  } catch (err) {
+    console.error(`alertTrialsWhenBatchDecided: batch ${batchId}`, err);
   }
 }
 
@@ -237,11 +272,14 @@ export interface ApproveDecisionInput {
  * (spec 4(c), coxwell's C2: provider approve enabled, trial-only) -- the trial-only rule
  * applies on the BUYER list: a trial-eligible tier is approved as a 7-day trial, anything else
  * (CME included) is refused to the admin queue, because neither surface can supply an end
- * date, an invoice ref or a trial length. */
+ * date, an invoice ref or a trial length.
+ *
+ * _adminUrl is no longer read: it only fed the per-tier trial alert, which is now one per batch
+ * and links the admin Trials page (alertTrialsWhenBatchDecided). Kept so the callers stand. */
 export async function approveFeedTierRequest(
   id: string,
   actionedBy: string,
-  adminUrl: string,
+  _adminUrl: string,
   decision?: ApproveDecisionInput
 ): Promise<FeedTierRequestRow> {
   const pending = mapRow(await resolveSingleEnvelope(id));
@@ -261,11 +299,13 @@ export async function approveFeedTierRequest(
   // notifyTrialClientActivated() DM from activateTrialIfEligible instead of the plain one --
   // sending both would double-DM the client (coxwell green-light,
   // leo-feed-activation-notification-2026-08-17 / m22397).
-  if (input.decision === "trial") await activateTrialIfEligible(row, adminUrl);
+  if (input.decision === "trial") await activateTrialIfEligible(row);
   // The same list as activateTrialIfEligible's guard, so exactly one of the two DMs goes out.
   if (!(input.decision === "trial" && isAdminTrialEligibleTier(row.tierKey))) {
     await notifyClient(row, `<b>✅ Feed access approved</b>\n${row.tierName} is approved on your account.`);
   }
+  // Any decision can be the batch's last, a paid one included.
+  await alertTrialsWhenBatchDecided(row.batchId);
   return row;
 }
 
@@ -278,6 +318,8 @@ export async function rejectFeedTierRequest(id: string, actionedBy: string, reas
     row,
     `<b>❌ Feed access declined</b>\n${row.tierName} request was declined.` + (reason ? `\nReason: ${reason}` : "")
   );
+  // Declining the last pending member is what releases the alert for the members trialled before it.
+  await alertTrialsWhenBatchDecided(row.batchId);
   return row;
 }
 

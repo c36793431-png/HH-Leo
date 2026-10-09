@@ -621,6 +621,7 @@ export interface ListAccessRequestsOptions {
   userId?: string;
   productKind?: AccessProductKind;
   ids?: string[];
+  batchId?: string;
 }
 
 export async function listAccessRequests(options: ListAccessRequestsOptions = {}): Promise<AccessRequestRow[]> {
@@ -641,6 +642,10 @@ export async function listAccessRequests(options: ListAccessRequestsOptions = {}
   if (options.ids) {
     params.push(options.ids);
     conditions.push(`a.id = any($${params.length}::uuid[])`);
+  }
+  if (options.batchId) {
+    params.push(options.batchId);
+    conditions.push(`a.batch_id = $${params.length}`);
   }
   const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
   const result = await pool.query<ListRow>(

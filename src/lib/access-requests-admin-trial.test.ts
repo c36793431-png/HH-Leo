@@ -424,6 +424,80 @@ test("trial converted reads the joined row: the client's email and licence tail,
   assert.match(alert, /^email: buyer\d+@example\.invalid$/m);
   const key = (await sql(`select license_key from licenses where id = $1`, [b.licenseId])).rows[0].license_key as string;
   assert.match(alert, new RegExp(`^license: …${key.slice(-4)}$`, "m"));
+  assert.match(alert, /^package: NY Base\ntier: NY Alpha$/m, "item 5: the package ahead of the tier");
+});
+
+// Item 5 (coxwell #458 ~18:45Z/18:50Z, marcus m62102): `package: NY Base` ahead of the tier, and ONE
+// "✅ trial activated" per package request rather than one per member tier.
+const APPROVALS_CHAT = "-1003914182493";
+const activatedSince = (mark: number) => sinkSince(mark).filter((t) => t.startsWith("✅ trial activated"));
+
+/** A package request as the tiers page makes it: one batch, one envelope per member. */
+async function requestPackage(buyer: Awaited<ReturnType<typeof makeBuyer>>, region: "ny" | "london", packageKey: string) {
+  const rows = await lib.ftr.createFeedTierRequest({ userId: buyer.userId, licenseId: buyer.licenseId, region, tierKey: packageKey, adminUrl: "u" });
+  return Object.fromEntries(rows.map((r) => [r.tierKey, r.id])) as Record<string, string>;
+}
+
+test("NY Base requested as a package, both members approved as trials: ONE alert, sent on the second approval, naming the package and both tiers", async () => {
+  const b = await makeBuyer();
+  let mark = telegramSends.length;
+  const ids = await requestPackage(b, "ny", "ny-retail-package");
+  const [requestAlert] = telegramSends.slice(mark).filter((m) => m.chatId === APPROVALS_CHAT).map((m) => m.text);
+  assert.match(requestAlert, /^📡 new feed request\nemail: .+\npackage: NY Base\ntiers: NY (Alpha|Beta), NY (Alpha|Beta)\n/, "request alert: package, then its tiers");
+  assert.doesNotMatch(requestAlert, /NY Base Package \(/, "the pseudo-tier name is not repeated under the package line");
+
+  mark = telegramSends.length;
+  await adminApprove(ids["ny-fast"]);
+  assert.equal(activatedSince(mark).length, 0, "NY Beta still pending: no alert yet");
+  await adminApprove(ids["ny-normal"]);
+  const alerts = activatedSince(mark);
+  assert.equal(alerts.length, 1, "one alert for the package");
+  assert.match(alerts[0], /^package: NY Base\ntiers: NY Alpha, NY Beta$/m);
+  assert.match(alerts[0], /^https:\/\/feed\.horizonhft\.com\/admin\/feed-tier-trials$/m);
+  // The client still gets one DM per tier.
+  assert.equal(telegramSends.slice(mark).filter((m) => m.chatId === b.telegramId && /trial of NY/.test(m.text)).length, 2);
+});
+
+test("LD Base: two members trialled, the third declined -- the decline is the last decision and releases ONE alert for the two", async () => {
+  const b = await makeBuyer();
+  const ids = await requestPackage(b, "london", "ld-retail-package");
+  const mark = telegramSends.length;
+  await adminApprove(ids["ld-beta-56"], 30);
+  await adminApprove(ids["ld-gamma-19"], 30);
+  assert.equal(activatedSince(mark).length, 0, "Delta still pending");
+  await lib.ftr.rejectFeedTierRequest(ids["ld-delta-18"], ADMIN, null);
+  const alerts = activatedSince(mark);
+  assert.equal(alerts.length, 1);
+  assert.match(alerts[0], /^package: LD Base\ntiers: LD Beta 56, LD Gamma 19$/m);
+  assert.doesNotMatch(alerts[0], /Delta/);
+});
+
+test("a tier with no package: alert on its own approval, no package line", async () => {
+  const b = await makeBuyer();
+  const mark = telegramSends.length;
+  await adminApprove(await requestOne(b, "cme-ctrader-fix"));
+  const alerts = activatedSince(mark);
+  assert.equal(alerts.length, 1);
+  assert.doesNotMatch(alerts[0], /^package:/m);
+  assert.match(alerts[0], /^tier: CME Futures · cTrader FIX$/m);
+});
+
+test("a package whose members are all decided paid sends no trial alert", async () => {
+  const b = await makeBuyer();
+  const ids = await requestPackage(b, "ny", "ny-retail-package");
+  const mark = telegramSends.length;
+  const end = new Date(Date.now() + 30 * DAY);
+  for (const id of Object.values(ids)) await lib.ftr.approveFeedTierRequest(id, ADMIN, "u", { decision: "paid", endsAt: end, invoiceRef: "INV-2" });
+  assert.equal(activatedSince(mark).length, 0);
+});
+
+test("self-serve trial started carries the package line", async () => {
+  const b = await makeBuyer();
+  const mark = telegramSends.length;
+  await lib.ftr.startSelfServeFeedTierTrial({ userId: b.userId, licenseId: b.licenseId, region: "ny", tierKey: "ny-normal", adminUrl: "u" });
+  const [alert] = sinkSince(mark).filter((t) => t.startsWith("🧪 trial started"));
+  assert.ok(alert, "the alert went out");
+  assert.match(alert, /^package: NY Base\ntier: NY Beta$/m);
 });
 
 // Last two: they run DDL against the shared database (each fails and rolls back).

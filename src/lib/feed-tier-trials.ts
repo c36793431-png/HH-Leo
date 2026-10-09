@@ -200,6 +200,7 @@ export async function startFeedTierTrial(args: StartTrialArgs): Promise<FeedTier
 
   await notifyFeedTierTrialStarted({
     client: await clientRefForUser(row.userId, row.userEmail),
+    tierKey: row.tierKey,
     tierName: row.tierName,
     licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
     trialEndsAt: row.trialEndsAt,
@@ -308,6 +309,7 @@ export async function markFeedTierTrialConverted(userId: string, tierKey: string
   if (!row) return;
   await notifyFeedTierTrialConverted({
     client: await clientRefForUser(row.userId, row.userEmail),
+    tierKey: row.tierKey,
     tierName: row.tierName,
     licenseKey: row.licenseKeyTail ? `****${row.licenseKeyTail}` : "unknown",
   }).catch(() => {});
