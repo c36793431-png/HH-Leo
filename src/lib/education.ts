@@ -442,6 +442,6 @@ export function renamedLessonSlug(slug: string): string | undefined {
 
 /** A lesson's page. Single spelling of the route so the catalogue's card link and the sign-in
  * return allowlist (post-auth-redirect.ts) cannot point at two different places. */
-export function lessonHref(lesson: EducationLesson): string {
+export function lessonHref(lesson: Pick<EducationLesson, "slug">): string {
   return `/education/${lesson.slug}`;
 }

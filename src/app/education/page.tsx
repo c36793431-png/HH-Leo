@@ -1,31 +1,24 @@
-import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getReachablePanels } from "@/lib/user-roles";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@/lib/licenses";
 import { PortalShell } from "@/components/portal/portal-shell";
-import { EducationCatalog } from "@/components/education/education-catalog";
+import { PublicShell } from "@/components/marketplace/public-shell";
+import { EducationCatalog, type EducationLessonCard } from "@/components/education/education-catalog";
 import { EDUCATION_CATEGORIES, EDUCATION_LESSONS } from "@/lib/education";
+import { publicEducationCatalogue } from "@/lib/education-public";
 import { authPageHref } from "@/lib/post-auth-redirect";
 
 export default async function EducationPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect(authPageHref("/login", "/education"));
-  const switchablePanels = getReachablePanels(session.user.roles);
-
-  const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
-  const isAdmin = isAdminUser(session.user);
-  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
-  const userName = session.user.name ?? session.user.email ?? "trader";
-  const userEmail = session.user.email ?? "";
 
   // TODO: gate by license.tier once real license check is wired up — assume free-tier for now.
   const isPaidTier = false;
 
   const freeCount = EDUCATION_LESSONS.filter((l) => l.free).length;
 
-  return (
-    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
+  const page = (lessons: EducationLessonCard[]) => (
+    <>
       <div className="edu-hero">
         <div className="eyebrow">Horizon Academy</div>
         <h2>Learn to trade with Horizon HFT</h2>
@@ -49,9 +42,29 @@ export default async function EducationPage() {
         </div>
       </div>
 
-      <EducationCatalog lessons={EDUCATION_LESSONS} isPaidTier={isPaidTier} />
+      <EducationCatalog lessons={lessons} isPaidTier={isPaidTier} />
 
       <div className="foot">HORIZON HFT · customer portal</div>
+    </>
+  );
+
+  // Signed out: the same list, browsable (coxwell via marcus, m62822). EducationCatalog is a client
+  // component, so whatever it is given is in the page's HTML: it gets the public catalogue's card
+  // fields, never the lessons themselves (intro, blocks), and lesson 11 under its public copy.
+  if (!session?.user?.id) {
+    return <PublicShell signInHref={authPageHref("/login", "/education")}>{page(publicEducationCatalogue().lessons)}</PublicShell>;
+  }
+
+  const switchablePanels = getReachablePanels(session.user.roles);
+  const activeLicenses = await getActiveLicenseDetailsForUser(session.user.id).catch(() => []);
+  const isAdmin = isAdminUser(session.user);
+  const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, activeLicenses);
+  const userName = session.user.name ?? session.user.email ?? "trader";
+  const userEmail = session.user.email ?? "";
+
+  return (
+    <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
+      {page(EDUCATION_LESSONS)}
     </PortalShell>
   );
 }

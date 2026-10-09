@@ -3,11 +3,14 @@
 import { useMemo, useState } from "react";
 import { EDUCATION_CATEGORIES, lessonHref, type EducationCategoryKey, type EducationLesson } from "@/lib/education";
 
+/** What a card renders. The signed-out page passes the public catalogue's card fields only. */
+export type EducationLessonCard = Pick<EducationLesson, "slug" | "title" | "description" | "category" | "minutes" | "free">;
+
 export function EducationCatalog({
   lessons,
   isPaidTier, // TODO: gate by license.tier once real license check is wired up
 }: {
-  lessons: EducationLesson[];
+  lessons: EducationLessonCard[];
   isPaidTier: boolean;
 }) {
   const [activeCategory, setActiveCategory] = useState<EducationCategoryKey | "all">("all");
@@ -70,7 +73,7 @@ export function EducationCatalog({
   );
 }
 
-function LessonCard({ lesson, isPaidTier }: { lesson: EducationLesson; isPaidTier: boolean }) {
+function LessonCard({ lesson, isPaidTier }: { lesson: EducationLessonCard; isPaidTier: boolean }) {
   const locked = !lesson.free && !isPaidTier;
 
   if (locked) {
