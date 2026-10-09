@@ -190,6 +190,7 @@ test("allowlist: signed Ed25519 over canonical JSON; serial rises on every respo
     assert.equal(ok, true, "signature verifies with the public key");
     assert.equal(r.body.kid, "test");
     assert.equal(r.body.data.box, box.name);
+    assert.equal(r.body.data.purpose, "feed-box-allowlist", "domain separation (Fable m62985 Q1)");
     assert.ok(Math.abs(Date.parse(r.body.data.issued_at) - Date.now()) < 10_000);
   }
   assert.equal(b.body.data.serial, a.body.data.serial + 1);
@@ -209,7 +210,7 @@ test("allowlist: never served unsigned: no signing key = 503", async () => {
   }
 });
 
-test("allowlist: the EFFECTIVE set: this box's tiers only, live only, not revoked; bad IPs skipped with the reason", async () => {
+test("allowlist: the OPEN set: this box's tiers only, not revoked; a lapsed record is still served until the job revokes it (Fable S1); bad IPs skipped", async () => {
   const box = await newBox([CME]);
   const live = await granted(CME, "203.0.113.10");
   const otherTier = await granted(NY, "203.0.113.11");
@@ -223,8 +224,10 @@ test("allowlist: the EFFECTIVE set: this box's tiers only, live only, not revoke
   const { body } = await getList(box.token);
   const ids = body.data.records.map((r: any) => r.record_id);
   assert.ok(ids.includes(live.recordId), "live CME record listed");
-  assert.deepEqual(body.data.records.find((r: any) => r.record_id === live.recordId), { record_id: live.recordId, ip: "203.0.113.10", tier_key: "cme-ctrader-fix" });
-  for (const [what, r] of [["other tier", otherTier], ["lapsed", lapsed], ["revoked", revoked], ["cidr", cidr], ["private", priv]] as const) {
+  assert.deepEqual(body.data.records.find((r: any) => r.record_id === live.recordId), { record_id: live.recordId, ip: "203.0.113.10", tier_key: "cme-ctrader-fix", lapsed_since: null });
+  // S1: liveness never cuts in a GET; only the expiry job turns a lapse into a revoke (stamp, message, 3-day grace).
+  assert.ok(ids.includes(lapsed.recordId), "a lapsed subscription's record is still served until it is revoked");
+  for (const [what, r] of [["other tier", otherTier], ["revoked", revoked], ["cidr", cidr], ["private", priv]] as const) {
     assert.ok(!ids.includes(r.recordId), `${what} not in records`);
   }
   const skipped = Object.fromEntries(body.data.skipped.map((s: any) => [s.record_id, s.reason]));
@@ -298,6 +301,10 @@ test("state: pending until the box applies; 'pending bridge reload' is never 'ac
   assert.deepEqual(await state(), { kind: "rejected", label: "rejected by the box: protected IP" });
   await postApplied(box.token, { record_id: g.recordId, applied_at: now, result: "applied" });
   assert.match((await state()).label, /^active, applied \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$/);
+  await sql(`update feed_subscriptions set status = 'lapsed' where server_registration_id = $1`, [g.serverId]);
+  assert.deepEqual(await state(), { kind: "ending", label: "subscription lapsed; the expiry job revokes it 3 days after it first sees it" });
+  await sql(`update feed_allowlist_records set lapse_seen_at = '2026-10-09T08:00:00Z' where id = $1`, [g.recordId]);
+  assert.deepEqual(await state(), { kind: "ending", label: "subscription lapsed; the expiry job revokes it 3 days after it first sees it (client told 2026-10-09 08:00 UTC)" });
 });
 
 // ---------- expiry job ----------
@@ -325,7 +332,7 @@ test("expiry OFF (default): reports the lapsed record, writes NOTHING, tells nob
 });
 
 test("expiry ON: first sighting stamps + tells the client; no revoke inside the 3-day grace; revoke after it; live again = cleared", async () => {
-  await newBox([CME]);
+  const box = await newBox([CME]);
   process.env.AUTOPROVISION_EXPIRY_ENABLED = "true";
   const g = await granted(CME, "203.0.113.41");
   const back = await granted(CME, "203.0.113.42");
@@ -335,6 +342,10 @@ test("expiry ON: first sighting stamps + tells the client; no revoke inside the 
   assert.ok(first.body.stamped.includes(g.recordId));
   assert.ok(!first.body.revoked.includes(g.recordId), "nothing revoked on the run that first sees it");
   assert.ok(sends.some((s) => /ends in 3 days/.test(s.text) || /removed in 3 days/.test(s.text)), "client told");
+  assert.ok(sends.some((s) => /message us on Telegram to renew/.test(s.text)), "renewals go via Telegram (Fable N4)");
+  const inGrace = (await getList(box.token)).body.data.records.find((r: any) => r.record_id === g.recordId);
+  assert.ok(inGrace, "still served during the grace (S1)");
+  assert.ok(inGrace.lapsed_since, "with the job's first sighting, for the box's day-one report");
 
   sends.length = 0;
   const second = await runExpiry();
@@ -349,6 +360,9 @@ test("expiry ON: first sighting stamps + tells the client; no revoke inside the 
   const row = (await sql(`select revoked_at, revoked_by from feed_allowlist_records where id = $1`, [g.recordId])).rows[0];
   assert.ok(row.revoked_at);
   assert.equal(row.revoked_by, "expiry-job");
+  const after = (await getList(box.token)).body.data.records.map((r: any) => r.record_id);
+  assert.ok(!after.includes(g.recordId), "a record the job revoked leaves the list");
+  assert.ok(after.includes(back.recordId), "the renewed one stays");
   const kept = (await sql(`select revoked_at, lapse_seen_at from feed_allowlist_records where id = $1`, [back.recordId])).rows[0];
   assert.deepEqual([kept.revoked_at, kept.lapse_seen_at], [null, null]);
 });
