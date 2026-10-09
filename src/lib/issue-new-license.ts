@@ -167,8 +167,10 @@ export async function issueNewLicenseForUser(
       feedTypes,
     });
     const what = grantWhat({ tier: tier ?? "paid", feedTypes, issuedAt, expiresAt: new Date(license.expiresAt) });
-    await sendKeyAndRecord(actorUserId, license.id, target, subject, message, what);
+    // The banner first: the licence exists either way, and a Telegram throw from the key send propagates
+    // (Fable N1), which must not leave the client without it.
     await addApprovedNotice(userId, what);
+    await sendKeyAndRecord(actorUserId, license.id, target, subject, message, what);
     if (isPaidTier(tier ?? "paid")) {
       await sendPaidGroupInvite(target);
     }

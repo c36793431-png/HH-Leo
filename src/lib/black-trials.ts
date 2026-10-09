@@ -1,7 +1,8 @@
 import { pool } from "./db";
 import { notifyBlackTrialRequested, notifyBlackTrialConvertRequested } from "./telemetry-sink";
 import { clientRefForUser } from "./client-ref";
-import { sendTelegramMessage } from "./telegram-bot";
+import { addApprovedNotice, notifyClient as notifyReach, reportUnreachable } from "./client-reach";
+import type { NotifyOutcome } from "./notify";
 
 export const BLACK_TRIAL_STATUSES = ["requested", "active", "declined", "converted"] as const;
 export type BlackTrialStatus = (typeof BLACK_TRIAL_STATUSES)[number];
@@ -231,9 +232,14 @@ export async function requestBlackTrial(args: RequestArgs): Promise<BlackTrialRo
   }
 }
 
-async function notifyClient(row: BlackTrialRow, text: string): Promise<void> {
-  if (!row.telegramUserId) return;
-  await sendTelegramMessage(row.telegramUserId, text).catch(() => {});
+/** The client's own message, same portal bot and text as before, now through notifyUser (Fable S1, marcus
+ * m62190): the Telegram result is recorded on the user, email is the fallback, and a decision that reaches
+ * nobody raises the unreachable alert. Never throws: the decision has committed. */
+async function notifyClient(row: BlackTrialRow, what: string, subject: string, text: string): Promise<void> {
+  const out = await notifyReach(row.userId, subject, text).catch(
+    (err): NotifyOutcome => ({ channel: "none", ok: false, error: err instanceof Error ? err.message : String(err) })
+  );
+  if (!out.ok) await reportUnreachable(row.userId, what, out.attempts);
 }
 
 export interface ApproveArgs {
@@ -267,8 +273,12 @@ export async function approveBlackTrial(args: ApproveArgs): Promise<BlackTrialRo
   const row = await getBlackTrial(args.id);
   if (!row) throw new Error("Black trial not found after approval");
 
+  const what = `Black trial, ${BLACK_TRIAL_DAYS} days`;
+  await addApprovedNotice(row.userId, what);
   await notifyClient(
     row,
+    what,
+    "Your Black trial is live",
     `<b>⚫️ Your Black trial is live</b>\nConnection details are on your portal at Account → Servers. ` +
       `Trial runs ${BLACK_TRIAL_DAYS} days.`
   );
@@ -302,6 +312,8 @@ export async function declineBlackTrial(id: string, actionedBy: string, reason: 
 
   await notifyClient(
     row,
+    "Black trial request declined",
+    "Your Black trial request was declined",
     `<b>Black trial request declined</b>` + (reason ? `\nReason: ${reason}` : "")
   );
   return row;

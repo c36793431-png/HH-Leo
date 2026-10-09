@@ -467,6 +467,8 @@ export async function issueAdditionalLicenseAction(
       const config = await getPortalConfig();
       const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
       const what = grantWhat({ tier: tier ?? "paid", feedTypes, issuedAt: new Date(), expiresAt });
+      // Banner before the key send: a Telegram throw there propagates (Fable N1) and must not cost the banner.
+      await addApprovedNotice(userId, what);
       await sendKeyAndRecord(
         adminUserId,
         license.id,
@@ -475,7 +477,6 @@ export async function issueAdditionalLicenseAction(
         `Your${showBadge ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`,
         what
       );
-      await addApprovedNotice(userId, what);
     } else {
       await recordKeyDelivery(adminUserId, userId, license.id, NO_USERS_ROW);
     }

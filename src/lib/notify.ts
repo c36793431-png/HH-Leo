@@ -27,6 +27,11 @@ export type NotifyOutcome =
 
 const errName = (err: unknown) => `threw ${err instanceof Error ? err.name : typeof err}`;
 
+/** Email is sent as plain text: a message written for Telegram's HTML mode (e.g. the Black trial's "<b>…</b>")
+ * loses its tags and entities there, so the email fallback doesn't show raw markup. */
+const plainText = (s: string) =>
+  s.replace(/<\/?(?:b|strong|i|em|u|s|code|pre)>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+
 /** Records the Telegram attempt on the user. Best-effort: a failed write never changes the delivery. */
 async function recordTelegramResult(userId: string, attempt: NotifyAttempt): Promise<void> {
   await pool
@@ -73,7 +78,7 @@ export async function notifyUser(
   if (recipient.email) {
     let attempt: NotifyAttempt;
     try {
-      const r = await sendEmail(recipient.email, subject, message);
+      const r = await sendEmail(recipient.email, subject, plainText(message));
       attempt = r.ok ? { channel: "email", ok: true, resendEmailId: r.emailId } : { channel: "email", ok: false, error: r.error };
     } catch (err) {
       attempt = { channel: "email", ok: false, error: errName(err) };

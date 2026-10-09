@@ -15,6 +15,7 @@ import {
   type StoredBasketLine,
 } from "@/lib/basket-store";
 import { submitBasketAction, type SubmitReach } from "@/app/marketplace/basket/actions";
+import { SUPPORT_HANDLE, SUPPORT_TELEGRAM_URL } from "@/lib/support-contact";
 
 /**
  * /marketplace/basket (Iris sheets 3-5 + r2 2-4; rulings marcus m59146). A REQUEST basket, not a
@@ -170,7 +171,7 @@ export function BasketView({
                     </a>
                   ) : (
                     <p>
-                      Or message <a href="https://t.me/Coxwell2" target="_blank" rel="noopener noreferrer">@Coxwell2</a> on Telegram.
+                      Or message <a href={SUPPORT_TELEGRAM_URL} target="_blank" rel="noopener noreferrer">{SUPPORT_HANDLE}</a> on Telegram.
                     </p>
                   )}
                 </div>

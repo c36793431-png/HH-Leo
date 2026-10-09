@@ -1,6 +1,7 @@
 import { notifyFeedTierRequestSubmitted, notifyFeedTierTrialActivated } from "./telemetry-sink";
 import { clientRefForUser } from "./client-ref";
 import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
+import { addApprovedNotice, approvalMessage, followUpIfUnreached, SUPPORT_HANDLE } from "./client-reach";
 import { expandTierKey, feedTierMeta, isAdminTrialEligibleTier, isFeedRegion, isTrialEligibleTier, type FeedRegion } from "./feed-tier-catalogue";
 import {
   insertFeedTierTrial,
@@ -170,10 +171,17 @@ async function resolveSingleEnvelope(id: string): Promise<AccessRequestRow> {
 }
 
 /** Best-effort DM via the Trading Alerts bot -- same "not started this bot" 403 handling
- * as /v1/hft-alert; a failed send must never fail the approve/reject action itself. */
-async function notifyClient(row: FeedTierRequestRow, text: string): Promise<void> {
-  if (!row.telegramUserId) return;
-  await sendHftAlertMessage(row.telegramUserId, text).catch(() => {});
+ * as /v1/hft-alert; a failed send must never fail the approve/reject action itself. Returns
+ * whether it was delivered, so a decision that reached nobody gets the client-reach follow-up. */
+async function notifyClient(row: FeedTierRequestRow, text: string): Promise<boolean> {
+  if (!row.telegramUserId) return false;
+  return sendHftAlertMessage(row.telegramUserId, text).catch(() => false);
+}
+
+/** What a feed approval granted, in words, for the dashboard banner and the follow-up (never a key or an address). */
+function feedGrantWhat(row: FeedTierRequestRow, decision: AccessDecision): string {
+  const until = row.endsAt ? ` until ${row.endsAt.toISOString().slice(0, 10)}` : "";
+  return decision === "trial" ? `${row.tierName} trial${until}` : `${row.tierName} feed access${until}`;
 }
 
 /** feed_tier_trials is NOT retired in this slice (Source H; feed-tier-trials.ts untouched):
@@ -192,9 +200,10 @@ async function notifyClient(row: FeedTierRequestRow, text: string): Promise<void
  * trialRowWouldBeWritten guard above already required an eligible tier.
  *
  * The admin's "✅ trial activated" is not sent from here: it goes once per request batch, from
- * alertTrialsWhenBatchDecided below. The client's own DM is still per tier. */
-async function activateTrialIfEligible(row: FeedTierRequestRow): Promise<void> {
-  if (!trialRowWouldBeWritten(row.tierKey, row.licenseId)) return;
+ * alertTrialsWhenBatchDecided below. The client's own DM is still per tier. Returns whether that
+ * DM reached the client; false when none was sent (no mirror row), so the caller can follow up. */
+async function activateTrialIfEligible(row: FeedTierRequestRow): Promise<boolean> {
+  if (!trialRowWouldBeWritten(row.tierKey, row.licenseId)) return false;
   try {
     const trial = await insertFeedTierTrial({
       userId: row.userId,
@@ -203,17 +212,18 @@ async function activateTrialIfEligible(row: FeedTierRequestRow): Promise<void> {
       tierKey: row.tierKey,
       trialEndsAt: row.endsAt ?? undefined,
     });
-    await notifyTrialClientActivated(trial);
+    return await notifyTrialClientActivated(trial);
   } catch (err) {
     if (err instanceof TrialAlreadyClaimedError) {
       console.error(
         `approveFeedTierRequest: trial granted for user ${row.userId} tier ${row.tierKey} but the mirror row was already claimed -- grant committed with no feed_tier_trials row`,
         err
       );
-      return;
+      return false;
     }
-    if (err instanceof TrialNotEligibleError) return;
+    if (err instanceof TrialNotEligibleError) return false;
     console.error("approveFeedTierRequest: failed to activate trial", err);
+    return false;
   }
 }
 
@@ -299,11 +309,17 @@ export async function approveFeedTierRequest(
   // notifyTrialClientActivated() DM from activateTrialIfEligible instead of the plain one --
   // sending both would double-DM the client (coxwell green-light,
   // leo-feed-activation-notification-2026-08-17 / m22397).
-  if (input.decision === "trial") await activateTrialIfEligible(row);
+  let delivered = false;
+  if (input.decision === "trial") delivered = await activateTrialIfEligible(row);
   // The same list as activateTrialIfEligible's guard, so exactly one of the two DMs goes out.
   if (!(input.decision === "trial" && isAdminTrialEligibleTier(row.tierKey))) {
-    await notifyClient(row, `<b>✅ Feed access approved</b>\n${row.tierName} is approved on your account.`);
+    delivered = await notifyClient(row, `<b>✅ Feed access approved</b>\n${row.tierName} is approved on your account.`);
   }
+  // Client reach (Fable S1, marcus m62190): the dashboard banner, and, only when the DM above reached nobody,
+  // the approval through the portal bot then email, else the unreachable alert. A delivered DM sends nothing more.
+  const what = feedGrantWhat(row, input.decision);
+  await addApprovedNotice(row.userId, what);
+  await followUpIfUnreached(row.userId, what, delivered, approvalMessage(what));
   // Any decision can be the batch's last, a paid one included.
   await alertTrialsWhenBatchDecided(row.batchId);
   return row;
@@ -314,10 +330,15 @@ export async function rejectFeedTierRequest(id: string, actionedBy: string, reas
   await rejectAccessRequest({ requestId: pending.id, decidedBy: actionedBy, reason });
   const row = await getFeedTierRequest(pending.id);
   if (!row) throw new Error("feed tier request not found after update");
-  await notifyClient(
+  const delivered = await notifyClient(
     row,
     `<b>❌ Feed access declined</b>\n${row.tierName} request was declined.` + (reason ? `\nReason: ${reason}` : "")
   );
+  // A decline is an answer the client is owed too (marcus m62190 names this send): same follow-up, no banner.
+  await followUpIfUnreached(row.userId, `${row.tierName} request declined`, delivered, {
+    subject: "Your Horizon feed request was declined",
+    message: `Your ${row.tierName} request was declined.` + (reason ? `\nReason: ${reason}` : "") + `\n\nQuestions: ${SUPPORT_HANDLE} on Telegram.`,
+  });
   // Declining the last pending member is what releases the alert for the members trialled before it.
   await alertTrialsWhenBatchDecided(row.batchId);
   return row;

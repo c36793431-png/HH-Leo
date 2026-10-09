@@ -218,8 +218,10 @@ export async function startFeedTierTrial(args: StartTrialArgs): Promise<FeedTier
 /** Client-facing (not the coxwell admin sink) activation notification -- email + portal DM,
  * shared by self-serve trial start and admin-approve of a trial-eligible feed-tier-request
  * (leo-feed-activation-notification-2026-08-17 scope expansion: coxwell wants the client
- * notified directly, not just the admin ping). Best-effort, never throws. */
-export async function notifyTrialClientActivated(row: FeedTierTrialRow): Promise<void> {
+ * notified directly, not just the admin ping). Best-effort, never throws. Returns whether either message
+ * reached the client (email accepted, or the Trading Alerts bot answered 2xx), so the approve path can follow
+ * up when neither did (Fable S1, marcus m62190); the texts are unchanged. */
+export async function notifyTrialClientActivated(row: FeedTierTrialRow): Promise<boolean> {
   const endsDate = row.trialEndsAt.toISOString().slice(0, 10);
   // The row's own length, not TRIAL_DURATION_DAYS: an admin trial can run 14 or 30 days.
   const days = trialLengthDays(row);
@@ -228,8 +230,9 @@ export async function notifyTrialClientActivated(row: FeedTierTrialRow): Promise
       ? `${row.serverName ? `${row.serverName} (${row.serverIp})` : row.serverIp}`
       : "not yet registered -- add one at /account/servers so we can track your IP";
 
+  let delivered = false;
   if (row.userEmail) {
-    await sendEmail(
+    const mail = await sendEmail(
       row.userEmail,
       `Your ${row.tierName} trial is live`,
       `Your ${days}-day trial of ${row.tierName} is now active.\n\n` +
@@ -241,18 +244,21 @@ export async function notifyTrialClientActivated(row: FeedTierTrialRow): Promise
         `2. Confirm your server IP is registered under Account > Servers.\n` +
         `3. Your feed will start streaming to that IP immediately.\n\n` +
         `Want to keep ${row.tierName} after the trial? Upgrade any time from your Dashboard.`
-    ).catch(() => {});
+    ).catch(() => null);
+    if (mail?.ok) delivered = true;
   }
 
   if (row.telegramUserId) {
-    await sendHftAlertMessage(
+    const dm = await sendHftAlertMessage(
       row.telegramUserId,
       `<b>🎁 Your ${days}-day trial of ${row.tierName} is live!</b>\n` +
         `License ****${row.licenseKeyTail ?? "----"}\n` +
         `Server: ${serverLine}\n` +
         `Ends ${endsDate}.`
-    ).catch(() => {});
+    ).catch(() => false);
+    if (dm) delivered = true;
   }
+  return delivered;
 }
 
 export async function getFeedTierTrial(id: string): Promise<FeedTierTrialRow | null> {

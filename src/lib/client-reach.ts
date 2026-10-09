@@ -5,13 +5,14 @@ import { pool } from "./db";
 import { notifyUser, type NotifyAttempt, type NotifyOutcome } from "./notify";
 import { notifyClientUnreachable, notifyStaleBasketRequest } from "./telemetry-sink";
 import { clientRefForUser } from "./client-ref";
+import { SUPPORT_HANDLE } from "./support-contact";
 
 const PORTAL = "https://portal.horizonhft.com";
 export const SERVERS_URL = `${PORTAL}/account/servers`;
 /** The feeder guide (www /education/connect-the-feeder) is not live yet (404 on 10-09; held for FOC12's steps), so
  * messages point at the live Education page. Switch to the guide URL in the same push that makes it live. */
 export const FEEDER_GUIDE_URL = "https://horizonhft.com/education";
-export const SUPPORT_HANDLE = "@Coxwell2";
+export { SUPPORT_HANDLE };
 
 export interface ClientContact {
   userId: string;
@@ -98,6 +99,23 @@ export async function addApprovedNotice(userId: string, what: string): Promise<v
   await pool
     .query(`insert into client_notices (user_id, kind, what) values ($1, 'approved', $2)`, [userId, what.slice(0, 300)])
     .catch((err) => console.error("client-reach: notice insert failed", userId, err instanceof Error ? err.message : err));
+}
+
+/** A decision whose own message goes out by its own sender (the Trading Alerts bot for feed tiers, c4b767e's
+ * texts unchanged; Fable S1, marcus m62190). delivered = that message reached the client: nothing more is sent,
+ * so they get exactly what they got before. Reached nobody: the fallback goes through notifyClient (the portal
+ * bot, recorded on the user, then email), and if that fails too, the unreachable alert. The Trading Alerts
+ * bot's own answer is not recorded in tg_last_dm_*: that is the portal bot's reach, which the badge reports. */
+export async function followUpIfUnreached(
+  userId: string,
+  what: string,
+  delivered: boolean,
+  fallback: { subject: string; message: string }
+): Promise<NotifyOutcome | null> {
+  if (delivered) return null;
+  const out = await notifyClient(userId, fallback.subject, fallback.message);
+  if (!out.ok) await reportUnreachable(userId, what, out.attempts);
+  return out;
 }
 
 /** A request granted or handled: banner + message through the working channel; unreachable -> admin alert. */
@@ -233,24 +251,32 @@ const mmdd = (d: Date | string) => new Date(d).toISOString().slice(5, 10);
 
 /** Whether we can reach the client, and what that says it from: the last recorded Telegram DM when there is
  * one (delivered = reachable; 403 = blocked), bot_started only when no DM was ever tried; email counts as a
- * channel on its own. The label is shown to admins next to the contact block. */
-export function reachability(r: ReachFields): { reachable: boolean; telegram: "delivered" | "blocked" | "untried" | "none"; label: string } {
-  let telegram: "delivered" | "blocked" | "untried" | "none" = "none";
+ * channel on its own. A /start AFTER the last failed DM clears the block (Fable S2, marcus m62190): pressing
+ * Start is what lets the bot DM them, so the badge and the Sent-step prompt must not wait for the next DM to
+ * notice. The label is shown to admins next to the contact block. */
+export function reachability(r: ReachFields): { reachable: boolean; telegram: "delivered" | "blocked" | "started" | "untried" | "none"; label: string } {
+  let telegram: "delivered" | "blocked" | "started" | "untried" | "none" = "none";
   let tgLabel = "Telegram: not linked";
   if (r.telegramUserId) {
     if (r.tgLastDmAt && r.tgLastDmOk === true) {
       telegram = "delivered";
       tgLabel = `Telegram: delivered ${mmdd(r.tgLastDmAt)}`;
     } else if (r.tgLastDmAt && r.tgLastDmOk === false) {
-      telegram = "blocked";
       const code = /\b(4\d\d)\b/.exec(r.tgLastDmError ?? "")?.[1];
-      tgLabel = `Telegram: blocked${code ? ` (${code})` : ""} ${mmdd(r.tgLastDmAt)}`;
+      const blocked = `blocked${code ? ` (${code})` : ""} ${mmdd(r.tgLastDmAt)}`;
+      if (r.botStartedAt && new Date(r.botStartedAt).getTime() > new Date(r.tgLastDmAt).getTime()) {
+        telegram = "started";
+        tgLabel = `Telegram: bot started ${mmdd(r.botStartedAt)}, after ${blocked}`;
+      } else {
+        telegram = "blocked";
+        tgLabel = `Telegram: ${blocked}`;
+      }
     } else {
       telegram = "untried";
       tgLabel = r.botStartedAt ? "Telegram: never tried, bot started" : "Telegram: never tried, bot not started";
     }
   }
-  const reachable = Boolean(r.email) || telegram === "delivered" || (telegram === "untried" && Boolean(r.botStartedAt));
+  const reachable = Boolean(r.email) || telegram === "delivered" || telegram === "started" || (telegram === "untried" && Boolean(r.botStartedAt));
   const label = `${tgLabel} · ${r.email ? "email on file" : "no email"}${reachable ? "" : " · can't be reached"}`;
   return { reachable, telegram, label };
 }
