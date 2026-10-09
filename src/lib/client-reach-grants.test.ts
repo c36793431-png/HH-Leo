@@ -59,8 +59,11 @@ const sends: Send[] = [];
 let portalRefuses = false;
 let portalThrows = false;
 let alertsRefuse = false;
+/** Fable N1 (m62198): the contact read inside followUpIfUnreached fails on the database. */
+let contactReadFails = false;
 
 async function sql(text: string, params: unknown[] = []) {
+  if (contactReadFails && /tg_last_dm_error, onboarding_goal\s+from users where id/.test(text)) throw new Error("simulated DB error");
   const r = await db.query(text, params);
   return { rows: r.rows as any[], rowCount: (r.rows.length || r.affectedRows || 0) as number };
 }
@@ -109,6 +112,7 @@ beforeEach(() => {
   portalRefuses = false;
   portalThrows = false;
   alertsRefuse = false;
+  contactReadFails = false;
 });
 
 let seq = 0;
@@ -316,4 +320,20 @@ test("N1: licence issued, the key send's Telegram THROWS (propagates as before) 
     "the key send's Telegram throw propagates, as before"
   );
   assert.equal((await notices(userId)).length, 1, "banner written before the send");
+});
+
+// ---------- Fable N1 on 9d6dd53 (m62198): the follow-up never fails a committed decision ----------
+
+test("follow-up: a DB error reading the client's contact does not fail the approval, and the batch's trial alert still goes out", async () => {
+  const ftr = await import("./feed-tier-requests");
+  const b = await buyer();
+  const id = await requestOne(b, "ny-normal");
+  alertsRefuse = true; // the Alerts-bot DM fails, so the follow-up runs and reads the contact
+  contactReadFails = true;
+  const row = await ftr.approveFeedTierRequest(id, ADMIN, "u"); // the Telegram card: a 7-day trial
+  assert.equal(row.status, "approved", "the approval returns: the grant committed before the follow-up");
+  assert.ok(
+    sends.some((s) => s.kind === "telemetry" && /trial activated/i.test(s.text)),
+    `alertTrialsWhenBatchDecided still ran, got ${JSON.stringify(sends.map((s) => s.kind))}`
+  );
 });
