@@ -153,7 +153,7 @@ export function BasketView({
               <h2>Request sent</h2>
               {/* What happens next, said truthfully for this account (marcus m61849 part 3). */}
               <p>
-                <b>What happens next:</b> we review your request within 24 hours. You&apos;ll see the answer under My
+                <b>What happens next:</b>{" "}we review your request within 24 hours. You&apos;ll see the answer under My
                 requests and on your dashboard, and we&apos;ll message you by Telegram or email. Nothing has been charged and
                 nothing has started yet.
               </p>
