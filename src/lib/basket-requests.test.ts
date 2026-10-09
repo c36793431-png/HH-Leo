@@ -281,8 +281,8 @@ test("create: one row with the snapshot, one approvals-topic card, no envelope, 
     sent[0].text,
     [
       `🧺 new basket request ${br.basketReference(id)}`,
-      `email: ${u.email}`,
-      `telegram: @client_${u.email.match(/client(\d+)/)![1]}`,
+      // clientLine, both contacts on one line with the t.me link (marcus m62167).
+      `email: ${u.email} · telegram: @client_${u.email.match(/client(\d+)/)![1]} https://t.me/client_${u.email.match(/client(\d+)/)![1]}`,
       `lines (3):`,
       `• Horizon Terminal (software)`,
       `• London · Base (feed, 2 servers): no licence/server yet`,

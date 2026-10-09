@@ -276,8 +276,14 @@ async function notifyBounded(label: string, ctx: Record<string, unknown>, alert:
   }
 }
 
-function notifyFreeSignupBounded(opts: Parameters<typeof notifyFreeSignup>[0]): Promise<void> {
-  return notifyBounded("notifyFreeSignup", { source: opts.source, email: opts.email }, notifyFreeSignup(opts));
+/** The new user is named by clientLine (marcus m62167); the users read sits inside the bound. */
+function notifyFreeSignupBounded(opts: Omit<Parameters<typeof notifyFreeSignup>[0], "client"> & { userId: string | null; email: string | null }): Promise<void> {
+  const { userId, email, ...rest } = opts;
+  return notifyBounded(
+    "notifyFreeSignup",
+    { source: opts.source, email },
+    clientRefForUser(userId, email).then((client) => notifyFreeSignup({ ...rest, client }))
+  );
 }
 
 /** Runs one login side effect inside an Auth.js event. @auth/core awaits events inline
@@ -333,7 +339,7 @@ async function recordLoginWrites(args: { userId: string; email: string | null; p
         clientRefForUser(userId, email).then((client) => notifyFirstLogin({ client, loggedInAt: new Date(), source: provider }))
       );
       // One welcome, through the working channel, for a new account only (marcus m61849 part 6, m61862).
-      await notifyBounded("sendWelcome", ctx, sendWelcome(userId, { newWithinHours: 24 }).then(() => undefined));
+      await notifyBounded("sendWelcome", ctx, sendWelcome(userId, { newWithinHours: 24, greet: provider !== "telegram" }).then(() => undefined));
     }
   });
 }
@@ -431,6 +437,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           });
           await sendWelcomeDm(payload.id, user.display_name);
           await notifyFreeSignupBounded({
+            userId: user.id,
             email: user.email,
             name: user.display_name,
             telegramHandle: user.telegram_username,
@@ -575,6 +582,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
 
       await notifyFreeSignupBounded({
+        userId: user.id ?? null,
         email: user.email ?? null,
         name,
         telegramHandle,

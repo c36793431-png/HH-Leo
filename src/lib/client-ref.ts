@@ -13,12 +13,17 @@ import type { ClientRef } from "./telemetry-sink";
 export async function clientRefForUser(userId: string | null | undefined, knownEmail: string | null = null): Promise<ClientRef> {
   if (!userId) return { email: knownEmail, telegramUsername: null, userId: null };
   try {
-    const result = await pool.query<{ email: string | null; telegram_username: string | null }>(
-      `select email, telegram_username from users where id = $1`,
+    const result = await pool.query<{ email: string | null; telegram_username: string | null; telegram_user_id: string | null }>(
+      `select email, telegram_username, telegram_user_id from users where id = $1`,
       [userId]
     );
     const row = result.rows[0];
-    return { email: knownEmail ?? row?.email ?? null, telegramUsername: row?.telegram_username ?? null, userId };
+    return {
+      email: knownEmail ?? row?.email ?? null,
+      telegramUsername: row?.telegram_username ?? null,
+      userId,
+      telegramUserId: row?.telegram_user_id != null ? String(row.telegram_user_id) : null,
+    };
   } catch (err) {
     console.error("clientRefForUser: users lookup failed", err);
     return { email: knownEmail, telegramUsername: null, userId };

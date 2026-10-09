@@ -118,9 +118,12 @@ export async function createBasketRequest(args: {
   const u = user.rows[0] ?? {};
   await notifyBasketRequestSubmitted({
     reference: basketReference(id),
-    email: u.email ?? null,
-    telegramUsername: u.telegram_username ?? null,
-    telegramUserId: u.telegram_user_id != null ? String(u.telegram_user_id) : null,
+    client: {
+      email: u.email ?? null,
+      telegramUsername: u.telegram_username ?? null,
+      telegramUserId: u.telegram_user_id != null ? String(u.telegram_user_id) : null,
+      userId: args.userId,
+    },
     lines: stamped,
     hasTrial: args.wantTrial,
     adminUrl: "https://portal.horizonhft.com/admin/basket-requests",

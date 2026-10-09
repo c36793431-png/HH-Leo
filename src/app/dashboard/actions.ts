@@ -8,6 +8,7 @@ import { claimPendingLicense, getActiveLicenseDetailsForUser, isPaidTier, getGro
 import { sendGroupInvite, sendPaidGroupInvite } from "@/lib/group-membership";
 import { notifyTelegramLinked } from "@/lib/telemetry-sink";
 import type { ActionResult } from "@/lib/action-result";
+import { clientRefForUser } from "@/lib/client-ref";
 
 const INVITE_RATE_LIMIT_MS = 60_000;
 
@@ -48,11 +49,9 @@ export async function linkTelegramAction(payload: TelegramLoginPayload): Promise
   );
 
   if (wasUnlinked) {
-    notifyTelegramLinked({
-      email: before.rows[0]?.email ?? null,
-      telegramUsername: payload.username ?? null,
-      linkedAt: new Date(),
-    }).catch(() => {});
+    clientRefForUser(session.user.id, before.rows[0]?.email ?? null)
+      .then((client) => notifyTelegramLinked({ client, linkedAt: new Date() }))
+      .catch(() => {});
   }
 
   await claimPendingLicense({ userId: session.user.id, telegramUserId: payload.id });

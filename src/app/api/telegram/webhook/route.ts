@@ -13,6 +13,7 @@ import {
   UntrackableTrialError,
 } from "@/lib/access-requests";
 import { approvePartnerApplication, declinePartnerApplication, getPartnerApplication } from "@/lib/partner-applications";
+import { clientRefForUser } from "@/lib/client-ref";
 
 const INVITE_RATE_LIMIT_MS = 60_000;
 // Host is load-bearing: feed-tier-requests review moved to feed-admin (feed-admin-consolidation-2026-09-01).
@@ -247,11 +248,9 @@ export async function POST(req: NextRequest) {
   );
 
   if (currentLink === null || currentLink === undefined) {
-    notifyTelegramLinked({
-      email: userRow.rows[0]?.email ?? null,
-      telegramUsername: fromUsername ?? null,
-      linkedAt: new Date(),
-    }).catch(() => {});
+    clientRefForUser(userId, userRow.rows[0]?.email ?? null)
+      .then((client) => notifyTelegramLinked({ client, linkedAt: new Date() }))
+      .catch(() => {});
   }
 
   const activeLicenses = await getActiveLicenseDetailsForUser(userId).catch(() => []);

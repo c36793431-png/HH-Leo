@@ -372,10 +372,14 @@ test("a second admin trial on the same LD Base tier is refused inside the transa
 // Telegram @username, else users.id short -- never `email: -` while anything is known.
 const sinkSince = (mark: number) => telegramSends.slice(mark).filter((m) => m.chatId === SINK_CHAT).map((m) => m.text);
 
-test("clientLine falls back email -> @username -> id short", () => {
+// marcus m62167 (coxwell: both the email and the Telegram name): both when both are known; fallbacks unchanged.
+test("clientLine: both when both are known; falls back email -> @username (+ link) -> id short", () => {
   const id = "0d5672ca-1111-4222-8333-444455556666";
-  assert.equal(lib.sink.clientLine({ email: "a@b.c", telegramUsername: "x", userId: id }), "email: a@b.c");
-  assert.equal(lib.sink.clientLine({ email: null, telegramUsername: "dmuzsrdfx", userId: id }), "client: @dmuzsrdfx (no email)");
+  assert.equal(lib.sink.clientLine({ email: "a@b.c", telegramUsername: "has_both", userId: id }), "email: a@b.c · telegram: @has_both https://t.me/has_both");
+  assert.equal(lib.sink.clientLine({ email: "a@b.c", telegramUsername: "x", userId: id }), "email: a@b.c · telegram: @x", "too short for a t.me link");
+  assert.equal(lib.sink.clientLine({ email: "a@b.c", telegramUsername: null, userId: id, telegramUserId: "42" }), "email: a@b.c · telegram: tg://user?id=42");
+  assert.equal(lib.sink.clientLine({ email: "a@b.c", telegramUsername: null, userId: id }), "email: a@b.c");
+  assert.equal(lib.sink.clientLine({ email: null, telegramUsername: "dmuzsrdfx", userId: id }), "client: @dmuzsrdfx https://t.me/dmuzsrdfx (no email)");
   assert.equal(lib.sink.clientLine({ email: null, telegramUsername: null, userId: id }), "client: user 0d5672ca (no email, no telegram username)");
   assert.equal(lib.sink.clientLine({ email: null, telegramUsername: null, userId: null }), "client: unknown");
 });
@@ -389,7 +393,7 @@ test("server ip changed: a Telegram-only owner is named by @username, not `email
   assert.equal(await lib.srv.updateServerRegistrationById(b.serverId, b.userId, ipEdit("203.0.113.9"), null, (l) => `https://x/${l}`), true);
   const [alert] = sinkSince(mark).filter((t) => t.startsWith("🔁 server ip changed"));
   assert.ok(alert, "the alert went out");
-  assert.match(alert, /^client: @tgonly_owner \(no email\)$/m);
+  assert.match(alert, /^client: @tgonly_owner https:\/\/t\.me\/tgonly_owner \(no email\)$/m);
   assert.doesNotMatch(alert, /email: -/);
 });
 
@@ -397,12 +401,12 @@ test("server ip changed: no email and no username falls back to the users.id sho
   const bare = await makeBuyer({ email: null });
   let mark = telegramSends.length;
   await lib.srv.updateServerRegistrationById(bare.serverId, bare.userId, ipEdit("203.0.113.10"), null, () => "u");
-  assert.match(sinkSince(mark).join("\n"), new RegExp(`^client: user ${bare.userId.slice(0, 8)} \\(no email, no telegram username\\)$`, "m"));
+  assert.match(sinkSince(mark).join("\n"), new RegExp(`^client: user ${bare.userId.slice(0, 8)} \\(no email, no telegram username\\) · telegram: tg://user\\?id=\\d+$`, "m"));
 
   const withEmail = await makeBuyer({ telegramUsername: "has_both" });
   mark = telegramSends.length;
   await lib.srv.updateServerRegistrationById(withEmail.serverId, withEmail.userId, ipEdit("203.0.113.11"), null, () => "u");
-  assert.match(sinkSince(mark).join("\n"), /^email: buyer\d+@example\.invalid$/m);
+  assert.match(sinkSince(mark).join("\n"), /^email: buyer\d+@example\.invalid · telegram: @has_both https:\/\/t\.me\/has_both$/m);
 });
 
 test("trial activated names a Telegram-only client by @username", async () => {
@@ -411,7 +415,7 @@ test("trial activated names a Telegram-only client by @username", async () => {
   await adminApprove(await requestOne(b, "ny-normal"));
   const [alert] = sinkSince(mark).filter((t) => t.startsWith("✅ trial activated"));
   assert.ok(alert, "the alert went out");
-  assert.match(alert, /^client: @tgonly_trial \(no email\)$/m);
+  assert.match(alert, /^client: @tgonly_trial https:\/\/t\.me\/tgonly_trial \(no email\)$/m);
 });
 
 test("trial converted reads the joined row: the client's email and licence tail, not `email: -` / `…nown`", async () => {
@@ -421,7 +425,7 @@ test("trial converted reads the joined row: the client's email and licence tail,
   await lib.trials.markFeedTierTrialConverted(b.userId, "ny-fast");
   const [alert] = sinkSince(mark).filter((t) => t.startsWith("💳 trial converted"));
   assert.ok(alert, "the alert went out");
-  assert.match(alert, /^email: buyer\d+@example\.invalid$/m);
+  assert.match(alert, /^email: buyer\d+@example\.invalid · telegram: tg:\/\/user\?id=\d+$/m);
   const key = (await sql(`select license_key from licenses where id = $1`, [b.licenseId])).rows[0].license_key as string;
   assert.match(alert, new RegExp(`^license: …${key.slice(-4)}$`, "m"));
   assert.match(alert, /^package: NY Base\ntier: NY Alpha$/m, "item 5: the package ahead of the tier");

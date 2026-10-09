@@ -54,12 +54,10 @@ async function notifyExpiringSoon(): Promise<number> {
       if ((claim.rowCount ?? 0) === 0) continue; // already notified today
 
       await notifyLicenseExpiringSoon({
-        email: row.email,
+        client: { email: row.email, telegramUsername: row.telegram_username, telegramUserId: row.telegram_user_id, userId: row.user_id },
         licenseKey: row.license_key,
         tier: row.tier,
         expiresAt: row.expires_at,
-        telegramUsername: row.telegram_username,
-        telegramUserId: row.telegram_user_id,
       });
       notified++;
     } catch (err) {
@@ -113,12 +111,10 @@ export async function GET(req: NextRequest) {
         [row.license_id]
       );
       notifyLicenseExpired({
-        email: row.email,
+        client: { email: row.email, telegramUsername: row.telegram_username, telegramUserId: row.telegram_user_id, userId: row.user_id },
         licenseKey: row.license_key,
         tier: row.tier,
         expiredAt: new Date(),
-        telegramUsername: row.telegram_username,
-        telegramUserId: row.telegram_user_id,
       }).catch(() => {});
       processed++;
     } catch (err) {

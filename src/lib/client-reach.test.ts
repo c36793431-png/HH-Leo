@@ -172,7 +172,7 @@ test("part 2: trial granted to a client we can't reach -> DB row + approvals ale
   const alert = sends.find((s) => s.kind === "telemetry" && /can't be reached/.test(s.text));
   assert.ok(alert, `approvals alert, got ${JSON.stringify(sends)}`);
   assert.match(alert!.text, /Approved but client can't be reached/);
-  assert.match(alert!.text, /client: @dmuzsrdfx \(no email\)/, "named by Leo's clientLine (marcus m62162)");
+  assert.match(alert!.text, /client: @dmuzsrdfx https:\/\/t\.me\/dmuzsrdfx \(no email\)/, "named by Leo's clientLine (marcus m62162)");
   const u = (await sql(`select tg_last_dm_ok, tg_last_dm_error from users where id = $1`, [c.id])).rows[0];
   assert.equal(u.tg_last_dm_ok, false);
   assert.match(u.tg_last_dm_error, /403/);
@@ -196,7 +196,7 @@ test("part 8: the unreachable alert names a Telegram-only client by @username, n
   await reach.reportUnreachable(c.id, "London trial, 30 days", [{ channel: "telegram", ok: false, error: "403 Forbidden" }]);
   const t = sends.find((x) => x.kind === "telemetry" && /can't be reached/.test(x.text))!;
   assert.ok(t);
-  assert.match(t.text, /client: @tg_only_one \(no email\)/);
+  assert.match(t.text, /client: @tg_only_one https:\/\/t\.me\/tg_only_one \(no email\)/);
   assert.doesNotMatch(t.text, /email: -/);
 });
 
@@ -270,4 +270,45 @@ test("part 6: welcome to an unreachable user does not alert the admin (the dashb
   await reach.sendWelcome(c.id);
   assert.equal(sends.filter((s) => /can't be reached/.test(s.text)).length, 0);
   assert.equal((await sql(`select count(*)::int as n from client_unreachable_alerts where user_id = $1`, [c.id])).rows[0].n, 0);
+});
+
+// ---------- marcus m62167: the 5 user alerts are named by clientLine, no less than before ----------
+
+test("m62167: a Telegram-only client is named by @username (+ link) on the expiry, basket and linked alerts", async () => {
+  const sink = await import("./telemetry-sink");
+  const client = { email: null, telegramUsername: "tg_alerts", userId: "0d5672ca-1111-4222-8333-444455556666", telegramUserId: "77" };
+  await sink.notifyLicenseExpiringSoon({ client, licenseKey: "HHFT-AAAA-BBBB-CCCC", tier: "trial", expiresAt: new Date() });
+  await sink.notifyLicenseExpired({ client, licenseKey: "HHFT-AAAA-BBBB-CCCC", tier: "trial", expiredAt: new Date() });
+  await sink.notifyTelegramLinked({ client, linkedAt: new Date() });
+  await sink.notifyBasketRequestSubmitted({ reference: "REQ-1", client, lines: [], hasTrial: false, adminUrl: "https://x" });
+  const texts = sends.filter((x) => x.kind === "telemetry").map((x) => x.text);
+  assert.equal(texts.length, 4);
+  for (const t of texts) {
+    assert.match(t, /client: @tg_alerts https:\/\/t\.me\/tg_alerts \(no email\)/, t);
+    assert.doesNotMatch(t, /email: -/);
+  }
+});
+
+test("m62167: an account with no Telegram at all still says 'telegram: none on file' on the expiry and basket alerts", async () => {
+  const sink = await import("./telemetry-sink");
+  const client = { email: "e@example.invalid", telegramUsername: null, userId: null, telegramUserId: null };
+  await sink.notifyLicenseExpired({ client, licenseKey: "HHFT-AAAA-BBBB-CCCC", tier: "trial", expiredAt: new Date() });
+  await sink.notifyBasketRequestSubmitted({ reference: "REQ-2", client, lines: [], hasTrial: false, adminUrl: "https://x" });
+  for (const t of sends.filter((x) => x.kind === "telemetry").map((x) => x.text)) assert.match(t, /\nemail: e@example\.invalid\ntelegram: none on file\n/);
+});
+
+test("m62167: a free signup keeps a typed handle that differs from the account's @username", async () => {
+  const sink = await import("./telemetry-sink");
+  await sink.notifyFreeSignup({ client: { email: "f@example.invalid", telegramUsername: "real_name", userId: null }, telegramHandle: "@typed_other", joinedAt: new Date() });
+  await sink.notifyFreeSignup({ client: { email: "g@example.invalid", telegramUsername: "same_one", userId: null }, telegramHandle: "same_one", joinedAt: new Date() });
+  const [a, b] = sends.filter((x) => x.kind === "telemetry").map((x) => x.text);
+  assert.match(a, /email: f@example\.invalid · telegram: @real_name https:\/\/t\.me\/real_name/);
+  assert.match(a, /\ntyped telegram: @typed_other\n/);
+  assert.doesNotMatch(b, /typed telegram/);
+});
+
+test("part 6: a Telegram signup's welcome skips the greeting (it already got the signup DM)", async () => {
+  const reach = await import("./client-reach");
+  assert.match(reach.welcomeMessage().message, /^Welcome to Horizon\./);
+  assert.match(reach.welcomeMessage({ greet: false }).message, /^One question so we can help you/);
 });

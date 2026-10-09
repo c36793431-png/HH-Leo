@@ -63,8 +63,9 @@ const COXWELL_APPROVALS_THREAD_ID = 28865;
 
 /** Best-effort, non-blocking: a failed notify must never block signup. */
 export async function notifyFreeSignup(opts: {
-  email: string | null;
+  client: ClientRef;
   name?: string | null;
+  /** The handle typed at signup; printed as its own line only when it differs from the account's @username. */
   telegramHandle?: string | null;
   joinedAt: Date;
   source?: string;
@@ -75,8 +76,10 @@ export async function notifyFreeSignup(opts: {
   const text =
     `🌱 new free user\n` +
     (opts.name ? `name: ${opts.name}\n` : "") +
-    (opts.telegramHandle ? `telegram: @${opts.telegramHandle}\n` : "") +
-    `email: ${opts.email ?? "-"}\n` +
+    `${clientLine(opts.client)}\n` +
+    (opts.telegramHandle && opts.telegramHandle.replace(/^@/, "") !== (opts.client.telegramUsername ?? "").replace(/^@/, "")
+      ? `typed telegram: @${opts.telegramHandle.replace(/^@/, "")}\n`
+      : "") +
     `joined: ${opts.joinedAt.toISOString()}` +
     (opts.source ? `\nsource: ${opts.source}` : "");
 
@@ -199,15 +202,32 @@ export interface ClientRef {
   email: string | null;
   telegramUsername: string | null;
   userId: string | null;
+  /** The Telegram account id, for a tg:// link when there is no @username (the old telegramLine's fallback). */
+  telegramUserId?: string | null;
 }
 
 /** The alert's who-line: the email, else the Telegram @username, else the users.id short (its
  * first 8, as in an /admin/users URL). Never a bare `-` while anything is known. */
+/** "@user https://t.me/user" (one tap to DM; the link only for a valid username), else "tg://user?id=N". */
+function telegramRef(c: ClientRef): string | null {
+  if (c.telegramUsername) {
+    const u = c.telegramUsername.replace(/^@/, "");
+    return /^[A-Za-z0-9_]{3,32}$/.test(u) ? `@${u} https://t.me/${u}` : `@${u}`;
+  }
+  return c.telegramUserId ? `tg://user?id=${c.telegramUserId}` : null;
+}
+
+/** The ONE line every admin alert names its client with (marcus m62102 item 6; both contacts m62167, coxwell asked
+ * for the email AND the Telegram name): "email: x · telegram: @u https://t.me/u" when both are known; otherwise the
+ * fallbacks email -> @username (+ link) -> users.id short, with a tg:// link added when that is all we hold. */
 export function clientLine(c: ClientRef): string {
+  const tg = telegramRef(c);
+  if (c.email && tg) return `email: ${c.email} · telegram: ${tg}`;
   if (c.email) return `email: ${c.email}`;
-  if (c.telegramUsername) return `client: @${c.telegramUsername} (no email)`;
-  if (c.userId) return `client: user ${c.userId.slice(0, 8)} (no email, no telegram username)`;
-  return `client: unknown`;
+  if (c.telegramUsername) return `client: ${tg} (no email)`;
+  const tgId = tg ? ` · telegram: ${tg}` : "";
+  if (c.userId) return `client: user ${c.userId.slice(0, 8)} (no email, no telegram username)${tgId}`;
+  return `client: unknown${tgId}`;
 }
 
 /** `package: NY Base` ahead of the tier line, when every tier named belongs to the same package
@@ -221,14 +241,6 @@ function packageLine(tierKeys: string[]): string {
 
 function tierLine(tierNames: string[]): string {
   return tierNames.length === 1 ? `tier: ${tierNames[0]}` : `tiers: ${tierNames.join(", ")}`;
-}
-
-/** Bare `@handle` auto-links in Telegram plain text; a `tg://user?id=` deep link covers
- * users with no username set. Never emits a bare `@` or `@None`. */
-function telegramLine(telegramUsername: string | null, telegramUserId: string | null): string {
-  if (telegramUsername) return `telegram: @${telegramUsername}`;
-  if (telegramUserId) return `telegram: tg://user?id=${telegramUserId}`;
-  return `telegram: none on file`;
 }
 
 export async function notifyTrialIssued(opts: {
@@ -285,17 +297,15 @@ export async function notifyLicenseUpgraded(opts: {
 }
 
 export async function notifyLicenseExpiringSoon(opts: {
-  email: string | null;
+  client: ClientRef;
   licenseKey: string;
   tier: string;
   expiresAt: Date;
-  telegramUsername?: string | null;
-  telegramUserId?: string | null;
 }): Promise<void> {
   await sendSinkMessage(
     `⏰ license expiring soon\n` +
-      `email: ${opts.email ?? "-"}\n` +
-      `${telegramLine(opts.telegramUsername ?? null, opts.telegramUserId ?? null)}\n` +
+      `${clientLine(opts.client)}\n` +
+      `${opts.client.telegramUsername || opts.client.telegramUserId ? "" : "telegram: none on file\n"}` +
       `tier: ${opts.tier}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `expires: ${opts.expiresAt.toISOString()}`
@@ -303,17 +313,15 @@ export async function notifyLicenseExpiringSoon(opts: {
 }
 
 export async function notifyLicenseExpired(opts: {
-  email: string | null;
+  client: ClientRef;
   licenseKey: string;
   tier: string;
   expiredAt: Date;
-  telegramUsername?: string | null;
-  telegramUserId?: string | null;
 }): Promise<void> {
   await sendSinkMessage(
     `⏱️ license expired\n` +
-      `email: ${opts.email ?? "-"}\n` +
-      `${telegramLine(opts.telegramUsername ?? null, opts.telegramUserId ?? null)}\n` +
+      `${clientLine(opts.client)}\n` +
+      `${opts.client.telegramUsername || opts.client.telegramUserId ? "" : "telegram: none on file\n"}` +
       `tier: ${opts.tier}\n` +
       `license: …${keyTail(opts.licenseKey)}\n` +
       `expired: ${opts.expiredAt.toISOString()}`
@@ -335,15 +343,10 @@ export async function notifyLicenseRevoked(opts: {
   );
 }
 
-export async function notifyTelegramLinked(opts: {
-  email: string | null;
-  telegramUsername: string | null;
-  linkedAt: Date;
-}): Promise<void> {
+export async function notifyTelegramLinked(opts: { client: ClientRef; linkedAt: Date }): Promise<void> {
   await sendSinkMessage(
     `🔗 telegram linked\n` +
-      `email: ${opts.email ?? "-"}\n` +
-      `telegram: ${opts.telegramUsername ? "@" + opts.telegramUsername : "-"}\n` +
+      `${clientLine(opts.client)}\n` +
       `linked: ${opts.linkedAt.toISOString()}`
   );
 }
@@ -466,9 +469,7 @@ export async function notifyStrategySubmissionSubmitted(opts: {
  * by hand and marks it handled on the admin page. */
 export async function notifyBasketRequestSubmitted(opts: {
   reference: string;
-  email: string | null;
-  telegramUsername: string | null;
-  telegramUserId: string | null;
+  client: ClientRef;
   lines: { kind: string; name: string; servers?: number; note?: string }[];
   hasTrial: boolean;
   adminUrl: string;
@@ -483,8 +484,8 @@ export async function notifyBasketRequestSubmitted(opts: {
     .join("\n");
   await sendApprovalsTopicMessage(
     `🧺 new basket request ${opts.reference}\n` +
-      `email: ${opts.email ?? "-"}\n` +
-      `${telegramLine(opts.telegramUsername, opts.telegramUserId)}\n` +
+      `${clientLine(opts.client)}\n` +
+      `${opts.client.telegramUsername || opts.client.telegramUserId ? "" : "telegram: none on file\n"}` +
       `lines (${opts.lines.length}):\n` +
       `${lineText}\n` +
       `trial: ${opts.hasTrial ? "30-day trial requested (first on this account)" : "none"}\n` +
@@ -574,14 +575,16 @@ export async function notifyPartnerApplicationSubmitted(opts: {
   name: string;
   email: string;
   telegram: string | null;
+  /** Set when the applicant's email matched a users row: the alert then names them by clientLine. */
+  client?: ClientRef | null;
   notes: string | null;
   adminUrl: string;
 }): Promise<void> {
   const text =
     `🤝 new partner application\n` +
     `name: ${opts.name}\n` +
-    `email: ${opts.email}\n` +
-    `telegram: ${opts.telegram ?? "-"}\n` +
+    (opts.client ? `${clientLine(opts.client)}\n` + (opts.telegram ? `form telegram: ${opts.telegram}\n` : "")
+      : `email: ${opts.email}\n` + `telegram: ${opts.telegram ?? "-"}\n`) +
     (opts.notes ? `notes: ${opts.notes}\n` : "") +
     `${opts.adminUrl}`;
 

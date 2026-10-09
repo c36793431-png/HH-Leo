@@ -181,12 +181,14 @@ export const ONBOARDING_GOALS = {
 } as const;
 export type OnboardingGoal = keyof typeof ONBOARDING_GOALS;
 
-export function welcomeMessage(): { subject: string; message: string } {
+/** greet: false for a Telegram signup, which already got auth.ts sendWelcomeDm ("Welcome to Horizon HFT, <name>!" +
+ * community links); then this is only the one question, so nobody is welcomed twice. */
+export function welcomeMessage(opts: { greet?: boolean } = {}): { subject: string; message: string } {
+  const greet = opts.greet !== false;
   return {
-    subject: "Welcome to Horizon",
+    subject: greet ? "Welcome to Horizon" : "One question from Horizon",
     message: [
-      "Welcome to Horizon. We're glad you're here.",
-      "",
+      ...(greet ? ["Welcome to Horizon. We're glad you're here.", ""] : []),
       "One question so we can help you: What are you looking to do with Horizon? (prop challenge / own account / just exploring)",
       `Answer with one tap on your dashboard: ${PORTAL}/dashboard`,
       "",
@@ -197,13 +199,13 @@ export function welcomeMessage(): { subject: string; message: string } {
 
 /** One welcome on first login, through the working channel. Unreachable is fine here: the dashboard shows the
  * same question as a card until it's answered, so no admin alert. Never throws. */
-export async function sendWelcome(userId: string, opts: { newWithinHours?: number } = {}): Promise<NotifyOutcome> {
+export async function sendWelcome(userId: string, opts: { newWithinHours?: number; greet?: boolean } = {}): Promise<NotifyOutcome> {
   try {
     if (opts.newWithinHours) {
       const r = await pool.query(`select created_at > now() - make_interval(hours => $2) as fresh from users where id = $1`, [userId, opts.newWithinHours]);
       if (!r.rows[0]?.fresh) return { channel: "none", ok: false, error: "not a new account: no welcome" };
     }
-    const { subject, message } = welcomeMessage();
+    const { subject, message } = welcomeMessage({ greet: opts.greet });
     return await notifyClient(userId, subject, message);
   } catch (err) {
     console.error("client-reach: welcome failed", userId, err instanceof Error ? err.message : err);

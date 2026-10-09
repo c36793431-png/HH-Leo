@@ -4,6 +4,7 @@ import { sendHftAlertMessage } from "./telegram-hft-alert-bot";
 import { sendEmail } from "./email";
 import { createPartner, getPartnerByUserId } from "./partners";
 import { resolveAdminUserId } from "./admin";
+import { clientRefForUser } from "./client-ref";
 
 export const PARTNER_APPLICATION_STATUSES = ["pending", "approved", "declined"] as const;
 export type PartnerApplicationStatus = (typeof PARTNER_APPLICATION_STATUSES)[number];
@@ -91,6 +92,8 @@ export async function createPartnerApplication(args: CreateArgs): Promise<Partne
     name: row.name,
     email: row.email,
     telegram: row.telegram,
+    // A matched account is named by clientLine (marcus m62167); an applicant with no account stays as before.
+    client: userId ? await clientRefForUser(userId, row.email) : null,
     notes: row.notes,
     adminUrl: args.adminUrl,
   }).catch(() => {});
