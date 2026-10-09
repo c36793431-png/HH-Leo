@@ -163,15 +163,21 @@ export function isTrialEligibleTier(tierKey: string): boolean {
 }
 
 /** Tiers the ADMIN QUEUE may grant as a trial: the list above plus the CME tier (coxwell via
- * marcus, m57688). The admin decides case by case. Putting CME in the list above instead would
- * also hand every buyer a self-serve trial of Pip Dealer's paid feed, and let the provider panel
- * and the Telegram card turn a CME approve into a trial with no length chosen. Nobody has made
- * that product decision.
+ * marcus, m57688) and the three LD Base tiers (coxwell, topic #458, 2026-10-07; marcus m62102).
+ * The admin decides case by case. Putting CME or LD Base in the list above instead would also
+ * hand every buyer a self-serve trial of a paid feed, and let the provider panel and the Telegram
+ * card turn an approve into a trial with no length chosen. Nobody has made that product decision.
  * Also the mirror's list: trialRowWouldBeWritten and insertFeedTierTrial read it, because the
  * mirror has to record every tier any path can trial. feed_tier_trials_tier_key_check has to
- * allow each key here (0092 added cme-ctrader-fix); a key it refuses fails the mirror INSERT
- * after the grant has committed. */
-export const ADMIN_TRIAL_ELIGIBLE_TIER_KEYS: readonly string[] = [...TRIAL_ELIGIBLE_TIER_KEYS, "cme-ctrader-fix"];
+ * allow each key here (0092 added cme-ctrader-fix, 0096 the LD Base three); a key it refuses
+ * fails the mirror INSERT after the grant has committed. */
+export const ADMIN_TRIAL_ELIGIBLE_TIER_KEYS: readonly string[] = [
+  ...TRIAL_ELIGIBLE_TIER_KEYS,
+  "cme-ctrader-fix",
+  "ld-beta-56",
+  "ld-gamma-19",
+  "ld-delta-18",
+];
 
 export function isAdminTrialEligibleTier(tierKey: string): boolean {
   return ADMIN_TRIAL_ELIGIBLE_TIER_KEYS.includes(tierKey);

@@ -1,6 +1,7 @@
 /* Run: npx tsx --test src/lib/access-requests-admin-trial.test.ts
  *
- * The admin queue's trial on the CME tier, and its length (marcus m57688 + m57759/m57767).
+ * The admin queue's trial on the CME tier, and its length (marcus m57688 + m57759/m57767); the
+ * same on the three LD Base tiers (marcus m62102, migration 0096).
  * Real Postgres, no prod: an in-memory PGlite carries the REAL migration chain from
  * db/migrations, and the shipped lib functions run against it through db.ts's global._pgPool
  * seam. PGlite is a pinned devDependency, so `npm install` is all a clean clone needs. The pin is
@@ -285,8 +286,88 @@ test("a paid approval on CME is untouched: no trial row, ends on the given date"
   assert.equal(s.trials.length, 0);
 });
 
-// Last: it runs DDL against the shared database.
-test("0092_rollback refuses while a CME trial row exists, and leaves the 5-key check in place", async () => {
+// LD Base (coxwell topic #458, marcus m62102): admin-queue trial only, same pattern as CME.
+// The 0081 seed put SEED_PROVIDER on every tier, so the three LD rows carry a provider.
+const LD_BASE = ["ld-beta-56", "ld-gamma-19", "ld-delta-18"];
+
+test("admin queue: a trial on each LD Base tier is granted AND recorded (0096 admits all three keys), on the provider's Trials tab", async () => {
+  const buyer = await makeBuyer();
+  const t0 = Date.now();
+  const trialIds: string[] = [];
+  for (const tierKey of LD_BASE) {
+    const id = await requestOne(buyer, tierKey);
+    await adminApprove(id, 30);
+
+    const s = await stateOf(id, buyer.userId, tierKey);
+    assert.equal(s.envelope.status, "approved", tierKey);
+    assert.equal(s.envelope.decision, "trial", tierKey);
+    assert.equal(s.grants.length, 1, tierKey);
+    assertAbout(s.grants[0].ends_at, t0 + 30 * DAY, `${tierKey} grant ends_at`);
+    assert.equal(s.trials.length, 1, `${tierKey}: the feed_tier_trials mirror row must exist`);
+    assert.equal(s.trials[0].region, "london");
+    assert.equal(s.trials[0].trial_status, "active");
+    assert.equal(new Date(s.trials[0].trial_ends_at).getTime(), new Date(s.envelope.ends_at).getTime(), `${tierKey}: mirror ends when the grant ends`);
+    trialIds.push(s.trials[0].id);
+  }
+  const providerTrials = await lib.providers.listActiveTrialsForProvider(SEED_PROVIDER);
+  LD_BASE.forEach((tierKey, i) => {
+    assert.ok(providerTrials.some((t) => t.id === trialIds[i] && t.tierKey === tierKey), `${tierKey} on the provider's Trials tab`);
+  });
+});
+
+test("self-serve trial on each LD Base tier stays refused, and writes no envelope", async () => {
+  const buyer = await makeBuyer();
+  for (const tierKey of LD_BASE) {
+    await assert.rejects(
+      lib.ftr.startSelfServeFeedTierTrial({ userId: buyer.userId, licenseId: buyer.licenseId, region: "london", tierKey, adminUrl: "u" }),
+      lib.trials.TrialNotEligibleError,
+      tierKey
+    );
+  }
+  assert.equal((await sql(`select count(*)::int as n from access_requests where user_id = $1`, [buyer.userId])).rows[0].n, 0);
+  assert.equal((await sql(`select count(*)::int as n from feed_tier_trials where user_id = $1`, [buyer.userId])).rows[0].n, 0);
+});
+
+test("Telegram card and provider panel (no decision input) on LD Base still refuse to the queue: nothing granted", async () => {
+  const buyer = await makeBuyer();
+  const id = await requestOne(buyer, "ld-gamma-19");
+  await assert.rejects(lib.ftr.approveFeedTierRequest(id, ADMIN, "u"), lib.ar.PaidApprovalNeedsQueueError);
+  await assert.rejects(lib.providers.providerApproveFeedTierRequest(SEED_PROVIDER, id, "u"), lib.ar.PaidApprovalNeedsQueueError);
+  const s = await stateOf(id, buyer.userId, "ld-gamma-19");
+  assert.equal(s.envelope.status, "pending");
+  assert.equal(s.grants.length, 0);
+  assert.equal(s.trials.length, 0);
+});
+
+test("a second admin trial on the same LD Base tier is refused inside the transaction (Rule #2): no second grant", async () => {
+  const buyer = await makeBuyer();
+  const first = await requestOne(buyer, "ld-delta-18");
+  await adminApprove(first);
+  // A live grant refuses the new request itself (assertNoLiveGrant), so lapse the first one, and
+  // expire its trial row: Rule #2 holds whatever the first trial's status.
+  await sql(`update feed_subscriptions set status = 'lapsed', ends_at = now() - interval '1 day' where access_request_id = $1`, [first]);
+  await sql(`update feed_tier_trials set trial_status = 'expired' where user_id = $1 and tier_key = 'ld-delta-18'`, [buyer.userId]);
+  const second = await requestOne(buyer, "ld-delta-18");
+  await assert.rejects(adminApprove(second), lib.ar.TrialAlreadyGrantedError);
+  const s = await stateOf(second, buyer.userId, "ld-delta-18");
+  assert.equal(s.envelope.status, "pending");
+  assert.equal(s.grants.length, 0);
+  assert.equal(s.trials.length, 1, "still only the first trial's row");
+});
+
+// Last two: they run DDL against the shared database (each fails and rolls back).
+test("0096_rollback refuses while an LD Base trial row exists, and leaves the LD keys in the check", async () => {
+  const checkDef = async () =>
+    (await sql(`select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'feed_tier_trials_tier_key_check'`)).rows[0].def as string;
+  assert.ok((await sql(`select 1 from feed_tier_trials where tier_key = any($1)`, [LD_BASE])).rows.length > 0, "earlier tests left LD Base rows");
+  for (const k of LD_BASE) assert.match(await checkDef(), new RegExp(k));
+  await assert.rejects(db.exec(readFileSync(path.join(MIGRATIONS, "0096_rollback.sql"), "utf8")), /feed_tier_trials_tier_key_check/);
+  await db.exec("rollback");
+  for (const k of LD_BASE) assert.match(await checkDef(), new RegExp(k));
+  assert.equal((await sql(`select count(*)::int as n from schema_migrations where version = '0096'`)).rows[0].n, 1);
+});
+
+test("0092_rollback refuses while a CME trial row exists, and leaves the CME key in the check", async () => {
   const checkDef = async () =>
     (await sql(`select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'feed_tier_trials_tier_key_check'`)).rows[0].def as string;
   assert.ok((await sql(`select 1 from feed_tier_trials where tier_key = 'cme-ctrader-fix'`)).rows.length > 0, "earlier tests left CME rows");
