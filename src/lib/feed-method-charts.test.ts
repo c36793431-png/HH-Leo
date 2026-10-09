@@ -58,19 +58,22 @@ test("the figures the copy quotes come out of the same data", () => {
   assert.equal(fmtPct1(gap("LD Delta 18").stallPct), "9.9%");
 });
 
-test("head to head is the published percentages, public feed names only", () => {
+test("head to head is both published sides of each pair, public feed names only", () => {
+  // Both cells of each pair from the method post's 6x6 table: row first vs column other, then row other
+  // vs column first (horizonhft.com/blog/how-we-compare-our-london-feeds, read 2026-10-09).
   assert.deepEqual(
     HEAD_TO_HEAD.map((h) => [h.first, h.other, h.firstPct, h.otherPct]),
     [
-      ["Black", "London Alpha", 89, undefined],
-      ["Black", "London Ultra", 91, undefined],
-      ["Black", "LD Beta 56", 98, undefined],
-      ["Black", "LD Gamma 19", 98, undefined],
-      ["Black", "LD Delta 18", 98, undefined],
+      ["Black", "London Alpha", 89, 11],
+      ["Black", "London Ultra", 91, 9],
+      ["Black", "LD Beta 56", 98, 2],
+      ["Black", "LD Gamma 19", 98, 2],
+      ["Black", "LD Delta 18", 98, 2],
       ["London Alpha", "London Ultra", 54, 46],
     ],
   );
   for (const h of HEAD_TO_HEAD) {
     assert.ok(FEEDS.includes(h.first) && FEEDS.includes(h.other));
+    assert.equal(h.firstPct + h.otherPct, 100, `${h.first} vs ${h.other}`);
   }
 });

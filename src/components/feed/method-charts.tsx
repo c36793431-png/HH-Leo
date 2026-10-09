@@ -271,12 +271,10 @@ function HeadToHead() {
             </span>
             <span className="fl-ch-track">
               <i className="fl-ch-bar" style={{ width: pct(h.firstPct), background: FEED_COLOUR[h.first] }} />
-              {h.otherPct !== undefined && (
-                <i className="fl-ch-bar fl-ch-bar-2" style={{ width: pct(h.otherPct), background: FEED_COLOUR[h.other] }} />
-              )}
+              <i className="fl-ch-bar fl-ch-bar-2" style={{ width: pct(h.otherPct), background: FEED_COLOUR[h.other] }} />
               <i className="fl-ch-mid" />
             </span>
-            <span className="fl-ch-rv">{h.otherPct !== undefined ? `${h.firstPct}% / ${h.otherPct}%` : `${h.firstPct}%`}</span>
+            <span className="fl-ch-rv">{`${h.firstPct}% / ${h.otherPct}%`}</span>
           </li>
         ))}
       </ul>

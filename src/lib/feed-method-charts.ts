@@ -5,8 +5,8 @@
  * 14 Aug 2026 London run, each ALL-MATCH against that run's window_stats.json. Change the README first,
  * then these; feed-method-charts.test.ts pins a few cells against it. Public feed names only.
  *
- * Head to head is not in the README: it is the percentages the method post publishes, already quoted
- * in the page's copy. Nothing here is derived. */
+ * Head to head is not in the README: it is copied from the method post's 6x6 "Who shows the new price
+ * first" table (horizonhft.com/blog/how-we-compare-our-london-feeds). Nothing here is derived. */
 
 export const FEEDS = ["Black", "London Alpha", "London Ultra", "LD Beta 56", "LD Gamma 19", "LD Delta 18"] as const;
 export type FeedName = (typeof FEEDS)[number];
@@ -135,15 +135,15 @@ export const SPREAD: { feed: FeedName; p50: number; p95: number; p99: number }[]
   { feed: "LD Delta 18", p50: 0.149902, p95: 0.160156, p99: 0.189941 },
 ];
 
-/** Head to head: how often the first feed showed the new price first, as the method post publishes it.
- * Only London Alpha vs London Ultra has both sides published (54 / 46); for the rest only the first
- * feed's share is, so the chart shows that share and nothing for the other side. */
-export const HEAD_TO_HEAD: { first: FeedName; other: FeedName; firstPct: number; otherPct?: number }[] = [
-  { first: "Black", other: "London Alpha", firstPct: 89 },
-  { first: "Black", other: "London Ultra", firstPct: 91 },
-  { first: "Black", other: "LD Beta 56", firstPct: 98 },
-  { first: "Black", other: "LD Gamma 19", firstPct: 98 },
-  { first: "Black", other: "LD Delta 18", firstPct: 98 },
+/** Head to head: how often each feed of the pair showed the new price first, both sides copied from the
+ * method post's 6x6 "Who shows the new price first" table (firstPct = the first feed's row, otherPct =
+ * the other feed's row, same pair). Each published pair sums to 100. */
+export const HEAD_TO_HEAD: { first: FeedName; other: FeedName; firstPct: number; otherPct: number }[] = [
+  { first: "Black", other: "London Alpha", firstPct: 89, otherPct: 11 },
+  { first: "Black", other: "London Ultra", firstPct: 91, otherPct: 9 },
+  { first: "Black", other: "LD Beta 56", firstPct: 98, otherPct: 2 },
+  { first: "Black", other: "LD Gamma 19", firstPct: 98, otherPct: 2 },
+  { first: "Black", other: "LD Delta 18", firstPct: 98, otherPct: 2 },
   { first: "London Alpha", other: "London Ultra", firstPct: 54, otherPct: 46 },
 ];
 
