@@ -4,6 +4,7 @@
 import { pool } from "./db";
 import { notifyUser, type NotifyAttempt, type NotifyOutcome } from "./notify";
 import { notifyClientUnreachable, notifyStaleBasketRequest } from "./telemetry-sink";
+import { clientRefForUser } from "./client-ref";
 
 const PORTAL = "https://portal.horizonhft.com";
 export const SERVERS_URL = `${PORTAL}/account/servers`;
@@ -66,7 +67,8 @@ export async function reportUnreachable(userId: string, what: string, attempts?:
     );
     const id = row.rows[0].id;
     const c = await getClientContact(userId);
-    const sent = await notifyClientUnreachable({ userId, name: c?.name ?? null, what, why: why(attempts) }).catch(() => false);
+    const client = await clientRefForUser(userId);
+    const sent = await notifyClientUnreachable({ client, name: c?.name ?? null, what, why: why(attempts) }).catch(() => false);
     if (sent) await pool.query(`update client_unreachable_alerts set alert_sent_at = now() where id = $1`, [id]);
   } catch (err) {
     console.error("client-reach: reportUnreachable failed", userId, err instanceof Error ? err.message : err);
@@ -157,7 +159,7 @@ export async function runStaleBasketReminders(): Promise<number> {
     const c = await getClientContact(r.user_id);
     const lines = (Array.isArray(r.lines) ? r.lines : []).map((l) => l.label ?? l.name ?? l.kind ?? "item").join(", ").slice(0, 300);
     const ok = await notifyStaleBasketRequest({
-      userId: r.user_id,
+      client: await clientRefForUser(r.user_id),
       name: c?.name ?? null,
       reference: `REQ-${r.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`,
       submittedAt: new Date(r.submitted_at),

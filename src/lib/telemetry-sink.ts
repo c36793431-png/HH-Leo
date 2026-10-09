@@ -124,9 +124,9 @@ export async function notifyPaidActivation(opts: {
 
 /** Shared low-level send — all lifecycle notify* functions below post to the same
  * coxwell sink chat as notifyFreeSignup/notifyPaidActivation. Best-effort, non-blocking. */
-async function sendSinkMessage(text: string): Promise<void> {
+async function sendSinkMessage(text: string): Promise<boolean> {
   const token = process.env.TELEMETRY_BOT_TOKEN;
-  if (!token) return; // Not configured yet — coxwell sets this in Vercel.
+  if (!token) return false; // Not configured yet — coxwell sets this in Vercel.
 
   try {
     const res = await fetch(`${API_ROOT}/bot${token}/sendMessage`, {
@@ -135,16 +135,18 @@ async function sendSinkMessage(text: string): Promise<void> {
       body: JSON.stringify({ chat_id: SIGNUP_NOTIFY_CHAT_ID, text }),
     });
     if (!res.ok) console.error("telemetry-sink: sink send failed", res.status);
+    return res.ok;
   } catch (err) {
     console.error("telemetry-sink: sink send failed", err);
+    return false;
   }
 }
 
 /** Posts to the Coxwell approvals topic; falls back to the flat sink chat on failure so
  * the notification is never silently dropped. Best-effort, non-blocking. */
-async function sendApprovalsTopicMessage(text: string): Promise<void> {
+async function sendApprovalsTopicMessage(text: string): Promise<boolean> {
   const token = process.env.TELEMETRY_BOT_TOKEN;
-  if (!token) return; // Not configured yet — coxwell sets this in Vercel.
+  if (!token) return false; // Not configured yet — coxwell sets this in Vercel.
 
   try {
     const res = await fetch(`${API_ROOT}/bot${token}/sendMessage`, {
@@ -158,11 +160,12 @@ async function sendApprovalsTopicMessage(text: string): Promise<void> {
     });
     if (!res.ok) {
       console.error("telemetry-sink: approvals topic send failed", res.status);
-      await sendSinkMessage(text);
+      return await sendSinkMessage(text);
     }
+    return true;
   } catch (err) {
     console.error("telemetry-sink: approvals topic send failed", err);
-    await sendSinkMessage(text);
+    return await sendSinkMessage(text);
   }
 }
 
@@ -758,4 +761,36 @@ function fmt(v: unknown): string {
   if (v === undefined || v === null) return "-";
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
+}
+
+/** A grant or handled request that reached nobody (marcus m61849 part 2): Telegram failed or absent, email failed
+ * or absent. To the approvals topic, naming the client by clientLine. Returns whether it was sent (client-reach
+ * stores it as alert_sent_at; the row itself is written before this). */
+export async function notifyClientUnreachable(opts: { client: ClientRef; what: string; why: string; name?: string | null }): Promise<boolean> {
+  return sendApprovalsTopicMessage(
+    `⚠️ Approved but client can't be reached\n` +
+      `${clientLine(opts.client)}\n` +
+      (opts.name ? `name: ${opts.name}\n` : "") +
+      `granted: ${opts.what}\n` +
+      `why: ${opts.why}`
+  );
+}
+
+/** One reminder for a basket request still 'new' after 24h (marcus m61849 part 5). */
+export async function notifyStaleBasketRequest(opts: {
+  client: ClientRef;
+  reference: string;
+  submittedAt: Date;
+  lines: string;
+  name?: string | null;
+}): Promise<boolean> {
+  const hours = Math.floor((Date.now() - opts.submittedAt.getTime()) / 3_600_000);
+  return sendApprovalsTopicMessage(
+    `⏰ basket request still new after ${hours}h\n` +
+      `ref: ${opts.reference}\n` +
+      `${clientLine(opts.client)}\n` +
+      (opts.name ? `name: ${opts.name}\n` : "") +
+      `asked for: ${opts.lines}\n` +
+      `submitted: ${opts.submittedAt.toISOString()}`
+  );
 }

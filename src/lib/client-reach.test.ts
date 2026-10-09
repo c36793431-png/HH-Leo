@@ -172,8 +172,7 @@ test("part 2: trial granted to a client we can't reach -> DB row + approvals ale
   const alert = sends.find((s) => s.kind === "telemetry" && /can't be reached/.test(s.text));
   assert.ok(alert, `approvals alert, got ${JSON.stringify(sends)}`);
   assert.match(alert!.text, /Approved but client can't be reached/);
-  assert.match(alert!.text, /@dmuzsrdfx/);
-  assert.match(alert!.text, /t\.me\/dmuzsrdfx/);
+  assert.match(alert!.text, /client: @dmuzsrdfx \(no email\)/, "named by Leo's clientLine (marcus m62162)");
   const u = (await sql(`select tg_last_dm_ok, tg_last_dm_error from users where id = $1`, [c.id])).rows[0];
   assert.equal(u.tg_last_dm_ok, false);
   assert.match(u.tg_last_dm_error, /403/);
@@ -189,24 +188,24 @@ test("part 2: the alert send failing still keeps the row (alert_sent_at null)", 
   assert.equal(rows[0].alert_sent_at, null);
 });
 
-// ---------- Part 8: one contact formatter for every admin alert ----------
+// ---------- Part 8: the client is named by the ONE formatter (Leo's clientLine, marcus m62162) ----------
 
-test("part 8: a Telegram-only client renders @username + t.me link in admin alerts, never 'email: -'", async () => {
-  const sink = await import("./telemetry-sink");
-  await sink.notifyFirstLogin({ email: null, loggedInAt: new Date(), source: "telegram", telegramUsername: "dmuzsrdfx", telegramUserId: "5077" } as any);
-  const t = sends.find((s) => s.kind === "telemetry")!;
+test("part 8: the unreachable alert names a Telegram-only client by @username, never 'email: -'", async () => {
+  const reach = await import("./client-reach");
+  const c = await client({ username: "tg_only_one" });
+  await reach.reportUnreachable(c.id, "London trial, 30 days", [{ channel: "telegram", ok: false, error: "403 Forbidden" }]);
+  const t = sends.find((x) => x.kind === "telemetry" && /can't be reached/.test(x.text))!;
   assert.ok(t);
-  assert.match(t.text, /@dmuzsrdfx/);
-  assert.match(t.text, /https:\/\/t\.me\/dmuzsrdfx/);
+  assert.match(t.text, /client: @tg_only_one \(no email\)/);
   assert.doesNotMatch(t.text, /email: -/);
 });
 
-test("part 8: no contact at all says so plainly", async () => {
-  const { contactLines } = await import("./client-reach");
-  assert.equal(contactLines({ email: null, telegramUsername: null, telegramUserId: null }), "no contact on file");
-  assert.equal(contactLines({ email: "a@b.c", telegramUsername: "x_y", telegramUserId: "1" }), "email: a@b.c\ntelegram: @x_y https://t.me/x_y");
-  assert.equal(contactLines({ email: null, telegramUsername: null, telegramUserId: "42" }), "telegram: no @username (id 42)");
-  assert.equal(contactLines({ email: "a@b.c", telegramUsername: null, telegramUserId: null }), "email: a@b.c\ntelegram: none on file");
+test("part 8: a client with no email and no @username is named by the short user id", async () => {
+  const reach = await import("./client-reach");
+  const c = await client({ username: null });
+  await reach.reportUnreachable(c.id, "London trial, 30 days");
+  const t = sends.find((x) => x.kind === "telemetry" && /can't be reached/.test(x.text))!;
+  assert.ok(t.text.includes(`client: user ${c.id.slice(0, 8)} (no email, no telegram username)`), t.text);
 });
 
 // ---------- Parts 4/7: approval notice + reachability badge ----------

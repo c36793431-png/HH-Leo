@@ -9,6 +9,7 @@ import { sendTelegramMessage } from "./telegram-bot";
 import { getPortalConfig } from "./portal-config";
 import { notifyFreeSignup, notifyFirstLogin } from "./telemetry-sink";
 import { clientRefForUser } from "./client-ref";
+import { sendWelcome } from "./client-reach";
 import { getOrCreateReferralCode } from "./referrals";
 import { attributeReferralFromCookie } from "./referrals-cookie";
 import { pickPrimaryRole } from "./user-roles";
@@ -331,6 +332,8 @@ async function recordLoginWrites(args: { userId: string; email: string | null; p
         // The lookup sits inside the bound too, so a slow users read cannot hold the sign-in.
         clientRefForUser(userId, email).then((client) => notifyFirstLogin({ client, loggedInAt: new Date(), source: provider }))
       );
+      // One welcome, through the working channel, for a new account only (marcus m61849 part 6, m61862).
+      await notifyBounded("sendWelcome", ctx, sendWelcome(userId, { newWithinHours: 24 }).then(() => undefined));
     }
   });
 }
