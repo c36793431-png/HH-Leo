@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { basketReference } from "@/lib/basket-requests";
+import { notifyRequestHandled } from "@/lib/client-reach";
 import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
@@ -49,6 +51,8 @@ export async function setBasketRequestHandledAction(formData: FormData): Promise
   const changed = await setBasketRequestHandled(id, adminId, handled);
   if (changed) {
     await logAdminAction(adminId, handled ? "basket_request_handled" : "basket_request_reopened", changed.userId, { basketRequestId: id });
+    // The client is told the request is finished (or the admin is told we can't reach them): marcus m61849.
+    if (handled) await notifyRequestHandled(changed.userId, basketReference(id));
   }
   revalidatePath("/admin/basket-requests");
 }

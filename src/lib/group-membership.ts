@@ -48,13 +48,14 @@ export type InviteResult =
 export async function sendGroupInvite(target: InviteTarget, tier: GroupTier): Promise<InviteResult> {
   const groupLabel = GROUP_LABEL[tier];
   if (!target.telegramUserId) {
-    await notifyUser(
-      { email: target.email },
+    const out = await notifyUser(
+      { userId: target.userId, email: target.email },
       `Link your Telegram to receive your ${groupLabel} invite`,
       `Your Horizon HFT account is ready, but we need your Telegram account linked ` +
         `to send your ${groupLabel} invite. Log in at horizonhft.com and use ` +
         "\"Link Telegram\" on your dashboard, then contact us for your invite."
     );
+    if (!out.ok) console.error("group-membership: link-Telegram prompt reached nobody", target.userId, out.error);
     return { sent: false, reason: "telegram_not_linked" };
   }
 
@@ -76,12 +77,13 @@ export async function sendGroupInvite(target: InviteTarget, tier: GroupTier): Pr
     [target.userId, target.telegramUserId, chatId, tier, link]
   );
 
-  await notifyUser(
-    { telegramUserId: target.telegramUserId },
+  const dm = await notifyUser(
+    { userId: target.userId, telegramUserId: target.telegramUserId, email: target.email },
     `Your Horizon HFT ${groupLabel} access is active`,
     `🎉 Welcome! Your ${groupLabel} access is active — join here: ${link}. ` +
       `See you inside.\n\nThis link is single-use — it expires once you join.`
   );
+  if (!dm.ok) console.error("group-membership: invite DM reached nobody", target.userId, dm.error);
   return { sent: true };
 }
 

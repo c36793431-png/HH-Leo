@@ -101,12 +101,13 @@ export async function GET(req: NextRequest) {
       if (row.telegram_user_id) {
         await removeFromPaidGroupIfNoOtherActiveLicense(row.user_id, row.telegram_user_id);
       }
-      await notifyUser(
-        { telegramUserId: row.telegram_user_id, email: row.email },
+      const told = await notifyUser(
+        { userId: row.user_id, telegramUserId: row.telegram_user_id, email: row.email },
         "Your Horizon HFT subscription has expired",
         `Your subscription has expired and Paid Users Group access has been removed. ` +
           `Renew any time — contact us on Telegram: ${config.telegramChannelUrl}`
       );
+      if (!told.ok) console.error("expire-licenses: expiry notice reached nobody", row.user_id, told.error);
       await pool.query(
         `update licenses set lifecycle_state = 'expired_processed' where id = $1`,
         [row.license_id]

@@ -88,7 +88,8 @@ export default async function MyRequestsPage() {
           )}
           <p className="fp-note bk-req-foot">
             <b>Sent</b> = we have it. <b>In review</b> = we&apos;re looking at it. <b>Handled</b>{" "}
-            = we&apos;ve replied by email; it does <b>not</b> say every line was granted. <b>Active</b> / <b>Ended</b>{" "}
+            = we&apos;ve finished your request; what was set up for you shows on your dashboard. It does <b>not</b> say
+            every line was granted. <b>Active</b> / <b>Ended</b>{" "}
             = a licence or trial you hold or held.
           </p>
         </div>

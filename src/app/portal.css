@@ -1540,6 +1540,10 @@
 }
 .portal-shell .bk-input-ro { border-color: var(--hz-line-soft); color: var(--hz-ink-2); }
 .portal-shell .bk-sent-grid { display: grid; gap: 16px; max-width: 640px; }
+/* "Turn on notifications" on the Sent step, for an account we can't message yet (marcus m61849 part 3). */
+.portal-shell .bk-notify { margin-top: 14px; padding: 14px 16px; border: 1px solid #f5b54766; border-left: 3px solid #f5b547; border-radius: 10px; background: #f5b5470f; }
+.portal-shell .bk-notify b { color: var(--hz-ink); }
+.portal-shell .bk-notify .btn { margin-top: 10px; display: inline-flex; }
 .portal-shell .bk-sent { display: flex; gap: 16px; border-color: var(--hz-card-line); }
 .portal-shell .bk-sent-mark {
   flex: none; width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center;

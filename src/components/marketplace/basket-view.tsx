@@ -14,7 +14,7 @@ import {
   type BasketStep,
   type StoredBasketLine,
 } from "@/lib/basket-store";
-import { submitBasketAction } from "@/app/marketplace/basket/actions";
+import { submitBasketAction, type SubmitReach } from "@/app/marketplace/basket/actions";
 
 /**
  * /marketplace/basket (Iris sheets 3-5 + r2 2-4; rulings marcus m59146). A REQUEST basket, not a
@@ -84,7 +84,7 @@ export function BasketView({
   const [step, setStep] = useState<Step>("basket");
   const [wantTrial, setWantTrial] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState<{ reference: string; lines: BasketLine[]; hasTrial: boolean } | null>(null);
+  const [sent, setSent] = useState<{ reference: string; lines: BasketLine[]; hasTrial: boolean; reach: SubmitReach } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const byId = useMemo(() => new Map(catalogue.map((e) => [`${e.kind}:${e.key}`, e])), [catalogue]);
@@ -124,7 +124,7 @@ export function BasketView({
         setError(res.error);
         return;
       }
-      setSent({ reference: res.reference, lines: res.lines, hasTrial: res.hasTrial });
+      setSent({ reference: res.reference, lines: res.lines, hasTrial: res.hasTrial, reach: res.reach });
       basketClear();
       setStep("sent");
       window.scrollTo({ top: 0 });
@@ -151,7 +151,30 @@ export function BasketView({
             <div className="bk-sent-mark" aria-hidden="true">✓</div>
             <div>
               <h2>Request sent</h2>
-              <p>We&apos;ll confirm by email. Nothing has been charged and nothing has started yet.</p>
+              {/* What happens next, said truthfully for this account (marcus m61849 part 3). */}
+              <p>
+                <b>What happens next:</b> we review your request within 24 hours. You&apos;ll see the answer under My
+                requests and on your dashboard, and we&apos;ll message you by Telegram or email. Nothing has been charged and
+                nothing has started yet.
+              </p>
+              {sent.reach.needsBotStart && (
+                <div className="bk-notify" role="note">
+                  <b>Turn on notifications</b>
+                  <p>
+                    We can&apos;t message you yet: there&apos;s no email on this account and the Horizon bot hasn&apos;t
+                    been started. Open the bot and press Start so we can tell you when your request is approved.
+                  </p>
+                  {sent.reach.botStartUrl ? (
+                    <a className="btn primary" href={sent.reach.botStartUrl} target="_blank" rel="noopener noreferrer">
+                      Open the Horizon bot →
+                    </a>
+                  ) : (
+                    <p>
+                      Or message <a href="https://t.me/Coxwell2" target="_blank" rel="noopener noreferrer">@Coxwell2</a> on Telegram.
+                    </p>
+                  )}
+                </div>
+              )}
               {account?.email && (
                 <div className="bk-chips">
                   <span className="bk-chip">{account.email}</span>

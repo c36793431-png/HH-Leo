@@ -17,7 +17,8 @@ import {
   readFeedTypesFromFormData,
   type LicenseTier,
 } from "@/lib/licenses";
-import { issueNewLicenseForUser, recordKeyDelivery, sendKeyAndRecord, NO_USERS_ROW } from "@/lib/issue-new-license";
+import { grantWhat, issueNewLicenseForUser, recordKeyDelivery, sendKeyAndRecord, NO_USERS_ROW } from "@/lib/issue-new-license";
+import { addApprovedNotice } from "@/lib/client-reach";
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 import { isAdminUser } from "@/lib/admin-users-panel";
@@ -465,13 +466,16 @@ export async function issueAdditionalLicenseAction(
     if (target) {
       const config = await getPortalConfig();
       const showBadge = (await getActiveLicensesForUser(userId)).length > 1;
+      const what = grantWhat({ tier: tier ?? "paid", feedTypes, issuedAt: new Date(), expiresAt });
       await sendKeyAndRecord(
         adminUserId,
         license.id,
         target,
         "Your additional Horizon HFT license is ready",
-        `Your${showBadge ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`
+        `Your${showBadge ? ` HH${license.licenseNumber}` : ""} license key: ${license.licenseKey}\n\nLog in at horizonhft.com to download the installer and view full docs.\nCommunity: ${config.communityGroupUrl}`,
+        what
       );
+      await addApprovedNotice(userId, what);
     } else {
       await recordKeyDelivery(adminUserId, userId, license.id, NO_USERS_ROW);
     }

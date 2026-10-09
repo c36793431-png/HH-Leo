@@ -257,15 +257,20 @@ test("the key send leaves a license_key_delivery row for every outcome (marcus m
     assert.deepEqual(d, { licenseId: r.license.id, channel: "email", ok: false, error: "validation_error The example.invalid domain is not verified." });
     assert.ok(!JSON.stringify(d).includes(r.license.licenseKey), "no key in the record");
   });
-  await t.test("DM refused: Telegram's status and answer", async () => {
+  // Client reach (marcus m61849/m61876): a refused DM now falls back to email, and the row says both.
+  await t.test("DM refused: Telegram's status and answer, then the email fallback", async () => {
     const u = await makeUser();
     portalRefuses = true;
     const r = await quiet(() => issue(u.id)).finally(() => (portalRefuses = false));
     assert.deepEqual(await only(r.license.id), {
       licenseId: r.license.id,
-      channel: "telegram",
-      ok: false,
-      error: '403 {"ok":false,"error_code":403,"description":"Forbidden: bot was blocked by the user"}',
+      channel: "email",
+      ok: true,
+      resendEmailId: "email-id",
+      attempts: [
+        { channel: "telegram", ok: false, error: '403 {"ok":false,"error_code":403,"description":"Forbidden: bot was blocked by the user"}' },
+        { channel: "email", ok: true, resendEmailId: "email-id" },
+      ],
     });
   });
   await t.test("DM throws: recorded, then the throw propagates as before", async () => {
@@ -352,6 +357,7 @@ test("the two key texts, exactly: trial (marcus m60927) and paid (unchanged)", (
       "1. Log in at https://portal.horizonhft.com/login",
       "2. Download the installer: https://portal.horizonhft.com/downloads",
       "3. Register your server: https://portal.horizonhft.com/account/servers - we enable your feeds once your server is registered.",
+      "4. Connect the feeder, step by step: https://horizonhft.com/education/connect-the-feeder",
       "",
       "Community: https://t.me/+community",
     ].join("\n")

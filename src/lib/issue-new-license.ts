@@ -10,6 +10,7 @@ import {
 } from "./licenses";
 import { logAdminAction } from "./admin";
 import { notifyUser, type NotifyOutcome } from "./notify";
+import { addApprovedNotice, reportUnreachable, FEEDER_GUIDE_URL } from "./client-reach";
 import { getPortalConfig } from "./portal-config";
 import { sendPaidGroupInvite } from "./group-membership";
 
@@ -67,6 +68,7 @@ export function trialReadyMessage(opts: {
     `1. Log in at ${PORTAL}/login`,
     `2. Download the installer: ${PORTAL}/downloads`,
     `3. Register your server: ${PORTAL}/account/servers - we enable your feeds once your server is registered.`,
+    `4. Connect the feeder, step by step: ${FEEDER_GUIDE_URL}`,
     "",
     `Community: ${opts.communityGroupUrl}`,
   ].join("\n");
@@ -89,6 +91,15 @@ export function licenseNotification(opts: {
 }
 
 export type KeyDelivery = "telegram" | "email" | "none";
+
+/** "London trial, 30 days" / "paid licence, 90 days": what a grant was, for the client's dashboard banner and
+ * the admin's unreachable alert. Never the key. */
+export function grantWhat(opts: { tier: LicenseTier; feedTypes: FeedType[]; issuedAt: Date; expiresAt: Date }): string {
+  const feeds = opts.feedTypes.map((f) => FEED_TYPE_META[f]?.name.replace(/ Feed$/, "") ?? f).join(" + ");
+  const days = Math.max(1, Math.round((opts.expiresAt.getTime() - opts.issuedAt.getTime()) / DAY_MS));
+  const kind = opts.tier === "trial" ? "trial" : `${opts.tier} licence`;
+  return `${feeds ? `${feeds} ` : ""}${kind}, ${days} days`;
+}
 
 /** The admin_actions row that proves the key send (marcus m60934): one per issue, after the
  * send, never an update of the issue row. details_json = { licenseId, channel, ok, and
@@ -156,7 +167,9 @@ export async function issueNewLicenseForUser(
       expiresAt: new Date(license.expiresAt),
       feedTypes,
     });
-    await sendKeyAndRecord(actorUserId, license.id, target, subject, message);
+    const what = grantWhat({ tier: tier ?? "paid", feedTypes, issuedAt, expiresAt: new Date(license.expiresAt) });
+    await sendKeyAndRecord(actorUserId, license.id, target, subject, message, what);
+    await addApprovedNotice(userId, what);
     if (isPaidTier(tier ?? "paid")) {
       await sendPaidGroupInvite(target);
     }
@@ -172,7 +185,11 @@ export const NO_USERS_ROW: NotifyOutcome = { channel: "none", ok: false, error: 
 /** Writes the license_key_delivery row. Best-effort: a failed record must not turn a delivered
  * key into an error, or skip the invite after it. */
 export async function recordKeyDelivery(actorUserId: string, userId: string, licenseId: string, outcome: NotifyOutcome): Promise<void> {
-  await logAdminAction(actorUserId, LICENSE_KEY_DELIVERY_ACTION, userId, { licenseId, ...outcome }, licenseId).catch((err) =>
+  // The m60934 shape { licenseId, channel, ok, id | error }, plus attempts only when a fallback happened.
+  const { attempts, ...rest } = outcome;
+  delete (rest as { unreachable?: true }).unreachable;
+  const details = { licenseId, ...rest, ...(attempts && attempts.length > 1 ? { attempts } : {}) };
+  await logAdminAction(actorUserId, LICENSE_KEY_DELIVERY_ACTION, userId, details, licenseId).catch((err) =>
     console.error("license_key_delivery record failed", licenseId, err instanceof Error ? err.message : err)
   );
 }
@@ -184,11 +201,15 @@ export async function sendKeyAndRecord(
   licenseId: string,
   target: { userId: string; telegramUserId: string | null; email: string | null },
   subject: string,
-  message: string
+  message: string,
+  /** What was granted, in words; when given, a delivery that reached nobody raises the unreachable alert. */
+  what?: string
 ): Promise<void> {
   let outcome: NotifyOutcome;
   try {
-    outcome = await notifyUser({ telegramUserId: target.telegramUserId, email: target.email }, subject, message);
+    outcome = await notifyUser({ userId: target.userId, telegramUserId: target.telegramUserId, email: target.email }, subject, message, {
+      propagateTelegramThrow: true,
+    });
   } catch (err) {
     const channel = keyDeliveryChannel(target);
     const error = `threw ${err instanceof Error ? err.name : typeof err}`;
@@ -196,4 +217,5 @@ export async function sendKeyAndRecord(
     throw err;
   }
   await recordKeyDelivery(actorUserId, target.userId, licenseId, outcome);
+  if (!outcome.ok && what) await reportUnreachable(target.userId, what, outcome.attempts);
 }

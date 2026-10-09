@@ -150,11 +150,13 @@ export async function resendWelcomeAction(
     const client = (await listClients()).find((c) => c.userId === userId);
     if (client) {
       const config = await getPortalConfig();
-      await notifyUser(
-        { telegramUserId: client.telegramUserId, email: client.email },
+      const out = await notifyUser(
+        { userId: client.userId, telegramUserId: client.telegramUserId, email: client.email },
         "Welcome back to Horizon HFT",
         `Community: ${config.communityGroupUrl}\nLog in at horizonhft.com any time to view your account.`
       );
+      // Never silent (marcus m61849): the admin who pressed Resend sees that it reached nobody, and why.
+      if (!out.ok) throw new Error(`Not delivered: ${out.error}`);
     }
     await logAdminAction(session.user.id, "resend_welcome", userId, null);
     revalidatePath("/admin");
