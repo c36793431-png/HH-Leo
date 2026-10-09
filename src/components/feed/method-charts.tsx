@@ -109,8 +109,8 @@ function UpdatesPerHour() {
   return (
     <figure className="fl-ch">
       <figcaption>
-        <b>Updates per hour</b>
-        <span>Price updates each feed sent, per UTC hour</span>
+        <b>Updates per hour (context, not a score input)</b>
+        <span>Price updates recorded from each feed, per UTC hour</span>
       </figcaption>
       <Legend />
       <div className="fl-ch-plot">
@@ -226,7 +226,7 @@ function Spread() {
   return (
     <figure className="fl-ch">
       <figcaption>
-        <b>Spread shown</b>
+        <b>Spread shown (context, not a score input)</b>
         <span>XAUUSD spread, USD per oz: dot p50, bar to p95, line to p99</span>
       </figcaption>
       <ul className="fl-ch-rows">
@@ -255,13 +255,13 @@ function Spread() {
   );
 }
 
-/** 4) Head to head: the published share of moves where the first feed showed the new price first. */
+/** 4) Head to head: the published share of matched moves each feed of a pair showed first. */
 function HeadToHead() {
   return (
     <figure className="fl-ch">
       <figcaption>
         <b>Head to head</b>
-        <span>Share of price moves where the first feed showed the new price first</span>
+        <span>Share of matched price moves each feed showed first (moves both feeds showed within 100 ms)</span>
       </figcaption>
       <ul className="fl-ch-rows fl-ch-h2h">
         {HEAD_TO_HEAD.map((h) => (
