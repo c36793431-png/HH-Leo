@@ -112,6 +112,8 @@
 .fl-hero h1 em { font-style: normal; color: var(--fl-amber); }
 .fl-sub { color: var(--fl-ink-2); font-size: 16px; line-height: 1.6; max-width: 530px; margin-top: 20px; }
 .fl-sub b { color: var(--fl-ink); font-weight: 600; }
+.fl-sub a { text-decoration: underline; text-decoration-color: var(--fl-amber-line); text-underline-offset: 3px; }
+.fl-sub a:hover { text-decoration-color: var(--fl-amber); }
 
 .fl-pillars { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; max-width: 560px; padding: 0; }
 .fl-pillars .fl-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--fl-ink); border: 1px solid var(--fl-amber-line); background: var(--fl-amber-soft); border-radius: 999px; padding: 7px 13px 7px 11px; white-space: nowrap; }
@@ -179,6 +181,22 @@
 .fl-prop h3 { font-family: var(--fl-disp); font-weight: 700; font-size: 19px; letter-spacing: 0.01em; display: flex; align-items: center; gap: 9px; }
 .fl-prop p { font-size: 13px; color: var(--fl-ink-2); line-height: 1.55; margin-top: 7px; }
 .fl-prop p a { color: var(--fl-cyan); text-decoration: underline; text-underline-offset: 2px; }
+
+/* how we measure */
+.fl-measure { max-width: 1200px; width: 100%; margin: 40px auto 0; padding: 0 40px; }
+.fl-ms-head h2 { font-family: var(--fl-disp); font-weight: 800; font-size: 32px; line-height: 1.07; letter-spacing: 0.01em; }
+.fl-ms-head h2 em { font-style: normal; color: var(--fl-amber); }
+.fl-ms-grid { list-style: none; padding: 0; margin: 20px 0 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.fl-ms-cell { padding: 18px; border: 1px solid var(--fl-line-soft); border-radius: 14px; background: linear-gradient(180deg, rgba(13, 20, 31, 0.5), rgba(8, 12, 19, 0.5)); min-width: 0; }
+.fl-ms-v { font-family: var(--fl-disp); font-weight: 800; font-size: 26px; color: var(--fl-ink); line-height: 1; }
+.fl-ms-v .fl-u { font-size: 14px; color: var(--fl-amber); font-weight: 700; margin-left: 2px; }
+.fl-ms-cell b { display: block; font-size: 13.5px; color: var(--fl-ink); font-weight: 600; margin-top: 10px; }
+.fl-ms-cell p { font-size: 12.5px; color: var(--fl-ink-2); line-height: 1.5; margin-top: 5px; }
+.fl-ms-cell .fl-nw { white-space: nowrap; }
+.fl-ms-note { font-size: 12.5px; color: var(--fl-ink-3); line-height: 1.55; margin-top: 14px; }
+.fl-ms-note b { color: var(--fl-ink-2); font-weight: 600; }
+.fl-ms-cta { display: flex; align-items: center; gap: 13px; margin-top: 18px; flex-wrap: wrap; }
+.fl-ms-cta .fl-btn { padding: 11px 20px; font-size: 14px; }
 
 /* programme band */
 .fl-provband { max-width: 1200px; width: 100%; margin: 40px auto 0; padding: 0 40px; }
@@ -249,6 +267,9 @@
 .fl-ab-note .fl-ic { color: var(--fl-ok); }
 
 /* responsive */
+@media (max-width: 1180px) {
+  .feed-landing-v1 .fl-ms-grid { grid-template-columns: repeat(3, 1fr); }
+}
 @media (max-width: 920px) {
   .feed-landing-v1 .fl-nav { padding: 0 18px; height: 64px; flex: 0 0 64px; gap: 10px; }
   .feed-landing-v1 .fl-nav-links a.fl-subtle, .feed-landing-v1 .fl-trader-link { display: none; }
@@ -263,6 +284,9 @@
   .feed-landing-v1 .fl-tcell:nth-child(2) { border-right: none; }
   .feed-landing-v1 .fl-tcell:nth-child(1), .feed-landing-v1 .fl-tcell:nth-child(2) { border-bottom: 1px solid var(--fl-line-soft); }
   .feed-landing-v1 .fl-props { grid-template-columns: 1fr; padding: 26px 20px 6px; }
+  .feed-landing-v1 .fl-measure { padding: 0 20px; }
+  .feed-landing-v1 .fl-ms-head h2 { font-size: 27px; }
+  .feed-landing-v1 .fl-ms-grid { grid-template-columns: 1fr; gap: 10px; }
   .feed-landing-v1 .fl-provband { padding: 0 20px; }
   .feed-landing-v1 .fl-pb-in { grid-template-columns: 1fr; gap: 26px; padding: 26px 22px; }
   .feed-landing-v1 .fl-pb-right { order: -1; }

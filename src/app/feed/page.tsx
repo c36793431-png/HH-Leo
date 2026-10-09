@@ -38,6 +38,11 @@ import "./feed-landing.css";
  *  - Small "signed in as" chip + sign-out added to the nav for a signed-in non-provider member,
  *    mirroring partner-landing's treatment (mockup itself has no signed-in nav state).
  */
+// Public method write-ups on www (m62795). Every figure in the "How we measure" block below is
+// copied from the method post's text -- change the post first, then these.
+const METHOD_SUMMARY_URL = "https://horizonhft.com/feeds#how-we-measure";
+const METHOD_POST_URL = "https://horizonhft.com/blog/how-we-compare-our-london-feeds";
+
 export default async function FeedLandingPage() {
   const session = await auth();
   const user = session?.user ?? null;
@@ -103,7 +108,11 @@ export default async function FeedLandingPage() {
 
             <p className="fl-sub">
               Horizon distributes market-data feeds to institutional desks and an active retail trading community.
-              Bring your feed onto the network — we <b>measure it transparently</b>, list it in front of subscribers,
+              Bring your feed onto the network — we{" "}
+              <a href={METHOD_POST_URL}>
+                <b>measure it transparently</b>
+              </a>
+              , list it in front of subscribers,
               and <b>share revenue on every one you win.</b> No gatekeeping if the quality is real.
             </p>
 
@@ -336,6 +345,79 @@ export default async function FeedLandingPage() {
               Publish tiers, set trial rules, watch live feed health, and pull statements — all from a provider
               console. You run your offering; the admin only steps in as an exception.
             </p>
+          </div>
+        </section>
+
+        {/* HOW WE MEASURE */}
+        <section className="fl-measure" id="how-we-measure" aria-labelledby="fl-measure-title">
+          <div className="fl-ms-head">
+            <span className="fl-pb-eyebrow">
+              <span className="fl-d" />
+              How we measure
+            </span>
+            <h2 id="fl-measure-title">
+              Six London feeds, <em>side by side.</em>
+            </h2>
+          </div>
+          <ol className="fl-ms-grid">
+            <li className="fl-ms-cell">
+              <div className="fl-ms-v">1 clock</div>
+              <b>One machine, one clock</b>
+              <p>
+                One machine in a London data centre records every feed at the same time, stamping each price update
+                with its own clock — so we can say which feed showed a price first.
+              </p>
+            </li>
+            <li className="fl-ms-cell">
+              <div className="fl-ms-v">
+                100<span className="fl-u"> pts</span>
+              </div>
+              <b>One score</b>
+              <p>
+                <span className="fl-nw">Speed (0–45)</span> + <span className="fl-nw">Consistency (0–35)</span> +{" "}
+                <span className="fl-nw">Stream quality (0–20)</span>.
+              </p>
+            </li>
+            <li className="fl-ms-cell">
+              <div className="fl-ms-v">
+                15<span className="fl-u"> pairs</span>
+              </div>
+              <b>Head to head</b>
+              <p>
+                Black showed the new price first on 89% of moves against London Alpha, 91% against London Ultra and
+                98% against each of the LD feeds. London Alpha against London Ultra was close to even (54% / 46%).
+              </p>
+            </li>
+            <li className="fl-ms-cell">
+              <div className="fl-ms-v">
+                &gt;500<span className="fl-u"> ms</span>
+              </div>
+              <b>Stalls and long gaps</b>
+              <p>
+                A stall is a gap of more than 500 ms between updates; we also score the 99th-percentile gap. London
+                Alpha: 695 ms with 2.0% stalls. LD Gamma 19 and LD Delta 18: 1,484 ms with about 9.9% stalls.
+              </p>
+            </li>
+            <li className="fl-ms-cell">
+              <div className="fl-ms-v">Next run</div>
+              <b>Packet capture</b>
+              <p>
+                From the next run onward, a network packet capture runs next to the recording. None was taken for
+                the 14 Aug run: its figures come from software timestamps only.
+              </p>
+            </li>
+          </ol>
+          <p className="fl-ms-note">
+            <b>One run:</b> Fri 14 Aug 2026, 11:57–21:00 UTC, XAUUSD, one machine in London. Scores are relative to
+            that run. Being first is not the same as being right, and none of this is a latency guarantee.
+          </p>
+          <div className="fl-ms-cta">
+            <a className="fl-btn fl-ghost" href={METHOD_SUMMARY_URL}>
+              How we measure <span className="fl-ar">→</span>
+            </a>
+            <a className="fl-btn fl-ghost" href={METHOD_POST_URL}>
+              Full method <span className="fl-ar">→</span>
+            </a>
           </div>
         </section>
 
