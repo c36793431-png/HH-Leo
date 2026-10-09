@@ -113,9 +113,17 @@ export async function followUpIfUnreached(
   fallback: { subject: string; message: string }
 ): Promise<NotifyOutcome | null> {
   if (delivered) return null;
-  const out = await notifyClient(userId, fallback.subject, fallback.message);
-  if (!out.ok) await reportUnreachable(userId, what, out.attempts);
-  return out;
+  // Never throws (Fable m62198 N1): the decision has committed, and a DB error reading the contact must not fail
+  // the admin action or skip what runs after it (the batch's trial alert). notifyUser and reportUnreachable don't
+  // throw; getClientContact's read is what can.
+  try {
+    const out = await notifyClient(userId, fallback.subject, fallback.message);
+    if (!out.ok) await reportUnreachable(userId, what, out.attempts);
+    return out;
+  } catch (err) {
+    console.error("client-reach: follow-up failed", userId, err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 /** A request granted or handled: banner + message through the working channel; unreachable -> admin alert. */
