@@ -449,7 +449,7 @@ test("21 (C4): enforcement ON + a database error in the compare: 500, no row wri
   assert.equal((await seen(l.id))[0].hits, 1);
 });
 
-test("pre-flip rebind SQL in docs/licence-pc-lock.md: preview lists exactly the drifted keys; apply rebinds them, once", async () => {
+test("pre-flip rebind SQL in docs/licence-pc-lock.md: preview lists exactly the drifted keys; apply rebinds them, once, never undoing a reset", async () => {
   const doc = readFileSync(path.join(process.cwd(), "docs/licence-pc-lock.md"), "utf8");
   const blocks = [...doc.matchAll(/```sql\n([\s\S]*?)```/g)].map((m) => m[1]);
   assert.equal(blocks.length, 2);
@@ -470,8 +470,22 @@ test("pre-flip rebind SQL in docs/licence-pc-lock.md: preview lists exactly the 
   await validate(k4.key, PC_A);
   await validate(k4.key, PC_B);
   await sql(`update license_hwid_seen set last_seen = now() + interval '1 minute' where license_id = $1 and hwid = $2`, [k4.id, PC_B]);
+  // Fable m63564 S1: an admin reset is never undone. k5: bound to PC_A, reset, no validate since -> stays unbound.
+  const k5 = await newLicence();
+  await validate(k5.key, PC_A);
+  assert.deepEqual(await resetForm(k5.id), { ok: true });
+  // k6: PC_A x50, reset, PC_B x1 -> stays PC_B. PC_A's hits predate the move (pinned a minute back, so the order does
+  // not rest on clock resolution).
+  const k6 = await newLicence();
+  for (let i = 0; i < 50; i++) await validate(k6.key, PC_A);
+  await sql(`update license_hwid_seen set first_seen = first_seen - interval '1 minute', last_seen = last_seen - interval '1 minute'
+             where license_id = $1 and hwid = $2`, [k6.id, PC_A]);
+  assert.deepEqual(await resetForm(k6.id), { ok: true });
+  await validate(k6.key, PC_B);
+  assert.equal((await licenceRow(k6.id)).hardware_id, PC_B);
+  assert.deepEqual((await seen(k6.id)).map((x) => [x.hwid, Number(x.hits)]), [[PC_A, 50], [PC_B, 1]]);
 
-  const mine = new Set([k1.id, k2.id, k3.id, k4.id]);
+  const mine = new Set([k1.id, k2.id, k3.id, k4.id, k5.id, k6.id]);
   const previewRows = (await sql(preview)).rows.filter((r) => mine.has(r.license_id));
   assert.deepEqual(
     previewRows.map((r) => [r.license_id, r.bound_now, r.dominant]).sort(),
@@ -483,5 +497,8 @@ test("pre-flip rebind SQL in docs/licence-pc-lock.md: preview lists exactly the 
   assert.equal((await licenceRow(k2.id)).hardware_id, PC_C);
   assert.equal((await licenceRow(k3.id)).hardware_id, null);
   assert.equal((await licenceRow(k4.id)).hardware_id, PC_B);
+  assert.equal((await licenceRow(k5.id)).hardware_id, null);
+  assert.equal((await licenceRow(k5.id)).hardware_bound_at, null);
+  assert.equal((await licenceRow(k6.id)).hardware_id, PC_B);
   assert.deepEqual((await sql(preview)).rows.filter((r) => mine.has(r.license_id)), []);
 });

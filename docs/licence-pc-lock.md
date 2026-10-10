@@ -12,6 +12,9 @@ m63422; Fable's review m63552 (PASS WITH STRIKES); build GO m63554. Migration `0
   never refused (marcus m63419, option i).
 - Expired, revoked and unknown keys: unchanged, nothing written.
 - A database error in the bind/record step answers 500, never `hwid_mismatch`.
+- Two first validates racing on one unbound key: one statement binds and records, so under READ COMMITTED the second
+  waits on the row lock, re-reads the winner's binding and keeps it. That is correct by Postgres semantics but NOT
+  measured: the tests run on one PGlite session (Fable m63564, delta 5).
 - `/v1/hb` never binds: its `hid` stays telemetry in `client_heartbeats`.
 - `/admin/licenses`: **Reset PC** on any bound row (confirm step). Clears `hardware_id` and `hardware_bound_at`,
   keeps `activated_at` and the seen rows, writes `admin_actions` `admin_licenses_reset_hwid` with
@@ -56,14 +59,24 @@ Two alternating clean hwids from one `last_ip` fits an adapter reorder (VPN, Tai
 Dominant = the clean hwid with the most hits; ties go to the most recent `last_seen`, then the hwid itself, so the
 pick is a total order. `HWID-ERROR-` rows are never candidates. Licences with no clean row are left as they are.
 
+Only activity since the current binding counts (Fable m63564 S1): a key must be bound (`hardware_bound_at` set), and
+a row is a candidate only if `last_seen >= hardware_bound_at`. Reset PC keeps the seen rows, so without this the
+apply would undo an admin's reset: a reset key not yet re-validated would go back to the old PC, and so would a key
+re-bound to a new PC that the old PC's older hits outnumber. A reset key that has not validated since is skipped and
+binds itself on its next validate.
+
+For marcus (Fable N1): when two clean PCs genuinely share one key, the apply rebinds it to whichever PC validated
+more, the heavier user. The SQL cannot tell that case from drift; read the preview, and that is where a human spots it.
+
 Preview (read-only):
 
 ```sql
 with ranked as (
   select s.license_id, s.hwid, s.hits,
          row_number() over (partition by s.license_id order by s.hits desc, s.last_seen desc, s.hwid) as rn
-  from license_hwid_seen s
+  from license_hwid_seen s join licenses l on l.id = s.license_id
   where left(s.hwid, 11) <> 'HWID-ERROR-'
+    and l.hardware_bound_at is not null and s.last_seen >= l.hardware_bound_at
 )
 select l.id as license_id, l.hardware_id as bound_now, r.hwid as dominant, r.hits
 from ranked r join licenses l on l.id = r.license_id
@@ -78,8 +91,9 @@ begin;
 with ranked as (
   select s.license_id, s.hwid,
          row_number() over (partition by s.license_id order by s.hits desc, s.last_seen desc, s.hwid) as rn
-  from license_hwid_seen s
+  from license_hwid_seen s join licenses l on l.id = s.license_id
   where left(s.hwid, 11) <> 'HWID-ERROR-'
+    and l.hardware_bound_at is not null and s.last_seen >= l.hardware_bound_at
 )
 update licenses l
 set hardware_id = r.hwid, hardware_bound_at = now(), activated_at = coalesce(l.activated_at, now())
