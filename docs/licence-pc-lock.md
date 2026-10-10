@@ -67,8 +67,13 @@ binds itself on its next validate.
 
 The apply also skips a hwid first seen before the current binding, unless it is the bound one (marcus m63582,
 ruling b). `hits` count all time, so without this an old PC that validates once after a move would win back the key
-on its pre-move hits. The preview still lists such a key, with `seen_before_binding = true`: the apply will not
-rebind it, and a human reads why.
+on its pre-move hits. The preview still lists such a key, with `seen_before_binding = true`, so a human reads why.
+
+`apply_target` is the binding the key will have after the apply (marcus m63585, ruling i). The preview computes it
+with the apply's own `ranked` CTE, copied verbatim (the test checks the copy), so it is exactly what the apply does:
+`apply_target = bound_now` means the apply leaves the key alone. It can differ from `dominant`: if the old PC is
+dominant but flagged and a third PC has validated since the move, the apply moves the key to the third PC. Every key the
+apply moves is listed: if the bound hwid were the dominant, it would also rank first among the apply's candidates.
 
 For marcus (Fable N1): when two clean PCs genuinely share one key, the apply rebinds it to whichever PC validated
 more, the heavier user. The SQL cannot tell that case from drift; read the preview, and that is where a human spots it.
@@ -76,17 +81,26 @@ more, the heavier user. The SQL cannot tell that case from drift; read the previ
 Preview (read-only):
 
 ```sql
-with ranked as (
+with seen_rank as (
   select s.license_id, s.hwid, s.hits, s.first_seen,
          row_number() over (partition by s.license_id order by s.hits desc, s.last_seen desc, s.hwid) as rn
   from license_hwid_seen s join licenses l on l.id = s.license_id
   where left(s.hwid, 11) <> 'HWID-ERROR-'
     and l.hardware_bound_at is not null and s.last_seen >= l.hardware_bound_at
+), ranked as (
+  select s.license_id, s.hwid,
+         row_number() over (partition by s.license_id order by s.hits desc, s.last_seen desc, s.hwid) as rn
+  from license_hwid_seen s join licenses l on l.id = s.license_id
+  where left(s.hwid, 11) <> 'HWID-ERROR-'
+    and l.hardware_bound_at is not null and s.last_seen >= l.hardware_bound_at
+    and (s.first_seen >= l.hardware_bound_at or s.hwid = l.hardware_id)
 )
-select l.id as license_id, l.hardware_id as bound_now, r.hwid as dominant, r.hits,
-       r.first_seen < l.hardware_bound_at as seen_before_binding
-from ranked r join licenses l on l.id = r.license_id
-where r.rn = 1 and l.hardware_id is distinct from r.hwid
+select l.id as license_id, l.hardware_id as bound_now, d.hwid as dominant, d.hits,
+       d.first_seen < l.hardware_bound_at as seen_before_binding,
+       coalesce(a.hwid, l.hardware_id) as apply_target
+from seen_rank d join licenses l on l.id = d.license_id
+left join ranked a on a.license_id = l.id and a.rn = 1
+where d.rn = 1 and l.hardware_id is distinct from d.hwid
 order by l.id;
 ```
 
@@ -110,3 +124,8 @@ commit;
 ```
 
 These two blocks are run by `src/lib/license-hwid.test.ts` on PGlite (PG 17.5), so an edit here is tested.
+
+## Backlog (rebind SQL)
+
+The rebind docs thread is closed for scope (marcus m63585). Further edge cases go here as notes, not new review
+rounds. None open.
