@@ -28,6 +28,8 @@ import { getTierCountsByRegion } from "@/lib/feed-tiers";
 import { FeedRequestForm } from "@/components/feeds/feed-request-form";
 import { getAnyServerRegistrationForUser } from "@/lib/server-registration";
 import { ServerRegistrationBand } from "@/components/feeds/server-registration-band";
+import { FEED_HISTORY_LIMIT, FEED_HISTORY_SOURCES, feedHistoryRows, listMyRequestsHistory } from "@/lib/my-requests-history";
+import { HistoryRowList } from "@/components/marketplace/history-rows";
 
 // One vocabulary for every client surface (coxwell 14:05Z via marcus m59956): held is Activated
 // (with the held-tier count on a multi-tier feed), nothing held is Available, never Locked.
@@ -67,6 +69,11 @@ export default async function FeedsPage() {
   const bestLicenseTier = tier === "free" ? null : tier;
   const tierCounts = await getTierCountsByRegion().catch(() => ({} as Awaited<ReturnType<typeof getTierCountsByRegion>>));
   const serverRegistration = await getAnyServerRegistrationForUser(session.user.id).catch(() => null);
+  // "My feed requests" (coxwell via marcus m63860 / m63907): the My requests history filtered to feeds; same loader,
+  // same rows, never a second query. A source that fails is left out and the section says so.
+  const history = await listMyRequestsHistory(session.user.id);
+  const feedHistory = feedHistoryRows(history.rows);
+  const feedHistoryFailed = history.failedSources.some((src) => FEED_HISTORY_SOURCES.includes(src));
   const userName = session.user.name ?? session.user.email ?? "trader";
   const userEmail = session.user.email ?? "";
 
@@ -233,6 +240,27 @@ export default async function FeedsPage() {
           </div>
         ) : (
           <p className="fp-section-empty">Roadmap coming soon — check back for what&apos;s next.</p>
+        )}
+      </div>
+
+      <div className="fp-section">
+        <h2 className="fp-section-title">My feed requests</h2>
+        {feedHistory.rows.length === 0 && !feedHistoryFailed ? (
+          <div className="card fp-history-empty">
+            <b>No feed requests yet.</b>
+            <p>When you ask for a feed or a trial, it shows here with its status.</p>
+          </div>
+        ) : (
+          <div className="card bk-reqs">
+            <HistoryRowList rows={feedHistory.rows} />
+            {feedHistoryFailed && (
+              <p className="fp-note bk-req-foot">Part of your history couldn&apos;t be loaded just now. Refresh to try again.</p>
+            )}
+            <p className="fp-note bk-req-foot">
+              {feedHistory.total > FEED_HISTORY_LIMIT ? `The latest ${FEED_HISTORY_LIMIT} of ${feedHistory.total}. ` : ""}
+              <Link href="/marketplace/requests">See all in My requests →</Link>
+            </p>
+          </div>
         )}
       </div>
 

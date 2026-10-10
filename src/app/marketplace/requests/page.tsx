@@ -6,18 +6,8 @@ import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@
 import { PortalShell } from "@/components/portal/portal-shell";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { authPageHref } from "@/lib/post-auth-redirect";
-import { listMyRequestsHistory, type HistoryStatus } from "@/lib/my-requests-history";
-import { formatAbsoluteUtc } from "@/lib/format-time";
-
-const PILL_CLASS: Record<HistoryStatus, string> = {
-  Sent: "bk-pill-sent",
-  "In review": "bk-pill-review",
-  Approved: "bk-pill-approved",
-  Declined: "bk-pill-declined",
-  Handled: "bk-pill-handled",
-  Active: "bk-pill-active",
-  Ended: "bk-pill-ended",
-};
+import { listMyRequestsHistory } from "@/lib/my-requests-history";
+import { HistoryRowList } from "@/components/marketplace/history-rows";
 
 /**
  * /marketplace/requests: "My requests" (Iris r2 sheet 3; marcus m59173 item 6), now the whole
@@ -62,27 +52,7 @@ export default async function MyRequestsPage() {
         </div>
       ) : (
         <div className="card bk-reqs">
-          {rows.map((r) => (
-            <div key={r.key} className="bk-req">
-              <div className="bk-req-when">
-                {formatAbsoluteUtc(r.at)}
-                <small>{r.reference}</small>
-              </div>
-              <ul className="bk-req-lines">
-                <li className="bk-req-kind">{r.kind}</li>
-                {r.items.map((item, i) => (
-                  <li key={i} className={item === "Start with a 30-day trial" ? "bk-req-trial" : undefined}>
-                    {item}
-                    {r.itemStatuses?.[i] && <span>{`: ${r.itemStatuses[i]}`}</span>}
-                  </li>
-                ))}
-              </ul>
-              <div className="bk-req-status">
-                <span className={`bk-pill ${PILL_CLASS[r.status]}`}>{r.status}</span>
-                {r.outcome && <small>{r.outcome}</small>}
-              </div>
-            </div>
-          ))}
+          <HistoryRowList rows={rows} />
           {failedSources.length > 0 && (
             <p className="fp-note bk-req-foot">Part of your history couldn&apos;t be loaded just now. Refresh to try again.</p>
           )}
