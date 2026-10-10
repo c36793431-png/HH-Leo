@@ -65,6 +65,11 @@ apply would undo an admin's reset: a reset key not yet re-validated would go bac
 re-bound to a new PC that the old PC's older hits outnumber. A reset key that has not validated since is skipped and
 binds itself on its next validate.
 
+The apply also skips a hwid first seen before the current binding, unless it is the bound one (marcus m63582,
+ruling b). `hits` count all time, so without this an old PC that validates once after a move would win back the key
+on its pre-move hits. The preview still lists such a key, with `seen_before_binding = true`: the apply will not
+rebind it, and a human reads why.
+
 For marcus (Fable N1): when two clean PCs genuinely share one key, the apply rebinds it to whichever PC validated
 more, the heavier user. The SQL cannot tell that case from drift; read the preview, and that is where a human spots it.
 
@@ -72,13 +77,14 @@ Preview (read-only):
 
 ```sql
 with ranked as (
-  select s.license_id, s.hwid, s.hits,
+  select s.license_id, s.hwid, s.hits, s.first_seen,
          row_number() over (partition by s.license_id order by s.hits desc, s.last_seen desc, s.hwid) as rn
   from license_hwid_seen s join licenses l on l.id = s.license_id
   where left(s.hwid, 11) <> 'HWID-ERROR-'
     and l.hardware_bound_at is not null and s.last_seen >= l.hardware_bound_at
 )
-select l.id as license_id, l.hardware_id as bound_now, r.hwid as dominant, r.hits
+select l.id as license_id, l.hardware_id as bound_now, r.hwid as dominant, r.hits,
+       r.first_seen < l.hardware_bound_at as seen_before_binding
 from ranked r join licenses l on l.id = r.license_id
 where r.rn = 1 and l.hardware_id is distinct from r.hwid
 order by l.id;
@@ -94,6 +100,7 @@ with ranked as (
   from license_hwid_seen s join licenses l on l.id = s.license_id
   where left(s.hwid, 11) <> 'HWID-ERROR-'
     and l.hardware_bound_at is not null and s.last_seen >= l.hardware_bound_at
+    and (s.first_seen >= l.hardware_bound_at or s.hwid = l.hardware_id)
 )
 update licenses l
 set hardware_id = r.hwid, hardware_bound_at = now(), activated_at = coalesce(l.activated_at, now())
