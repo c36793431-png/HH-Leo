@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { createFeedBoxAction, issueBoxTokenAction, type IssueTokenResult } from "./actions";
+import { createFeedBoxAction, issueBoxTokenAction, revokeRecordAction, type IssueTokenResult } from "./actions";
 import type { ActionResult } from "@/lib/action-result";
 
 export function CreateBoxForm({ tiers }: { tiers: { id: string; tierKey: string; name: string }[] }) {
@@ -55,5 +55,33 @@ export function IssueTokenButton({ boxId, hasToken }: { boxId: string; hasToken:
       )}
       {state && !state.ok && <p className="mt-1 text-red-400">{state.error}</p>}
     </div>
+  );
+}
+
+/** Revoke one open record now. A reason is required; it goes to the audit row (/admin/history) and this row's state. */
+export function RevokeRecordForm({ boxId, recordId, ip }: { boxId: string; recordId: string; ip: string }) {
+  const [state, action, pending] = useActionState<ActionResult | null, FormData>(revokeRecordAction, null);
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (!confirm(`Revoke ${ip}? The box removes it on its next poll. The subscription itself is not changed.`)) e.preventDefault();
+      }}
+      className="flex items-center gap-1.5"
+    >
+      <input type="hidden" name="boxId" value={boxId} />
+      <input type="hidden" name="recordId" value={recordId} />
+      <input
+        name="reason"
+        required
+        maxLength={300}
+        placeholder="reason"
+        className="w-36 rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5"
+      />
+      <button type="submit" disabled={pending} className="rounded border border-red-500/50 px-2 py-0.5 text-red-300 hover:bg-red-500/10">
+        {pending ? "Revoking…" : "Revoke now"}
+      </button>
+      {state && !state.ok && <span className="text-red-400">{state.error}</span>}
+    </form>
   );
 }

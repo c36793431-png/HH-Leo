@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { logAdminAction } from "@/lib/admin";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { createFeedBox, issueBoxToken } from "@/lib/feed-boxes";
+import { createFeedBox, issueBoxToken, revokeAllowlistRecord } from "@/lib/feed-boxes";
 
 async function requireAdmin(): Promise<string> {
   const session = await auth();
@@ -40,4 +40,18 @@ export async function issueBoxTokenAction(_prev: IssueTokenResult, formData: For
   } catch (err) {
     return { ok: false, error: err instanceof Error && err.message ? err.message : "Failed to issue the token" };
   }
+}
+
+/** Revoke now (Fable F1 m62978, GO marcus m63784): one record off the box at its next poll. The audit row, with the
+ * reason, is written by revokeAllowlistRecord in the same transaction as revoked_at, so neither exists without the
+ * other. */
+export async function revokeRecordAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  return runAction("Failed to revoke the record", async () => {
+    const adminId = await requireAdmin();
+    const boxId = String(formData.get("boxId") ?? "");
+    const recordId = String(formData.get("recordId") ?? "");
+    if (!/^[0-9a-f-]{36}$/.test(boxId) || !/^[0-9a-f-]{36}$/.test(recordId)) throw new Error("No record");
+    await revokeAllowlistRecord({ boxId, recordId, adminUserId: adminId, reason: String(formData.get("reason") ?? "") });
+    revalidatePath("/admin/feed-boxes");
+  });
 }

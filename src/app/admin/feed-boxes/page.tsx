@@ -1,7 +1,7 @@
 import { pool } from "@/lib/db";
 import { listBoxRecords, listFeedBoxes, type RecordState } from "@/lib/feed-boxes";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { CreateBoxForm, IssueTokenButton } from "./box-forms";
+import { CreateBoxForm, IssueTokenButton, RevokeRecordForm } from "./box-forms";
 
 /** Feed boxes (feed auto-provision, marcus m62546): each provider box, its tiers and token, and every allowlist
  * record on those tiers with what the box has done with it (Fable m62433 item 2: "pending bridge reload" is never
@@ -57,7 +57,8 @@ export default async function AdminFeedBoxesPage() {
                 <th className="py-1 pr-3 font-medium">Tier</th>
                 <th className="py-1 pr-3 font-medium">Client server</th>
                 <th className="py-1 pr-3 font-medium">Told</th>
-                <th className="py-1 font-medium">State</th>
+                <th className="py-1 pr-3 font-medium">State</th>
+                <th className="py-1 font-medium" />
               </tr>
             </thead>
             <tbody>
@@ -70,12 +71,13 @@ export default async function AdminFeedBoxesPage() {
                     {r.clientEmail ? <span className="text-zinc-500"> · {r.clientEmail}</span> : null}
                   </td>
                   <td className="py-1 pr-3 text-zinc-500">{formatAbsoluteUtc(r.toldAt)}</td>
-                  <td className={`py-1 ${STATE_CLASS[r.state.kind]}`}>{r.state.label}</td>
+                  <td className={`py-1 pr-3 ${STATE_CLASS[r.state.kind]}`}>{r.state.label}</td>
+                  <td className="py-1 text-xs">{r.revoked ? null : <RevokeRecordForm boxId={b.id} recordId={r.recordId} ip={r.ip} />}</td>
                 </tr>
               ))}
               {records[i].length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-2 text-zinc-500">
+                  <td colSpan={6} className="py-2 text-zinc-500">
                     No allowlist records on these tiers.
                   </td>
                 </tr>

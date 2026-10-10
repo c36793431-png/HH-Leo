@@ -12,6 +12,7 @@ import { EFFECTIVE_STATUS_SQL } from "./feed-subscriptions";
 import { signResponse, type SignedEnvelope } from "./response-signing";
 import { followUpIfUnreached } from "./client-reach";
 import { SUPPORT_HANDLE } from "./support-contact";
+import { resolveAdminUserId } from "./admin";
 
 /** Bearer tokens are 32 random bytes, base64url (43 chars). Anything shorter is refused before the lookup. */
 const TOKEN_CHARS = 43;
@@ -287,6 +288,59 @@ export async function recordApplied(
   return { status: 200 };
 }
 
+// ---------- admin "Revoke now" (Fable F1 m62978; GO marcus m63784) ----------
+
+export const REVOKE_REASON_MAX = 300;
+
+/** Takes one open record off a box now: revoked_at = now(), revoked_by = 'admin:<user id>', and in the SAME
+ * transaction an admin_actions row 'feed_allowlist_revoked' with the reason (feed_allowlist_records has no reason
+ * column; /admin/history shows the row). Covers G2: an old declared_ip's record is revoked like any other. The
+ * subscription is untouched: this ends the IP on the box, not the grant. The box drops it on its next poll and writes
+ * back 'removed'. Refuses a record not on this box's tiers, and an already-revoked one (the first revoker stays). */
+export async function revokeAllowlistRecord(args: {
+  boxId: string;
+  recordId: string;
+  adminUserId: string;
+  reason: string;
+}): Promise<{ recordId: string; ip: string; tierKey: string }> {
+  const reason = args.reason.trim();
+  if (!reason) throw new Error("Give a reason for the revoke");
+  if (reason.length > REVOKE_REASON_MAX) throw new Error(`Reason is longer than ${REVOKE_REASON_MAX} chars`);
+  const adminUserId = await resolveAdminUserId(args.adminUserId);
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const rec = await client.query(
+      `select ar.ip, ar.revoked_at, ft.tier_key, b.name as box
+         from feed_allowlist_records ar
+         join feed_box_tiers bt on bt.feed_tier_id = ar.feed_tier_id and bt.box_id = $1
+         join feed_boxes b on b.id = bt.box_id
+         join feed_tiers ft on ft.id = ar.feed_tier_id
+        where ar.id = $2
+          for update of ar`,
+      [args.boxId, args.recordId]
+    );
+    const row = rec.rows[0] as { ip: string; revoked_at: Date | null; tier_key: string; box: string } | undefined;
+    if (!row) throw new Error("That record is not on this box's tiers");
+    if (row.revoked_at) throw new Error("That record is already revoked");
+    await client.query(`update feed_allowlist_records set revoked_at = now(), revoked_by = $2 where id = $1`, [
+      args.recordId,
+      `admin:${adminUserId}`,
+    ]);
+    await client.query(`insert into admin_actions (admin_user_id, action_type, details_json) values ($1, 'feed_allowlist_revoked', $2)`, [
+      adminUserId,
+      JSON.stringify({ box: row.box, record_id: args.recordId, ip: row.ip, tier: row.tier_key, reason }),
+    ]);
+    await client.query("commit");
+    return { recordId: args.recordId, ip: row.ip, tierKey: row.tier_key };
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ---------- admin view: what state each record is in ----------
 
 export type RecordState =
@@ -307,9 +361,15 @@ export function recordState(r: {
   applyResult: ApplyResult | null;
   applyReason: string | null;
   ipProblem: string | null;
+  /** An admin's "Revoke now": who (email, if known) and why, from its audit row. */
+  adminRevoke?: { by: string | null; reason: string } | null;
 }): RecordState {
   if (r.revokedAt || !r.live) {
     if (r.applyResult === "removed" && r.appliedAt) return { kind: "removed", label: `removed from the box ${ymd(r.appliedAt)}` };
+    if (r.revokedAt && r.adminRevoke) {
+      const { by, reason } = r.adminRevoke;
+      return { kind: "ending", label: `revoked by ${by ?? "an admin"} ${ymd(r.revokedAt)}: ${reason}; waiting for the box to remove it` };
+    }
     if (r.revokedAt) return { kind: "ending", label: "revoked; waiting for the box to remove it" };
     // Fable m62985 S1: a lapse never drops anything by itself; only the expiry job revokes, after its grace.
     const told = r.lapseSeenAt ? ` (client told ${ymd(r.lapseSeenAt)})` : "";
@@ -329,6 +389,7 @@ export interface BoxRecordRow {
   serverName: string | null;
   clientEmail: string | null;
   toldAt: Date;
+  revoked: boolean;
   state: RecordState;
 }
 
@@ -336,13 +397,22 @@ export interface BoxRecordRow {
 export async function listBoxRecords(boxId: string): Promise<BoxRecordRow[]> {
   const r = await pool.query(
     `select ar.id, ar.ip, ft.tier_key, sr.server_name, u.email, ar.told_at, ar.revoked_at, ar.lapse_seen_at,
-            ar.applied_at, ar.apply_result, ar.apply_reason,
+            ar.applied_at, ar.apply_result, ar.apply_reason, rv.reason as revoke_reason, rv.email as revoked_by_email,
             ${LIVE_SQL} as live
        from feed_allowlist_records ar
        join feed_box_tiers bt on bt.feed_tier_id = ar.feed_tier_id and bt.box_id = $1
        join feed_tiers ft on ft.id = ar.feed_tier_id
        left join server_registrations sr on sr.id = ar.server_registration_id
        left join users u on u.id = sr.user_id
+       left join lateral (
+             select a.details_json->>'reason' as reason, au.email
+               from admin_actions a
+               left join users au on au.id = a.admin_user_id
+              where ar.revoked_by like 'admin:%'
+                and a.action_type = 'feed_allowlist_revoked'
+                and a.details_json->>'record_id' = ar.id::text
+              order by a.created_at desc
+              limit 1) rv on true
       where ar.revoked_at is null or ar.revoked_at > now() - interval '30 days'
       order by ar.revoked_at nulls first, ar.told_at desc`,
     [boxId]
@@ -354,6 +424,7 @@ export async function listBoxRecords(boxId: string): Promise<BoxRecordRow[]> {
     serverName: (x.server_name as string | null) ?? null,
     clientEmail: (x.email as string | null) ?? null,
     toldAt: x.told_at as Date,
+    revoked: x.revoked_at != null,
     state: recordState({
       live: Boolean(x.live),
       revokedAt: (x.revoked_at as Date | null) ?? null,
@@ -362,6 +433,9 @@ export async function listBoxRecords(boxId: string): Promise<BoxRecordRow[]> {
       applyResult: (x.apply_result as ApplyResult | null) ?? null,
       applyReason: (x.apply_reason as string | null) ?? null,
       ipProblem: hostIpProblem(x.ip as string),
+      adminRevoke: x.revoke_reason
+        ? { by: (x.revoked_by_email as string | null) ?? null, reason: x.revoke_reason as string }
+        : null,
     }),
   }));
 }
