@@ -102,6 +102,8 @@ const FEED_ADMIN_LINKS = [
   { href: "/admin/register-provider", label: "Register provider", icon: UserPlus },
   { href: "/admin/revenue", label: "Revenue", icon: DollarSign },
   { href: "/admin/feed-requests", label: "Feed requests", icon: Rss },
+  // A portal page: on the feed host the proxy sends this path to portal.horizonhft.com (marcus m63907).
+  { href: "/admin/basket-requests", label: "Basket requests (portal) ↗", icon: ShoppingBasket },
   { href: "/admin/feed-tier-requests", label: "Feed signups", icon: SatelliteDish },
   { href: "/admin/feed-tier-trials", label: "Feed trials", icon: Gift },
   { href: "/admin/black-trials", label: "Black trials", icon: SatelliteDish },

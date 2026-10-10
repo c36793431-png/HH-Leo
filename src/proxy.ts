@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { REFERRAL_COOKIE, REFERRAL_COOKIE_MAX_AGE_DAYS } from "@/lib/referrals";
 import { getActivePartnerReferralCode } from "@/lib/partners";
+import { isAdminFeedRoute, portalAdminRedirect } from "@/lib/feed-host-admin";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 const FEED_HOST = "feed.horizonhft.com";
@@ -81,10 +82,9 @@ export default auth(async (req) => {
     // (decision_split_portal_admin_and_feed_admin_surfaces_2026-08-23; host-rewrite fix
     // 2026-08-24). Exact-match allowlist, not a prefix -- a bare "/admin" prefix would also
     // pass through /admin/users and /admin/finance, which are portal-only and must stay
-    // 404 on this host (marcus-approved list, feed-admin-dashboard-build-2026-08-24).
-    const ADMIN_FEED_ROUTES = ["/admin", "/admin/revenue", "/admin/providers", "/admin/feed-health", "/admin/provider-applications", "/admin/register-provider", "/admin/feed-requests", "/admin/feed-tier-requests", "/admin/feed-tier-trials", "/admin/black-trials", "/admin/feed-boxes", "/admin/accounts"];
-    const isAdminFeedRoute =
-      ADMIN_FEED_ROUTES.includes(pathname) || pathname.startsWith("/admin/provider-applications/");
+    // 404 on this host (marcus-approved list, feed-admin-dashboard-build-2026-08-24). The list lives in
+    // lib/feed-host-admin.ts (ADMIN_FEED_ROUTES), with its tests.
+    const adminFeedRoute = isAdminFeedRoute(pathname);
     const isStaticAsset = /\.[a-zA-Z0-9]+$/.test(pathname);
     const passthrough =
       pathname === "/login" ||
@@ -92,7 +92,7 @@ export default auth(async (req) => {
       pathname === "/account" ||
       pathname.startsWith("/account/") ||
       pathname.startsWith("/feed") ||
-      isAdminFeedRoute ||
+      adminFeedRoute ||
       isStaticAsset;
 
     // Admin has its own page (coxwell, feed-admin-role-collision-fix-2026-08-24): bounce them
@@ -110,6 +110,12 @@ export default auth(async (req) => {
     if ((isFeedDashboardPath || isFeedRootPath) && isAdminUser(req.auth?.user)) {
       return NextResponse.redirect(new URL("/admin/provider-applications", req.nextUrl));
     }
+
+    // A portal admin page typed on this host (e.g. /admin/basket-requests, which the Telegram alert opens on the
+    // portal) goes to the portal at the same path and query, before the /feed rewrite below would 404 it (coxwell via
+    // marcus m63885 / m63907). The admin stays signed in: the session cookie is scoped to the parent domain.
+    const toPortal = portalAdminRedirect(pathname, req.nextUrl.search);
+    if (toPortal) return NextResponse.redirect(toPortal, 307);
 
     if (!passthrough) {
       const url = req.nextUrl.clone();
