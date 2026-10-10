@@ -128,4 +128,10 @@ These two blocks are run by `src/lib/license-hwid.test.ts` on PGlite (PG 17.5), 
 ## Backlog (rebind SQL)
 
 The rebind docs thread is closed for scope (marcus m63585). Further edge cases go here as notes, not new review
-rounds. None open.
+rounds.
+
+- **B1, second apply run** (Fable m63596, measured on 823cf52). The apply sets `hardware_bound_at = now()`, which is
+  after every seen row, so a key it just re-bound has no in-window row of its own until that PC validates again. If one
+  other PC validates in that gap, a second apply moves the key to it on 1 hit. Harmless for the planned single pre-flip
+  run, and the window closes once the bound PC validates. If a second run is ever planned: candidate fix
+  `hardware_bound_at = r.last_seen` instead of `now()`, so the chosen PC stays in its own window. Not built or tested.
