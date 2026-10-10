@@ -10,7 +10,7 @@ import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { DurationForm } from "@/components/admin/duration-form";
 import { ActionButton } from "@/components/admin/action-button";
 import { TierSelectForm } from "@/components/admin/tier-select-form";
-import { extendLicenseFromListAction, revokeLicenseFromListAction, setLicenseTierAction } from "./actions";
+import { extendLicenseFromListAction, resetLicenseHardwareAction, revokeLicenseFromListAction, setLicenseTierAction } from "./actions";
 
 const STATUS_STYLES = {
   active: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
@@ -215,6 +215,16 @@ export default async function AdminLicensesPage({
                             className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
                           />
                         </>
+                      )}
+                      {l.hardwareId && (
+                        <ActionButton
+                          action={resetLicenseHardwareAction}
+                          hiddenFields={{ licenseId: l.id }}
+                          label="Reset PC"
+                          successMessage="PC binding cleared"
+                          confirmMessage={`Clear the PC binding for ${maskLicenseKey(l.licenseKey)}? The next PC to start Horizon with this key will bind to it.`}
+                          className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-amber-500 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
                       )}
                       {l.userId && (
                         <Link

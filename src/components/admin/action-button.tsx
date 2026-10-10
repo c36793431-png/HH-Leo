@@ -10,12 +10,14 @@ interface ActionButtonProps {
   label: string;
   successMessage: string;
   className?: string;
+  /** When set, the submit asks window.confirm(confirmMessage) first and does nothing on Cancel. */
+  confirmMessage?: string;
 }
 
 /** Single-button admin mutation (revoke, expire-now, resend, force-remove) — same
  * success/error/toast contract as DurationForm so no admin action can crash to
  * Next's generic error page and leave the operator guessing whether it landed. */
-export function ActionButton({ action, hiddenFields = {}, label, successMessage, className }: ActionButtonProps) {
+export function ActionButton({ action, hiddenFields = {}, label, successMessage, className, confirmMessage }: ActionButtonProps) {
   const [state, formAction, isPending] = useActionState(action, null);
 
   useEffect(() => {
@@ -24,7 +26,10 @@ export function ActionButton({ action, hiddenFields = {}, label, successMessage,
   }, [state, successMessage]);
 
   return (
-    <form action={formAction}>
+    <form
+      action={formAction}
+      onSubmit={confirmMessage ? (e) => { if (!window.confirm(confirmMessage)) e.preventDefault(); } : undefined}
+    >
       {Object.entries(hiddenFields).map(([key, value]) => (
         <input key={key} type="hidden" name={key} value={value} />
       ))}

@@ -6,6 +6,7 @@ import { pool } from "@/lib/db";
 import { extendLicense, revokeLicenseAndSyncGroup, getLicenseExpiresAt, setLicenseTier, LICENSE_TIERS, type LicenseTier } from "@/lib/licenses";
 import { parseDurationFormData, resolveExpiresAt } from "@/lib/duration";
 import { logAdminAction } from "@/lib/admin";
+import { resetLicenseHardwareId } from "@/lib/license-hwid";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
 
@@ -74,6 +75,22 @@ export async function revokeLicenseFromListAction(
     const ownerId = await getLicenseOwner(licenseId);
     await revokeLicenseAndSyncGroup(licenseId);
     await logAdminAction(adminUserId, "admin_licenses_revoke", ownerId, { licenseId }, licenseId);
+    revalidateLicenses(ownerId);
+  });
+}
+
+/** "Reset PC": frees the licence's one-PC binding so the next PC to validate binds (0099). activated_at is kept. */
+export async function resetLicenseHardwareAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to reset PC", async () => {
+    const adminUserId = await requireAdminUsersPanel();
+    const licenseId = formData.get("licenseId") as string;
+    const ownerId = await getLicenseOwner(licenseId);
+    const previousHardwareId = await resetLicenseHardwareId(licenseId);
+    if (previousHardwareId === null) throw new Error("License is not bound to a PC");
+    await logAdminAction(adminUserId, "admin_licenses_reset_hwid", ownerId, { licenseId, previousHardwareId }, licenseId);
     revalidateLicenses(ownerId);
   });
 }
