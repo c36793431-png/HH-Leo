@@ -42,6 +42,9 @@ export interface HistoryRow {
   /** One small status per item, same order (a mixed click: m59992); absent when the row's own
    * status says it all. */
   itemStatuses?: string[];
+  /** Basket rows only: just the feed lines (and the trial line when the basket asked for one), formatted as in
+   * items, for /feeds' "My feed requests" (marcus m63907). Empty when the basket had no feed line. */
+  feedItems?: string[];
   status: HistoryStatus;
   /** The outcome under the status, e.g. "Trial until 3 Nov 2026"; null when there is none. */
   outcome: string | null;
@@ -64,16 +67,19 @@ function tierName(tierKey: string | null, fallback: string | null): string {
 
 // ---- pure mappers (unit-tested in my-requests-history.test.ts) ----
 
+const BASKET_TRIAL_LINE = "Start with a 30-day trial";
+const basketLineLabel = (l: BasketRequestRow["lines"][number]) =>
+  l.kind === "feed" ? `${l.name} · ${l.servers ?? 1} server${(l.servers ?? 1) === 1 ? "" : "s"}` : l.name;
+
 export function basketHistoryRow(r: BasketRequestRow): HistoryRow {
+  const feedLines = r.lines.filter((l) => l.kind === "feed").map(basketLineLabel);
   return {
     key: `basket:${r.id}`,
     source: "basket",
     at: r.submittedAt,
     kind: "Basket request",
-    items: [
-      ...r.lines.map((l) => (l.kind === "feed" ? `${l.name} · ${l.servers ?? 1} server${(l.servers ?? 1) === 1 ? "" : "s"}` : l.name)),
-      ...(r.hasTrial ? ["Start with a 30-day trial"] : []),
-    ],
+    items: [...r.lines.map(basketLineLabel), ...(r.hasTrial ? [BASKET_TRIAL_LINE] : [])],
+    feedItems: feedLines.length > 0 ? [...feedLines, ...(r.hasTrial ? [BASKET_TRIAL_LINE] : [])] : [],
     status: r.status === "handled" ? "Handled" : "Sent",
     // The basket's own lines, unchanged from the basket-only page.
     outcome: r.status === "handled" ? "We've replied. See your email for what was agreed." : "We have it. We'll confirm by email.",
@@ -289,6 +295,30 @@ export function licenceHistoryRow(r: LicenceRecord, now: Date = new Date()): His
     outcome: r.status === "revoked" ? "Revoked" : live ? `Until ${fmtDate(r.expiresAt)}` : `Ended ${fmtDate(r.expiresAt)}`,
     reference: `Key ••••${r.keyTail}`,
   };
+}
+
+/** The sources that can hold a feed request: what /feeds' "My feed requests" draws from (marcus m63907). Strategy
+ * ideas and submissions, software access and licences are not feed requests. */
+export const FEED_HISTORY_SOURCES: readonly HistorySource[] = ["basket", "access", "legacy_tier_request", "feed_request", "feed_trial", "black_trial"];
+export const FEED_HISTORY_LIMIT = 10;
+
+/** "My feed requests" on /feeds: the My requests rows that are about feeds, newest first, at most `limit`. A basket
+ * shows only its feed lines and is left out when it had none; Software access is left out; the grouping (a click
+ * is one row, per-item statuses when they differ) is kept as is (marcus m63907). `total` counts before the cap. */
+export function feedHistoryRows(rows: HistoryRow[], limit: number = FEED_HISTORY_LIMIT): { rows: HistoryRow[]; total: number } {
+  const feed: HistoryRow[] = [];
+  for (const r of rows) {
+    if (!FEED_HISTORY_SOURCES.includes(r.source)) continue;
+    if (r.source === "access" && r.kind !== "Feed access") continue;
+    if (r.source === "basket") {
+      if (!r.feedItems || r.feedItems.length === 0) continue;
+      feed.push({ ...r, items: r.feedItems });
+      continue;
+    }
+    feed.push(r);
+  }
+  const sorted = sortHistory(feed);
+  return { rows: sorted.slice(0, limit), total: sorted.length };
 }
 
 /** Newest first; ties broken by key so the order is total (two rows can share a timestamp). */

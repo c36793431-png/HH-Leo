@@ -10,6 +10,8 @@ import {
   basketHistoryRow,
   blackTrialHistoryRow,
   cutText,
+  feedHistoryRows,
+  FEED_HISTORY_LIMIT,
   feedRequestHistoryRow,
   feedTrialHistoryRow,
   legacyTierHistoryRow,
@@ -19,6 +21,8 @@ import {
   strategySubmissionHistoryRow,
 } from "./my-requests-history";
 import type { AccessRequestRow } from "./access-requests";
+import type { BasketRequestRow } from "./basket-requests";
+import type { HistoryRow } from "./my-requests-history";
 
 const NOW = new Date("2026-10-04T15:00:00Z");
 const day = (n: number) => new Date(NOW.getTime() + n * 86_400_000);
@@ -140,4 +144,53 @@ test("sort: newest first, ties broken by key", () => {
   const mk = (key: string, at: Date) => ({ key, source: "basket" as const, at, kind: "", items: [], status: "Sent" as const, outcome: null, reference: "" });
   const sorted = sortHistory([mk("b", day(-1)), mk("a", day(-1)), mk("c", day(0))]);
   assert.deepEqual(sorted.map((r) => r.key), ["c", "a", "b"]);
+});
+
+// ---- "My feed requests" on /feeds (marcus m63907) ----
+
+function basket(over: Partial<BasketRequestRow>): BasketRequestRow {
+  return { id: "11111111-2222-4333-8444-555555555555", reference: "REQ-11111111", userId: "u", userName: null, userEmail: null, telegram: null, lines: [], hasTrial: false, status: "new", handledAt: null, handledByEmail: null, submittedAt: day(-1), ...over };
+}
+
+test("basket mapper: feedItems holds only the feed lines (and the trial line), items are unchanged", () => {
+  const mixed = basketHistoryRow(basket({ lines: [{ kind: "strategy", key: "obi", name: "OBI" }, { kind: "feed", key: "ld-base", name: "London Base", servers: 2 }], hasTrial: true }));
+  assert.deepEqual(mixed.items, ["OBI", "London Base · 2 servers", "Start with a 30-day trial"]);
+  assert.deepEqual(mixed.feedItems, ["London Base · 2 servers", "Start with a 30-day trial"]);
+  const noFeed = basketHistoryRow(basket({ lines: [{ kind: "software", key: "terminal", name: "Horizon Terminal" }], hasTrial: true }));
+  assert.deepEqual(noFeed.feedItems, []);
+});
+
+test("feed history keeps feed sources, drops strategy, software access and licences", () => {
+  const rows: HistoryRow[] = [
+    ...accessHistoryRows([envelope({ batchId: "feed" }), envelope({ batchId: "soft", productKind: "software", tierKey: null, tierName: null, productId: "terminal" })], NOW),
+    legacyTierHistoryRow({ id: "l1", tierKey: "ny-fast", status: "pending", createdAt: day(-5) }),
+    feedRequestHistoryRow({ id: "f1", text: "Tokyo equities", status: "new", at: day(-6) }),
+    feedTrialHistoryRow({ id: "t1", tierKey: "ny-fast", status: "active", startedAt: day(-7), endsAt: day(3) }, NOW),
+    blackTrialHistoryRow({ id: "bt1", status: "requested", requestedAt: day(-8), expiresAt: null }, NOW),
+    strategyRequestHistoryRow({ id: "s1", text: "an idea", status: "new", at: day(-2) }),
+    strategySubmissionHistoryRow({ id: "s2", text: "a pitch", status: "pending", at: day(-2) }),
+    licenceHistoryRow({ id: "lic", keyTail: "AB12", tier: "paid", status: "active", issuedAt: day(-9), expiresAt: day(20) }, NOW),
+  ];
+  const { rows: out, total } = feedHistoryRows(rows);
+  assert.deepEqual(out.map((r) => r.source).sort(), ["access", "black_trial", "feed_request", "feed_trial", "legacy_tier_request"]);
+  assert.equal(total, 5);
+  assert.ok(out.every((r) => r.kind !== "Software access"));
+});
+
+test("feed history: a mixed basket shows only its feed lines; a basket with no feed line is left out", () => {
+  const mixed = basketHistoryRow(basket({ id: "aaaaaaaa-2222-4333-8444-555555555555", lines: [{ kind: "strategy", key: "obi", name: "OBI" }, { kind: "feed", key: "ld-base", name: "London Base" }] }));
+  const noFeed = basketHistoryRow(basket({ id: "bbbbbbbb-2222-4333-8444-555555555555", lines: [{ kind: "strategy", key: "grid", name: "Grid" }] }));
+  const { rows: out } = feedHistoryRows([mixed, noFeed]);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0].items, ["London Base · 1 server"]);
+  assert.equal(out[0].status, mixed.status);
+});
+
+test("feed history: newest first, at most 10, total counts them all", () => {
+  const rows = Array.from({ length: 14 }, (_, i) => feedRequestHistoryRow({ id: `f${i}`, text: `feed ${i}`, status: "new", at: day(-i) }));
+  const { rows: out, total } = feedHistoryRows([...rows].reverse());
+  assert.equal(FEED_HISTORY_LIMIT, 10);
+  assert.equal(out.length, 10);
+  assert.equal(total, 14);
+  assert.deepEqual(out.map((r) => r.items[0]), Array.from({ length: 10 }, (_, i) => `feed ${i}`));
 });
