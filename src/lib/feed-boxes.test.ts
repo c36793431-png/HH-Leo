@@ -367,6 +367,80 @@ test("expiry ON: first sighting stamps + tells the client; no revoke inside the 
   assert.deepEqual([kept.revoked_at, kept.lapse_seen_at], [null, null]);
 });
 
+// ---------- admin "Revoke now" (Fable F1 m62978; GO marcus m63784, G1 + G2) ----------
+
+const revokeRows = async (recordId: string) =>
+  (await sql(`select admin_user_id, details_json from admin_actions where action_type = 'feed_allowlist_revoked' and details_json->>'record_id' = $1`, [recordId])).rows;
+
+test("revoke now: revoked_at + revoked_by 'admin:<id>', reason in an audit row, off the served list at once; the box can write back 'removed'", async () => {
+  const fb = await import("./feed-boxes");
+  const box = await newBox([CME]);
+  const g = await granted(CME, "203.0.113.50");
+  assert.ok((await getList(box.token)).body.data.records.some((r: any) => r.record_id === g.recordId));
+
+  const out = await fb.revokeAllowlistRecord({ boxId: box.id, recordId: g.recordId, adminUserId: ADMIN, reason: "  client cancelled by phone  " });
+  assert.deepEqual(out, { recordId: g.recordId, ip: "203.0.113.50", tierKey: "cme-ctrader-fix" });
+  const row = (await sql(`select revoked_at, revoked_by from feed_allowlist_records where id = $1`, [g.recordId])).rows[0];
+  assert.ok(row.revoked_at);
+  assert.equal(row.revoked_by, `admin:${ADMIN}`);
+  const audit = await revokeRows(g.recordId);
+  assert.equal(audit.length, 1, "exactly one audit row");
+  assert.equal(audit[0].admin_user_id, ADMIN);
+  assert.deepEqual(audit[0].details_json, { box: box.name, record_id: g.recordId, ip: "203.0.113.50", tier: "cme-ctrader-fix", reason: "client cancelled by phone" });
+  assert.ok(!(await getList(box.token)).body.data.records.some((r: any) => r.record_id === g.recordId), "the next poll no longer serves it");
+  // The subscription itself is untouched: revoke takes the IP off the box, it does not end the grant.
+  assert.equal((await sql(`select status from feed_subscriptions where server_registration_id = $1`, [g.serverId])).rows[0].status, "active");
+
+  const state = async () => (await fb.listBoxRecords(box.id)).find((r) => r.recordId === g.recordId)!;
+  const s = await state();
+  assert.equal(s.revoked, true);
+  assert.equal(s.state.kind, "ending");
+  assert.match(s.state.label, /^revoked by admin@example\.invalid \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC: client cancelled by phone; waiting for the box to remove it$/);
+  assert.equal((await postApplied(box.token, { record_id: g.recordId, applied_at: new Date().toISOString(), result: "removed" })).status, 200);
+  assert.equal((await state()).state.kind, "removed");
+});
+
+test("revoke now covers G2: a changed declared_ip leaves the old record open (both served); revoking the old one leaves only the new IP", async () => {
+  const fb = await import("./feed-boxes");
+  const fs = await import("./feed-subscriptions");
+  const { pool } = await import("./db");
+  const box = await newBox([CME]);
+  const g = await granted(CME, "203.0.113.60");
+  const client = await pool.connect();
+  try {
+    await fs.insertAllowlistRecord(client as any, { serverRegistrationId: g.serverId, feedTierId: CME, ip: "203.0.113.61" });
+  } finally {
+    client.release();
+  }
+  const ipsFor = async () =>
+    (await getList(box.token)).body.data.records.filter((r: any) => r.ip === "203.0.113.60" || r.ip === "203.0.113.61").map((r: any) => r.ip).sort();
+  assert.deepEqual(await ipsFor(), ["203.0.113.60", "203.0.113.61"], "the shipped writer leaves the old IP open");
+  await fb.revokeAllowlistRecord({ boxId: box.id, recordId: g.recordId, adminUserId: ADMIN, reason: "IP changed to 203.0.113.61" });
+  assert.deepEqual(await ipsFor(), ["203.0.113.61"]);
+});
+
+test("revoke now refuses, and writes nothing: blank or >300-char reason, a record on another box's tiers, an unknown id, an already-revoked record (its revoked_by kept)", async () => {
+  const fb = await import("./feed-boxes");
+  const box = await newBox([CME]);
+  const cme = await granted(CME, "203.0.113.70");
+  const ny = await granted(NY, "203.0.113.71");
+  const byJob = await granted(CME, "203.0.113.72");
+  await sql(`update feed_allowlist_records set revoked_at = now() - interval '1 day', revoked_by = 'expiry-job' where id = $1`, [byJob.recordId]);
+  const revoke = (recordId: string, reason: string) => fb.revokeAllowlistRecord({ boxId: box.id, recordId, adminUserId: ADMIN, reason });
+
+  await assert.rejects(revoke(cme.recordId, "   "), /reason/i);
+  await assert.rejects(revoke(cme.recordId, "x".repeat(301)), /300/);
+  await assert.rejects(revoke(ny.recordId, "wrong box"), /not on this box/i);
+  await assert.rejects(revoke("00000000-0000-4000-8000-00000000dead", "unknown"), /not on this box/i);
+  await assert.rejects(revoke(byJob.recordId, "again"), /already revoked/i);
+
+  const rows = (await sql(`select id, revoked_at, revoked_by from feed_allowlist_records where id in ($1, $2, $3)`, [cme.recordId, ny.recordId, byJob.recordId])).rows;
+  const by = Object.fromEntries(rows.map((r: any) => [r.id, r]));
+  assert.deepEqual([by[cme.recordId].revoked_at, by[ny.recordId].revoked_at], [null, null]);
+  assert.equal(by[byJob.recordId].revoked_by, "expiry-job", "a second revoke never re-attributes the first");
+  for (const id of [cme.recordId, ny.recordId, byJob.recordId]) assert.equal((await revokeRows(id)).length, 0, "no audit row for a refused revoke");
+});
+
 // ---------- migration ----------
 
 test("0098: every allowlist record has its own id; 0098_rollback removes exactly what 0098 added", async () => {
