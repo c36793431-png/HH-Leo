@@ -912,6 +912,9 @@
 .portal-shell .fp-card.fp-trial .fp-expiry { color: var(--hz-warn); }
 .portal-shell .fp-note { font-size: 11px; color: var(--hz-ink-3); }
 .portal-shell .fp-cta { align-self: flex-start; margin-top: 6px; }
+/* Takes the card's spare height, so the buttons and notes after it sit on the card's bottom edge and line up across
+   a row (marcus m63852). Zero height and a -6px margin cancel the extra flex gap it adds. */
+.portal-shell .fp-push { flex: 1 0 0; margin-top: -6px; }
 .portal-shell .fp-card.fp-coming_soon { opacity: 0.7; }
 .portal-shell .fp-card.fp-maintenance { opacity: 0.75; }
 .portal-shell .fp-footnote { font-size: 12px; color: var(--hz-ink-3); margin-top: 18px; max-width: 640px; }

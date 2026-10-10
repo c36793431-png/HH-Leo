@@ -123,6 +123,7 @@ export default async function FeedsPage() {
                 <h3 className="fp-name">{entry.name}</h3>
                 <p className="fp-desc">{entry.description}</p>
                 {entry.latencyBand && <span className="fp-latency">{entry.latencyBand}</span>}
+                <span className="fp-push" aria-hidden="true" />
                 <Link href={detailHref} className="btn primary sm fp-cta">
                   View product →
                 </Link>
@@ -164,6 +165,9 @@ export default async function FeedsPage() {
                 </span>
               )}
 
+              {/* Pushes this card's buttons and notes to its bottom edge, so every button in a row lines up whatever
+                  the text above it (coxwell via marcus m63852). */}
+              <span className="fp-push" aria-hidden="true" />
               {isActiveOrTrial && seeTiersLink}
               {(status === "active" || status === "trial") && (
                 <a className="btn ghost sm fp-cta" href={config.telegramChannelUrl} target="_blank" rel="noopener noreferrer">
