@@ -495,16 +495,39 @@ test("pre-flip rebind SQL in docs/licence-pc-lock.md: preview lists exactly the 
   await validate(k7.key, PC_A);
   assert.equal((await licenceRow(k7.id)).hardware_id, PC_B);
   assert.deepEqual((await seen(k7.id)).map((x) => [x.hwid, Number(x.hits)]), [[PC_A, 51], [PC_B, 1]]);
+  // marcus m63585 ruling (i). k8: as k7, then a third PC_C validates twice. The dominant is the old PC_A (flagged), but
+  // the apply moves the key to PC_C -> the preview's apply_target must say PC_C.
+  const k8 = await newLicence();
+  for (let i = 0; i < 50; i++) await validate(k8.key, PC_A);
+  await sql(`update license_hwid_seen set first_seen = first_seen - interval '1 minute', last_seen = last_seen - interval '1 minute'
+             where license_id = $1 and hwid = $2`, [k8.id, PC_A]);
+  assert.deepEqual(await resetForm(k8.id), { ok: true });
+  await validate(k8.key, PC_B);
+  await validate(k8.key, PC_A);
+  for (let i = 0; i < 2; i++) await validate(k8.key, PC_C);
+  assert.equal((await licenceRow(k8.id)).hardware_id, PC_B);
+  assert.deepEqual((await seen(k8.id)).map((x) => [x.hwid, Number(x.hits)]), [[PC_A, 51], [PC_C, 2], [PC_B, 1]]);
 
-  const mine = new Set([k1.id, k2.id, k3.id, k4.id, k5.id, k6.id, k7.id]);
+  const mine = new Set([k1.id, k2.id, k3.id, k4.id, k5.id, k6.id, k7.id, k8.id]);
   const previewRows = (await sql(preview)).rows.filter((r) => mine.has(r.license_id));
 
   await db.exec(apply);
   assert.equal((await licenceRow(k7.id)).hardware_id, PC_B);
+  assert.equal((await licenceRow(k8.id)).hardware_id, PC_C);
+  for (const r of previewRows) assert.equal(r.apply_target, (await licenceRow(r.license_id)).hardware_id, r.license_id);
   assert.deepEqual(
-    previewRows.map((r) => [r.license_id, r.bound_now, r.dominant, r.seen_before_binding]).sort(),
-    [[k1.id, PC_A, PC_B, false], [k4.id, PC_A, PC_B, false], [k7.id, PC_B, PC_A, true]].sort()
+    previewRows.map((r) => [r.license_id, r.bound_now, r.dominant, r.seen_before_binding, r.apply_target]).sort(),
+    [
+      [k1.id, PC_A, PC_B, false, PC_B],
+      [k4.id, PC_A, PC_B, false, PC_B],
+      [k7.id, PC_B, PC_A, true, PC_B],
+      [k8.id, PC_B, PC_A, true, PC_C],
+    ].sort()
   );
+  // The preview ranks apply_target with the apply's own CTE, verbatim.
+  const applyRanked = apply.match(/ranked as \(\n[\s\S]*?\n\)\n/);
+  assert.ok(applyRanked);
+  assert.ok(preview.includes(applyRanked[0]), "preview must carry the apply's ranked CTE verbatim");
   assert.equal((await licenceRow(k1.id)).hardware_id, PC_B);
   assert.equal((await licenceRow(k2.id)).hardware_id, PC_C);
   assert.equal((await licenceRow(k3.id)).hardware_id, null);
@@ -513,7 +536,7 @@ test("pre-flip rebind SQL in docs/licence-pc-lock.md: preview lists exactly the 
   assert.equal((await licenceRow(k5.id)).hardware_bound_at, null);
   assert.equal((await licenceRow(k6.id)).hardware_id, PC_B);
   assert.deepEqual(
-    (await sql(preview)).rows.filter((r) => mine.has(r.license_id)).map((r) => [r.license_id, r.dominant, r.seen_before_binding]),
-    [[k7.id, PC_A, true]]
+    (await sql(preview)).rows.filter((r) => mine.has(r.license_id)).map((r) => [r.license_id, r.dominant, r.seen_before_binding, r.apply_target]),
+    [[k7.id, PC_A, true, PC_B]]
   );
 });
