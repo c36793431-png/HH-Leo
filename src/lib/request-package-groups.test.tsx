@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
-import { groupRequestsByPackage } from "./request-package-groups";
+import { countRequestGroups, groupRequestsByPackage } from "./request-package-groups";
 import type { FeedTierRequestRow } from "./feed-tier-requests";
 import { PendingApprovalsList } from "../components/feed/pending-approvals-list";
 import { FeedTierRequestRows } from "../components/admin/feed-tier-request-rows";
@@ -132,6 +132,39 @@ test("provider panel render, control: no package in the list renders exactly as 
   assert.equal(count(html, 'class="qrow'), 2);
   assert.equal(count(html, "Base Package"), 0);
   assert.equal(count(html, 'class="qtier"'), 0);
+});
+
+test("the pending count is the rendered rows: HH28's NY Base batch (2 envelopes) counts 1, not 2", () => {
+  // Shape of prod batch 92359684: ny-fast + ny-normal, one batch, one created_at.
+  const nyBase = [row("e1", "b1", "ny-fast"), row("e2", "b1", "ny-normal")];
+  assert.equal(nyBase.length, 2, "control: two envelopes, the number every counter used to show");
+  assert.equal(countRequestGroups(nyBase), 1);
+  assert.equal(countRequestGroups([...nyBase, row("c1", "b9", "cme-ctrader-fix")]), 2);
+  assert.equal(countRequestGroups([]), 0);
+
+  const html = strip(renderToStaticMarkup(<PendingApprovalsList pending={nyBase} approveAction={noop} rejectAction={noop} />));
+  assert.equal(count(html, 'class="qrow'), countRequestGroups(nyBase), "count == rows on screen");
+});
+
+test("the pending count follows the list for non-packages too: a hand-picked part-package batch counts one per row", () => {
+  const partial = [row("a", "b1", "ld-beta-56"), row("b", "b1", "ld-gamma-19")];
+  const html = strip(renderToStaticMarkup(<PendingApprovalsList pending={partial} approveAction={noop} rejectAction={noop} />));
+  assert.equal(countRequestGroups(partial), 2);
+  assert.equal(count(html, 'class="qrow'), 2);
+});
+
+test("explainer is written for the provider: no function names, no 'Horizon admin', per-feed while Approve is per feed", () => {
+  const html = strip(
+    renderToStaticMarkup(
+      <PendingApprovalsList pending={[row("e1", "b1", "ny-fast"), row("e2", "b1", "ny-normal")]} approveAction={noop} rejectAction={noop} />
+    )
+  );
+  const qexpand = html.slice(html.indexOf('class="qexpand"'));
+  assert.ok(!qexpand.includes("()"), "no function call syntax");
+  assert.ok(!qexpand.includes("<code>"));
+  assert.ok(!qexpand.includes("Horizon admin"));
+  assert.match(qexpand, /Approving a feed starts the client&#x27;s trial on it\. They get an email and a bot message, and access goes live\./);
+  assert.match(qexpand, />You approve<[\s\S]*>Client gets email \+ bot message<[\s\S]*>Access live</);
 });
 
 test("admin queue render: a label row naming the package, then each member row with its own Approve and Reject", () => {

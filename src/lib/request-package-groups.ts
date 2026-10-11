@@ -61,3 +61,12 @@ export function groupRequestsByPackage<T extends { batchId: string; tierKey: str
   }
   return groups;
 }
+
+/** The number every pending-approvals counter on the provider panel shows: the Overview KPI and
+ * banner, the sidebar badge and the Approvals header (marcus m64242, A1). It is the number of rows
+ * the Approvals list renders, so a NY Base request reads as 1 and not as its 2 envelopes, and a
+ * hand-picked batch that isn't a package still counts one per row, as it renders. Counting the
+ * envelopes (pending.length) is what made every counter say 2 for one package. */
+export function countRequestGroups<T extends { batchId: string; tierKey: string }>(rows: T[]): number {
+  return groupRequestsByPackage(rows).length;
+}

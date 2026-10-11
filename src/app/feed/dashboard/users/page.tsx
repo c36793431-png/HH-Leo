@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
 import { PendingApprovalsList } from "@/components/feed/pending-approvals-list";
 import { listPendingRequestsForProvider } from "@/lib/feed-providers";
+import { countRequestGroups } from "@/lib/request-package-groups";
 import { providerApproveAction, providerRejectAction } from "./actions";
 
 /** PRIMARY interaction screen (provider-panel-spec.md §2) -- the provider approves here,
@@ -17,6 +18,7 @@ export default async function FeedApprovalsPage() {
   const providerId = session!.user!.id!;
 
   const pending = await listPendingRequestsForProvider(providerId);
+  const requestCount = countRequestGroups(pending);
 
   return (
     <>
@@ -34,7 +36,9 @@ export default async function FeedApprovalsPage() {
           <div className="chead">
             <span className="ic">⚑</span>
             <h3>Pending your approval</h3>
-            <span className="cap">{pending.length} requests · newest first</span>
+            <span className="cap">
+              {requestCount} request{requestCount === 1 ? "" : "s"} · newest first
+            </span>
           </div>
 
           {pending.length === 0 ? (

@@ -52,19 +52,17 @@ export function PendingApprovalsList({
             )}
             {i === 0 && (
               <div className="qexpand">
-                Approving calls <code>insertFeedTierTrial()</code> — the same helper the admin flow uses
-                — so the client gets the identical activation chain. You&apos;re approving directly; this
-                never routes through Horizon admin.
+                {/* Written for the provider, no function names (marcus m64242, A1). "Each feed" because
+                    every feed still has its own Approve until the one-click package approve (A2)
+                    ships; that change rewrites this line. */}
+                Approving a feed starts the client&apos;s trial on it. They get an email and a bot message, and
+                access goes live.
                 <div className="flow">
                   <span className="n act">You approve</span>
                   <span className="ar">→</span>
-                  <span className="n">insertFeedTierTrial()</span>
+                  <span className="n">Client gets email + bot message</span>
                   <span className="ar">→</span>
-                  <span className="n">client activation email</span>
-                  <span className="ar">+</span>
-                  <span className="n">client bot ping</span>
-                  <span className="ar">→</span>
-                  <span className="n">tier access live</span>
+                  <span className="n">Access live</span>
                 </div>
               </div>
             )}

@@ -7,7 +7,8 @@ import { formatRelative } from "@/lib/format-time";
 import { getBotLink } from "@/lib/telegram-bot-links";
 import { FEEDS_BOT_KEY } from "@/lib/telegram-feeds-bot";
 import { getActiveSubscriberCountForProvider, getProviderRevenueSummary } from "@/lib/feed-subscriptions";
-import { packageLabelForTierKey, moneyOrUnpriced } from "@/lib/feed-provider-packages";
+import { moneyOrUnpriced } from "@/lib/feed-provider-packages";
+import { countRequestGroups, groupRequestsByPackage } from "@/lib/request-package-groups";
 
 /** How many months of History the card carries. Three is what fits without the card turning into
  * a table; the Revenue page's History view is the full list and the card links to it. */
@@ -15,23 +16,21 @@ const MONTHS_ON_CARD = 3;
 
 const TYPE_ICON: Record<string, string> = { pending: "🧪", approved: "✓", rejected: "✗", provisioned: "💳" };
 
-/** Collapses pending requests by (client, package) so a client requesting all of London
- * Base's three tiers in one sitting reads as one row, not three -- same defect Revenue and
- * the Feeds tab already had. Package membership comes from feed-provider-packages.ts, the
- * one shared source; this only aggregates requests by it, it doesn't redefine it. */
-function groupActivityByClientPackage(rows: FeedTierRequestRow[]) {
-  const groups = new Map<string, { key: string; userEmail: string | null; label: string; latest: Date }>();
-  for (const r of rows) {
-    const label = packageLabelForTierKey(r.tierKey) ?? r.tierName;
-    const key = `${r.userId}::${label}`;
-    const existing = groups.get(key);
-    if (!existing) {
-      groups.set(key, { key, userEmail: r.userEmail, label, latest: r.createdAt });
-    } else if (r.createdAt > existing.latest) {
-      existing.latest = r.createdAt;
-    }
-  }
-  return Array.from(groups.values()).sort((a, b) => b.latest.getTime() - a.latest.getTime());
+/** Recent activity lists the pending requests exactly as the Approvals list renders them: one
+ * entry per groupRequestsByPackage group, so a package batch is one entry under the package's
+ * name and anything else is one entry per feed (marcus m64242, A1). It used to collapse by
+ * (client, package label), a second grouper for the same fact that could disagree with the list
+ * and the counters. Pending arrives newest first and the grouper keeps that order. */
+function recentRequestActivity(rows: FeedTierRequestRow[]) {
+  return groupRequestsByPackage(rows).map((g) => {
+    const r = g.kind === "package" ? g.members[0] : g.row;
+    return {
+      key: g.kind === "package" ? `batch-${g.batchId}` : r.id,
+      userEmail: r.userEmail,
+      label: g.kind === "package" ? g.label : r.tierName,
+      at: r.createdAt,
+    };
+  });
 }
 
 export default async function FeedOverviewPage() {
@@ -48,6 +47,7 @@ export default async function FeedOverviewPage() {
   ]);
 
   const oldest = pending[pending.length - 1];
+  const requestCount = countRequestGroups(pending);
   /** The three most recent months exactly as History orders them, newest first -- INCLUDING a
    * month with no paying client, which renders "—" here as it does there. Dropping the empty ones
    * would be a gate the canonical page does not have: a card whose top row was August would read
@@ -66,11 +66,14 @@ export default async function FeedOverviewPage() {
       </header>
 
       <section className="fp-content">
-        {pending.length > 0 && (
+        {requestCount > 0 && (
           <div className="banner warn">
             <span className="bic">⚑</span>
             <div>
-              <b>{pending.length} request{pending.length === 1 ? "" : "s"}</b> are waiting for your approval.
+              <b>
+                {requestCount} request{requestCount === 1 ? "" : "s"}
+              </b>{" "}
+              {requestCount === 1 ? "is" : "are"} waiting for your approval.
               Approving is one click and instantly activates the client.
             </div>
             <Link className="baction" href="/feed/dashboard/users">
@@ -103,11 +106,11 @@ export default async function FeedOverviewPage() {
               </Link>
             </div>
           </div>
-          <div className={`stat${pending.length > 0 ? " hot" : ""}`}>
+          <div className={`stat${requestCount > 0 ? " hot" : ""}`}>
             <div className="lab">
               <span className="si">⚑</span> Pending approvals
             </div>
-            <div className="val">{pending.length}</div>
+            <div className="val">{requestCount}</div>
             <div className="sub">
               {oldest ? <>oldest waiting · {formatRelative(oldest.createdAt)} · </> : "queue is clear · "}
               <Link href="/feed/dashboard/users" style={{ color: "var(--pfp-warn)", fontWeight: 600 }}>
@@ -208,7 +211,7 @@ export default async function FeedOverviewPage() {
               </div>
             ) : (
               <div className="act">
-                {groupActivityByClientPackage(pending)
+                {recentRequestActivity(pending)
                   .slice(0, 5)
                   .map((g) => (
                   <div className="ai" key={g.key}>
@@ -217,9 +220,9 @@ export default async function FeedOverviewPage() {
                       <b>
                         {g.userEmail ?? "unknown"} — {g.label}
                       </b>
-                      <span>requested {formatRelative(g.latest)}</span>
+                      <span>requested {formatRelative(g.at)}</span>
                     </div>
-                    <div className="tm">{formatRelative(g.latest)}</div>
+                    <div className="tm">{formatRelative(g.at)}</div>
                   </div>
                 ))}
               </div>
