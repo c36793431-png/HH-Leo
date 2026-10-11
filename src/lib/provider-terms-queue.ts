@@ -107,8 +107,8 @@ export interface BookContext {
 
 /** §3.2's aggregate: where the book sits on retained margin across every confirmed
  * (live) tier, so a single proposal's split can be judged against the fleet instead
- * of in isolation. provider_tiers is confirmed-only by construction (no status
- * column there), so every row here is a live, retained-margin data point. */
+ * of in isolation. No status filter: every provider_tiers row counts, trial and
+ * paused included (0065 added the status column after this was written). */
 export async function getBookContext(): Promise<BookContext> {
   const result = await pool.query<{ median_retained_pct: string | null; live_count: string }>(
     `select

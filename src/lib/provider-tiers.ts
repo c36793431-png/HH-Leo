@@ -3,8 +3,8 @@ import { getProviderApplication, notifyProviderLive } from "./provider-applicati
 
 /** The one "live provider" predicate (marcus m64339): an APPROVED provider application with at least one
  * provider_tiers row whose status is 'live'. The admin dashboard's Feed providers tile, the /admin/providers
- * roster's Live/Onboarding status and that page's "Live providers" stat all read this, so they cannot
- * disagree. provider_applications.onboarded_at is not the test: a provider can serve clients on live tiers
+ * roster's Live/Onboarding status, that page's "Live providers" stat and getProviderMarketplaceSummary()'s
+ * liveProviderCount (/admin, /admin/provider-applications) all read this, so they cannot disagree. provider_applications.onboarded_at is not the test: a provider can serve clients on live tiers
  * with it NULL. `pa` is the provider_applications alias in the caller's query. */
 export function providerIsLiveSql(pa: string): string {
   return `(${pa}.status = 'approved' and exists (
@@ -19,10 +19,10 @@ export interface ProviderMarketplaceSummary {
 }
 
 /** Feed-admin dashboard Providers/Revenue tiles (bus thread
- * feed-admin-dashboard-build-2026-08-24). provider_tiers is confirmed-only by construction
- * (no status column -- see 0061's migration comment), so every row here is a live, real
- * data point -- same invariant getTermsQueueStats()/getBookContext() in
- * provider-terms-queue.ts rely on for the /admin/providers surface. This is a separate,
+ * feed-admin-dashboard-build-2026-08-24). liveProviderCount uses providerIsLiveSql above.
+ * liveTierCount and the run-rate sums still cover every provider_tiers row whatever its
+ * status (0065 added trial/paused; before it the table was confirmed-only), so they are not
+ * live-only. This is a separate,
  * narrower query (dashboard only needs provider/tier counts + run-rate, not the terms-queue's
  * proposal/median-margin stats), not a reuse -- keep both in sync if provider_tiers' shape
  * changes.
@@ -40,7 +40,7 @@ export async function getProviderMarketplaceSummary(): Promise<ProviderMarketpla
     retained: string | null;
   }>(
     `select
-       count(distinct provider_user_id) as live_providers,
+       (select count(*) from provider_applications pa where ${providerIsLiveSql("pa")}) as live_providers,
        count(*) as live_tiers,
        sum(client_price_cents) as gross,
        sum(client_price_cents * (100 - provider_split_pct) / 100.0) as retained
@@ -66,8 +66,8 @@ export interface LiveTierRevenueRow {
 }
 
 /** Per-tier breakdown backing /admin/revenue (spec §9) -- the auditable detail behind
- * getProviderMarketplaceSummary()'s rollup. Same "provider_tiers is live-only by
- * construction" invariant applies, so no status filter is needed here either. */
+ * getProviderMarketplaceSummary()'s run-rate rollup. No status filter: lists every tier,
+ * trial and paused included, matching the run-rate sums. */
 export async function listAllLiveTiers(): Promise<LiveTierRevenueRow[]> {
   const result = await pool.query<{
     id: string;
