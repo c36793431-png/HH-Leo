@@ -138,7 +138,7 @@ export default auth(async (req) => {
     // "/admin" is excluded: that route file host-branches internally and is legitimately dual-host.
     // Checked after the 403 above so a non-admin still gets Forbidden, not a 404 that leaks which
     // admin routes exist.
-    const FEED_ONLY_ADMIN_ROUTES = ["/admin/revenue", "/admin/providers", "/admin/feed-health", "/admin/provider-applications", "/admin/register-provider", "/admin/feed-requests", "/admin/feed-tier-requests", "/admin/feed-tier-trials", "/admin/black-trials", "/admin/feed-boxes", "/admin/accounts"];
+    const FEED_ONLY_ADMIN_ROUTES = ["/admin/revenue", "/admin/providers", "/admin/feed-health", "/admin/provider-applications", "/admin/register-provider", "/admin/feed-requests", "/admin/feed-tier-requests", "/admin/feed-tier-trials", "/admin/black-trials", "/admin/feed-boxes", "/admin/feed-connections", "/admin/accounts"];
     const isFeedOnlyAdminRoute =
       FEED_ONLY_ADMIN_ROUTES.includes(pathname) || pathname.startsWith("/admin/provider-applications/");
     if (!isFeedHost && !isPartnerHost && isFeedOnlyAdminRoute) {

@@ -119,7 +119,7 @@ test("0102: both tables, their keys and checks; no password column anywhere", as
     `insert into feed_tier_connections (feed_tier_id, conn_type, host, port, symbols) values ('${CME}', 'b_fix', 'h', 1, '{"a":1}')`,
     `insert into feed_tier_connections (feed_tier_id, conn_type, host, port, symbols) values ('${CME}', 'b_fix', 'h', 1, (select jsonb_agg(i) from generate_series(1, 65) i))`,
   ];
-  for (const s of bad) await assert.rejects(sql(s), undefined, s);
+  for (const s of bad) await assert.rejects(sql(s), Error, s);
   // A login needs its connection row (composite FK) and a well-formed name.
   const u = await client();
   await assert.rejects(sql(`insert into feed_client_logins (subscriber_user_id, feed_tier_id, conn_type, username) values ($1, $2, 'b_fix', 'C58-ROBERT')`, [u, CME]), /foreign key/);

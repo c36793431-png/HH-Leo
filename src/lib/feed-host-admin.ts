@@ -17,6 +17,7 @@ export const ADMIN_FEED_ROUTES: readonly string[] = [
   "/admin/feed-tier-trials",
   "/admin/black-trials",
   "/admin/feed-boxes",
+  "/admin/feed-connections",
   "/admin/accounts",
 ];
 
