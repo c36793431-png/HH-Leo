@@ -4,6 +4,7 @@ import {
   getRecentLicenseActivity,
   getSignupsPerDay,
   getRevenueStats,
+  getNetworkCounts,
 } from "@/lib/admin-dashboard";
 import Link from "next/link";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
@@ -57,12 +58,13 @@ const SIGNUP_STATUS_STYLES: Record<string, string> = {
 };
 
 export default async function AdminDashboardPage() {
-  const [counts, signups, activity, sparkline, revenue] = await Promise.all([
+  const [counts, signups, activity, sparkline, revenue, network] = await Promise.all([
     getUserCounts(),
     getRecentSignups(10),
     getRecentLicenseActivity(10),
     getSignupsPerDay(30),
     getRevenueStats(),
+    getNetworkCounts(),
   ]);
 
   const maxSparkline = Math.max(1, ...sparkline.map((d) => d.count));
@@ -109,6 +111,28 @@ export default async function AdminDashboardPage() {
         <StatTile label="Free" value={String(counts.free)} href="/admin/users?role=user&hasLicense=none" />
         <StatTile label="Lapsed" value={String(counts.lapsed)} href="/admin/users?role=user&tab=lapsed" />
         <StatTile label="Admins" value={String(counts.admins)} href="/admin/users?tab=admin" />
+      </section>
+
+      {/* Network (marcus m64339). Strategy providers stays "—": nothing a third party submits is listed anywhere yet. */}
+      <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatTile
+          label="Feed providers"
+          value={String(network.feedProviders)}
+          sub={`${network.liveFeedProviders} live · ${network.feedProviders - network.liveFeedProviders} onboarding`}
+          href="/admin/providers"
+        />
+        <StatTile
+          label="Partners"
+          value={String(network.activePartners)}
+          sub={`${network.pendingPartnerApplications} application${network.pendingPartnerApplications === 1 ? "" : "s"} pending`}
+          href="/admin/partners"
+        />
+        <StatTile
+          label="Strategy providers"
+          value="—"
+          sub={`not live yet · ${network.strategySubmissions} submitted`}
+          href="/admin/strategy-submissions"
+        />
       </section>
 
       <section className="mb-8 rounded-xl border border-cyan-400/35 bg-cyan-950/60 p-6">

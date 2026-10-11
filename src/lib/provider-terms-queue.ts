@@ -1,4 +1,5 @@
 import { pool } from "./db";
+import { providerIsLiveSql } from "./provider-tiers";
 
 // /admin/providers "Needs terms review" queue -- spec §2/§3.2 (Iris, bus thread
 // provider-terms-negotiation-2026-08-24, m29314 [1/3] + m29329 REVISED). One row per
@@ -147,11 +148,12 @@ export async function getNeedsTermsReviewCount(): Promise<number> {
 
 /** Stat strip. Horizon-retained is a contracted run-rate over live provider_tiers
  * (client_price_cents * retained%), not a reconciled-payments figure -- same
- * "contracted, not reconciled" honesty as the dashboard Revenue tile. */
+ * "contracted, not reconciled" honesty as the dashboard Revenue tile. Live providers counts
+ * applications by providerIsLiveSql, so it equals the roster's Live filter (marcus m64339). */
 export async function getTermsQueueStats(): Promise<TermsQueueStats> {
   const [needsReview, live, confirmed, retained] = await Promise.all([
     getNeedsTermsReviewCount(),
-    pool.query<{ count: string }>(`select count(distinct provider_user_id) as count from provider_tiers`),
+    pool.query<{ count: string }>(`select count(*) as count from provider_applications pa where ${providerIsLiveSql("pa")}`),
     pool.query<{ count: string }>(
       `select count(*) as count from provider_tier_proposals
        where terms_status = 'confirmed' and decided_at >= date_trunc('month', now())`

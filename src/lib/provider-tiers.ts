@@ -1,6 +1,16 @@
 import { pool } from "./db";
 import { getProviderApplication, notifyProviderLive } from "./provider-applications";
 
+/** The one "live provider" predicate (marcus m64339): an APPROVED provider application with at least one
+ * provider_tiers row whose status is 'live'. The admin dashboard's Feed providers tile, the /admin/providers
+ * roster's Live/Onboarding status and that page's "Live providers" stat all read this, so they cannot
+ * disagree. provider_applications.onboarded_at is not the test: a provider can serve clients on live tiers
+ * with it NULL. `pa` is the provider_applications alias in the caller's query. */
+export function providerIsLiveSql(pa: string): string {
+  return `(${pa}.status = 'approved' and exists (
+    select 1 from provider_tiers live_t where live_t.application_id = ${pa}.id and live_t.status = 'live'))`;
+}
+
 export interface ProviderMarketplaceSummary {
   liveProviderCount: number;
   liveTierCount: number;
@@ -138,12 +148,10 @@ export interface ProviderRosterEntry {
 
 /** /admin/providers roster table (bus thread feed-admin-dashboard-build-2026-08-24,
  * Iris's "roster is the index, terms-review is a filtered view inside it" reconciliation).
- * One row per approved application, tiers nested. Status is Live/Onboarding derived from
- * provider_applications.onboarded_at (NOT NULL = Live, NULL = Onboarding) -- the split
- * 0060's own migration comment names as "the Live/pending-onboarding split". Iris's spec
- * pointed at provider_tiers.published_at for this, but that column is `not null default
- * now()` and can never be NULL, so it can't carry a two-state distinction; onboarded_at is
- * the field that actually does. Base is provider_applications (status='approved') left-joined
+ * One row per approved application, tiers nested. Status is Live/Onboarding by providerIsLiveSql
+ * (>=1 tier with status 'live'), the same predicate as the dashboard tile and the "Live providers"
+ * stat (marcus m64339). It used to be onboarded_at, which filed a provider serving clients on live
+ * tiers under Onboarding. Base is provider_applications (status='approved') left-joined
  * to provider_tiers, not an inner join on provider_tiers, so onboarding applicants with zero
  * confirmed tiers still show up as a row instead of being invisible. Uptime remains unmodeled
  * -- same gap as the aggregate dashboard's dropped connections-state tile.
@@ -159,7 +167,7 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
   const result = await pool.query<{
     application_id: string;
     provider_name: string;
-    onboarded_at: Date | null;
+    is_live: boolean;
     source: "application" | "admin_manual";
     reviewer_display_name: string | null;
     reviewer_email: string | null;
@@ -180,7 +188,7 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
     tier_regions: string[] | null;
     tier_coverage: string[] | null;
   }>(
-    `select pa.id as application_id, pa.name as provider_name, pa.onboarded_at, pa.source,
+    `select pa.id as application_id, pa.name as provider_name, ${providerIsLiveSql("pa")} as is_live, pa.source,
             u.display_name as reviewer_display_name, u.email as reviewer_email,
             pa.protocol as app_protocol, pa.host as app_host, pa.port as app_port,
             pa.compid as app_compid, pa.regions as app_regions, pa.coverage as app_coverage,
@@ -202,7 +210,7 @@ export async function listProviderRoster(): Promise<ProviderRosterEntry[]> {
       entry = {
         applicationId: row.application_id,
         providerName: row.provider_name,
-        status: row.onboarded_at != null ? "live" : "onboarding",
+        status: row.is_live ? "live" : "onboarding",
         source: row.source,
         reviewedByLabel:
           row.source === "admin_manual"

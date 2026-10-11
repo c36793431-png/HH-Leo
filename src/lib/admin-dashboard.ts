@@ -3,6 +3,7 @@ import { getPaymentTotals } from "./payments";
 import { licenseStatusCaseSql } from "./licenses";
 import { getFeedCostStats } from "./feed-subscriptions";
 import { ROLE_LABELS, type UserRole } from "./admin-user-roles";
+import { providerIsLiveSql } from "./provider-tiers";
 import type { ComputedLicenseStatus } from "./license-status-badge";
 
 /**
@@ -75,6 +76,47 @@ export async function getUserCounts(): Promise<UserCounts> {
     deal: Number(row?.deal ?? 0),
     lapsed: Number(row?.lapsed ?? 0),
     admins: Number(row?.admins ?? 0),
+  };
+}
+
+export interface NetworkCounts {
+  feedProviders: number;
+  liveFeedProviders: number;
+  activePartners: number;
+  pendingPartnerApplications: number;
+  strategySubmissions: number;
+}
+
+/**
+ * The dashboard's network row (marcus m64339), each read from the table its tile links to.
+ * feedProviders = approved provider applications, the /admin/providers roster; liveFeedProviders
+ * = of those, providerIsLiveSql, the same predicate as that page's Live filter. Partners = partners
+ * status 'active' (/admin/partners), pending = partner_applications 'pending'. Strategy providers
+ * have no live listing (no public page reads strategy_submissions), so only the submitted count is
+ * read, and never the admin-only 'listed' status.
+ */
+export async function getNetworkCounts(): Promise<NetworkCounts> {
+  const result = await pool.query<{
+    feed_providers: string;
+    live_feed_providers: string;
+    active_partners: string;
+    pending_partner_applications: string;
+    strategy_submissions: string;
+  }>(`
+    select
+      (select count(*) from provider_applications where status = 'approved') as feed_providers,
+      (select count(*) from provider_applications pa where ${providerIsLiveSql("pa")}) as live_feed_providers,
+      (select count(*) from partners where status = 'active') as active_partners,
+      (select count(*) from partner_applications where status = 'pending') as pending_partner_applications,
+      (select count(*) from strategy_submissions) as strategy_submissions
+  `);
+  const row = result.rows[0];
+  return {
+    feedProviders: Number(row?.feed_providers ?? 0),
+    liveFeedProviders: Number(row?.live_feed_providers ?? 0),
+    activePartners: Number(row?.active_partners ?? 0),
+    pendingPartnerApplications: Number(row?.pending_partner_applications ?? 0),
+    strategySubmissions: Number(row?.strategy_submissions ?? 0),
   };
 }
 
