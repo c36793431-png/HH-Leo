@@ -51,6 +51,13 @@ export function parseSymbolLines(text: string): SymbolEntry[] {
   });
 }
 
+/** The editor's prefill: the stored list back as lines parseSymbolLines reads to the same list, so saving a row
+ * unchanged keeps its symbols. A description that itself starts with a dash gets the "—" separator, else the parser
+ * would take that dash as the separator. */
+export function symbolLinesText(symbols: SymbolEntry[]): string {
+  return symbols.map((s) => (/^[—–-]\s/.test(s.description) ? `${s.symbol} — ${s.description}` : `${s.symbol} ${s.description}`)).join("\n");
+}
+
 export interface ConnectionInput {
   feedTierId: string;
   connType: string;

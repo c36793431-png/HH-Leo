@@ -24,6 +24,8 @@ import { getConfigSummary } from "@/lib/config-summary";
 import { FeedTierSelectForm } from "@/components/admin/feed-tier-select-form";
 import { AdminClientContact } from "@/components/admin/client-contact";
 import { getClientContact } from "@/lib/client-reach";
+import { listClientLoginRows } from "@/lib/feed-connections";
+import { ClientLoginRows } from "@/components/admin/client-login-rows";
 import {
   computeFeedAssignmentRows,
   getFeedTierSubscriptionsForSubscriber,
@@ -210,13 +212,14 @@ export default async function AdminUserDetailPage({
 }) {
   const { id } = await params;
   const reach = await getClientContact(id).catch(() => null);
-  const [session, user, payments, configSummary, feedTiers, feedSubscriptions] = await Promise.all([
+  const [session, user, payments, configSummary, feedTiers, feedSubscriptions, clientLoginRows] = await Promise.all([
     auth(),
     getUserDetail(id),
     listPaymentsForUser(id),
     getConfigSummary(id),
     listFeedTiersForAdminPicker(),
     getFeedTierSubscriptionsForSubscriber(id),
+    listClientLoginRows(id),
   ]);
   if (!user) notFound();
   const isSelf = session?.user?.id === user.userId;
@@ -364,6 +367,18 @@ export default async function AdminUserDetailPage({
                   rows={feedAssignmentRows}
                   subjectName={user.displayName ?? user.email ?? "this user"}
                 />
+              </dd>
+            </div>
+          )}
+          {clientLoginRows.length > 0 && (
+            <div>
+              <dt className="text-xs text-zinc-500">Feed connection usernames</dt>
+              <dd className="text-zinc-200">
+                <p className="mb-1.5 max-w-xs text-[11px] leading-snug text-zinc-500">
+                  The client&apos;s login per connection type. Host, port and symbols are on Feed connections; the
+                  password is sent to the client separately.
+                </p>
+                <ClientLoginRows userId={user.userId} rows={clientLoginRows} />
               </dd>
             </div>
           )}

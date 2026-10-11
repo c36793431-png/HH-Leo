@@ -38,6 +38,7 @@ import {
   ClipboardCheck,
   Store,
   ShoppingBasket,
+  Cable,
   type LucideIcon,
 } from "lucide-react";
 
@@ -108,6 +109,7 @@ const FEED_ADMIN_LINKS = [
   { href: "/admin/feed-tier-trials", label: "Feed trials", icon: Gift },
   { href: "/admin/black-trials", label: "Black trials", icon: SatelliteDish },
   { href: "/admin/feed-boxes", label: "Feed boxes", icon: Server },
+  { href: "/admin/feed-connections", label: "Feed connections", icon: Cable },
   { href: "/admin/accounts", label: "Accounts", icon: CircleUser },
   { href: "/admin/feed-health", label: "Feed health", icon: Radar },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
