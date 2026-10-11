@@ -31,7 +31,7 @@ export function PortalShell({
   const [navOpen, setNavOpen] = useState(false);
 
   return (
-    <div className={`portal-shell${navOpen ? " nav-open" : ""}`}>
+    <div className={`portal-shell${adminSurface ? " admin-shell" : ""}${navOpen ? " nav-open" : ""}`}>
       <div className="scrim" onClick={() => setNavOpen(false)} />
       <div className="app">
         <PortalSidebar
