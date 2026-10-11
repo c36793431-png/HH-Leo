@@ -182,14 +182,16 @@ test("a bad amount (0, negative, sub-cent, not a number, over numeric(12,2)) is 
   assert.equal((await grants(b.requestId)).length, 0);
 });
 
-test("the form's text: '' = no amount; '50', '49.99', ' 1,250.5 ' parse; '0', '-1', '1.234', 'abc', '$50' are refused", () => {
+test("the form's text: '' = no amount; '50', '49.99', ' 1,250.5 ' parse; '0', '-1', '1.234', 'abc', '$50', '50,00' are refused", () => {
   const { parseAmountReceivedUsd } = lib.payments;
   assert.equal(parseAmountReceivedUsd(""), null);
   assert.equal(parseAmountReceivedUsd("   "), null);
   assert.equal(parseAmountReceivedUsd("50"), 50);
   assert.equal(parseAmountReceivedUsd("49.99"), 49.99);
   assert.equal(parseAmountReceivedUsd(" 1,250.5 "), 1250.5);
-  for (const bad of ["0", "0.00", "-1", "1.234", "abc", "$50", "1e3", "50 USD"]) {
+  assert.equal(parseAmountReceivedUsd("1,234,567.89"), 1234567.89);
+  // A comma only counts as a thousands separator in a thousands place: a decimal comma is refused, never read as 100x.
+  for (const bad of ["0", "0.00", "-1", "1.234", "abc", "$50", "1e3", "50 USD", "50,00", "1,0", ",50", "50,", "12,34,56", "1250,5"]) {
     assert.throws(() => parseAmountReceivedUsd(bad), /amount received/i, bad);
   }
 });

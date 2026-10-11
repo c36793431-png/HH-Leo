@@ -35,12 +35,13 @@ export function isReceivableUsdAmount(n: number): boolean {
 }
 
 /** The admin queue's optional "Amount received (USD)" field. Empty = no amount (null), so nothing is
- * written. Digits with up to 2 decimals, commas allowed as thousands separators; anything else, and 0,
- * is refused rather than guessed at. */
+ * written. Digits with up to 2 decimals, commas allowed only as thousands separators (placement is
+ * checked before they are stripped, so a decimal comma like "50,00" is refused, not read as 5000);
+ * anything else, and 0, is refused rather than guessed at. */
 export function parseAmountReceivedUsd(raw: string): number | null {
-  const text = raw.trim().replace(/,/g, "");
+  const text = raw.trim();
   if (!text) return null;
-  const n = /^\d+(\.\d{1,2})?$/.test(text) ? Number(text) : Number.NaN;
+  const n = /^(\d{1,3}(,\d{3})*|\d+)(\.\d{1,2})?$/.test(text) ? Number(text.replace(/,/g, "")) : Number.NaN;
   if (!isReceivableUsdAmount(n)) throw new Error("Amount received must be a dollar amount above 0, like 50 or 49.99");
   return n;
 }
