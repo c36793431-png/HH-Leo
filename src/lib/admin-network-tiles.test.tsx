@@ -2,7 +2,8 @@
  *
  * Admin dashboard network tiles (marcus m64339 GO on plan m64338). One "live provider" predicate,
  * providerIsLiveSql (approved + >=1 provider_tiers row status 'live'), read by the dashboard tile, the
- * /admin/providers roster's Live/Onboarding status and that page's "Live providers" stat.
+ * /admin/providers roster's Live/Onboarding status, that page's "Live providers" stat, and
+ * getProviderMarketplaceSummary().liveProviderCount (/admin and /admin/provider-applications).
  * Runs on PGlite with the REAL migration chain (the provider-overview.test.tsx harness), no prod.
  * Counts are asserted as deltas over what the migrations seed, so a seed row can't make them pass. */
 import { test, before } from "node:test";
@@ -83,9 +84,10 @@ before(async () => {
 
 test("live = approved + >=1 live tier: onboarded_at NULL with live tiers is live, onboarded_at set with none is not; tile, roster and stat agree", async () => {
   const { getNetworkCounts } = await import("./admin-dashboard");
-  const { listProviderRoster } = await import("./provider-tiers");
+  const { listProviderRoster, getProviderMarketplaceSummary } = await import("./provider-tiers");
   const { getTermsQueueStats } = await import("./provider-terms-queue");
   const statBase = (await getTermsQueueStats()).liveProvidersCount;
+  const summaryBase = (await getProviderMarketplaceSummary()).liveProviderCount;
 
   const cw1Like = await provider("approved", ["live", "live"], false); // serves clients, never stamped
   const pipLike = await provider("approved", ["live"], true);
@@ -110,6 +112,12 @@ test("live = approved + >=1 live tier: onboarded_at NULL with live tiers is live
   assert.equal(stat - statBase, 2, "the Live providers stat moves with the same predicate");
   assert.equal(stat, counts.liveFeedProviders, "page stat == dashboard tile");
   assert.equal(liveOnRoster, counts.liveFeedProviders, "roster Live filter == dashboard tile");
+
+  // Fable S1 (m64490): /admin's "N live" + Live/Cold-start tag and /admin/provider-applications'
+  // "Providers live" read getProviderMarketplaceSummary(), not the three readers above.
+  const summary = (await getProviderMarketplaceSummary()).liveProviderCount;
+  assert.equal(summary - summaryBase, 2, "pausedOnly, pending and declined rows do not count as live");
+  assert.equal(summary, counts.liveFeedProviders, "/admin and /admin/provider-applications == dashboard tile");
 });
 
 test("partners: active counted, inactive not; pending applications in the sub-line, approved/declined not", async () => {
