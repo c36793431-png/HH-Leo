@@ -99,10 +99,15 @@ async function pendingRequest(referrerId: string | null) {
      values ($1, $2, 'srv', 'other', 'New York', $3) returning id`,
     [l.rows[0].id, buyer.id, `10.8.0.${seq}`]
   );
+  const serverId = s.rows[0].id as string;
+  return { buyer, serverId, requestId: await requestTier(buyer.id, serverId, "ny-normal") };
+}
+/** One more pending feed request from an existing buyer's server, on `tierKey`. */
+async function requestTier(buyerId: string, serverId: string, tierKey: string) {
   const ar = await import("../../lib/access-requests");
-  const tier = (await sql(`select id from feed_tiers where tier_key = 'ny-normal'`)).rows[0].id;
-  const { requestIds } = await ar.createAccessRequestBatch({ userId: buyer.id, items: [{ kind: "feed_tier", serverRegistrationId: s.rows[0].id, feedTierId: tier }] });
-  return { buyer, requestId: requestIds[0] };
+  const tier = (await sql(`select id from feed_tiers where tier_key = $1`, [tierKey])).rows[0].id;
+  const { requestIds } = await ar.createAccessRequestBatch({ userId: buyerId, items: [{ kind: "feed_tier", serverRegistrationId: serverId, feedTierId: tier }] });
+  return requestIds[0];
 }
 
 const paid = (amountReceivedUsd?: number | null) => ({
@@ -267,4 +272,91 @@ test("control: Finance's Add payment for 'customer' still links the user and ear
   assert.equal(Number((await earningsFor(buyer.id))[0].amount_usd), 30);
   assert.equal((await sql(`select user_id from payments where counterparty = $1`, [infraBuyer.email])).rows[0].user_id, null);
   assert.equal((await earningsFor(infraBuyer.id)).length, 0);
+});
+
+// Q4 interim (a) (marcus m64826, m64880; Fable m64882): a referrer earns on a client's FIRST feed_access payment per
+// tier, not on every payment for life. A Finance (R3) feed row carries no tier, so it counts as the first for every
+// tier, and earns only if the client has no feed earning at all. Earning status is ignored: a clawed-back first
+// earning still counts as the first. Software ('customer') is untouched.
+async function lapseGrant(requestId: string) {
+  await sql(`update feed_subscriptions set status = 'lapsed', ends_at = now() - interval '1 day' where access_request_id = $1`, [requestId]);
+}
+/** Finance's hand-entered rows for a client (the approve's own payment carries the same counterparty email). */
+async function financeRows(email: string) {
+  return (await sql(`select * from payments where counterparty = $1 and access_request_id is null`, [email])).rows;
+}
+const financeFeedRow = (email: string) =>
+  finance.addPaymentAction(null, form({ receivedAt: "2026-10-10", amountUsd: "50", direction: "in", category: "feed_access", counterparty: email }));
+
+test("Q4: a second paid approve for the same client and tier (re-approve after lapse) writes its payment and NO earning", async () => {
+  const referrer = await makeReferrer();
+  const { buyer, serverId, requestId } = await pendingRequest(referrer.id);
+  await ftr.approveFeedTierRequest(requestId, ADMIN, "", paid(50));
+  await lapseGrant(requestId);
+  const second = await requestTier(buyer.id, serverId, "ny-normal");
+  await ftr.approveFeedTierRequest(second, ADMIN, "", paid(50));
+  assert.equal((await paymentFor(second)).length, 1, "the second payment is still recorded");
+  const earnings = await earningsFor(buyer.id);
+  assert.equal(earnings.length, 1);
+  assert.equal(earnings[0].payment_id, (await paymentFor(requestId))[0].id);
+});
+
+test("Q4: a clawed-back first earning still counts as the first -- the re-approve on that tier writes none", async () => {
+  const referrer = await makeReferrer();
+  const { buyer, serverId, requestId } = await pendingRequest(referrer.id);
+  await ftr.approveFeedTierRequest(requestId, ADMIN, "", paid(50));
+  await referrals.clawbackEarning((await earningsFor(buyer.id))[0].id);
+  await lapseGrant(requestId);
+  const second = await requestTier(buyer.id, serverId, "ny-normal");
+  await ftr.approveFeedTierRequest(second, ADMIN, "", paid(50));
+  const earnings = await earningsFor(buyer.id);
+  assert.equal(earnings.length, 1);
+  assert.equal(earnings[0].status, "clawback");
+});
+
+test("Q4: a different tier for the same client earns once, on its own first payment", async () => {
+  const referrer = await makeReferrer();
+  const { buyer, serverId, requestId } = await pendingRequest(referrer.id);
+  await ftr.approveFeedTierRequest(requestId, ADMIN, "", paid(50));
+  const fast = await requestTier(buyer.id, serverId, "ny-fast");
+  await ftr.approveFeedTierRequest(fast, ADMIN, "", paid(40));
+  const earnings = await earningsFor(buyer.id);
+  assert.equal(earnings.length, 2);
+  const fastPayment = (await paymentFor(fast))[0];
+  const fastEarnings = earnings.filter((e) => e.payment_id === fastPayment.id);
+  assert.equal(fastEarnings.length, 1);
+  assert.equal(Number(fastEarnings[0].amount_usd), 12);
+});
+
+test("Q4-1: a Finance feed row after an approve-earning writes NO earning (a tierless row needs no feed earning at all)", async () => {
+  const referrer = await makeReferrer();
+  const { buyer, requestId } = await pendingRequest(referrer.id);
+  await ftr.approveFeedTierRequest(requestId, ADMIN, "", paid(50));
+  const result = await financeFeedRow(buyer.email);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal((await financeRows(buyer.email)).length, 1, "the Finance row is kept");
+  assert.equal((await earningsFor(buyer.id)).length, 1);
+});
+
+test("Q4-1b: a Finance feed row earns first, then a paid approve for the same client writes NO earning", async () => {
+  const referrer = await makeReferrer();
+  const { buyer, requestId } = await pendingRequest(referrer.id);
+  await financeFeedRow(buyer.email);
+  assert.equal((await earningsFor(buyer.id)).length, 1, "the Finance row is the first feed earning");
+  await ftr.approveFeedTierRequest(requestId, ADMIN, "", paid(50));
+  assert.equal((await paymentFor(requestId)).length, 1);
+  const earnings = await earningsFor(buyer.id);
+  assert.equal(earnings.length, 1);
+  assert.equal(earnings[0].payment_id, (await financeRows(buyer.email))[0].id);
+});
+
+test("control (pinned): software is untouched by Q4 -- every 'customer' row for the same client earns 30%", async () => {
+  const referrer = await makeReferrer();
+  const buyer = await makeUser(referrer.id);
+  for (let i = 0; i < 2; i++) {
+    await finance.addPaymentAction(null, form({ receivedAt: "2026-10-10", amountUsd: "100", direction: "in", category: "customer", counterparty: buyer.email }));
+  }
+  const earnings = await earningsFor(buyer.id);
+  assert.equal(earnings.length, 2);
+  assert.deepEqual(earnings.map((e) => Number(e.amount_usd)), [30, 30]);
 });
