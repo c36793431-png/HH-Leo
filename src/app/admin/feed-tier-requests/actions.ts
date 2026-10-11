@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { approveFeedTierRequest, rejectFeedTierRequest } from "@/lib/feed-tier-requests";
+import { parseAmountReceivedUsd } from "@/lib/payments";
 
 async function requireAdmin(): Promise<string> {
   const session = await auth();
@@ -16,6 +17,8 @@ async function requireAdmin(): Promise<string> {
  * vs paid per line (Source K). paid carries the end date the invoice bought and the invoice
  * ref; trial carries neither -- its end is derived server-side as now() + its length (S4), so
  * any submitted date is ignored. The length is the admin's pick of 7, 14 or 30 days (m57759).
+ * paid may also carry the amount received (m64288); it is passed on whatever the decision, so a
+ * trial that arrives with one is refused by the library rather than quietly dropped here.
  * The library re-validates all of it; this only shapes the form input. */
 export async function approveFeedTierRequestAction(
   _prevState: ActionResult | null,
@@ -31,13 +34,19 @@ export async function approveFeedTierRequestAction(
     const endsAt = decision === "paid" ? (endsAtRaw ? new Date(endsAtRaw) : null) : null;
     if (decision === "paid" && (!endsAt || Number.isNaN(endsAt.getTime()))) throw new Error("Paid approval needs an end date");
     const trialDaysRaw = ((formData.get("trialDays") as string) ?? "").trim();
+    const amountReceivedUsd = parseAmountReceivedUsd((formData.get("amountReceived") as string) ?? "");
     await approveFeedTierRequest(id, adminId, "https://feed.horizonhft.com/admin/feed-tier-trials", {
       decision,
       endsAt,
       invoiceRef: decision === "paid" ? invoiceRef : null,
       trialDays: decision === "trial" && trialDaysRaw ? Number(trialDaysRaw) : undefined,
+      amountReceivedUsd,
     });
     revalidatePath("/admin/feed-tier-requests");
+    if (amountReceivedUsd != null) {
+      revalidatePath("/admin/finance");
+      revalidatePath("/admin/dashboard");
+    }
   });
 }
 

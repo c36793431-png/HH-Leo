@@ -2,6 +2,7 @@ import type { PoolClient } from "@neondatabase/serverless";
 import { pool } from "./db";
 import { TrialAlreadyClaimedError, TrialNotEligibleError, hasClaimedTrial } from "./feed-tier-trials";
 import { ADMIN_TRIAL_DAY_OPTIONS, TRIAL_DURATION_DAYS, isAdminTrialEligibleTier, isTrialEligibleTier } from "./feed-tier-catalogue";
+import { isReceivableUsdAmount } from "./payments";
 import {
   assertNoLiveGrant,
   assignPseudonymSeq,
@@ -294,6 +295,10 @@ export interface ApproveAccessRequestInput {
   /** trial only: its length, one of ADMIN_TRIAL_DAY_OPTIONS. Only the admin queue passes it
    * (m57759); omitted = TRIAL_DURATION_DAYS, which is every other path. */
   trialDays?: number;
+  /** paid only, admin queue only: the money received for this line (marcus m64288). Omitted or null =
+   * nothing written. Set = one payments row (category 'feed_access') in the approve's own transaction,
+   * written by approveAccessRequest only -- the self-serve trial never carries one. */
+  amountReceivedUsd?: number | null;
 }
 
 export interface ApproveAccessRequestResult {
@@ -308,15 +313,22 @@ export interface ApproveAccessRequestResult {
  * exists for paid only. The length is TRIAL_DURATION_DAYS unless the admin queue picked one of
  * ADMIN_TRIAL_DAY_OPTIONS (m57759). Runs before any transaction opens, so a bad length writes
  * nothing. */
-function resolveDecision(input: Pick<ApproveAccessRequestInput, "decision" | "endsAt" | "invoiceRef" | "trialDays">): { endsAt: Date; invoiceRef: string | null } {
+function resolveDecision(
+  input: Pick<ApproveAccessRequestInput, "decision" | "endsAt" | "invoiceRef" | "trialDays" | "amountReceivedUsd">
+): { endsAt: Date; invoiceRef: string | null } {
   const invoiceRef = (input.invoiceRef ?? "").trim();
+  const amount = input.amountReceivedUsd;
   if (input.decision === "paid") {
     if (!input.endsAt || Number.isNaN(input.endsAt.getTime())) throw new Error("Paid approval needs an end date");
     if (input.endsAt.getTime() <= Date.now()) throw new Error("The end date must be in the future");
     if (!invoiceRef) throw new Error("Paid approval needs an invoice ref");
+    if (amount != null && !isReceivableUsdAmount(amount)) {
+      throw new Error("Amount received must be a dollar amount above 0, like 50 or 49.99");
+    }
     return { endsAt: input.endsAt, invoiceRef };
   }
   if (invoiceRef) throw new Error("A trial has no invoice ref");
+  if (amount != null) throw new Error("A trial has no amount received");
   const days = input.trialDays ?? TRIAL_DURATION_DAYS;
   if (!ADMIN_TRIAL_DAY_OPTIONS.includes(days)) {
     throw new Error(`A trial runs ${ADMIN_TRIAL_DAY_OPTIONS.join(", ")} days, not ${days}`);
@@ -410,12 +422,32 @@ async function approveOnClient(client: PoolClient, input: ApproveAccessRequestIn
   return { requestId: envelope.id, feedSubscriptionId, endsAt, decision: input.decision, tierKey };
 }
 
+/** The amount the admin received for a paid line, into the payments ledger (marcus m64288; 0100), on
+ * the approve's client after approveOnClient has written the envelope, so the row reads its own facts
+ * back: the requester, the invoice ref as memo, the decider's email as created_by (as Finance's Add
+ * payment form writes it). A failure here rolls the approval back with it: a grant whose recorded
+ * payment was lost would be worse than an approve the admin retries. */
+async function recordAmountReceived(client: PoolClient, requestId: string, amountUsd: number): Promise<void> {
+  const inserted = await client.query(
+    `insert into payments (amount_usd, direction, category, activation_source, counterparty, user_id, access_request_id, memo, created_by)
+     select $2, 'in', 'feed_access', 'paid', requester.email, a.user_id, a.id, a.invoice_ref, decider.email
+     from access_requests a
+     join users requester on requester.id = a.user_id
+     left join users decider on decider.id = a.decided_by
+     where a.id = $1
+     returning id`,
+    [requestId, amountUsd]
+  );
+  if (inserted.rowCount !== 1) throw new Error("the amount received was not recorded");
+}
+
 export async function approveAccessRequest(input: ApproveAccessRequestInput): Promise<ApproveAccessRequestResult> {
   resolveDecision(input);
   const client = await pool.connect();
   try {
     await client.query("begin");
     const result = await approveOnClient(client, input);
+    if (input.amountReceivedUsd != null) await recordAmountReceived(client, result.requestId, input.amountReceivedUsd);
     await client.query("commit");
     return result;
   } catch (err) {

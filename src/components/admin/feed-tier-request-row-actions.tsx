@@ -26,6 +26,9 @@ const INPUT =
  * form (0086 phase 2, docs/specs/0086-phase2-code.md section 4(d); coxwell notice C5): radio
  * trial | paid; the end date and invoice ref are shown and required for paid only -- a trial
  * takes no date, only a length of 7, 14 or 30 days from approval (S4; m57759), default 7.
+ * paid also offers an optional "Amount received (USD)" (m64288): empty records nothing, filled
+ * records it in the payments ledger with the approval. One invoice can cover several lines, so
+ * the hint says to enter it once.
  * Reject prompts for an optional reason (forwarded to the client's decline DM). */
 export function FeedTierRequestRowActions({ requestId, approveAction, rejectAction }: FeedTierRequestRowActionsProps) {
   const [pending, startTransition] = useTransition();
@@ -34,6 +37,7 @@ export function FeedTierRequestRowActions({ requestId, approveAction, rejectActi
   const [trialDays, setTrialDays] = useState(TRIAL_DURATION_DAYS);
   const [endsAt, setEndsAt] = useState("");
   const [invoiceRef, setInvoiceRef] = useState("");
+  const [amountReceived, setAmountReceived] = useState("");
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
 
@@ -44,6 +48,7 @@ export function FeedTierRequestRowActions({ requestId, approveAction, rejectActi
     if (decision === "paid") {
       formData.append("endsAt", endsAt);
       formData.append("invoiceRef", invoiceRef);
+      formData.append("amountReceived", amountReceived);
     } else {
       formData.append("trialDays", String(trialDays));
     }
@@ -153,6 +158,17 @@ export function FeedTierRequestRowActions({ requestId, approveAction, rejectActi
                 aria-label="Invoice ref"
                 className={INPUT}
               />
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amountReceived}
+                onChange={(e) => setAmountReceived(e.target.value)}
+                disabled={pending}
+                placeholder="Amount received (USD), optional"
+                aria-label="Amount received (USD)"
+                className={INPUT}
+              />
+              <span className="text-[11px] text-zinc-500">Enter once per invoice.</span>
             </>
           )}
           <button type="button" onClick={approve} disabled={pending || paidIncomplete} className={`self-start ${BTN_GREEN}`}>

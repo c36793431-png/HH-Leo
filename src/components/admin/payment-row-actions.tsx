@@ -15,6 +15,9 @@ const CATEGORY_OPTIONS = [
   { value: "infra", label: "Infra" },
   { value: "other", label: "Other" },
   { value: "referral_payout", label: "Referral payout" },
+  // Written by the admin queue's paid approve (0100). Listed so editing such a row keeps its category;
+  // a select without it would fall back to the first option and re-tag it 'customer' on save.
+  { value: "feed_access", label: "Feed access" },
 ];
 
 const DELETE_PHRASE = "CONFIRM";

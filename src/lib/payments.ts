@@ -10,7 +10,10 @@ export type PaymentCategory =
   | "feed_provider"
   | "infra"
   | "other"
-  | "referral_payout";
+  | "referral_payout"
+  | "feed_access";
+/** feed_access (0100): money received for feed access, written by the admin queue's paid approve
+ * (access-requests.ts approveAccessRequest), never by the Add payment form. */
 export const PAYMENT_CATEGORIES: PaymentCategory[] = [
   "customer",
   "partner",
@@ -19,7 +22,28 @@ export const PAYMENT_CATEGORIES: PaymentCategory[] = [
   "infra",
   "other",
   "referral_payout",
+  "feed_access",
 ];
+
+/** amount_usd is numeric(12,2). */
+const MAX_AMOUNT_USD = 9_999_999_999.99;
+
+/** A positive whole-cent amount that fits amount_usd. The approve path re-checks the number it is
+ * handed with this, so a caller that skips parseAmountReceivedUsd still cannot write a bad amount. */
+export function isReceivableUsdAmount(n: number): boolean {
+  return Number.isFinite(n) && n > 0 && n <= MAX_AMOUNT_USD && Math.abs(Math.round(n * 100) - n * 100) < 1e-6;
+}
+
+/** The admin queue's optional "Amount received (USD)" field. Empty = no amount (null), so nothing is
+ * written. Digits with up to 2 decimals, commas allowed as thousands separators; anything else, and 0,
+ * is refused rather than guessed at. */
+export function parseAmountReceivedUsd(raw: string): number | null {
+  const text = raw.trim().replace(/,/g, "");
+  if (!text) return null;
+  const n = /^\d+(\.\d{1,2})?$/.test(text) ? Number(text) : Number.NaN;
+  if (!isReceivableUsdAmount(n)) throw new Error("Amount received must be a dollar amount above 0, like 50 or 49.99");
+  return n;
+}
 
 export type ActivationSource = "paid" | "trial" | "deal" | "team";
 export const ACTIVATION_SOURCES: ActivationSource[] = ["paid", "trial", "deal", "team"];
@@ -135,6 +159,30 @@ export async function getPaymentTotals(): Promise<PaymentTotals> {
     totalOutThisMonth,
     netThisMonth: grossInThisMonth - totalOutThisMonth,
     mrrProxy: Number(row?.mrr_proxy ?? 0),
+  };
+}
+
+/** The COLLECTED tile on /admin/feed-tier-requests. null = no rows in that window, so the tile
+ * shows "—" and not $0. Month = the DB clock's calendar month (UTC on Neon). */
+export interface FeedAccessCollected {
+  monthUsd: number | null;
+  allTimeUsd: number | null;
+}
+
+/** Money received for feed access: payments rows of category 'feed_access', direction 'in'. Reads
+ * nothing else -- not invoice_ref, list price or anything contracted. */
+export async function getFeedAccessCollected(): Promise<FeedAccessCollected> {
+  const result = await pool.query<{ month_usd: string | null; all_time_usd: string | null }>(`
+    select
+      sum(amount_usd) filter (where received_at >= date_trunc('month', now())) as month_usd,
+      sum(amount_usd) as all_time_usd
+    from payments
+    where category = 'feed_access' and direction = 'in'
+  `);
+  const row = result.rows[0];
+  return {
+    monthUsd: row?.month_usd == null ? null : Number(row.month_usd),
+    allTimeUsd: row?.all_time_usd == null ? null : Number(row.all_time_usd),
   };
 }
 

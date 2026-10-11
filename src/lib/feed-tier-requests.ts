@@ -274,6 +274,8 @@ export interface ApproveDecisionInput {
   invoiceRef: string | null;
   /** trial only: the admin queue's chosen length (ADMIN_TRIAL_DAY_OPTIONS, m57759). */
   trialDays?: number;
+  /** paid only: the admin queue's optional "Amount received (USD)" (m64288); null = none recorded. */
+  amountReceivedUsd?: number | null;
 }
 
 /** Approve ONE line (spec section 3). With a decision (the admin queue, section 4(d)) it is

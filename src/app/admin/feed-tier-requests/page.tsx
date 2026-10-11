@@ -2,7 +2,10 @@ import Link from "next/link";
 import { listFeedTierRequests, FEED_TIER_REQUEST_STATUSES } from "@/lib/feed-tier-requests";
 import { listTierWaitlist } from "@/lib/tier-waitlist";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
+import { getFeedAccessCollected } from "@/lib/payments";
+import { countRequestGroupsByStatus } from "@/lib/request-package-groups";
 import { FeedTierRequestRows } from "@/components/admin/feed-tier-request-rows";
+import { FeedCollectedTile } from "@/components/admin/feed-collected-tile";
 import { approveFeedTierRequestAction, rejectFeedTierRequestAction } from "./actions";
 
 type FeedTierRequestStatus = (typeof FEED_TIER_REQUEST_STATUSES)[number];
@@ -31,19 +34,14 @@ export default async function AdminFeedTierRequestsPage({
     : undefined;
   const view = sp.view === "waitlist" ? "waitlist" : "requests";
 
-  const [requests, allRequests, waitlist] = await Promise.all([
+  const [requests, allRequests, waitlist, collected] = await Promise.all([
     listFeedTierRequests({ status }),
     status ? listFeedTierRequests() : Promise.resolve(null),
     listTierWaitlist(),
+    getFeedAccessCollected(),
   ]);
-  const statsSource = allRequests ?? requests;
-  const stats = FEED_TIER_REQUEST_STATUSES.reduce(
-    (acc, s) => {
-      acc[s] = statsSource.filter((r) => r.status === s).length;
-      return acc;
-    },
-    {} as Record<FeedTierRequestStatus, number>
-  );
+  // Request groups, not feed rows: a NY Base request is 1 (marcus m64288, ruling 2).
+  const stats = countRequestGroupsByStatus(allRequests ?? requests, FEED_TIER_REQUEST_STATUSES);
 
   if (view === "waitlist") {
     return (
@@ -124,6 +122,7 @@ export default async function AdminFeedTierRequestsPage({
       </header>
 
       <div className="fttr-stats">
+        <FeedCollectedTile collected={collected} />
         {FEED_TIER_REQUEST_STATUSES.map((s) => (
           <div key={s} className={`fttr-stat ${s}`}>
             <div className="n">{stats[s]}</div>
