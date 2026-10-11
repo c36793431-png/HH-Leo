@@ -157,6 +157,11 @@ test("the page's own prefill saves back unchanged: symbolLinesText round-trips t
   assert.deepEqual(lib.parseSymbolLines(lib.symbolLinesText(row.symbols)), row.symbols);
 });
 
+test("each row's form is keyed by updatedAt, so a save remounts it with the saved values (Fable S1: defaultValue is never re-applied to a mounted input)", () => {
+  const src = readFileSync(path.join(process.cwd(), "src/app/admin/feed-connections/page.tsx"), "utf8");
+  assert.ok(/<ConnectionForm\s+key=\{c\.updatedAt\.toISOString\(\)\}\s+row=\{/.test(src), "row form keyed by c.updatedAt");
+});
+
 test("/admin/users/[id] lists the client's connection usernames from listClientLoginRows, under the feed assignment", async () => {
   const src = readFileSync(path.join(process.cwd(), "src/app/admin/users/[id]/page.tsx"), "utf8");
   // assert.ok, not assert.match: a failed match would print the whole 700-line page.

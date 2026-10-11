@@ -41,7 +41,10 @@ export default async function AdminFeedConnectionsPage() {
           </div>
           <div className="text-xs text-zinc-500">last saved {formatAbsoluteUtc(c.updatedAt)}</div>
           <div className="mt-4">
+            {/* Keyed by updatedAt (Fable S1): the inputs are uncontrolled, so a save must remount the form or it keeps
+                the old values and its next Save writes them back. */}
             <ConnectionForm
+              key={c.updatedAt.toISOString()}
               row={{
                 feedTierId: c.feedTierId,
                 connType: c.connType,
