@@ -86,6 +86,7 @@ async function approve(buyer: Awaited<ReturnType<typeof makeBuyer>>, tierKey: st
 }
 
 const fx: Record<string, { sub: string; buyer: Awaited<ReturnType<typeof makeBuyer>> }> = {};
+let baseline = 0;
 
 before(async () => {
   db = new PGlite();
@@ -115,6 +116,8 @@ before(async () => {
     [PIP]
   );
   await sql(`update feed_tiers set provider_user_id = $1 where tier_key in ('ny-normal', 'ny-fast')`, [PIP]);
+  // The migration chain's own rows (0081 seeds subscriptions for its seven pairs).
+  baseline = (await lib.cf.listClientFeeds()).length;
 
   // 1. CME paid via the queue, priced; its allowlist record then revoked and a second one opened.
   fx.cmePaid = { buyer: await makeBuyer(), sub: "" };
@@ -146,7 +149,8 @@ const byId = (rows: Awaited<ReturnType<typeof lib.cf.listClientFeeds>>, id: stri
 
 test("one row per subscription, with every column marcus listed", async () => {
   const rows = await lib.cf.listClientFeeds();
-  assert.equal(rows.length, 4);
+  assert.equal(rows.length, baseline + 4);
+  assert.equal(new Set(rows.map((r) => r.subscriptionId)).size, rows.length, "no row twice (the allowlist join is aggregated)");
 
   const p = byId(rows, fx.cmePaid.sub);
   assert.equal(p.userId, fx.cmePaid.buyer.userId);
@@ -191,8 +195,9 @@ test("region filter: cme shows only CME rows; an unknown region is no filter", a
   const cme = await lib.cf.listClientFeeds({ region: "cme" });
   assert.deepEqual(new Set(cme.map((r) => r.subscriptionId)), new Set([fx.cmePaid.sub, fx.cmePastEnd.sub]));
   const ny = await lib.cf.listClientFeeds({ region: "ny" });
-  assert.deepEqual(new Set(ny.map((r) => r.subscriptionId)), new Set([fx.nyDirect.sub, fx.nyLapsed.sub]));
-  assert.equal((await lib.cf.listClientFeeds({ region: "nowhere" })).length, 4);
+  assert.ok(ny.every((r) => r.region === "ny"));
+  assert.ok([fx.nyDirect.sub, fx.nyLapsed.sub].every((id) => ny.some((r) => r.subscriptionId === id)));
+  assert.equal((await lib.cf.listClientFeeds({ region: "nowhere" })).length, baseline + 4);
 });
 
 test("read-only: listing writes nothing (row counts of every table it touches, and pseudonyms, unchanged)", async () => {
