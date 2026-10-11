@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { logAdminAction } from "@/lib/admin";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { createFeedBox, issueBoxToken, revokeAllowlistRecord } from "@/lib/feed-boxes";
+import { createFeedBox, issueBoxToken, revokeAllowlistRecord, revokeBoxToken, setBoxStatusTiers } from "@/lib/feed-boxes";
 
 async function requireAdmin(): Promise<string> {
   const session = await auth();
@@ -18,8 +18,35 @@ export async function createFeedBoxAction(_prev: ActionResult | null, formData: 
     const adminId = await requireAdmin();
     const name = String(formData.get("name") ?? "").trim();
     const tiers = formData.getAll("tier").map(String).filter(Boolean);
-    await createFeedBox(name, tiers);
-    await logAdminAction(adminId, "feed_box_created", null, { box: name, tiers }).catch(() => {});
+    const statusTiers = formData.getAll("statusTier").map(String).filter(Boolean);
+    await createFeedBox(name, tiers, statusTiers);
+    await logAdminAction(adminId, "feed_box_created", null, { box: name, tiers, statusTiers }).catch(() => {});
+    revalidatePath("/admin/feed-boxes");
+  });
+}
+
+/** Replace the tiers a box may report feed status for (Fable m64547 S1). The tiers it applies client IPs for are
+ * set at creation and are not editable here. */
+export async function setStatusTiersAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  return runAction("Failed to save the status tiers", async () => {
+    const adminId = await requireAdmin();
+    const boxId = String(formData.get("boxId") ?? "");
+    if (!/^[0-9a-f-]{36}$/.test(boxId)) throw new Error("No box");
+    const statusTiers = formData.getAll("statusTier").map(String).filter(Boolean);
+    const { name } = await setBoxStatusTiers(boxId, statusTiers);
+    await logAdminAction(adminId, "feed_box_status_tiers_set", null, { box: name, statusTiers }).catch(() => {});
+    revalidatePath("/admin/feed-boxes");
+    revalidatePath("/admin/feed-health");
+  });
+}
+
+/** Revoke a box's token (Q4). The audit row is written by revokeBoxToken in the same transaction. */
+export async function revokeBoxTokenAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  return runAction("Failed to revoke the token", async () => {
+    const adminId = await requireAdmin();
+    const boxId = String(formData.get("boxId") ?? "");
+    if (!/^[0-9a-f-]{36}$/.test(boxId)) throw new Error("No box");
+    await revokeBoxToken({ boxId, adminUserId: adminId });
     revalidatePath("/admin/feed-boxes");
   });
 }

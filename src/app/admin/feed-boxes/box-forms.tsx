@@ -1,10 +1,37 @@
 "use client";
 
 import { useActionState } from "react";
-import { createFeedBoxAction, issueBoxTokenAction, revokeRecordAction, type IssueTokenResult } from "./actions";
+import {
+  createFeedBoxAction,
+  issueBoxTokenAction,
+  revokeBoxTokenAction,
+  revokeRecordAction,
+  setStatusTiersAction,
+  type IssueTokenResult,
+} from "./actions";
 import type { ActionResult } from "@/lib/action-result";
 
-export function CreateBoxForm({ tiers }: { tiers: { id: string; tierKey: string; name: string }[] }) {
+type Tier = { id: string; tierKey: string; name: string };
+
+function TierChecks({ tiers, name, legend, checked }: { tiers: Tier[]; name: string; legend: string; checked?: Set<string> }) {
+  return (
+    <fieldset>
+      <legend className="text-xs text-zinc-500">{legend}</legend>
+      <div className="mt-1 flex flex-wrap gap-3">
+        {tiers.map((t) => (
+          <label key={t.id} className="flex items-center gap-1.5">
+            <input type="checkbox" name={name} value={t.id} defaultChecked={checked?.has(t.id)} /> {t.name}{" "}
+            <span className="text-zinc-500">({t.tierKey})</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/** Two tier sets (Fable m64547 S1): the allowlist set (client IPs this box applies) and the status set (feeds it
+ * reports on). A status-only box, like a measuring monitor, ticks only the second and gets an empty allowlist. */
+export function CreateBoxForm({ tiers }: { tiers: Tier[] }) {
   const [state, action, pending] = useActionState<ActionResult | null, FormData>(createFeedBoxAction, null);
   return (
     <form action={action} className="space-y-3 text-sm">
@@ -12,16 +39,8 @@ export function CreateBoxForm({ tiers }: { tiers: { id: string; tierKey: string;
         <span className="text-xs text-zinc-500">Box name (lowercase, digits, -)</span>
         <input name="name" required pattern="[a-z0-9][a-z0-9\-]{1,39}" className="mt-1 block w-64 rounded border border-zinc-700 bg-zinc-900 px-2 py-1" />
       </label>
-      <fieldset>
-        <legend className="text-xs text-zinc-500">Tiers this box serves</legend>
-        <div className="mt-1 flex flex-wrap gap-3">
-          {tiers.map((t) => (
-            <label key={t.id} className="flex items-center gap-1.5">
-              <input type="checkbox" name="tier" value={t.id} /> {t.name} <span className="text-zinc-500">({t.tierKey})</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <TierChecks tiers={tiers} name="tier" legend="Applies client IPs for (set once, at creation)" />
+      <TierChecks tiers={tiers} name="statusTier" legend="Reports feed status for" />
       <button type="submit" disabled={pending} className="rounded border border-cyan-500/50 px-3 py-1 text-cyan-300 hover:bg-cyan-500/10">
         {pending ? "Creating…" : "Create box"}
       </button>
@@ -55,6 +74,42 @@ export function IssueTokenButton({ boxId, hasToken }: { boxId: string; hasToken:
       )}
       {state && !state.ok && <p className="mt-1 text-red-400">{state.error}</p>}
     </div>
+  );
+}
+
+/** The only tier set editable after creation (Fable m64547 S1). Unticking a tier drops what the box last reported
+ * for it. */
+export function StatusTiersForm({ boxId, tiers, current }: { boxId: string; tiers: Tier[]; current: string[] }) {
+  const [state, action, pending] = useActionState<ActionResult | null, FormData>(setStatusTiersAction, null);
+  return (
+    <form action={action} className="mt-3 space-y-2 text-xs">
+      <input type="hidden" name="boxId" value={boxId} />
+      <TierChecks tiers={tiers} name="statusTier" legend="Reports feed status for" checked={new Set(current)} />
+      <button type="submit" disabled={pending} className="rounded border border-cyan-500/50 px-2 py-0.5 text-cyan-300 hover:bg-cyan-500/10">
+        {pending ? "Saving…" : "Save status tiers"}
+      </button>
+      {state && !state.ok && <span className="ml-2 text-red-400">{state.error}</span>}
+    </form>
+  );
+}
+
+/** Revoke the box's token: it stops authenticating at once, on both endpoints. Issue token makes a new one. */
+export function RevokeTokenButton({ boxId }: { boxId: string }) {
+  const [state, action, pending] = useActionState<ActionResult | null, FormData>(revokeBoxTokenAction, null);
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (!confirm("Revoke the token? The box stops authenticating at once, until a new token is issued and installed on it.")) e.preventDefault();
+      }}
+      className="mt-1 text-xs"
+    >
+      <input type="hidden" name="boxId" value={boxId} />
+      <button type="submit" disabled={pending} className="rounded border border-red-500/50 px-2 py-0.5 text-red-300 hover:bg-red-500/10">
+        {pending ? "Revoking…" : "Revoke token"}
+      </button>
+      {state && !state.ok && <p className="mt-1 text-red-400">{state.error}</p>}
+    </form>
   );
 }
 

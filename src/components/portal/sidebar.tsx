@@ -109,7 +109,7 @@ const FEED_ADMIN_LINKS = [
   { href: "/admin/black-trials", label: "Black trials", icon: SatelliteDish },
   { href: "/admin/feed-boxes", label: "Feed boxes", icon: Server },
   { href: "/admin/accounts", label: "Accounts", icon: CircleUser },
-  { href: "/admin/feed-health", label: "Feed health", icon: Radar, soon: true },
+  { href: "/admin/feed-health", label: "Feed health", icon: Radar },
 ] as const satisfies readonly { href: string; label: string; icon: LucideIcon; soon?: boolean }[];
 
 const MY_REQUESTS_HREF = "/marketplace/requests";

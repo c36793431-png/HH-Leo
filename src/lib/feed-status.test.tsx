@@ -285,11 +285,18 @@ test("S2: an out-of-order (older) report is 200 stored:0 superseded:true and cha
   const sentA = iso(20_000);
   assert.equal((await postStatus(box.token, report(box.name, [feed("ld-alpha-85", { state: "down" })], { sent_at: sentB }))).status, 200);
   const before = (await sql(`select status_reported_at, status_sent_at, status_ignored from feed_boxes where id = $1`, [box.id])).rows[0];
-  const late = await postStatus(box.token, report(box.name, [feed("ld-alpha-85", { state: "up" }), feed("nope-1")], { sent_at: sentA }));
+  // Fable m64579: older A also carries a key B did not (EURUSD). Superseded is decided once, at box level, before any
+  // row write, so A inserts nothing new either.
+  const late = await postStatus(
+    box.token,
+    report(box.name, [feed("ld-alpha-85", { state: "up" }), feed("ld-alpha-85", { symbol: "EURUSD" }), feed("nope-1")], { sent_at: sentA })
+  );
   assert.equal(late.status, 200);
   assert.equal(late.body.stored, 0);
   assert.equal(late.body.superseded, true);
-  const row = (await sql(`select state, box_sent_at from feed_status_latest where box_id = $1`, [box.id])).rows[0];
+  const rows = (await sql(`select symbol, state, box_sent_at from feed_status_latest where box_id = $1`, [box.id])).rows;
+  assert.deepEqual(rows.map((r: any) => r.symbol), ["XAUUSD"], "no EURUSD row from the older report");
+  const row = rows[0];
   assert.equal(row.state, "down", "the old 'up' never wins");
   assert.equal(new Date(row.box_sent_at).toISOString(), sentB);
   const after = (await sql(`select status_reported_at, status_sent_at, status_ignored from feed_boxes where id = $1`, [box.id])).rows[0];
@@ -338,6 +345,9 @@ test("S3: box fresh but the row missing from its last report -> 'Not in last rep
   const stopped = effectiveFeedState(row, { statusReportedAt: fresh, measuring: false }, now);
   assert.equal(stopped.kind, "collector_stopped");
   assert.equal(stopped.label, "not measured (collector stopped)");
+  // Fable m64579: a stopped collector that then goes silent ages like any other box.
+  const stoppedThenSilent = (s: number) => effectiveFeedState(row, { statusReportedAt: new Date(now.getTime() - s * 1000), measuring: false }, now).kind;
+  assert.deepEqual([120, 121, 601].map(stoppedThenSilent), ["collector_stopped", "unknown", "no_report"]);
   // Boundary on the ROW clock: the same instant as the box stamp is "in the last report".
   assert.equal(effectiveFeedState({ ...row, receivedAt: fresh }, { statusReportedAt: fresh, measuring: true }, now).kind, "up");
   assert.equal(effectiveFeedState({ ...row, receivedAt: new Date(fresh.getTime() - 1) }, { statusReportedAt: fresh, measuring: true }, now).kind, "not_in_last_report");
@@ -395,8 +405,11 @@ test("/admin/feed-health: per box and per feed, worst-of badge, symbol + source,
       feed("london-alpha"),
     ])
   );
-  const html = renderToStaticMarkup(await Page());
-  assert.ok(html.includes(box.name));
+  const page = renderToStaticMarkup(await Page());
+  // Earlier tests' boxes render too: read only this box's section.
+  const start = page.indexOf(`data-box="${box.name}"`);
+  assert.ok(start > 0, "the box has a section");
+  const html = page.slice(start, page.indexOf("</section>", start));
   assert.ok(html.includes("XAUUSD via feedcompare"));
   assert.ok(html.includes("XAUUSD via bridge_status"));
   assert.ok(html.includes("box reported 1 unknown feed id: london-alpha"));

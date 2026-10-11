@@ -1,7 +1,7 @@
 import { pool } from "@/lib/db";
 import { listBoxRecords, listFeedBoxes, type RecordState } from "@/lib/feed-boxes";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { CreateBoxForm, IssueTokenButton, RevokeRecordForm } from "./box-forms";
+import { CreateBoxForm, IssueTokenButton, RevokeRecordForm, RevokeTokenButton, StatusTiersForm } from "./box-forms";
 
 /** Feed boxes (feed auto-provision, marcus m62546): each provider box, its tiers and token, and every allowlist
  * record on those tiers with what the box has done with it (Fable m62433 item 2: "pending bridge reload" is never
@@ -31,7 +31,8 @@ export default async function AdminFeedBoxesPage() {
         </span>
         <p className="mt-2 text-sm text-zinc-400">
           Provider boxes pull the allowlist for their tiers and report back what they applied. A record is active only
-          once its box says so.
+          once its box says so. A measuring box reports feed status for its status tiers (Feed health); a box with no
+          allowlist tiers gets an empty allowlist.
         </p>
       </header>
 
@@ -42,14 +43,27 @@ export default async function AdminFeedBoxesPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 className="text-sm font-medium text-sky-400">{b.name}</h2>
-              <div className="mt-1 text-xs text-zinc-400">tiers: {b.tiers.map((t) => t.name).join(", ") || "none"}</div>
+              <div className="mt-1 text-xs text-zinc-400">
+                {`applies client IPs for: ${b.tiers.map((t) => t.name).join(", ") || "none"}`}
+              </div>
+              <div className="text-xs text-zinc-400">{`reports feed status for: ${b.statusTiers.map((t) => t.name).join(", ") || "none"}`}</div>
               <div className="text-xs text-zinc-500">
                 last poll: {b.lastSeenAt ? `${formatAbsoluteUtc(b.lastSeenAt)} (${formatRelative(b.lastSeenAt)})` : "never"} · serial {b.serial} ·
                 token: {b.hasToken ? `set${b.rotatedAt ? `, rotated ${formatAbsoluteUtc(b.rotatedAt)}` : ""}` : "none"}
               </div>
+              <div className="text-xs text-zinc-500">
+                {`last status report: ${b.statusReportedAt ? `${formatAbsoluteUtc(b.statusReportedAt)} (${formatRelative(b.statusReportedAt)})` : "never"}`}
+              </div>
             </div>
-            <IssueTokenButton boxId={b.id} hasToken={b.hasToken} />
+            <div>
+              <IssueTokenButton boxId={b.id} hasToken={b.hasToken} />
+              {b.hasToken ? <RevokeTokenButton boxId={b.id} /> : null}
+            </div>
           </div>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs text-zinc-500">Edit status tiers</summary>
+            <StatusTiersForm boxId={b.id} tiers={tiers} current={b.statusTiers.map((t) => t.id)} />
+          </details>
           <table className="mt-4 w-full text-left text-xs">
             <thead className="text-zinc-500">
               <tr>

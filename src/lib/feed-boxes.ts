@@ -78,18 +78,23 @@ export interface FeedBox {
   serial: number;
   rotatedAt: Date | null;
   lastSeenAt: Date | null;
+  /** The tiers it APPLIES client IPs for (feed_box_tiers): its allowlist. Set at creation only (Fable m64547 S1). */
   tiers: { id: string; tierKey: string; name: string }[];
+  /** The tiers it may REPORT feed status for (feed_box_status_tiers, 0101). Never feeds the allowlist. */
+  statusTiers: { id: string; tierKey: string; name: string }[];
+  statusReportedAt: Date | null;
 }
+
+const tierList = (v: unknown) => (typeof v === "string" ? JSON.parse(v) : v) as FeedBox["tiers"];
 
 export async function listFeedBoxes(): Promise<FeedBox[]> {
   const r = await pool.query(
-    `select b.id, b.name, b.token_sha256 is not null as has_token, b.serial, b.rotated_at, b.last_seen_at,
-            coalesce(json_agg(json_build_object('id', ft.id, 'tierKey', ft.tier_key, 'name', ft.name) order by ft.tier_key)
-                     filter (where ft.id is not null), '[]') as tiers
+    `select b.id, b.name, b.token_sha256 is not null as has_token, b.serial, b.rotated_at, b.last_seen_at, b.status_reported_at,
+            coalesce((select json_agg(json_build_object('id', ft.id, 'tierKey', ft.tier_key, 'name', ft.name) order by ft.tier_key)
+                        from feed_box_tiers bt join feed_tiers ft on ft.id = bt.feed_tier_id where bt.box_id = b.id), '[]') as tiers,
+            coalesce((select json_agg(json_build_object('id', ft.id, 'tierKey', ft.tier_key, 'name', ft.name) order by ft.tier_key)
+                        from feed_box_status_tiers st join feed_tiers ft on ft.id = st.feed_tier_id where st.box_id = b.id), '[]') as status_tiers
        from feed_boxes b
-       left join feed_box_tiers bt on bt.box_id = b.id
-       left join feed_tiers ft on ft.id = bt.feed_tier_id
-      group by b.id
       order by b.name`
   );
   return r.rows.map((b: Record<string, unknown>) => ({
@@ -99,19 +104,27 @@ export async function listFeedBoxes(): Promise<FeedBox[]> {
     serial: Number(b.serial),
     rotatedAt: (b.rotated_at as Date | null) ?? null,
     lastSeenAt: (b.last_seen_at as Date | null) ?? null,
-    tiers: (typeof b.tiers === "string" ? JSON.parse(b.tiers) : b.tiers) as FeedBox["tiers"],
+    tiers: tierList(b.tiers),
+    statusTiers: tierList(b.status_tiers),
+    statusReportedAt: (b.status_reported_at as Date | null) ?? null,
   }));
 }
 
-export async function createFeedBox(name: string, feedTierIds: string[]): Promise<string> {
+/** Two sets (Fable m64547 S1): applyTierIds -> feed_box_tiers (the box's allowlist), statusTierIds ->
+ * feed_box_status_tiers (what it may report status for). Either may be empty, not both: a status-only box (tommy4)
+ * gets an empty signed allowlist, never a London client IP. */
+export async function createFeedBox(name: string, applyTierIds: string[], statusTierIds: string[] = []): Promise<string> {
   if (!BOX_NAME.test(name)) throw new Error("Box name: 2-40 chars, lowercase letters, digits and '-'");
-  if (feedTierIds.length === 0) throw new Error("Pick at least one tier");
+  if (applyTierIds.length === 0 && statusTierIds.length === 0) {
+    throw new Error("Pick at least one tier (one it applies client IPs for, or one it reports feed status for)");
+  }
   const client = await pool.connect();
   try {
     await client.query("begin");
     const b = await client.query(`insert into feed_boxes (name) values ($1) returning id`, [name]);
     const id = b.rows[0].id as string;
-    for (const t of feedTierIds) await client.query(`insert into feed_box_tiers (box_id, feed_tier_id) values ($1, $2)`, [id, t]);
+    for (const t of applyTierIds) await client.query(`insert into feed_box_tiers (box_id, feed_tier_id) values ($1, $2)`, [id, t]);
+    for (const t of statusTierIds) await client.query(`insert into feed_box_status_tiers (box_id, feed_tier_id) values ($1, $2)`, [id, t]);
     await client.query("commit");
     return id;
   } catch (err) {
@@ -132,6 +145,55 @@ export async function issueBoxToken(boxId: string): Promise<{ name: string; toke
   );
   if (!r.rows[0]) throw new Error("Box not found");
   return { name: r.rows[0].name as string, token };
+}
+
+/** Replace a box's STATUS set (Fable m64547 S1: the only set editable after creation). Never touches feed_box_tiers.
+ * A tier taken out drops its feed_status_latest rows (0101's FK cascades). */
+export async function setBoxStatusTiers(boxId: string, feedTierIds: string[]): Promise<{ name: string }> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const b = await client.query(`select name from feed_boxes where id = $1 for update`, [boxId]);
+    if (!b.rows[0]) throw new Error("Box not found");
+    await client.query(`delete from feed_box_status_tiers where box_id = $1 and not (feed_tier_id = any($2::uuid[]))`, [boxId, feedTierIds]);
+    for (const t of feedTierIds) {
+      await client.query(`insert into feed_box_status_tiers (box_id, feed_tier_id) values ($1, $2) on conflict do nothing`, [boxId, t]);
+    }
+    await client.query("commit");
+    return { name: b.rows[0].name as string };
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Revoke a box's token (marcus m64519 Q4; FOC13's removal step): token_sha256 = null, so authenticateBox's lookup
+ * finds nothing and both endpoints 401. rotated_at and serial are untouched. The audit row 'feed_box_token_revoked'
+ * {box} is written in the same transaction. Issue token makes a new one. */
+export async function revokeBoxToken(args: { boxId: string; adminUserId: string }): Promise<{ name: string }> {
+  const adminUserId = await resolveAdminUserId(args.adminUserId);
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const b = await client.query(`select name, token_sha256 from feed_boxes where id = $1 for update`, [args.boxId]);
+    const row = b.rows[0] as { name: string; token_sha256: string | null } | undefined;
+    if (!row) throw new Error("Box not found");
+    if (!row.token_sha256) throw new Error("That box has no token to revoke");
+    await client.query(`update feed_boxes set token_sha256 = null where id = $1`, [args.boxId]);
+    await client.query(`insert into admin_actions (admin_user_id, action_type, details_json) values ($1, 'feed_box_token_revoked', $2)`, [
+      adminUserId,
+      JSON.stringify({ box: row.name }),
+    ]);
+    await client.query("commit");
+    return { name: row.name };
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ---------- the box's requests ----------

@@ -454,6 +454,8 @@ test("0098: every allowlist record has its own id; 0098_rollback removes exactly
     if (SEEDS[f]) await scratch.exec(SEEDS[f]);
     await scratch.exec(readFileSync(path.join(MIGRATIONS, f), "utf8"));
   }
+  // Rollbacks unwind newest first: 0101's tables reference feed_boxes, so 0101_rollback runs before 0098's.
+  await scratch.exec(readFileSync(path.join(MIGRATIONS, "0101_rollback.sql"), "utf8"));
   await scratch.exec(readFileSync(path.join(MIGRATIONS, "0098_rollback.sql"), "utf8"));
   const cols = (await scratch.query(`select column_name from information_schema.columns where table_name = 'feed_allowlist_records' order by column_name`)).rows.map((r: any) => r.column_name);
   assert.deepEqual(cols, ["feed_tier_id", "ip", "revoked_at", "server_registration_id", "told_at"]);
