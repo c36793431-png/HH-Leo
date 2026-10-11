@@ -154,6 +154,7 @@
 .feed-provider-v1 .stat .val small { font-family: var(--pfp-sans); font-size: 14px; font-weight: 600; color: var(--pfp-ink-3); margin-left: 4px; }
 .feed-provider-v1 .stat .sub { font-size: 12px; color: var(--pfp-ink-2); }
 .feed-provider-v1 .stat .sub .up { color: var(--pfp-ok); font-weight: 600; }
+.feed-provider-v1 .stat .sub .dn { color: var(--pfp-bad); font-weight: 600; }
 .feed-provider-v1 .stat.hot { border-color: rgba(255, 194, 75, 0.5); }
 .feed-provider-v1 .stat.hot .val { color: var(--pfp-warn); }
 .feed-provider-v1 .stat.hot .lab .si { color: var(--pfp-warn); }
@@ -273,6 +274,9 @@
 .feed-provider-v1 .mrev .mrow .mv { font-family: var(--pfp-mono); font-weight: 600; font-size: 14px; color: var(--pfp-cyan); }
 .feed-provider-v1 .mrev .mfoot { font-size: 11px; font-style: italic; color: var(--pfp-ink-hi); margin-top: 9px; }
 .feed-provider-v1 .mrev .mempty { font-size: 12px; color: var(--pfp-ink-hi); }
+/* P1 (m64242): a figure with no source reads muted, never in the money colour. */
+.feed-provider-v1 .mrev .mrow .mv.none { color: var(--pfp-ink-3); }
+.feed-provider-v1 .splitempty { font-size: 12px; color: var(--pfp-ink-hi); padding: 6px 0 2px; }
 
 /* Revenue → History: the all-months contracted total, under the table (marcus m50098). Sits
    outside the <table> both in markup and in look: it is NOT the column's footer, and styling it

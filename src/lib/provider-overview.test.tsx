@@ -131,12 +131,14 @@ test("ActiveUsersStat: 'N / M trial', new in 7 days, links to Subscribers and Tr
 
 test("Feed uptime tile and Feed health card: no number, no bars, no 'measured by', 'not measured yet'", async () => {
   const { FeedUptimeStat, FeedHealthCard } = await import("../components/feed/overview-cards");
+  // Text only: inline styles carry digits (font-weight:600) that nobody reads.
+  const text = (html: string) => html.replace(/<[^>]*>/g, "");
   const tile = strip(renderToStaticMarkup(<FeedUptimeStat />));
   assert.match(tile, /not measured yet/);
-  assert.doesNotMatch(tile.replace("30d", ""), /\d/);
+  assert.doesNotMatch(text(tile).replace("30d", ""), /\d/);
   const card = strip(renderToStaticMarkup(<FeedHealthCard />));
   assert.match(card, /Not measured yet/);
-  assert.doesNotMatch(card, /\d/);
+  assert.doesNotMatch(text(card), /\d/);
   assert.doesNotMatch(card, /measured by|Feedverse|spark/i);
   assert.match(card, /href="\/feed\/dashboard\/health"/);
 });

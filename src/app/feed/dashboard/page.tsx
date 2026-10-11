@@ -9,9 +9,18 @@ import { FEEDS_BOT_KEY } from "@/lib/telegram-feeds-bot";
 import { getActiveSubscriberCountForProvider, getProviderRevenueSummary } from "@/lib/feed-subscriptions";
 import { moneyOrUnpriced } from "@/lib/feed-provider-packages";
 import { countRequestGroups, groupRequestsByPackage } from "@/lib/request-package-groups";
+import { countNewClientsForProvider, thisMonthShare } from "@/lib/provider-overview";
+import {
+  ActiveUsersStat,
+  BotChip,
+  EarningsCard,
+  FeedHealthCard,
+  FeedUptimeStat,
+  ThisMonthShareStat,
+} from "@/components/feed/overview-cards";
 
-/** How many months of History the card carries. Three is what fits without the card turning into
- * a table; the Revenue page's History view is the full list and the card links to it. */
+/** How many months of History the Earnings card carries. Three is what fits without the card turning
+ * into a table; the Earnings page's History view is the full list and the card links to it. */
 const MONTHS_ON_CARD = 3;
 
 const TYPE_ICON: Record<string, string> = { pending: "🧪", approved: "✓", rejected: "✗", provisioned: "💳" };
@@ -37,22 +46,22 @@ export default async function FeedOverviewPage() {
   const session = await auth();
   const providerId = session!.user!.id!;
 
-  const [pending, trials, tiers, telegramLink, subscriberCount, revenue] = await Promise.all([
+  const now = new Date();
+  const [pending, trials, tiers, telegramLink, subscriberCount, revenue, newClients] = await Promise.all([
     listPendingRequestsForProvider(providerId),
     listActiveTrialsForProvider(providerId),
     listTiersForProvider(providerId),
     getBotLink(providerId, FEEDS_BOT_KEY),
     getActiveSubscriberCountForProvider(providerId),
-    getProviderRevenueSummary(providerId, new Date()),
+    getProviderRevenueSummary(providerId, now),
+    countNewClientsForProvider(providerId, now),
   ]);
 
   const oldest = pending[pending.length - 1];
   const requestCount = countRequestGroups(pending);
-  /** The three most recent months exactly as History orders them, newest first -- INCLUDING a
-   * month with no paying client, which renders "—" here as it does there. Dropping the empty ones
-   * would be a gate the canonical page does not have: a card whose top row was August would read
-   * as stale rather than as "September has no contracted client yet". */
-  const months = revenue.months.slice(0, MONTHS_ON_CARD);
+  const share = thisMonthShare(revenue.months, now);
+  /** People, not trial rows: a NY Base trial is 2 rows for 1 client (the A1 rule, m64242). */
+  const trialClients = new Set(trials.map((t) => t.userId)).size;
 
   return (
     <>
@@ -63,6 +72,7 @@ export default async function FeedOverviewPage() {
           <div className="crumb">feed.horizonhft.com / overview</div>
         </div>
         <div className="sp" />
+        <BotChip linked={Boolean(telegramLink)} />
       </header>
 
       <section className="fp-content">
@@ -82,30 +92,11 @@ export default async function FeedOverviewPage() {
           </div>
         )}
 
+        {/* Row 1 is Iris's dashboard.html KPI row (P1, m64242): this month's share, pending, active
+            users, feed uptime. Row 2 keeps the two tiles the panel had that the mockup has no slot
+            for: Tiers you manage, and the all-months total (coxwell's ask, m50098). */}
         <div className="stats">
-          <div className="stat">
-            <div className="lab">
-              <span className="si">◈</span> Tiers you manage
-            </div>
-            <div className="val">{tiers.length}</div>
-            <div className="sub">
-              <Link href="/feed/dashboard/feeds" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
-                Manage →
-              </Link>
-            </div>
-          </div>
-          <div className="stat">
-            <div className="lab">
-              <span className="si">◎</span> Subscribers
-            </div>
-            <div className="val">{subscriberCount}</div>
-            <div className="sub">
-              active, across your packages ·{" "}
-              <Link href="/feed/dashboard/subscribers" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
-                View →
-              </Link>
-            </div>
-          </div>
+          <ThisMonthShareStat share={share} />
           <div className={`stat${requestCount > 0 ? " hot" : ""}`}>
             <div className="lab">
               <span className="si">⚑</span> Pending approvals
@@ -118,42 +109,27 @@ export default async function FeedOverviewPage() {
               </Link>
             </div>
           </div>
+          <ActiveUsersStat subscribers={subscriberCount} trialClients={trialClients} newClients={newClients} />
+          <FeedUptimeStat />
           <div className="stat">
             <div className="lab">
-              <span className="si">◉</span> Active trials
+              <span className="si">◈</span> Tiers you manage
             </div>
-            <div className="val">{trials.length}</div>
+            <div className="val">{tiers.length}</div>
             <div className="sub">
-              across your managed tiers ·{" "}
-              <Link href="/feed/dashboard/active-users" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
-                View →
+              <Link href="/feed/dashboard/feeds" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
+                Manage →
               </Link>
             </div>
           </div>
-          <div className="stat">
-            <div className="lab">
-              <span className="si">◇</span> Feed health
-            </div>
-            <div className="val">
-              — <small>no telemetry yet</small>
-            </div>
-            <div className="sub">
-              <Link href="/feed/dashboard/health" style={{ color: "var(--pfp-cyan)", fontWeight: 600 }}>
-                See Feed Health →
-              </Link>
-            </div>
-          </div>
-          {/* THE ALL-MONTHS TOTAL, SIXTH TILE (coxwell's third ask, marcus m50098). APPENDED LAST
-              ON PURPOSE: .stats is repeat(4, 1fr) and the five tiles above fill row 1 and row 1 of
-              row 2, so a sixth lands in row 2 column 2 -- under Subscribers, the empty cell, with
-              no grid change. Inserting it anywhere earlier would push Feed health into that slot
-              and put this one under Tiers instead. Below the desktop breakpoint the grid is
-              1fr 1fr and "under Subscribers" stops being true; no copy here depends on position.
+          {/* THE ALL-MONTHS TOTAL (coxwell's third ask, marcus m50098). Row 2, column 2, next to
+              Tiers you manage. Below the desktop breakpoint the grid is 1fr 1fr; no copy here
+              depends on position.
 
               A TILE CANNOT CARRY THE REASONING, SO IT CARRIES THE WARNING AND A ROUTE TO IT. The
-              Revenue card further down this page renders the very month figures a reader would add
-              up, so the $105-vs-$120 gap is visible on THIS screen, not only on Revenue -- a bare
-              figure here would reproduce the exact failure the Revenue footer exists to prevent.
+              Earnings card further down this page renders the very month figures a reader would add
+              up, so the $105-vs-$120 gap is visible on THIS screen, not only on Earnings -- a bare
+              figure here would reproduce the exact failure the Earnings History footer exists to prevent.
               The .sub therefore carries the two things that stop a wrong reading (counted once; NOT
               the months added up) and links to the page that explains why. The full mechanism does
               not fit in a quarter-width tile and is not attempted here. */}
@@ -229,79 +205,9 @@ export default async function FeedOverviewPage() {
             )}
           </div>
 
-          <div className="card">
-            <div className="chead">
-              <span className="ic">▦</span>
-              <h3>Revenue</h3>
-            </div>
-            {/* TWO FIGURES, TWO DIFFERENT QUESTIONS, and each label says which (coxwell 13:58Z via
-                marcus). The card used to carry the live one alone under the word "Estimated
-                monthly" -- which reads like a month's total and is not one, so beside $60 of
-                September it would have looked like a contradiction rather than a different
-                question. "Right now" vs "in the month" is the whole distinction and it is in the
-                labels, not in a footnote. */}
-            <div className="stat" style={{ padding: 0, background: "transparent", border: "none", borderRadius: 0 }}>
-              <div className="lab">Your 50% · right now</div>
-              <div className="val">{moneyOrUnpriced(revenue.liveShareCents, revenue.live.priced)}</div>
-              <div className="sub">
-                half of what clients who are active today are charged
-                {revenue.live.priced < revenue.live.subscribers && (
-                  <> · {revenue.live.priced} of {revenue.live.subscribers} priced</>
-                )}
-              </div>
-            </div>
-
-            <div className="mrev">
-              <div className="mhead">
-                <b>Your 50% · by month</b>
-                <span>what was contracted in each month</span>
-              </div>
-              {months.length === 0 ? (
-                <div className="mempty">A month appears here once a client holds a paid subscription during it.</div>
-              ) : (
-                <>
-                  {months.map((m) => (
-                    <div className="mrow" key={m.monthKey}>
-                      <span className="ml">{m.label}</span>
-                      <span className="mc">
-                        {m.clients === 0
-                          ? "no paying client"
-                          : `${m.clients} paying client${m.clients === 1 ? "" : "s"}`}
-                      </span>
-                      <span className="mv">
-                        {m.clients === 0 ? "—" : moneyOrUnpriced(m.shareCents, m.pricedClients)}
-                      </span>
-                    </div>
-                  ))}
-                  {/* m49083's rule, carried onto the card with the figures it governs: a client on a
-                      one-month term must not read as three months of revenue. m50098 adds the
-                      second clause, because a total now sits on the same screen and a line that
-                      only says "don't add" leaves the reader to guess whether that tile IS the sum.
-                      It isn't, and this is the nearest place to the rows to say so. */}
-                  {/* Phrased so it holds in every state: "not their sum" is true whether or not any
-                      agreement currently spans a month end, and true even once there are more
-                      months than MONTHS_ON_CARD and these rows stop being the whole set. Naming a
-                      direction ("smaller than these rows add to") would be false on both counts. */}
-                  <div className="mfoot">
-                    Each month stands alone — these are never added together. The all-months tile above is not their
-                    sum: it counts each agreement once, however many months it runs across.
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="scope-note">
-              <span className="i">ⓘ</span>
-              <span>
-                No payout ledger exists yet — every money figure on this page, here and in the all-months tile
-                above, is a list-price estimate, not money received. The live figure is today&apos;s active clients;
-                a month counts every client contracted at any point in it, including ones who have since stopped,
-                which is why the two rarely match. Trials, and clients with no agreed price, add nothing to any of
-                them. See{" "}
-                <Link href="/feed/dashboard/revenue?view=history">Revenue → History</Link> for the months in
-                full.
-              </span>
-            </div>
+          <div className="grid" style={{ gap: 18 }}>
+            <EarningsCard revenue={revenue} share={share} monthsOnCard={MONTHS_ON_CARD} />
+            <FeedHealthCard />
           </div>
         </div>
 

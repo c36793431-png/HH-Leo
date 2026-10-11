@@ -15,7 +15,9 @@ const NAV = [
   { href: "/feed/dashboard/subscribers", label: "Subscribers", ic: "◎" },
   { href: "/feed/dashboard/terms", label: "Terms", ic: "◈" },
   { href: "/feed/dashboard/notifications", label: "Notifications", ic: "✦" },
-  { href: "/feed/dashboard/revenue", label: "Revenue", ic: "▦" },
+  // "Earnings", not "Revenue" (m64316): the page shows only the provider's share, never a gross.
+  // The URL stays /revenue so existing links and bookmarks keep working.
+  { href: "/feed/dashboard/revenue", label: "Earnings", ic: "▦" },
   { href: "/feed/dashboard/health", label: "Feed Health", ic: "◇" },
   { href: "/feed/dashboard/docs", label: "Docs / Integration", ic: "▤" },
 ] as const;

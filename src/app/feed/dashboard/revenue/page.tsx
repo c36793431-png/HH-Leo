@@ -318,7 +318,8 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
       <header className="fp-topbar">
         <FeedNavToggle />
         <div>
-          <h1>Revenue</h1>
+          {/* "Earnings" (m64316, Fable m64314): every figure here is the provider's share, never a gross. */}
+          <h1>Earnings</h1>
           <div className="crumb">feed.horizonhft.com / revenue</div>
         </div>
         <div className="sp" />
@@ -614,7 +615,7 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
               <b>{status === "paying" ? "No paying subscribers yet" : "Nothing to show here"}</b>
               <p>
                 {status === "paying"
-                  ? "Revenue by package appears here once a client holds an active, paid subscription."
+                  ? "Earnings by package appear here once a client holds an active, paid subscription."
                   : status === "lapsed"
                     ? "No package here has a lapsed or trial client."
                     : "No package here has a client of any kind."}
@@ -667,7 +668,7 @@ export default async function FeedRevenuePage({ searchParams }: { searchParams: 
           )}
         </div>
 
-        <div className="foot">HORIZON HFT · provider panel · Revenue</div>
+        <div className="foot">HORIZON HFT · provider panel · Earnings</div>
       </section>
     </>
   );

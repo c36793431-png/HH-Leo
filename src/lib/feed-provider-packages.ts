@@ -112,7 +112,7 @@ export function groupTiers(tiers: ProviderTierRow[]): TierGroup[] {
   return groups;
 }
 
-function money(cents: number): string {
+export function money(cents: number): string {
   return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
