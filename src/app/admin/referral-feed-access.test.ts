@@ -350,6 +350,20 @@ test("Q4-1b: a Finance feed row earns first, then a paid approve for the same cl
   assert.equal(earnings[0].payment_id, (await financeRows(buyer.email))[0].id);
 });
 
+test("Q4 N4: a software ('customer') earning first never blocks the feed -- a paid approve for the same client still earns 30%", async () => {
+  const referrer = await makeReferrer();
+  const { buyer, requestId } = await pendingRequest(referrer.id);
+  await finance.addPaymentAction(null, form({ receivedAt: "2026-10-10", amountUsd: "100", direction: "in", category: "customer", counterparty: buyer.email }));
+  assert.equal((await earningsFor(buyer.id)).length, 1, "the software row earns first");
+  await ftr.approveFeedTierRequest(requestId, ADMIN, "", paid(50));
+  const earnings = await earningsFor(buyer.id);
+  assert.equal(earnings.length, 2);
+  const feedPayment = (await paymentFor(requestId))[0];
+  const feedEarnings = earnings.filter((e) => e.payment_id === feedPayment.id);
+  assert.equal(feedEarnings.length, 1);
+  assert.equal(Number(feedEarnings[0].amount_usd), 15);
+});
+
 test("control (pinned): software is untouched by Q4 -- every 'customer' row for the same client earns 30%", async () => {
   const referrer = await makeReferrer();
   const buyer = await makeUser(referrer.id);
