@@ -3,6 +3,8 @@ import { pool } from "./db";
 import { TrialAlreadyClaimedError, TrialNotEligibleError, hasClaimedTrial } from "./feed-tier-trials";
 import { ADMIN_TRIAL_DAY_OPTIONS, TRIAL_DURATION_DAYS, isAdminTrialEligibleTier, isTrialEligibleTier } from "./feed-tier-catalogue";
 import { isReceivableUsdAmount } from "./payments";
+import { maybeCreateReferralEarning } from "./referrals";
+import { logAdminAction } from "./admin";
 import {
   assertNoLiveGrant,
   assignPseudonymSeq,
@@ -426,9 +428,9 @@ async function approveOnClient(client: PoolClient, input: ApproveAccessRequestIn
  * the approve's client after approveOnClient has written the envelope, so the row reads its own facts
  * back: the requester, the invoice ref as memo, the decider's email as created_by (as Finance's Add
  * payment form writes it). A failure here rolls the approval back with it: a grant whose recorded
- * payment was lost would be worse than an approve the admin retries. */
-async function recordAmountReceived(client: PoolClient, requestId: string, amountUsd: number): Promise<void> {
-  const inserted = await client.query(
+ * payment was lost would be worse than an approve the admin retries. Returns the payment's id. */
+async function recordAmountReceived(client: PoolClient, requestId: string, amountUsd: number): Promise<string> {
+  const inserted = await client.query<{ id: string }>(
     `insert into payments (amount_usd, direction, category, activation_source, counterparty, user_id, access_request_id, memo, created_by)
      select $2, 'in', 'feed_access', 'paid', requester.email, a.user_id, a.id, a.invoice_ref, decider.email
      from access_requests a
@@ -439,23 +441,45 @@ async function recordAmountReceived(client: PoolClient, requestId: string, amoun
     [requestId, amountUsd]
   );
   if (inserted.rowCount !== 1) throw new Error("the amount received was not recorded");
+  return inserted.rows[0].id;
+}
+
+/** A referred client's feed payment earns the referrer 30% (marcus m64769 R2). Runs after the approve
+ * has committed, as a paid licence's auto-payment does (licenses.ts insertAutoPaymentForLicense):
+ * maybeCreateReferralEarning reads through the pool, so inside the transaction it would not see the
+ * row. Never throws: the approval stands, and a failure is logged and recorded as an admin_actions
+ * 'referral_earning_failed' row naming the payment, so an admin can re-run it (once per payment). */
+async function earnReferralForPayment(paymentId: string, decidedBy: string | null): Promise<void> {
+  try {
+    await maybeCreateReferralEarning(paymentId);
+  } catch (err) {
+    console.error(`referral earning failed for payment ${paymentId}`, err);
+    if (!decidedBy) return;
+    await logAdminAction(decidedBy, "referral_earning_failed", null, {
+      paymentId,
+      error: err instanceof Error ? err.message : String(err),
+    }).catch(() => {});
+  }
 }
 
 export async function approveAccessRequest(input: ApproveAccessRequestInput): Promise<ApproveAccessRequestResult> {
   resolveDecision(input);
   const client = await pool.connect();
+  let result: ApproveAccessRequestResult;
+  let paymentId: string | null = null;
   try {
     await client.query("begin");
-    const result = await approveOnClient(client, input);
-    if (input.amountReceivedUsd != null) await recordAmountReceived(client, result.requestId, input.amountReceivedUsd);
+    result = await approveOnClient(client, input);
+    if (input.amountReceivedUsd != null) paymentId = await recordAmountReceived(client, result.requestId, input.amountReceivedUsd);
     await client.query("commit");
-    return result;
   } catch (err) {
     await client.query("rollback");
     throw err;
   } finally {
     client.release();
   }
+  if (paymentId) await earnReferralForPayment(paymentId, input.decidedBy);
+  return result;
 }
 
 // ---------------------------------------------------------------------------------------------

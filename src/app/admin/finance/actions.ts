@@ -15,7 +15,7 @@ import {
 import { logAdminAction } from "@/lib/admin";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { maybeCreateReferralEarning } from "@/lib/referrals";
+import { maybeCreateReferralEarning, REFERRAL_CATEGORIES } from "@/lib/referrals";
 
 async function requireAdminUsersPanel(): Promise<{ userId: string; email: string }> {
   const session = await auth();
@@ -61,7 +61,9 @@ export async function addPaymentAction(
       throw new Error("Invalid date");
     }
 
-    const userId = category === "customer" ? await resolveUserIdByEmail(counterparty) : null;
+    // A row a referrer can earn on (software or, since marcus m64769, feed access) is linked to the client by email.
+    const earnsReferral = REFERRAL_CATEGORIES.includes(category);
+    const userId = earnsReferral ? await resolveUserIdByEmail(counterparty) : null;
 
     const paymentId = await insertPayment({
       receivedAt,
@@ -82,7 +84,7 @@ export async function addPaymentAction(
       category,
     });
 
-    if (direction === "in" && category === "customer") {
+    if (direction === "in" && earnsReferral) {
       await maybeCreateReferralEarning(paymentId);
     }
 

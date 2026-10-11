@@ -48,10 +48,15 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
   throw new Error("getOrCreateReferralCode: failed to generate a unique code after 5 attempts");
 }
 
-/** Hooked from addPaymentAction after insertPayment: a 'customer'/'in' payment from a
- * referred user earns their referrer 30% of the payment amount, captured at time of earning
- * so a future rate change never rewrites history. unique(payment_id) on referral_earnings
- * makes this safe to call more than once for the same payment (no double-earning on retry). */
+/** The payment categories that earn a referrer: software ('customer') and, since marcus m64769
+ * (coxwell's "referral commission applies to feed purchases"), feed access ('feed_access'). */
+export const REFERRAL_CATEGORIES: readonly string[] = ["customer", "feed_access"];
+
+/** Hooked after a payment row is written (Finance's Add payment, a paid licence's auto-payment,
+ * the admin queue's paid feed approve): an 'in' payment of a REFERRAL_CATEGORIES category from a
+ * referred user earns their referrer 30% of the amount received, captured at time of earning so a
+ * future rate change never rewrites history. unique(payment_id) on referral_earnings makes this
+ * safe to call more than once for the same payment (no double-earning on retry). */
 export async function maybeCreateReferralEarning(paymentId: string): Promise<void> {
   const payment = await pool.query<{
     id: string;
@@ -64,7 +69,7 @@ export async function maybeCreateReferralEarning(paymentId: string): Promise<voi
     [paymentId]
   );
   const row = payment.rows[0];
-  if (!row || row.direction !== "in" || row.category !== "customer" || !row.user_id) return;
+  if (!row || row.direction !== "in" || !REFERRAL_CATEGORIES.includes(row.category) || !row.user_id) return;
 
   const referred = await pool.query<{ referred_by_user_id: string | null }>(
     "select referred_by_user_id from users where id = $1",
@@ -73,9 +78,11 @@ export async function maybeCreateReferralEarning(paymentId: string): Promise<voi
   const referrerId = referred.rows[0]?.referred_by_user_id;
   if (!referrerId || referrerId === row.user_id) return;
 
-  // A partner-linked referrer (Legitcashmaker et al.) books into partner_deals instead of the
-  // flat-30% referral_earnings ledger — see recordAutoPartnerPayment for the bridge shape.
-  const partner = await getPartnerByUserId(referrerId);
+  // A partner-linked referrer (Legitcashmaker et al.) books software into partner_deals instead of
+  // the flat-30% referral_earnings ledger — see recordAutoPartnerPayment for the bridge shape. Feed
+  // money never does (marcus m64769 R4): the deal's 60% plus the provider's 50% would pay out more
+  // than the feed brought in, so it takes the plain 30% until coxwell rules on partner feed rates.
+  const partner = row.category === "customer" ? await getPartnerByUserId(referrerId) : null;
   if (partner) {
     await recordAutoPartnerPayment({
       partnerId: partner.id,
