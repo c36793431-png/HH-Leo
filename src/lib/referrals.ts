@@ -64,8 +64,12 @@ export async function maybeCreateReferralEarning(paymentId: string): Promise<voi
     direction: string;
     category: string;
     user_id: string | null;
+    feed_tier_id: string | null;
   }>(
-    "select id, amount_usd, direction, category, user_id from payments where id = $1",
+    `select p.id, p.amount_usd, p.direction, p.category, p.user_id, d.feed_tier_id
+     from payments p
+     left join feed_tier_request_details d on d.request_id = p.access_request_id
+     where p.id = $1`,
     [paymentId]
   );
   const row = payment.rows[0];
@@ -77,6 +81,25 @@ export async function maybeCreateReferralEarning(paymentId: string): Promise<voi
   );
   const referrerId = referred.rows[0]?.referred_by_user_id;
   if (!referrerId || referrerId === row.user_id) return;
+
+  // Feed money earns on the client's FIRST feed payment per tier only (marcus m64826/m64880, interim
+  // (a)). A Finance-entered row has no tier: it earns only if the client has no feed earning at all,
+  // and once booked it counts as the first for every tier. Earning status is ignored, so a clawed-back
+  // first earning still counts. Software has no such limit.
+  if (row.category === "feed_access") {
+    const prior = await pool.query(
+      `select 1
+       from referral_earnings e
+       join payments p on p.id = e.payment_id
+       left join feed_tier_request_details d on d.request_id = p.access_request_id
+       where e.referred_user_id = $1
+         and p.category = 'feed_access'
+         and ($2::uuid is null or d.feed_tier_id is null or d.feed_tier_id = $2::uuid)
+       limit 1`,
+      [row.user_id, row.feed_tier_id]
+    );
+    if (prior.rows.length > 0) return;
+  }
 
   // A partner-linked referrer (Legitcashmaker et al.) books software into partner_deals instead of
   // the flat-30% referral_earnings ledger — see recordAutoPartnerPayment for the bridge shape. Feed
