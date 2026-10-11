@@ -20,9 +20,10 @@ export interface ProviderMarketplaceSummary {
 
 /** Feed-admin dashboard Providers/Revenue tiles (bus thread
  * feed-admin-dashboard-build-2026-08-24). liveProviderCount uses providerIsLiveSql above.
- * liveTierCount and the run-rate sums still cover every provider_tiers row whatever its
- * status (0065 added trial/paused; before it the table was confirmed-only), so they are not
- * live-only. This is a separate,
+ * liveTierCount counts only provider_tiers rows with status 'live' (marcus m64494 R1), so /admin's
+ * "M live tiers" means what it says. The run-rate sums still cover every provider_tiers row
+ * whatever its status (0065 added trial/paused; before it the table was confirmed-only), so they
+ * are not live-only. This is a separate,
  * narrower query (dashboard only needs provider/tier counts + run-rate, not the terms-queue's
  * proposal/median-margin stats), not a reuse -- keep both in sync if provider_tiers' shape
  * changes.
@@ -41,7 +42,7 @@ export async function getProviderMarketplaceSummary(): Promise<ProviderMarketpla
   }>(
     `select
        (select count(*) from provider_applications pa where ${providerIsLiveSql("pa")}) as live_providers,
-       count(*) as live_tiers,
+       count(*) filter (where status = 'live') as live_tiers,
        sum(client_price_cents) as gross,
        sum(client_price_cents * (100 - provider_split_pct) / 100.0) as retained
      from provider_tiers`

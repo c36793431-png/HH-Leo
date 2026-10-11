@@ -120,6 +120,16 @@ test("live = approved + >=1 live tier: onboarded_at NULL with live tiers is live
   assert.equal(summary, counts.liveFeedProviders, "/admin and /admin/provider-applications == dashboard tile");
 });
 
+test("/admin's 'M live tiers' counts provider_tiers status 'live' only: a trial and a paused tier do not move M (marcus m64494 R1)", async () => {
+  const { getProviderMarketplaceSummary } = await import("./provider-tiers");
+  const m0 = (await getProviderMarketplaceSummary()).liveTierCount;
+  await provider("approved", ["trial", "paused"], true);
+  const m1 = (await getProviderMarketplaceSummary()).liveTierCount;
+  assert.equal(m1 - m0, 0, "trial + paused tiers are not live tiers");
+  await provider("approved", ["live"], true);
+  assert.equal((await getProviderMarketplaceSummary()).liveTierCount - m1, 1, "a live tier does move M");
+});
+
 test("partners: active counted, inactive not; pending applications in the sub-line, approved/declined not", async () => {
   const { getNetworkCounts } = await import("./admin-dashboard");
   const before = await getNetworkCounts();
