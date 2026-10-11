@@ -70,3 +70,16 @@ export function groupRequestsByPackage<T extends { batchId: string; tierKey: str
 export function countRequestGroups<T extends { batchId: string; tierKey: string }>(rows: T[]): number {
   return groupRequestsByPackage(rows).length;
 }
+
+/** The admin queue's PENDING / APPROVED / REJECTED tiles (marcus m64288, ruling 2): countRequestGroups
+ * over each status's rows, so a NY Base request pending as 2 envelopes is 1 there too. A package
+ * whose members are in different statuses groups in none of them and counts one per row, as the
+ * list renders it when filtered to one status. */
+export function countRequestGroupsByStatus<S extends string, T extends { batchId: string; tierKey: string; status: S }>(
+  rows: T[],
+  statuses: readonly S[]
+): Record<S, number> {
+  const counts = {} as Record<S, number>;
+  for (const s of statuses) counts[s] = countRequestGroups(rows.filter((r) => r.status === s));
+  return counts;
+}

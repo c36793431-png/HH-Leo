@@ -195,9 +195,10 @@ test("the form's text: '' = no amount; '50', '49.99', ' 1,250.5 ' parse; '0', '-
 });
 
 test("the payment write fails -> the WHOLE approve rolls back (the deploy-order hazard: code on a DB without 0100)", async () => {
-  // Put back the pre-0100 check: exactly what prod holds if the code deploys before the migration.
+  // Put back the pre-0100 check: exactly what prod holds if the code deploys before the migration. NOT VALID only
+  // because earlier tests here left feed_access rows (prod has none); it still checks every new insert.
   await sql(`alter table payments drop constraint payments_category_check`);
-  await sql(`alter table payments add constraint payments_category_check ${PRE_0100_CHECK}`);
+  await sql(`alter table payments add constraint payments_category_check ${PRE_0100_CHECK} not valid`);
   try {
     const b = await pendingRequest("ny-normal");
     await assert.rejects(lib.ftr.approveFeedTierRequest(b.requestId, ADMIN, "", paid(30)), /payments_category_check/);
@@ -262,4 +263,19 @@ test("admin tiles: a 2-feed pending NY Base package counts 1 (control: 2 envelop
   ];
   assert.equal(rows.filter((r) => r.batchId === "pkg").length, 2, "control: the package is 2 envelopes");
   assert.deepEqual(countRequestGroupsByStatus(rows, FEED_TIER_REQUEST_STATUSES), { pending: 3, approved: 1, rejected: 1 });
+});
+
+test("0100_rollback refuses while feed_access rows exist, then reverts to 0014's check with the column gone (runs last)", async () => {
+  const rollback = readFileSync(path.join(MIGRATIONS, "0100_rollback.sql"), "utf8");
+  await sql(`insert into payments (amount_usd, direction, category) values (1, 'in', 'feed_access')`);
+  await assert.rejects(db.exec(rollback), /feed_access rows/);
+  await db.exec("rollback");
+  assert.equal((await sql(`select 1 from schema_migrations where version = '0100'`)).rows.length, 1, "nothing rolled back");
+  await sql(`delete from payments where category = 'feed_access'`);
+  await db.exec(rollback);
+  const def = (await sql(`select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'payments_category_check'`)).rows[0].def;
+  assert.doesNotMatch(def, /feed_access/);
+  assert.match(def, /'referral_payout'/);
+  assert.equal((await sql(`select 1 from information_schema.columns where table_name = 'payments' and column_name = 'access_request_id'`)).rows.length, 0);
+  assert.equal((await sql(`select 1 from schema_migrations where version = '0100'`)).rows.length, 0);
 });
