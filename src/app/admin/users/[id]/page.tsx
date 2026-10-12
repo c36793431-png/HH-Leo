@@ -26,6 +26,8 @@ import { AdminClientContact } from "@/components/admin/client-contact";
 import { getClientContact } from "@/lib/client-reach";
 import { listClientLoginRows } from "@/lib/feed-connections";
 import { ClientLoginRows } from "@/components/admin/client-login-rows";
+import { listServerRegistrationsForAdminUser } from "@/lib/server-registration";
+import { AdminUserServers } from "@/components/admin/user-servers";
 import {
   computeFeedAssignmentRows,
   getFeedTierSubscriptionsForSubscriber,
@@ -212,7 +214,7 @@ export default async function AdminUserDetailPage({
 }) {
   const { id } = await params;
   const reach = await getClientContact(id).catch(() => null);
-  const [session, user, payments, configSummary, feedTiers, feedSubscriptions, clientLoginRows] = await Promise.all([
+  const [session, user, payments, configSummary, feedTiers, feedSubscriptions, clientLoginRows, servers] = await Promise.all([
     auth(),
     getUserDetail(id),
     listPaymentsForUser(id),
@@ -220,6 +222,7 @@ export default async function AdminUserDetailPage({
     listFeedTiersForAdminPicker(),
     getFeedTierSubscriptionsForSubscriber(id),
     listClientLoginRows(id),
+    listServerRegistrationsForAdminUser(id),
   ]);
   if (!user) notFound();
   const isSelf = session?.user?.id === user.userId;
@@ -379,6 +382,17 @@ export default async function AdminUserDetailPage({
                   password is sent to the client separately.
                 </p>
                 <ClientLoginRows userId={user.userId} rows={clientLoginRows} />
+              </dd>
+            </div>
+          )}
+          {servers.length > 0 && (
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-zinc-500">Servers</dt>
+              <dd>
+                <p className="mb-1.5 max-w-md text-[11px] leading-snug text-zinc-500">
+                  Every server this client registered. One that isn&apos;t linked to a licence switches nothing on.
+                </p>
+                <AdminUserServers rows={servers} />
               </dd>
             </div>
           )}

@@ -19,8 +19,9 @@ export interface GroupedServerEntry {
    * licenseId, which stops identifying a server once license_id is nullable -- two
    * licence-less servers would share a key and collapse. */
   registrationId: string;
-  licenseId: string;
-  licenseKey: string;
+  /** Null on a free account's licence-less server. */
+  licenseId: string | null;
+  licenseKey: string | null;
   registration: ServerRegistration;
   /** Latest connection IP for this licence === the declared IP (account/servers/page.tsx). The
    * observed-IP history ("Seen from") is no longer shown to the client (coxwell 14:04Z via
@@ -32,13 +33,25 @@ export interface GroupedServerEntry {
 interface ServerRegistrationsGroupedProps {
   entries: GroupedServerEntry[];
   /** A license with no registration yet, if one exists -- the only valid target for
-   * "+ Add server" / "+ Add here". Adding a genuinely new server beyond a user's
-   * existing licenses needs issuance, which is out of scope here. */
-  addTarget: { licenseId: string; action: BoundAction } | null;
+   * "+ Add server" / "+ Add here" on a licensed account. On the free view it is the
+   * licence-less register action (licenseId null) while the account is under its cap. */
+  addTarget: { licenseId: string | null; action: BoundAction } | null;
   /** Where "Get another licence" points when addTarget is null. The same
    * config.telegramChannelUrl the page's locked state already uses for "Upgrade to
    * Paid" -- passed in rather than read here so there is one source for the route. */
   upgradeUrl: string;
+  /** Free view only: said instead of "Get another licence" when addTarget is null because
+   * the account is at its licence-less cap, where a licence is not what is missing. */
+  limitNote?: string;
+}
+
+function AddSlotNote({ upgradeUrl, limitNote, inFooter = false }: { upgradeUrl: string; limitNote?: string; inFooter?: boolean }) {
+  if (!limitNote) return <NeedsAnotherLicence upgradeUrl={upgradeUrl} inFooter={inFooter} />;
+  return (
+    <div className={`srv-glic${inFooter ? " footer" : ""}`}>
+      <span className="srv-glic-b">{limitNote}</span>
+    </div>
+  );
 }
 
 type GroupKey = ServerLocation | "unspecified";
@@ -70,7 +83,7 @@ function mostRecentGroup(entries: GroupedServerEntry[]): GroupKey | null {
   return effectiveServerLocation(newest.registration.location, newest.registration.serverLocation);
 }
 
-export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl }: ServerRegistrationsGroupedProps) {
+export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl, limitNote }: ServerRegistrationsGroupedProps) {
   const [openGroup, setOpenGroup] = useState<GroupKey | null>(() => mostRecentGroup(entries));
   const [editingServerId, setEditingServerId] = useState<string | null>(null);
   const [addingInGroup, setAddingInGroup] = useState<GroupKey | null>(null);
@@ -114,7 +127,7 @@ export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl }: S
                     <span className="srv-gadd-icon">＋</span> Add here
                   </button>
                 )}
-                {!addTarget && key !== "unspecified" && <NeedsAnotherLicence upgradeUrl={upgradeUrl} />}
+                {!addTarget && key !== "unspecified" && <AddSlotNote upgradeUrl={upgradeUrl} limitNote={limitNote} />}
               </div>
               {isAdding && addTarget && key !== "unspecified" && (
                 <div className="srv-grows">
@@ -212,7 +225,7 @@ export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl }: S
                   </button>
                 )}
                 {!addTarget && key !== "unspecified" && (
-                  <NeedsAnotherLicence upgradeUrl={upgradeUrl} inFooter />
+                  <AddSlotNote upgradeUrl={upgradeUrl} limitNote={limitNote} inFooter />
                 )}
               </div>
             )}

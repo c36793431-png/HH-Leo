@@ -220,6 +220,13 @@ export function BasketView({
             <Link href="/marketplace/requests" className="btn primary">
               My requests →
             </Link>
+            {/* A feed needs a server before it can be switched on; the Servers tab is open to every
+                account now (marcus m65584 Q-S4). Same feedReady the basket's feed-line note reads. */}
+            {sent.lines.some((l) => l.kind === "feed") && !account?.feedReady && (
+              <Link href="/account/servers" className="btn ghost">
+                Add your server →
+              </Link>
+            )}
             <Link href="/marketplace" className="btn ghost">
               Back to the marketplace
             </Link>

@@ -22,7 +22,9 @@ export interface ServerRegistration {
    * licenseId is an attribute of it, and under 0086 becomes nullable. Every by-id write
    * below keys on this, never on licenseId. */
   id: string;
-  licenseId: string;
+  /** Null on a server a free account registered (insertUserServerRegistration) until it is
+   * linked to a licence (linkServerRegistrationToLicence). */
+  licenseId: string | null;
   serverName: string;
   vpsProvider: string;
   vpsProviderOther: string | null;
@@ -47,7 +49,7 @@ export interface ServerRegistrationInput {
 
 interface RegistrationRow {
   id: string;
-  license_id: string;
+  license_id: string | null;
   server_name: string;
   vps_provider: string;
   vps_provider_other: string | null;
@@ -253,6 +255,139 @@ interface UpsertRow {
   old_ip: string | null;
 }
 
+/** How many licence-less servers one account may hold (marcus m65584 Q-S3): every free
+ * signup can now write rows, and each insert sends the admin IP card. */
+export const UNLINKED_SERVER_CAP = 5;
+
+/** REGISTER path for an account with no licence to register against (marcus m65584): a plain
+ * insert with license_id NULL, legal since 0086 (license_id nullable, unique(license_id) lets
+ * any number of NULLs through). Not the upsert above: `on conflict (license_id)` never fires
+ * for NULL, so it would insert anyway, and it is keyed on a licence this row does not have.
+ *
+ * Nothing licence-keyed reads these rows (feed picker, /feeds banner, dashboard count, basket
+ * feed_ready all go through licenses), so a free server switches nothing on until
+ * linkServerRegistrationToLicence gives it a licence.
+ *
+ * Returns false when the account already holds UNLINKED_SERVER_CAP licence-less rows. The cap
+ * is read in the same statement as the insert, but two concurrent submits can both read 4 and
+ * both land; it limits alert noise, it is not an invariant anything relies on. */
+export async function insertUserServerRegistration(
+  userId: string,
+  input: ServerRegistrationInput,
+  adminUrl: string,
+  ownerEmail: string | null
+): Promise<boolean> {
+  const serverLocationLabel = SERVER_LOCATION_LABELS[input.location];
+  const hasLocationColumn = await checkLocationColumnExists();
+
+  const result = hasLocationColumn
+    ? await pool.query<{ id: string }>(
+        `insert into server_registrations
+           (license_id, user_id, server_name, vps_provider, vps_provider_other, server_location, location, declared_ip, updated_at)
+         select null, $1, $2, $3, $4, $5, $6, $7, now()
+         where (select count(*) from server_registrations where user_id = $1 and license_id is null) < $8
+         returning id`,
+        [userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.location, input.declaredIp, UNLINKED_SERVER_CAP]
+      )
+    : await pool.query<{ id: string }>(
+        `insert into server_registrations
+           (license_id, user_id, server_name, vps_provider, vps_provider_other, server_location, declared_ip, updated_at)
+         select null, $1, $2, $3, $4, $5, $6, now()
+         where (select count(*) from server_registrations where user_id = $1 and license_id is null) < $7
+         returning id`,
+        [userId, input.serverName, input.vpsProvider, input.vpsProviderOther, serverLocationLabel, input.declaredIp, UNLINKED_SERVER_CAP]
+      );
+
+  const row = result.rows[0];
+  if (!row) return false;
+  await alertServerIp({
+    kind: "registered",
+    registrationId: row.id,
+    licenseId: null,
+    previousDeclaredIp: null,
+    input,
+    serverLocationLabel,
+    userId,
+    ownerEmail,
+    adminUrl,
+  });
+  return true;
+}
+
+/** The account's licence-less servers, oldest first -- the free view of /account/servers,
+ * and the "Not linked to a licence" list for an account that has since got a licence. */
+export async function getUnlinkedServerRegistrationsForUser(userId: string): Promise<ServerRegistration[]> {
+  const result = await pool.query<RegistrationRow>(
+    "select * from server_registrations where user_id = $1 and license_id is null order by created_at",
+    [userId]
+  );
+  return result.rows.map(mapRegistration);
+}
+
+/** "Use for licence" (marcus m65584 Q-S2, plan R1): gives a licence-less server the licence
+ * the client got later, so it is not registered a second time and every licence-keyed reader
+ * now sees it. Only from NULL (`license_id is null`: a linked server is never moved to another
+ * licence), only the row's owner (`user_id = $2`), and only onto a licence that owner holds --
+ * the action checks that through requireLicenseId, and the `exists` re-checks it here so this
+ * function is not safe only because of its one caller.
+ *
+ * unique(license_id) refuses a licence that already has a server; that is thrown as a
+ * sentence for the client rather than a 23505. Returns false when nothing matched (wrong id,
+ * not the owner's row, already linked, or not the owner's licence), which the caller cannot
+ * tell apart, as with updateServerRegistrationById. */
+export async function linkServerRegistrationToLicence(id: string, userId: string, licenseId: string): Promise<boolean> {
+  try {
+    const result = await pool.query(
+      `update server_registrations set license_id = $3, updated_at = now()
+       where id = $1 and user_id = $2 and license_id is null
+         and exists (select 1 from licenses where id = $3 and user_id = $2)`,
+      [id, userId, licenseId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  } catch (err) {
+    if ((err as { code?: string }).code === "23505") throw new Error("That licence already has a server.");
+    throw err;
+  }
+}
+
+export interface AdminUserServerRow {
+  id: string;
+  serverName: string;
+  serverLocation: string;
+  declaredIp: string;
+  /** Null = not linked to a licence. */
+  licenseKey: string | null;
+  updatedAt: Date;
+}
+
+/** Every server an account owns, linked or not, for the read-only block on /admin/users/[id]
+ * (marcus m65584 Q-S1). /admin/connections/[licenseId] only reaches a server through its
+ * licence, so without this an admin has no view of a free account's server. */
+export async function listServerRegistrationsForAdminUser(userId: string): Promise<AdminUserServerRow[]> {
+  const result = await pool.query<{
+    id: string;
+    server_name: string;
+    server_location: string;
+    declared_ip: string;
+    license_key: string | null;
+    updated_at: Date;
+  }>(
+    `select sr.id, sr.server_name, sr.server_location, sr.declared_ip, l.license_key, sr.updated_at
+     from server_registrations sr left join licenses l on l.id = sr.license_id
+     where sr.user_id = $1
+     order by sr.updated_at desc`,
+    [userId]
+  );
+  return result.rows.map((r) => ({
+    id: r.id,
+    serverName: r.server_name,
+    serverLocation: r.server_location,
+    declaredIp: r.declared_ip,
+    licenseKey: r.license_key,
+    updatedAt: r.updated_at,
+  }));
+}
+
 /** The admin sink's server-IP alert (notifyServerRegistered), for a new server and for a
  * declared_ip change on an existing one -- 2-interim, marcus m53665, until the provider-facing
  * client_server_ip_changed key (2) lands; retire the edit arm then (Fable m53676). Runs after
@@ -296,6 +431,7 @@ async function alertServerIp(opts: {
     ]);
     await notifyServerRegistered({
       kind: opts.kind,
+      licensed: licenseId != null,
       client,
       serverName: input.serverName,
       vpsProvider: input.vpsProviderOther ? `${input.vpsProvider} (${input.vpsProviderOther})` : input.vpsProvider,
@@ -337,7 +473,8 @@ export async function updateServerRegistrationById(
   userId: string,
   input: ServerRegistrationInput,
   ownerEmail: string | null,
-  adminUrlForLicence: (licenseId: string) => string
+  /** Called with null for a licence-less server, whose admin view is the owner's user page. */
+  adminUrlForLicence: (licenseId: string | null) => string
 ): Promise<boolean> {
   const serverLocationLabel = SERVER_LOCATION_LABELS[input.location];
   const hasLocationColumn = await checkLocationColumnExists();
@@ -389,7 +526,7 @@ export async function updateServerRegistrationById(
       serverLocationLabel,
       userId,
       ownerEmail,
-      adminUrl: row.license_id ? adminUrlForLicence(row.license_id) : "",
+      adminUrl: adminUrlForLicence(row.license_id),
     });
   }
   return true;
@@ -638,7 +775,8 @@ export async function listConnectionOverview(): Promise<ConnectionOverviewRow[]>
      left join server_registrations sr on sr.id = k.registration_id
      left join latest on latest.license_id = k.license_id
      left join licenses l on l.id = k.license_id
-     left join users u on u.id = l.user_id
+     -- a free account's server has no licence to reach its owner through (marcus m65584)
+     left join users u on u.id = coalesce(l.user_id, sr.user_id)
      order by coalesce(latest.captured_at, sr.updated_at) desc nulls last`
   );
 

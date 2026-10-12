@@ -6,6 +6,9 @@ import { runAction, type ActionResult } from "@/lib/action-result";
 import { getActiveLicensesForUser, isPaidUser } from "@/lib/licenses";
 import {
   saveServerRegistration,
+  insertUserServerRegistration,
+  linkServerRegistrationToLicence,
+  UNLINKED_SERVER_CAP,
   updateServerRegistrationById,
   VPS_PROVIDERS,
   type VpsProvider,
@@ -79,6 +82,41 @@ export async function saveServerRegistrationAction(
   });
 }
 
+/** REGISTER path with no licence (marcus m65584): the free view of /account/servers. The
+ * owner is the session user only -- nothing in the form names a user or a licence -- and the
+ * row is written with license_id NULL, so it unlocks nothing until it is linked. */
+export async function saveUserServerRegistrationAction(
+  _prevState: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  return runAction("Failed to save server registration", async () => {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Not signed in");
+    const input = parseRegistrationInput(formData);
+
+    const inserted = await insertUserServerRegistration(
+      session.user.id,
+      input,
+      `https://portal.horizonhft.com/admin/users/${session.user.id}`,
+      session.user.email ?? null
+    );
+    if (!inserted) throw new Error(`You can register up to ${UNLINKED_SERVER_CAP} servers without a licence.`);
+    revalidatePath("/account/servers");
+  });
+}
+
+/** "Use for licence" (marcus m65584 Q-S2): moves a licence-less server onto a licence the
+ * user holds. requireLicenseId authorises the licence; the UPDATE's owner and NULL clauses
+ * authorise the server row (see linkServerRegistrationToLicence). */
+export async function linkServerRegistrationAction(registrationId: string, licenseId: string): Promise<ActionResult> {
+  return runAction("Failed to link server", async () => {
+    const { licenseId: validLicenseId, userId } = await requireLicenseId(licenseId);
+    const linked = await linkServerRegistrationToLicence(registrationId, userId, validLicenseId);
+    if (!linked) throw new Error("Server not found on this account");
+    revalidatePath("/account/servers");
+  });
+}
+
 /** EDIT path, keyed on the server row's id rather than its licence. requireLicenseId is
  * deliberately NOT used here: it authorises a licence, and after the re-key the thing
  * being written is a server. The ownership check moves into the UPDATE itself
@@ -94,12 +132,16 @@ export async function updateServerRegistrationAction(
     if (!session?.user?.id) throw new Error("Not signed in");
     const input = parseRegistrationInput(formData);
 
+    const userId = session.user.id;
     const updated = await updateServerRegistrationById(
       registrationId,
-      session.user.id,
+      userId,
       input,
       session.user.email ?? null,
-      (licenseId) => `https://portal.horizonhft.com/admin/connections/${licenseId}`
+      (licenseId) =>
+        licenseId
+          ? `https://portal.horizonhft.com/admin/connections/${licenseId}`
+          : `https://portal.horizonhft.com/admin/users/${userId}`
     );
     if (!updated) throw new Error("Server not found on this account");
     revalidatePath("/account/servers");

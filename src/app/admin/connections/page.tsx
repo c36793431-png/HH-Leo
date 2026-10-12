@@ -117,10 +117,14 @@ export default async function AdminConnectionsPage({
                       >
                         {r.email ?? "—"}
                       </Link>
+                    ) : r.userId ? (
+                      // A free account's server (license_id NULL, marcus m65584): no licence to
+                      // address the detail route by, so it links the owner's user page, where
+                      // the read-only Servers block lists it.
+                      <Link href={`/admin/users/${r.userId}`} className="hover:text-cyan-300 hover:underline">
+                        {r.email ?? "—"}
+                      </Link>
                     ) : (
-                      // No licence to address the detail route by. Cannot happen before the
-                      // 0086 tighten; renders the same text unlinked rather than linking to
-                      // /admin/connections/null.
                       <span>{r.email ?? "—"}</span>
                     )}
                   </td>

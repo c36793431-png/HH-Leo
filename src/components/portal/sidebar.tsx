@@ -56,7 +56,9 @@ const PORTAL_LINKS = [
   // Not paidOnly, deliberately: a catalogue of what we sell has to be visible to a free account
   // (marcus, m50717 #3). Sits under Feeds because every feed listing on it links back there.
   { href: "/marketplace", label: "Marketplace", icon: Store, color: "#A78BFA" },
-  { href: "/account/servers", label: "Servers", icon: HardDrive, paidOnly: true, lockedStaysOnPage: true, color: "#189FC9" },
+  // Not paidOnly: a free account can give us its server when it requests a product (coxwell via
+  // marcus m65488/m65584). What that server can do is still licence-gated, on the page itself.
+  { href: "/account/servers", label: "Servers", icon: HardDrive, color: "#189FC9" },
   { href: "/alerts", label: "Trading", icon: CandlestickChart, paidOnly: true, lockedStaysOnPage: true, color: "#FFC24B", isNew: true },
   { href: "/strategies", label: "Strategies", icon: Zap, paidOnly: true, lockedStaysOnPage: true, color: "#37F5A0" },
   { href: "/setfiles", label: "Setfiles", icon: Sliders, paidOnly: true, lockedStaysOnPage: true, color: "#2FBE8E" },

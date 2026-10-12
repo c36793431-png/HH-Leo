@@ -280,6 +280,19 @@ test("Q-S1 /admin/users/[id] gets a read-only Servers block listing every row th
   assert.ok(/<AdminUserServers rows=\{servers\} \/>/.test(src), "renders AdminUserServers");
 });
 
+test("/admin/connections names a licence-less server's owner (users reached through sr.user_id when there is no licence) and links their user page", async () => {
+  const rows = await lib.listConnectionOverview();
+  const free = rows.filter((r) => r.registrationId && r.licenseId === null && r.userId === FREE);
+  assert.equal(free.length, 5, "FREE's five licence-less servers, each with its owner");
+  for (const r of free) assert.equal(r.email, "free@example.invalid");
+  const paidBox = rows.find((r) => r.serverName === "paid-box")!;
+  assert.equal(paidBox.licenseId, PAID_LIC);
+  assert.equal(paidBox.email, "paid@example.invalid", "a licensed row still resolves its owner through the licence");
+
+  const src = readFileSync(path.join(process.cwd(), "src/app/admin/connections/page.tsx"), "utf8");
+  assert.ok(/\) : r\.userId \? \(\s*(\/\/[^\n]*\n\s*)*<Link href=\{`\/admin\/users\/\$\{r\.userId\}`\}/.test(src), "licence-less row links /admin/users/<id>");
+});
+
 test("Q-S4 the basket's Request sent state links 'Add your server →' to /account/servers when a feed was asked for and no server is ready", () => {
   const src = readFileSync(path.join(process.cwd(), "src/components/marketplace/basket-view.tsx"), "utf8");
   const sentBlock = src.slice(src.indexOf("// ---- 3 · SENT ----"), src.indexOf("// ---- EMPTY ----"));

@@ -366,9 +366,11 @@ export async function notifyFirstLogin(opts: {
 
 /** New server, or a declared_ip change on an existing one (server-registration.ts
  * alertServerIp). oldIp null = nothing declared or observed before. liveGrants null = the
- * lookup failed, said so rather than read as "no". */
+ * lookup failed, said so rather than read as "no". licensed false = a server a free account
+ * registered with no licence (marcus m65584 Q-S3: the same card, labelled). */
 export async function notifyServerRegistered(opts: {
   kind: "registered" | "edited";
+  licensed: boolean;
   client: ClientRef;
   serverName: string;
   vpsProvider: string;
@@ -386,7 +388,7 @@ export async function notifyServerRegistered(opts: {
         ? `${opts.liveGrants}${opts.oldIp ? " (a vendor allowlist may still hold the old ip)" : ""}`
         : "none";
   await sendSinkMessage(
-    `${opts.kind === "registered" ? "🖥 new server registration" : "🔁 server ip changed"}\n` +
+    `${opts.kind === "registered" ? "🖥 new server registration" : "🔁 server ip changed"}${opts.licensed ? "" : " · no licence"}\n` +
       `${clientLine(opts.client)}\n` +
       `feed: ${opts.feeds.length ? opts.feeds.join(", ") : "-"}\n` +
       `server: ${opts.serverName}\n` +

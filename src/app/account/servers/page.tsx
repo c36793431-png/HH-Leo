@@ -8,9 +8,12 @@ import { PortalShell } from "@/components/portal/portal-shell";
 import { ServerRegistrationForm } from "@/components/account/server-registration-form";
 import { ServerRegistrationView } from "@/components/account/server-registration-view";
 import { ServerRegistrationsGrouped, type GroupedServerEntry } from "@/components/account/server-registrations-grouped";
+import { UnlinkedServersCard } from "@/components/account/unlinked-servers-card";
 import {
   getServerRegistration,
   getLatestConnectionIp,
+  getUnlinkedServerRegistrationsForUser,
+  UNLINKED_SERVER_CAP,
   type ServerRegistration,
 } from "@/lib/server-registration";
 import { getBlackTrialForUser } from "@/lib/black-trials";
@@ -19,6 +22,8 @@ import { BlackTrialCard } from "@/components/account/black-trial-card";
 import { blackAvailability } from "@/lib/marketplace-catalogue";
 import {
   saveServerRegistrationAction,
+  saveUserServerRegistrationAction,
+  linkServerRegistrationAction,
   updateServerRegistrationAction,
   requestBlackTrialAction,
   requestBlackTrialConvertAction,
@@ -111,11 +116,12 @@ export default async function ServersPage() {
   if (!session?.user?.id) redirect("/login");
   const switchablePanels = getReachablePanels(session.user.roles);
 
-  const [paid, licenses, config, userTrial] = await Promise.all([
+  const [paid, licenses, config, userTrial, unlinked] = await Promise.all([
     isPaidUser(session.user.id).catch(() => false),
     getActiveLicenseDetailsForUser(session.user.id).catch(() => []),
     getPortalConfig(),
     getBlackTrialForUser(session.user.id).catch(() => null),
+    getUnlinkedServerRegistrationsForUser(session.user.id).catch(() => []),
   ]);
   const isAdmin = isAdminUser(session.user);
   const { tier, hasOtherActiveTiers } = computePortalTierFromLicenses(isAdmin, licenses);
@@ -162,6 +168,26 @@ export default async function ServersPage() {
   const primaryLicenseId = registeredCards[0]?.license.id ?? null;
   const trialProps = primaryLicenseId ? blackTrialCardProps(userTrial, primaryLicenseId) : null;
 
+  // Licence-less servers (marcus m65584). With no licence card they are the whole page, in the
+  // same grouped view, editable; with licences they sit in their own card with "Use for
+  // licence" for each licence that has no server yet.
+  const unlinkedEntries: GroupedServerEntry[] = unlinked.map((registration) => ({
+    registrationId: registration.id,
+    licenseId: null,
+    licenseKey: null,
+    registration,
+    verified: false,
+    action: updateServerRegistrationAction.bind(null, registration.id),
+  }));
+  const spareLicenses = cards.filter((c) => !c.registration).map((c) => c.license);
+  const unlinkedWithLinks = unlinked.map((registration) => ({
+    registration,
+    links: spareLicenses.map((license) => ({
+      licenseKey: license.licenseKey,
+      action: linkServerRegistrationAction.bind(null, registration.id, license.id),
+    })),
+  }));
+
   return (
     <PortalShell tier={tier} isAdmin={isAdmin} userName={userName} userEmail={userEmail} hasOtherActiveTiers={hasOtherActiveTiers} switchablePanels={switchablePanels}>
       <Link href="/feeds" className="btn ghost sm" style={{ marginBottom: 12, display: "inline-block" }}>
@@ -192,6 +218,7 @@ export default async function ServersPage() {
               requestable={blackAvailability() === "available"}
             />
           )}
+          {unlinkedWithLinks.length > 0 && <UnlinkedServersCard entries={unlinkedWithLinks} />}
         </div>
       ) : cards.length > 0 ? (
         cards.map(({ license, registration, verified }) => (
@@ -204,26 +231,27 @@ export default async function ServersPage() {
           />
         ))
       ) : (
+        // No licence: the tab is open anyway (coxwell via marcus m65488/m65584), so a client can
+        // give us their server when they request a product. The rows are licence-less and unlock
+        // nothing; that is said here rather than left for the client to infer.
         <div className="grid">
           <div className="card full">
             <div className="chead">
               <span className="ic">🖥</span>
               <h3>Server registration</h3>
             </div>
-            <div className="empty">
-              <div className="eic">🔒</div>
-              <b>Server registration is available to Horizon HFT users.</b>
-              <p>Get a license to register your trading server.</p>
-              <a
-                className="btn primary sm"
-                href={config.telegramChannelUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ marginTop: 12 }}
-              >
-                ⚡ Upgrade to Paid
-              </a>
-            </div>
+            <p style={{ color: "var(--hz-ink-2)", fontSize: 13, marginBottom: 16 }}>
+              Tell us where your Horizon client runs. Registering a server doesn&apos;t switch anything on. Feeds need
+              a licence and an approved request.
+            </p>
+            <ServerRegistrationsGrouped
+              entries={unlinkedEntries}
+              addTarget={
+                unlinked.length < UNLINKED_SERVER_CAP ? { licenseId: null, action: saveUserServerRegistrationAction } : null
+              }
+              upgradeUrl={config.telegramChannelUrl}
+              limitNote={`You can register up to ${UNLINKED_SERVER_CAP} servers without a licence. Edit one to change it.`}
+            />
           </div>
         </div>
       )}
