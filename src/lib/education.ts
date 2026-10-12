@@ -205,6 +205,12 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
       "2 Leg Lock opens a BUY and a SELL at market as soon as the tab is flat, so it starts locked; there is no entry gap. After Min Time(s), when the Fast Feed leads the broker by your Exec Gap, it closes the wrong side and broker pending orders re-lock the remaining leg. Trailing is only the fallback, if the broker refuses those orders.",
     blocks: [
       {
+        type: "warning",
+        heading: "Stopping safely",
+        body:
+          "When you want to stop and close, press STOP first and then Close Trade, in that order. If you press Close Trade first, wait until the log shows \"Pause complete\" before pressing STOP. Afterwards, check your open positions to confirm everything is flat.",
+      },
+      {
         type: "setting",
         heading: "Core Parameters",
         body: "Four parameters control the release and the exits:",
