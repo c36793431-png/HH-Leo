@@ -54,7 +54,7 @@ test("the cut: first half of the blocks, rounded down, at least one", () => {
     "broker-connections": "1/3 hidden 2",
     "fast-feed": "1/2 hidden 1",
     "1-leg-latency-arb": "1/1 hidden 1",
-    "2-leg-lock-hedge-arb": "1/2 hidden 1",
+    "2-leg-lock-hedge-arb": "1/3 hidden 2",
     "trend-impulse": "1/2 hidden 1",
     obi: "1/3 hidden 2",
     "grid-arbitrage": "1/3 hidden 2",
