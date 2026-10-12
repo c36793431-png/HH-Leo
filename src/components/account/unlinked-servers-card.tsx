@@ -45,20 +45,25 @@ export function UnlinkedServersCard({ entries }: { entries: UnlinkedServerEntry[
       <p style={{ color: "var(--hz-ink-2)", fontSize: 13, marginBottom: 16 }}>
         You registered these before you had a licence. Link one to a licence to use it for feeds.
       </p>
-      <div className="srv-grows">
-        {entries.map(({ registration, links }) => (
-          <div className="srv-srow" key={registration.id}>
-            <span className="srv-ic">🖥</span>
-            <span className="srv-sname">{registration.serverName}</span>
-            <span className="srv-sprov">{registration.serverLocation}</span>
-            <span className="srv-sip">{registration.declaredIp}</span>
-            {links.length > 0 ? (
-              links.map((link) => <LinkButton key={link.licenseKey} {...link} />)
-            ) : (
-              <span className="srv-sprov">Every licence already has a server</span>
-            )}
-          </div>
-        ))}
+      {/* Inside .srv-groups so the rows take its narrow-width layout and cannot widen the card. */}
+      <div className="srv-groups">
+        <div className="srv-grows srv-unlinked">
+          {entries.map(({ registration, links }) => (
+            <div className="srv-srow" key={registration.id}>
+              <span className="srv-ic">🖥</span>
+              <span className="srv-sname">{registration.serverName}</span>
+              <span className="srv-sprov">{registration.serverLocation}</span>
+              <span className="srv-sip">{registration.declaredIp}</span>
+              <span className="srv-links">
+                {links.length > 0 ? (
+                  links.map((link) => <LinkButton key={link.licenseKey} {...link} />)
+                ) : (
+                  <span className="srv-sprov">Every licence already has a server</span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -127,7 +127,8 @@ export function ServerRegistrationsGrouped({ entries, addTarget, upgradeUrl, lim
                     <span className="srv-gadd-icon">＋</span> Add here
                   </button>
                 )}
-                {!addTarget && key !== "unspecified" && <AddSlotNote upgradeUrl={upgradeUrl} limitNote={limitNote} />}
+                {/* The cap note is said once, under the open group's servers, not in every empty group. */}
+                {!addTarget && key !== "unspecified" && !limitNote && <NeedsAnotherLicence upgradeUrl={upgradeUrl} />}
               </div>
               {isAdding && addTarget && key !== "unspecified" && (
                 <div className="srv-grows">

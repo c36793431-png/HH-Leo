@@ -149,6 +149,14 @@ test("T2 the free insert writes license_id NULL + user_id, a second is fine, the
   assert.equal((await rowsOf(FREE)).length, 5, "the refused 6th wrote nothing");
 });
 
+test("at the cap the free page offers no 'Add here' and says the limit once, under the open group", async () => {
+  as(FREE, "free@example.invalid");
+  const out = await renderServersPage();
+  assert.doesNotMatch(out, /Add here/);
+  assert.equal(out.match(/You can register up to 5 servers without a licence/g)?.length, 1);
+  assert.doesNotMatch(out, /Get another licence/, "a licence is not what a free account at the cap is missing");
+});
+
 test("T3 edit works on your own licence-less row and refuses another user's row id", async () => {
   const [row] = await rowsOf(FREE);
   as(FREE, "free@example.invalid");
