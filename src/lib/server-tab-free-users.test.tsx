@@ -236,7 +236,7 @@ test("T7 'Use for licence': owner-only, NULL-only, own licence only, and refused
   assert.equal((await rowsOf(FREE2)).find((r) => r.id === second.id)?.license_id, null);
 });
 
-test("T8 the IP card for a licence-less row is labelled 'no licence' and links /admin/users/<id>, on insert and on an IP edit", async () => {
+test("T8 the IP card for a licence-less row is labelled 'no licence' and links /admin/users/<id> on insert; an IP edit on it sends no card (Fable S1, marcus (a))", async () => {
   sink.length = 0;
   as(FREE2, "free2@example.invalid");
   assert.deepEqual(await actions.saveUserServerRegistrationAction(null, server("f2-third", "192.0.2.12", "ny")), { ok: true });
@@ -244,20 +244,29 @@ test("T8 the IP card for a licence-less row is labelled 'no licence' and links /
   assert.match(sink[0], /new server registration · no licence/);
   assert.match(sink[0], new RegExp(`https://portal\\.horizonhft\\.com/admin/users/${FREE2}$`));
 
+  // the edit lands, but sends nothing: the cap bounds registered cards only, so an edit card would be unbounded
   const third = (await rowsOf(FREE2)).find((r) => r.server_name === "f2-third")!;
   assert.deepEqual(await actions.updateServerRegistrationAction(third.id, null, server("f2-third", "192.0.2.99", "ny")), { ok: true });
-  assert.equal(sink.length, 2);
-  assert.match(sink[1], /server ip changed · no licence/);
-  assert.match(sink[1], /192\.0\.2\.12 -> 192\.0\.2\.99/);
-  assert.match(sink[1], new RegExp(`https://portal\\.horizonhft\\.com/admin/users/${FREE2}$`));
+  assert.equal((await rowsOf(FREE2)).find((r) => r.id === third.id)?.declared_ip, "192.0.2.99");
+  assert.equal(sink.length, 1, "no edit card for a licence-less row");
 
-  // a licensed registration's card is unchanged: no label, /admin/connections/<licence>
+  // a licensed registration's cards are unchanged, on insert and on an IP edit: no label, /admin/connections/<licence>
   sink.length = 0;
   as(PAID, "paid@example.invalid");
   assert.deepEqual(await actions.saveServerRegistrationAction(PAID_LIC, null, server("paid-box", "203.0.113.5")), { ok: true });
   assert.equal(sink.length, 1);
   assert.doesNotMatch(sink[0], /no licence/);
   assert.match(sink[0], new RegExp(`/admin/connections/${PAID_LIC}$`));
+
+  // edited away and back, so the later tests still see paid-box at 203.0.113.5
+  const paidBox = (await rowsOf(PAID)).find((r) => r.server_name === "paid-box")!;
+  assert.deepEqual(await actions.updateServerRegistrationAction(paidBox.id, null, server("paid-box", "203.0.113.6")), { ok: true });
+  assert.deepEqual(await actions.updateServerRegistrationAction(paidBox.id, null, server("paid-box", "203.0.113.5")), { ok: true });
+  assert.equal(sink.length, 3, "a licensed row still alerts on every IP edit");
+  assert.match(sink[1], /^🔁 server ip changed\n/);
+  assert.match(sink[1], /203\.0\.113\.5 -> 203\.0\.113\.6/);
+  assert.match(sink[1], new RegExp(`https://portal\\.horizonhft\\.com/admin/connections/${PAID_LIC}$`));
+  assert.match(sink[2], /203\.0\.113\.6 -> 203\.0\.113\.5/);
 });
 
 test("paid page: today's licence cards, plus licence-less rows under 'Not linked to a licence' with 'Use for licence' per spare licence", async () => {

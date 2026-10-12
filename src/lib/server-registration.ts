@@ -467,14 +467,18 @@ async function alertServerIp(opts: {
  * Alerts the admin sink when declared_ip actually changed (2-interim, marcus m53665): `old`
  * locks the row and reads its declared IP in the same statement, so old -> new is the pair this
  * write really replaced, even against a concurrent edit. A no-op IP (every other field edited,
- * or nothing) never alerts. */
+ * or nothing) never alerts.
+ *
+ * A licence-less row never alerts on edit (Fable S1, marcus ruled (a)): every free account can
+ * edit, nothing is actionable on its IP (no allowlist; the admin reads the IP from the request
+ * when one arrives, and /admin/users/[id] shows it), and the UNLINKED_SERVER_CAP bounds only
+ * registered cards, so an edit card would be unbounded noise. */
 export async function updateServerRegistrationById(
   id: string,
   userId: string,
   input: ServerRegistrationInput,
   ownerEmail: string | null,
-  /** Called with null for a licence-less server, whose admin view is the owner's user page. */
-  adminUrlForLicence: (licenseId: string | null) => string
+  adminUrlForLicence: (licenseId: string) => string
 ): Promise<boolean> {
   const serverLocationLabel = SERVER_LOCATION_LABELS[input.location];
   const hasLocationColumn = await checkLocationColumnExists();
@@ -516,7 +520,7 @@ export async function updateServerRegistrationById(
 
   const row = result.rows[0];
   if (!row) return false;
-  if (row.old_ip !== input.declaredIp) {
+  if (row.license_id !== null && row.old_ip !== input.declaredIp) {
     await alertServerIp({
       kind: "edited",
       registrationId: id,
