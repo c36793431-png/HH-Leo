@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "crypto";
+import type { PoolClient } from "@neondatabase/serverless";
 import { pool, type Db } from "./db";
 import { signalInstrument } from "./signal-instruments";
 
@@ -245,8 +246,11 @@ export async function handleSignalIngest(
   const parsed = parseSignalBody(source, raw, sources);
   if (!parsed.ok) return { status: 400, body: parsed.error };
 
-  const client = await pool.connect();
+  // connect() inside the try, so a database that cannot be reached still answers the JSON 500 and logs the
+  // line below (fable m67577 call 1, marcus GO S2b.1 m67588).
+  let client: PoolClient | undefined;
   try {
+    client = await pool.connect();
     await client.query("begin");
     await client.query("select pg_advisory_xact_lock($1)", [SIGNAL_INGEST_LOCK_KEY]);
     const counts: SignalIngestCounts = { inserted: 0, scored: 0, filled: 0, unchanged: 0 };
@@ -261,11 +265,11 @@ export async function handleSignalIngest(
     await client.query("commit");
     return { status: 200, body: counts };
   } catch (err) {
-    await client.query("rollback").catch(() => {});
+    await client?.query("rollback").catch(() => {});
     console.error("signal-ingest: failed", source, (err as Error)?.name, (err as Error)?.message);
     return { status: 500, body: { error: "internal error; nothing was written" } };
   } finally {
-    client.release();
+    client?.release();
   }
 }
 

@@ -125,8 +125,8 @@ m67446, kept m67483).
 ## Answers
 
 Every answer the handler gives is JSON with `cache-control: no-store`. A failure to get a database
-connection happens before the handler's try (src/lib/signal-ingest.ts:248), so it is not one of these: it
-reaches the caller as a 5xx without this body, and nothing was written.
+connection is the 500 below, with its body and the server log line `signal-ingest: failed <source> <name>
+<message>` (S2b.1, fable m67577 call 1; at 6f3af9d it was a 5xx with no body and no log line).
 
 | Code | Body | Meaning |
 |---|---|---|
@@ -136,7 +136,7 @@ reaches the caller as a 5xx without this body, and nothing was written.
 | 403 | `{ "error": "forbidden" }` | IP rule set and the caller is not that IP (not set for axiom) |
 | 404 | `{ "error": "not found" }` | Not production |
 | 409 | `{ "error", "index" }` | Call `index` conflicts with the stored call (the 409 lines in the rules above, or a changed direction). The WHOLE batch is rolled back, calls before `index` too |
-| 500 | `{ "error": "internal error; nothing was written" }` | The transaction failed and was rolled back |
+| 500 | `{ "error": "internal error; nothing was written" }` | The database could not be reached, or the transaction failed and was rolled back |
 
 Calls in one POST are applied in index order, so a later call sees an earlier one: the same key twice
 with the same values answers 1 inserted + 1 unchanged, and a registration in call 0 with its exit in call 1

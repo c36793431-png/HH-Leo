@@ -10,7 +10,9 @@
  *  - the upsert: inserted / filled / scored / unchanged, entry_px_at = the fill's now(), prices compared as scaled
  *    integers, both sides rounded (a 7th decimal of the same price is unchanged, and so is an identical repost
  *    at 1.0006 / 128.003, fable S1 m67514), 6 dp at receipt, every 409 rolls the batch back;
- *  - the dead-band edges in integers (fable N4 m67474's inputs), from float literals as JSON.parse gives them.
+ *  - the dead-band edges in integers (fable N4 m67474's inputs), from float literals as JSON.parse gives them;
+ *  - S2b.1 (marcus GO m67588): the same key twice in one batch (fable m67577 N3), and a failed pool.connect()
+ *    answers the JSON 500 with the log line (fable m67577 call 1).
  * Real Postgres, no prod: the PGlite harness of signal-calls-0110.test.ts (the REAL migration chain, same seeds),
  * with the pool swapped in through global._pgPool as bundles.test.ts does. */
 import { test, before } from "node:test";
@@ -373,6 +375,47 @@ test("409: each family, and the whole batch is rolled back", async () => {
   await post(body(reg(d, exit(d))));
   await conflict(body(reg(nextDay()), reg(d, exit(d, 1.091))), /exitPx differs/, 1);
   await conflict(body(reg(nextDay()), reg(d, exit(d, 1.09, "19"))), /exitBarTs differs/, 1);
+});
+
+test("the same key twice in one batch: index order, a later call sees an earlier one (docs/signal-ingest.md Answers)", async () => {
+  // fable m67577 N3 (marcus GO S2b.1 m67588); the doc's two cases, plus a fill and a conflict.
+  const d = nextDay();
+  assert.deepEqual((await post(body(reg(d, entry(d)), reg(d, entry(d))))).body, { inserted: 1, scored: 0, filled: 0, unchanged: 1 });
+  const d2 = nextDay();
+  assert.deepEqual((await post(body(reg(d2, entry(d2)), reg(d2, exit(d2))))).body, { inserted: 1, scored: 1, filled: 0, unchanged: 0 });
+  assert.equal((await stored(d2)).outcome, "right");
+  const d3 = nextDay();
+  assert.deepEqual((await post(body(reg(d3), reg(d3, entry(d3))))).body, { inserted: 1, scored: 0, filled: 1, unchanged: 0 });
+
+  const d4 = nextDay();
+  const n0 = await rowCount();
+  const r = await post(body(reg(d4), reg(d4, { direction: "down" })));
+  assert.deepEqual(r, { status: 409, body: { error: "direction differs from the stored call", index: 1 } });
+  assert.equal(await rowCount(), n0, "call 0's insert is rolled back with the batch");
+});
+
+test("a database that cannot be reached: the JSON 500 and the log line, nothing written (fable m67577 call 1)", async () => {
+  const p = (globalThis as any)._pgPool;
+  const connect = p.connect;
+  const error = console.error;
+  const logged: unknown[][] = [];
+  const n0 = await rowCount();
+  p.connect = async () => {
+    throw new Error("connect ECONNREFUSED 127.0.0.1:5432");
+  };
+  console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  let r;
+  try {
+    r = await post(body(reg(nextDay())));
+  } finally {
+    p.connect = connect;
+    console.error = error;
+  }
+  assert.deepEqual(r, { status: 500, body: { error: "internal error; nothing was written" } });
+  assert.deepEqual(logged, [["signal-ingest: failed", "axiom", "Error", "connect ECONNREFUSED 127.0.0.1:5432"]]);
+  assert.equal(await rowCount(), n0);
 });
 
 test("dead-band edges in integers, from float literals as JSON.parse gives them (fable N4 m67474)", async () => {
