@@ -809,6 +809,13 @@
 .portal-shell .lesson-block p { font-size: 13px; color: var(--hz-ink-2); line-height: 1.55; }
 .portal-shell .lesson-block ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 .portal-shell .lesson-block li { font-size: 13px; color: var(--hz-ink-2); line-height: 1.5; }
+.portal-shell .lb-part { margin-top: 10px; }
+.portal-shell .lb-part-label { font-size: 13px; font-weight: 700; color: var(--hz-ink); margin-bottom: 2px; }
+.portal-shell .lb-code {
+  margin: 2px 0 0; padding: 10px 12px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--hz-card-line);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace); font-size: 12.5px; line-height: 1.5;
+  color: var(--hz-ink); white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
+}
 .portal-shell .lesson-locked-cta {
   display: flex; align-items: center; gap: 14px; background: rgba(255, 194, 75, 0.06);
   border: 1px dashed rgba(255, 194, 75, 0.4); border-radius: 12px; padding: 18px;

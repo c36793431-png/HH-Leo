@@ -65,6 +65,17 @@ function LessonBlock({ block }: { block: EducationBlock }) {
           ))}
         </ul>
       )}
+      {block.parts?.map((part, i) => (
+        <div key={i} className="lb-part">
+          {part.label && <h4 className="lb-part-label">{part.label}</h4>}
+          {part.text && <p>{part.text}</p>}
+          {part.code && (
+            <pre className="lb-code">
+              <code>{part.code}</code>
+            </pre>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
