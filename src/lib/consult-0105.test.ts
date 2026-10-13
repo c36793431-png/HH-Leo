@@ -12,7 +12,7 @@
  *  - one pending request per client per package; a question needs no package;
  *  - consult_requests.topic is capped at CONSULT_ASK_TOPIC_MAX and every CONSULT_ASK_TOPICS key is
  *    slug-shaped and fits (marcus Q1/Q2 m66313);
- *  - the rollback refuses while client or consultant rows exist.
+ *  - the rollback refuses while client or consultant rows, or house packages beyond the seed, exist.
  * Real Postgres, no prod: the PGlite harness of basket-requests.test.ts (the REAL migration chain,
  * same prod-data preflight seeds). */
 import { test, before } from "node:test";
@@ -257,7 +257,7 @@ test("deleting a client removes their requests; a consultant who owns a service 
 });
 
 // Last: it runs DDL against the shared database.
-test("0105_rollback refuses while requests or consultant services exist, then drops both tables and the ledger row", async () => {
+test("0105_rollback refuses while requests, consultant services or admin-added house packages exist (Fable N4), then drops both tables and the ledger row", async () => {
   const rollback = readFileSync(path.join(MIGRATIONS, "0105_rollback.sql"), "utf8");
   assert.ok((await sql(`select 1 from consult_requests`)).rows.length > 0, "earlier tests left request rows");
   await assert.rejects(db.exec(rollback), /consult_requests has rows/);
@@ -267,6 +267,10 @@ test("0105_rollback refuses while requests or consultant services exist, then dr
   await db.exec("rollback");
   assert.equal((await sql(`select count(*)::int n from schema_migrations where version = '0105'`)).rows[0].n, 1);
   await sql(`delete from consult_services where owner_user_id is not null`);
+  assert.ok((await sql(`select 1 from consult_services where owner_user_id is null and slug <> 'human-expert'`)).rows.length > 0, "earlier tests left admin-added house rows");
+  await assert.rejects(db.exec(rollback), /consult_services has house packages beyond the seed/);
+  await db.exec("rollback");
+  await sql(`delete from consult_services where slug <> 'human-expert'`);
   await db.exec(rollback);
   for (const t of ["consult_services", "consult_requests"]) assert.equal((await sql(`select to_regclass($1) as r`, [t])).rows[0].r, null, t);
   assert.equal((await sql(`select count(*)::int n from schema_migrations where version = '0105'`)).rows[0].n, 0);
