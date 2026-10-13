@@ -58,6 +58,15 @@ function buildBlobPathname(platform: Platform, version: string, filename: string
   return `downloads/${platform}/${version}/${filename}`;
 }
 
+/** The manual flow's finalize takes the pathname back from the browser: it must be one file
+ * directly under that version's downloads/ folder, so a row can never point at (and the file
+ * route never serve, nor finalize's cleanup delete) a release's private Mapping.txt (Fable S4, m66691). */
+export function isManualUploadPathname(platform: Platform, version: string, pathname: string): boolean {
+  const prefix = buildBlobPathname(platform, version, "");
+  const name = pathname.slice(prefix.length);
+  return pathname.startsWith(prefix) && name.length > 0 && !/[\\/]/.test(name) && !pathname.split("/").includes("..");
+}
+
 async function insertDownloadRow(args: {
   version: string;
   platform: Platform;

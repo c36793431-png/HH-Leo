@@ -13,7 +13,9 @@
  *    for an admin), visible in the admin list; latest orders by published_at; no reader SELECT
  *    names a mapping_* column;
  *  - publish / unpublish are admin-session actions with published_by, admin_actions rows and the
- *    three revalidates; confirm revalidates /admin/downloads only.
+ *    three revalidates; confirm revalidates /admin/downloads only;
+ *  - S4 (m66691): the map is private: only publish-builds names it, no download route reaches it,
+ *    manual finalize can't point a row at it (or del it), publish/unpublish touch no blob.
  * The REAL routes, lib and server actions on PGlite 0.4.6 with the real migration chain; Blob,
  * auth() and next/cache are mocked. */
 import { test, before, beforeEach, mock } from "node:test";
@@ -565,6 +567,55 @@ test("reader SELECTs never name a mapping_* column", async () => {
   for (const s of statements) assert.doesNotMatch(s, /mapping/, s);
 });
 
+test("S4: the map is private. Only the upload lib names its columns or namespace; no download route can reach it", async () => {
+  const files = (dir: string): string[] =>
+    readdirSync(path.join(process.cwd(), dir), { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? files(path.join(dir, e.name)) : /\.(ts|tsx)$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [path.join(dir, e.name)] : []
+    );
+  const naming = files("src").filter((f) =>
+    /mapping_blob|mapping_sha256|mapping_size|mappingBlob|mappings\//.test(readFileSync(path.join(process.cwd(), f), "utf8"))
+  );
+  assert.deepEqual(naming, ["src/lib/publish-builds.ts"], "the only source file that names the map's columns or pathnames");
+  for (const f of files("src/app/api/download")) {
+    const src = readFileSync(path.join(process.cwd(), f), "utf8");
+    assert.doesNotMatch(src, /publish-builds|mapping/i, `${f} never touches the map`);
+  }
+  assert.match(readFileSync(path.join(process.cwd(), "src/app/api/download/file/route.ts"), "utf8"), /get\(download\.blobPathname, \{ access: "private" \}\)/, "the file route serves the row's zip pathname only");
+  // The upload token for the map is write-only for its one pathname: no overwrite, and the server reads it back privately.
+  const b = build("4.4.0");
+  await pb.confirmPublishedBuild(b.args);
+  assert.ok(blobCalls.includes(`get ${b.paths.mapping}`));
+});
+
+test("S4: manual finalize refuses a pathname outside this version's downloads/ folder, before any row or del", async () => {
+  session = ADMIN_SESSION;
+  const map = build("4.5.0");
+  await pb.confirmPublishedBuild(map.args);
+  const finalize = (blobPathname: string) =>
+    finalizeRoute.POST(
+      new NextRequest("https://portal.test/api/admin/downloads/finalize", {
+        method: "POST",
+        body: JSON.stringify({ blobUrl: "u", blobPathname, version: "4.5.1", platform: "windows", sha256: "a".repeat(64), sizeBytes: 3 }),
+      })
+    );
+  for (const bad of [
+    map.paths.mapping,
+    "downloads/windows/4.5.1/../../../" + map.paths.mapping,
+    "downloads/windows/4.5.1/sub/x.zip",
+    "downloads/windows/4.5.1/",
+    "downloads/macos/4.5.1/x.zip",
+    "downloads/windows/4.5.10/x.zip",
+  ]) {
+    blobCalls.length = 0;
+    const res = await finalize(bad);
+    assert.equal(res.status, 400, bad);
+    assert.deepEqual(blobCalls, [], `${bad}: no del`);
+  }
+  assert.equal((await sql(`select 1 from downloads where version = '4.5.1'`)).rowCount, 0);
+  const ok = await finalize("downloads/windows/4.5.1/Horizon-AbC123.zip");
+  assert.equal(ok.status, 200, "control: the manual flow's own suffixed pathname still finalizes");
+});
+
 // ---------- publish / unpublish ----------
 
 test("publish and unpublish: admin session only, published_by, audit rows, three revalidates, blob kept", async () => {
@@ -578,8 +629,10 @@ test("publish and unpublish: admin session only, published_by, audit rows, three
 
   session = ADMIN_SESSION;
   revalidated.length = 0;
+  blobCalls.length = 0;
   const pub = await actions.publishDownloadAction(null, form({ id: d.id }));
   assert.equal(pub.ok, true, JSON.stringify(pub));
+  assert.deepEqual(blobCalls, [], "publish touches no blob: the map's visibility can't change (S4)");
   const r = await row(d.id);
   assert.ok(r.published_at);
   assert.equal(r.published_by, ADMIN);
@@ -598,7 +651,7 @@ test("publish and unpublish: admin session only, published_by, audit rows, three
   assert.equal(u.published_at, null);
   assert.equal(u.published_by, null);
   assert.equal(u.deleted_at, null);
-  assert.deepEqual(blobCalls, [], "unpublish keeps the blob");
+  assert.deepEqual(blobCalls, [], "unpublish keeps the blob and touches no map (S4)");
   assert.deepEqual(revalidated.sort(), ["/admin/downloads", "/dashboard", "/downloads"]);
   assert.equal((await sql(`select 1 from admin_actions where action_type = 'unpublish_download' and details_json->>'downloadId' = $1`, [d.id])).rowCount, 1);
   assert.equal((await actions.unpublishDownloadAction(null, form({ id: d.id }))).ok, false, "unpublishing a draft is refused");

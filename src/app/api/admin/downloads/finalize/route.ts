@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { del } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { finalizeDownloadUpload, PLATFORMS, SHA256_HEX, type Platform } from "@/lib/downloads";
+import { finalizeDownloadUpload, isManualUploadPathname, PLATFORMS, SHA256_HEX, type Platform } from "@/lib/downloads";
 import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 
 export async function POST(req: NextRequest) {
@@ -37,6 +37,10 @@ export async function POST(req: NextRequest) {
   }
   if (typeof platform !== "string" || !PLATFORMS.includes(platform as Platform)) {
     return NextResponse.json({ ok: false, error: "platform must be windows or macos" }, { status: 400 });
+  }
+  // Before the try: a refused pathname is never passed to the cleanup del().
+  if (!isManualUploadPathname(platform as Platform, version, blobPathname)) {
+    return NextResponse.json({ ok: false, error: "blobPathname is not this version's upload" }, { status: 400 });
   }
 
   try {
