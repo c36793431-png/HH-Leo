@@ -9,6 +9,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
+import { providerShareCentsFor } from "./feed-provider-packages";
 
 const MIGRATIONS = path.join(process.cwd(), "db/migrations");
 const SEED_PROVIDER = "00000000-0000-4000-8000-0000000000a1";
@@ -67,9 +68,23 @@ const sent = (prefix: string) => sends.filter((t) => t.startsWith(prefix)).lengt
 before(async () => {
   db = new PGlite();
   await replayChain(db);
+  // The pool and the tx client share ONE PGlite session, so a write that escaped the transaction onto the pool
+  // would still roll back here and no assertion could see it. Make the escape itself fail: any pool query while
+  // a client holds an open transaction throws.
+  let openTx = 0;
+  const clientQuery = async (text: string, params: unknown[] = []) => {
+    const verb = text.trim().toLowerCase();
+    if (verb === "begin") openTx++;
+    const r = await sql(text, params);
+    if (verb === "commit" || verb === "rollback") openTx--;
+    return r;
+  };
   (globalThis as any)._pgPool = {
-    query: sql,
-    connect: async () => ({ query: sql, release() {} }),
+    query: async (text: string, params: unknown[] = []) => {
+      if (openTx > 0) throw new Error(`pool query inside an open transaction: ${text.trim().slice(0, 80)}`);
+      return sql(text, params);
+    },
+    connect: async () => ({ query: clientQuery, release() {} }),
     end: async () => {},
   };
   process.env.NEON_DATABASE_URL = "postgres://unused";
@@ -336,10 +351,22 @@ test("T4 one clock: past expiry every stamped row reads EFFECTIVE lapsed; Renew 
   await makeServer(l, u);
   const r = await paid(u);
   await db.query(`update licenses set expires_at = now() - interval '2 days' where id = $1`, [l]);
-  for (const s of await subs(u)) {
+  const before = await subs(u);
+  for (const s of before) {
     assert.equal(s.status, "active", "no write on expiry");
     assert.equal(s.effective, "lapsed");
   }
+
+  // A plain extendLicense (not Renew) brings them back with NO feed write: the licence is the only clock.
+  await lic.extendLicense(l, new Date(Date.now() + 7 * DAY));
+  const extended = await subs(u);
+  for (const s of extended) assert.equal(s.effective, "active");
+  assert.deepEqual(
+    extended.map((s: any) => [s.id, s.status, String(s.ends_at), String(s.updated_at)]),
+    before.map((s: any) => [s.id, s.status, String(s.ends_at), String(s.updated_at)]),
+    "extendLicense wrote nothing to feed_subscriptions"
+  );
+  await db.query(`update licenses set expires_at = now() - interval '2 days' where id = $1`, [l]);
 
   const renewed = await b.renewBundle({ actorUserId: ADMIN, bundleId: r.bundleId, termDays: 30, amountUsd: 100 });
   assert.ok(Math.abs(new Date(renewed.expiresAt).getTime() - (Date.now() + 30 * DAY)) < 60_000, "from now, since it had expired");
@@ -450,9 +477,11 @@ test("T6 adopt trial: tier -> paid, one upgraded notify, zero activation notifie
 
 test("T2/T6 a throw after the licence write rolls everything back: no licence, tier untouched, no bundle, payment or notify", async () => {
   const fresh = await makeUser();
+  await db.query(`update users set referred_by_user_id = $2 where id = $1`, [fresh, await makeUser()]);
   await assert.rejects(paid(fresh, { basketRequestId: randomUUID() }));
   const c = await counts(fresh);
   assert.deepEqual([c.licences, c.bundles, c.payments], [0, 0, 0]);
+  assert.equal((await db.query(`select count(*)::int as n from referral_earnings where referred_user_id = $1`, [fresh])).rows[0].n, 0);
 
   const trialUser = await makeUser();
   const l = await makeLicence(trialUser, { tier: "trial" });
@@ -494,6 +523,9 @@ test("T11 trial bundle: tier 'trial' licence, no payment, one trial notify; stam
   const rows = await subs(u);
   assert.equal(rows.length, 3);
   assert.ok(rows.every((s: any) => s.price_cents === 0), "0 explicitly, not NULL and not 3000");
+  // The provider payout read (the shared 50% helper) pays nothing on them. It reads 0 as unpriced, so the
+  // provider dashboard shows these rows as unpriced, not "$0".
+  assert.ok(rows.every((s: any) => providerShareCentsFor(s.effective, s.price_cents) === null));
   await rejectsWith(b.renewBundle({ actorUserId: ADMIN, bundleId: r.bundleId, termDays: 30, amountUsd: 100 }), "BundleTrialRenewError");
 });
 
@@ -523,6 +555,22 @@ test("C6 Renew refuses a revoked licence before any write; revokeLicense keeps t
   const after = (await db.query(`select expires_at from licenses where id = $1`, [r.licenseId])).rows[0];
   assert.equal(new Date(after.expires_at).getTime(), new Date(first.expires_at).getTime());
   assert.equal((await counts(u)).payments, 1, "only the activation payment");
+
+  // The claim-pending branch (no user row) writes revoked_at too, and also keeps the first one.
+  seq++;
+  const pending = (
+    await db.query(
+      `insert into licenses (user_id, license_key, expires_at, feed_types, tier) values (null, $1, now() + interval '30 days', '{}', 'paid') returning id`,
+      [`HHFT-BNDL${seq}-PEND-${seq}`]
+    )
+  ).rows[0].id;
+  await lic.revokeLicense(pending);
+  const p1 = (await db.query(`select status, revoked_at from licenses where id = $1`, [pending])).rows[0];
+  assert.equal(p1.status, "revoked");
+  assert.ok(p1.revoked_at, "claim-pending branch writes revoked_at");
+  await lic.revokeLicense(pending);
+  const p2 = (await db.query(`select revoked_at from licenses where id = $1`, [pending])).rows[0];
+  assert.equal(new Date(p2.revoked_at).getTime(), new Date(p1.revoked_at).getTime());
 });
 
 test("T9 0107 on a fresh chain: uniques, the stamp CHECK, and a rollback that refuses on rows, on a later value and on an absent constraint", async () => {

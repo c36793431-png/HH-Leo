@@ -17,8 +17,9 @@
 --   'bundle'. If 0108 ('nova') applies first, re-read prod before applying this and carry both values.
 --
 -- Additive only. APPLY BEFORE THE CODE REACHES MAIN: plain assignFeedTierSubscription reads
--- feed_subscriptions.bundle_subscription_id and revokeLicense writes licenses.revoked_at, so without this file
--- every admin feed grant and every revoke fails. Rollback: 0107_rollback.sql.
+-- feed_subscriptions.bundle_subscription_id, revokeLicense writes licenses.revoked_at and insertPayment names
+-- payments.bundle_subscription_id, so without this file every admin feed grant, every revoke and every payment
+-- insert through it (licence auto rows, Finance "Add payment") fails. Rollback: 0107_rollback.sql.
 begin;
 
 create table if not exists bundle_subscriptions (
