@@ -397,6 +397,8 @@ test("lists: a client sees only their own requests, newest first; the admin list
 // Last: it runs DDL against the shared database.
 test("0093_rollback drops the table and its ledger row", async () => {
   assert.equal((await sql(`select count(*)::int n from schema_migrations where version = '0093'`)).rows[0].n, 1);
+  // Rollbacks unwind newest first: 0107's bundle_subscriptions.basket_request_id references this table.
+  await db.exec(readFileSync(path.join(MIGRATIONS, "0107_rollback.sql"), "utf8"));
   await db.exec(readFileSync(path.join(MIGRATIONS, "0093_rollback.sql"), "utf8"));
   assert.equal((await sql(`select to_regclass('basket_requests') as t`)).rows[0].t, null);
   assert.equal((await sql(`select count(*)::int n from schema_migrations where version = '0093'`)).rows[0].n, 0);

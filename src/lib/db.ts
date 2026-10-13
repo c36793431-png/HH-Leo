@@ -1,4 +1,7 @@
-import { Pool } from "@neondatabase/serverless";
+import { Pool, type PoolClient } from "@neondatabase/serverless";
+
+/** What a *On(db) variant writes through: the pool, or a client inside the caller's transaction. */
+export type Db = Pick<PoolClient, "query">;
 
 declare global {
   // eslint-disable-next-line no-var

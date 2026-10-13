@@ -1,4 +1,4 @@
-import { pool } from "./db";
+import { pool, type Db } from "./db";
 
 export type PaymentDirection = "in" | "out";
 export const PAYMENT_DIRECTIONS: PaymentDirection[] = ["in", "out"];
@@ -11,9 +11,12 @@ export type PaymentCategory =
   | "infra"
   | "other"
   | "referral_payout"
-  | "feed_access";
+  | "feed_access"
+  | "bundle";
 /** feed_access (0100): money received for feed access, written by the admin queue's paid approve
- * (access-requests.ts approveAccessRequest), never by the Add payment form. */
+ * (access-requests.ts approveAccessRequest), never by the Add payment form.
+ * bundle (0107): money received for a Horizon Complete bundle, written by activateBundle/renewBundle
+ * (lib/bundles.ts) with payments.bundle_subscription_id set. */
 export const PAYMENT_CATEGORIES: PaymentCategory[] = [
   "customer",
   "partner",
@@ -23,6 +26,7 @@ export const PAYMENT_CATEGORIES: PaymentCategory[] = [
   "other",
   "referral_payout",
   "feed_access",
+  "bundle",
 ];
 
 /** amount_usd is numeric(12,2). */
@@ -200,9 +204,15 @@ export interface AddPaymentInput {
 }
 
 export async function insertPayment(input: AddPaymentInput): Promise<string> {
-  const result = await pool.query<{ id: string }>(
-    `insert into payments (received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+  return insertPaymentOn(pool, input);
+}
+
+/** insertPayment on a given client (the bundle paths write their one payment inside their transaction).
+ * Writes the row only; maybeCreateReferralEarning is the caller's, after commit. */
+export async function insertPaymentOn(db: Db, input: AddPaymentInput & { bundleSubscriptionId?: string | null }): Promise<string> {
+  const result = await db.query<{ id: string }>(
+    `insert into payments (received_at, amount_usd, currency, direction, category, counterparty, user_id, memo, created_by, bundle_subscription_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      returning id`,
     [
       input.receivedAt,
@@ -214,6 +224,7 @@ export async function insertPayment(input: AddPaymentInput): Promise<string> {
       input.userId,
       input.memo,
       input.createdBy,
+      input.bundleSubscriptionId ?? null,
     ]
   );
   return result.rows[0].id;

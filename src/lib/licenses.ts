@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { pool } from "./db";
+import { pool, type Db } from "./db";
 import {
   notifyPaidActivation,
   notifyTrialIssued,
@@ -176,6 +176,11 @@ export async function settleLicenseBackgroundTasks(): Promise<void> {
   await Promise.allSettled([...backgroundTasks]);
 }
 
+/** issueLicense's INSERT, shared with issueLicenseOn so the two cannot drift. */
+const ISSUE_LICENSE_SQL = `insert into licenses (user_id, claim_email, claim_telegram_user_id, license_key, status, expires_at, notes, feed_types, tier)
+   values ($1, $2, $3, $4, 'active', $5, $6, $7, coalesce($8, 'paid'))
+   returning id, license_key, expires_at, tier, ${licenseNumberSql("licenses")} as license_number`;
+
 /** Creates an active license row bound to an existing user, or pre-provisioned by claim_email/claim_telegram_user_id ahead of signup. */
 export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicense> {
   const expiresAt = args.expiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -187,9 +192,7 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
     const licenseKey = generateLicenseKey();
     try {
       const result = await pool.query(
-        `insert into licenses (user_id, claim_email, claim_telegram_user_id, license_key, status, expires_at, notes, feed_types, tier)
-         values ($1, $2, $3, $4, 'active', $5, $6, $7, coalesce($8, 'paid'))
-         returning id, license_key, expires_at, tier, ${licenseNumberSql("licenses")} as license_number`,
+        ISSUE_LICENSE_SQL,
         [
           args.userId ?? null,
           args.claimEmail ?? null,
@@ -237,6 +240,59 @@ export async function issueLicense(args: IssueLicenseArgs): Promise<IssuedLicens
     }
   }
   throw new Error("issueLicense: failed to generate a unique license key after 5 attempts");
+}
+
+export interface IssueLicenseOnArgs {
+  userId: string;
+  expiresAt: Date;
+  feedTypes: FeedType[];
+  /** Required: a variant never leans on the DB column default ('paid', 0012:9). */
+  tier: LicenseTier;
+  notes?: string;
+}
+
+/** issueLicense's DB writes on the caller's transaction client, scheduling NOTHING: no activation notify,
+ * no auto list-price payment (plan 5a B3, fold 5b C8). The caller sends its own notify after commit.
+ * `db` must be inside BEGIN: each key attempt sits under a savepoint, so a key collision rolls back only
+ * that attempt (fold m66997 C7), and the active-licence check reads on the same client. */
+export async function issueLicenseOn(db: Db, args: IssueLicenseOnArgs): Promise<IssuedLicense & { tier: LicenseTier }> {
+  const existing = await db.query<{ id: string; expires_at: Date }>(
+    `select id, expires_at from licenses
+     where user_id = $1 and status = 'active' and expires_at > now()
+     order by expires_at desc
+     limit 1`,
+    [args.userId]
+  );
+  if (existing.rows[0]) throw new ActiveLicenseExistsError(existing.rows[0].id, existing.rows[0].expires_at);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await db.query("savepoint issue_license_key");
+    try {
+      const result = await db.query(ISSUE_LICENSE_SQL, [
+        args.userId,
+        null,
+        null,
+        generateLicenseKey(),
+        args.expiresAt,
+        args.notes ?? null,
+        args.feedTypes,
+        args.tier,
+      ]);
+      await db.query("release savepoint issue_license_key");
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        licenseKey: row.license_key,
+        expiresAt: row.expires_at,
+        licenseNumber: Number(row.license_number),
+        tier: row.tier,
+      };
+    } catch (err: unknown) {
+      await db.query("rollback to savepoint issue_license_key");
+      if ((err as { code?: string })?.code === "23505") continue; // license_key collision — retry with a fresh key
+      throw err;
+    }
+  }
+  throw new Error("issueLicenseOn: failed to generate a unique license key after 5 attempts");
 }
 
 export interface IssueAdditionalLicenseArgs {
@@ -301,8 +357,10 @@ export async function issueAdditionalLicense(args: IssueAdditionalLicenseArgs): 
 
 /** Actually sends the trial-issued/paid-activation sink notify — split out from
  * notifyNewPaidActivation so issueAdditionalLicense (which is never a first activation by
- * construction) can fire it unconditionally instead of through the isFirstActiveLicense gate. */
-async function sendActivationNotification(args: {
+ * construction) can fire it unconditionally instead of through the isFirstActiveLicense gate.
+ * Exported for activateBundle's after-commit notify (issueLicenseOn already refused a user with an
+ * active licence, so it is equivalent to the isFirstActiveLicense gate there). */
+export async function sendActivationNotification(args: {
   licenseKey: string;
   tier: string;
   expiresAt: Date;
@@ -407,7 +465,12 @@ async function recordAutoPaymentForNewLicense(args: {
 }
 
 export async function extendLicense(licenseId: string, expiresAt: Date): Promise<void> {
-  await pool.query(
+  await extendLicenseOn(pool, licenseId, expiresAt);
+}
+
+/** extendLicense's write on a given client. Never writes status: nothing un-revokes a licence. */
+export async function extendLicenseOn(db: Db, licenseId: string, expiresAt: Date): Promise<void> {
+  await db.query(
     `update licenses set expires_at = $2, lifecycle_state = null where id = $1`,
     [licenseId, expiresAt]
   );
@@ -429,14 +492,31 @@ export async function getLicenseExpiresAt(licenseId: string): Promise<Date | nul
 }
 
 export async function revokeLicense(licenseId: string): Promise<void> {
-  const result = await pool.query<{
-    license_key: string;
-    tier: string;
-    user_id: string | null;
-    email: string | null;
-    telegram_username: string | null;
-  }>(
-    `update licenses l set status = 'revoked', lifecycle_state = 'expired_processed'
+  const row = await revokeLicenseOn(pool, licenseId);
+  if (!row) return;
+
+  notifyLicenseRevoked({
+    client: { email: row.email, telegramUsername: row.telegram_username, userId: row.user_id },
+    licenseKey: row.license_key,
+    tier: row.tier,
+    revokedAt: new Date(),
+  }).catch(() => {});
+}
+
+export interface RevokedLicenseRow {
+  license_key: string;
+  tier: string;
+  user_id: string | null;
+  email: string | null;
+  telegram_username: string | null;
+}
+
+/** revokeLicense's writes on a given client, scheduling nothing. Returns the owner row for the caller's
+ * notify, or null for a claim-pending licence (no user row), which is still revoked. revoked_at (0107)
+ * keeps the FIRST revoke time, so the lapse card's day count never restarts on a repeat click. */
+export async function revokeLicenseOn(db: Db, licenseId: string): Promise<RevokedLicenseRow | null> {
+  const result = await db.query<RevokedLicenseRow>(
+    `update licenses l set status = 'revoked', lifecycle_state = 'expired_processed', revoked_at = coalesce(l.revoked_at, now())
      from users u
      where l.id = $1 and l.user_id = u.id
      returning l.license_key, l.tier, l.user_id, u.email, u.telegram_username`,
@@ -445,19 +525,13 @@ export async function revokeLicense(licenseId: string): Promise<void> {
   const row = result.rows[0];
   if (!row) {
     // No matching user row (claim-pending license, never activated) — still revoke it.
-    await pool.query(
-      `update licenses set status = 'revoked', lifecycle_state = 'expired_processed' where id = $1`,
+    await db.query(
+      `update licenses set status = 'revoked', lifecycle_state = 'expired_processed', revoked_at = coalesce(revoked_at, now()) where id = $1`,
       [licenseId]
     );
-    return;
+    return null;
   }
-
-  notifyLicenseRevoked({
-    client: { email: row.email, telegramUsername: row.telegram_username, userId: row.user_id },
-    licenseKey: row.license_key,
-    tier: row.tier,
-    revokedAt: new Date(),
-  }).catch(() => {});
+  return row;
 }
 
 export type LicenseTier = "trial" | "paid" | "team" | "deal";
@@ -474,13 +548,32 @@ export function isPaidTier(tier: LicenseTier | string): boolean {
  * lifecycle sink notify when the tier actually changes and the license belongs to a real
  * (non-claim-pending) user — best-effort, must never throw into the caller. */
 export async function setLicenseTier(licenseId: string, tier: LicenseTier): Promise<void> {
-  const current = await pool.query<{ tier: string; license_key: string; user_id: string | null }>(
+  const before = await setLicenseTierOn(pool, licenseId, tier);
+
+  if (before && before.tier !== tier && before.user_id) {
+    notifyLicenseUpgraded({
+      client: await clientRefForUser(before.user_id),
+      licenseKey: before.license_key,
+      fromTier: before.tier,
+      toTier: tier,
+    }).catch(() => {});
+  }
+}
+
+/** setLicenseTier's DB writes on a given client (the activation_source UPDATE included), scheduling
+ * nothing. Returns the row as it was before, so the caller can send its own notify after commit. */
+export async function setLicenseTierOn(
+  db: Db,
+  licenseId: string,
+  tier: LicenseTier
+): Promise<{ tier: string; license_key: string; user_id: string | null } | undefined> {
+  const current = await db.query<{ tier: string; license_key: string; user_id: string | null }>(
     `select tier, license_key, user_id from licenses where id = $1`,
     [licenseId]
   );
   const before = current.rows[0];
 
-  await pool.query(`update licenses set tier = $2 where id = $1`, [licenseId, tier]);
+  await db.query(`update licenses set tier = $2 where id = $1`, [licenseId, tier]);
 
   if (before && before.tier !== tier) {
     // Keep the auto-payment row's activation_source in sync with reality — this is the durable
@@ -489,22 +582,14 @@ export async function setLicenseTier(licenseId: string, tier: LicenseTier): Prom
     // issuance time, which is what caused the Aug 2026 finance ledger discrepancy.
     // Auto-payment rows are matched by memo (no license_id FK on payments) — see
     // recordAutoPaymentForNewLicense for the memo format this depends on.
-    await pool.query(
+    await db.query(
       `update payments set activation_source = $1
        where memo = $2
        and category = 'customer'`,
       [tier, `Auto: Paid tier license activation ${licenseId.slice(0, 8)}`]
     );
-
-    if (before.user_id) {
-      notifyLicenseUpgraded({
-        client: await clientRefForUser(before.user_id),
-        licenseKey: before.license_key,
-        fromTier: before.tier,
-        toTier: tier,
-      }).catch(() => {});
-    }
   }
+  return before;
 }
 
 export interface GroupTarget {
