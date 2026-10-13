@@ -15,7 +15,9 @@
  *  - publish / unpublish are admin-session actions with published_by, admin_actions rows and the
  *    three revalidates; confirm revalidates /admin/downloads only;
  *  - S4 (m66691): the map is private: only publish-builds names it, no download route reaches it,
- *    manual finalize can't point a row at it (or del it), publish/unpublish touch no blob.
+ *    manual finalize can't point a row at it (or del it), publish/unpublish touch no blob;
+ *  - finalize catch-del (m66731): S1's shape on the manual path; a taken pathname is refused, and
+ *    the cleanup deletes only a pathname no row points at.
  * The REAL routes, lib and server actions on PGlite 0.4.6 with the real migration chain; Blob,
  * auth() and next/cache are mocked. */
 import { test, before, beforeEach, mock } from "node:test";
@@ -614,6 +616,49 @@ test("S4: manual finalize refuses a pathname outside this version's downloads/ f
   assert.equal((await sql(`select 1 from downloads where version = '4.5.1'`)).rowCount, 0);
   const ok = await finalize("downloads/windows/4.5.1/Horizon-AbC123.zip");
   assert.equal(ok.status, 200, "control: the manual flow's own suffixed pathname still finalizes");
+});
+
+test("finalize catch-del (marcus m66731): never deletes a pathname a live or draft row points at", async () => {
+  session = ADMIN_SESSION;
+  const finalize = (version: string, blobPathname: string) =>
+    finalizeRoute.POST(
+      new NextRequest("https://portal.test/api/admin/downloads/finalize", {
+        method: "POST",
+        body: JSON.stringify({ blobUrl: "u", blobPathname, version, platform: "windows", sha256: "c".repeat(64), sizeBytes: 3 }),
+      })
+    );
+  const live = "downloads/windows/4.6.0/Horizon-Live01.zip";
+  store.set(live, Buffer.from("live"));
+  assert.equal((await finalize("4.6.0", live)).status, 200);
+
+  // The live row's own pathname again (the insert would fail on the live version): refused, no del.
+  blobCalls.length = 0;
+  const again = await finalize("4.6.0", live);
+  assert.equal(again.status, 409);
+  assert.deepEqual(blobCalls, [], "a taken pathname is refused before the insert, with no del");
+
+  // A concurrent finalize points a row at this pathname and wins the version: the catch re-checks, no del.
+  const raced = "downloads/windows/4.6.1/Horizon-Race01.zip";
+  store.set(raced, Buffer.from("raced"));
+  beforeInsert = async () => {
+    await db.query(
+      `insert into downloads (version, platform, blob_url, blob_pathname, sha256, size_bytes, uploaded_by, published_at)
+       values ('4.6.1', 'windows', 'u', $1, repeat('d', 64), 5, $2, now())`,
+      [raced, ADMIN]
+    );
+  };
+  blobCalls.length = 0;
+  assert.equal((await finalize("4.6.1", raced)).status, 500);
+  assert.deepEqual(blobCalls, [], "the winner's blob is kept");
+  assert.ok(store.has(raced));
+
+  // Control: an orphan upload whose insert fails (4.6.0 is live) is still cleaned up.
+  const orphan = "downloads/windows/4.6.0/Horizon-Orph01.zip";
+  store.set(orphan, Buffer.from("orphan"));
+  blobCalls.length = 0;
+  assert.equal((await finalize("4.6.0", orphan)).status, 500);
+  assert.deepEqual(blobCalls, [`del ${orphan}`]);
+  assert.ok(store.has(live), "the live 4.6.0 zip is untouched throughout");
 });
 
 // ---------- publish / unpublish ----------

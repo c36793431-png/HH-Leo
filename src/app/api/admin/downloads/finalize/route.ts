@@ -4,6 +4,7 @@ import { del } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { finalizeDownloadUpload, isManualUploadPathname, PLATFORMS, SHA256_HEX, type Platform } from "@/lib/downloads";
+import { pathnamesInUse } from "@/lib/publish-builds";
 import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 
 export async function POST(req: NextRequest) {
@@ -42,6 +43,11 @@ export async function POST(req: NextRequest) {
   if (!isManualUploadPathname(platform as Platform, version, blobPathname)) {
     return NextResponse.json({ ok: false, error: "blobPathname is not this version's upload" }, { status: 400 });
   }
+  // Same shape as confirm (Fable S1; marcus m66731): a pathname a live or draft row points at is
+  // refused with no del, and the catch below deletes only a pathname no row points at.
+  if ((await pathnamesInUse([blobPathname], { keptMaps: true })).size) {
+    return NextResponse.json({ ok: false, error: "blobPathname belongs to a live or draft release" }, { status: 409 });
+  }
 
   try {
     const uploadedBy = await resolveAdminUserId(session.user.id);
@@ -69,7 +75,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, id: download.id });
   } catch (err) {
-    await del(blobPathname).catch(() => undefined);
+    // Re-checked now: a row may point at it since the check above. If the check fails, delete nothing.
+    const inUse = await pathnamesInUse([blobPathname], { keptMaps: true }).catch(() => null);
+    if (inUse && !inUse.size) await del(blobPathname).catch(() => undefined);
     const message = err instanceof Error ? err.message : "failed to finalize upload";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }

@@ -128,8 +128,10 @@ async function hashBlob(pathname: string): Promise<{ sha256: string; sizeBytes: 
 }
 
 /** Which of these pathnames a downloads row points at, in either column. With keptMaps, a deleted
- * row's map counts too: Delete keeps maps, because installed clients' crash logs need them. */
-async function pathnamesInUse(pathnames: string[], opts: { keptMaps: boolean }): Promise<Set<string>> {
+ * row's map counts too: Delete keeps maps, because installed clients' crash logs need them. Every
+ * cleanup del() asks this first: confirm here, and the manual finalize route (it lives here because
+ * this is the only file that names the map columns, S4). */
+export async function pathnamesInUse(pathnames: string[], opts: { keptMaps: boolean }): Promise<Set<string>> {
   const result = await pool.query<{ pathname: string }>(
     `select blob_pathname as pathname from downloads
        where deleted_at is null and blob_pathname = any($1::text[])
