@@ -8,7 +8,8 @@
  *  - every body 400 refuses the whole batch and writes nothing;
  *  - the window is derived (sessionDate 06:00Z -> 21:00Z), never sent;
  *  - the upsert: inserted / filled / scored / unchanged, entry_px_at = the fill's now(), prices compared as scaled
- *    integers (a 7th decimal of the same price is unchanged), 6 dp at receipt, every 409 rolls the batch back;
+ *    integers, both sides rounded (a 7th decimal of the same price is unchanged, and so is an identical repost
+ *    at 1.0006 / 128.003, fable S1 m67514), 6 dp at receipt, every 409 rolls the batch back;
  *  - the dead-band edges in integers (fable N4 m67474's inputs), from float literals as JSON.parse gives them.
  * Real Postgres, no prod: the PGlite harness of signal-calls-0110.test.ts (the REAL migration chain, same seeds),
  * with the pool swapped in through global._pgPool as bundles.test.ts does. */
@@ -321,7 +322,7 @@ test("upsert: register, fill, score; entry_px_at is the fill's now(); reposts ar
   assert.deepEqual((await post(body(reg(d3, { direction: "neutral" })))).body, { inserted: 0, scored: 0, filled: 0, unchanged: 1 });
 });
 
-test("prices: stored at 6 dp; a 7th decimal of the same price is unchanged, not 409", async () => {
+test("prices: stored at 6 dp; a 7th decimal of the same price, or the same price exactly, is unchanged, not 409", async () => {
   const d = nextDay();
   await post(body(reg(d, entry(d, 1.0850004))));
   assert.equal((await stored(d)).entry_t, "1.085000", "a price with 7 decimals is stored at 6");
@@ -331,6 +332,19 @@ test("prices: stored at 6 dp; a 7th decimal of the same price is unchanged, not 
   await post(body(reg(d, exit(d, 1.0900004))));
   assert.equal((await stored(d)).exit_t, "1.090000");
   assert.deepEqual((await post(body(reg(d, exit(d, 1.0899996))))).body, { inserted: 0, scored: 0, filled: 0, unchanged: 1 });
+
+  // An IDENTICAL repost of a price whose float product is not an integer (fable S1 m67514): both sides are
+  // rounded, so it is unchanged, not 409. The first assert shows the trap is real on the runtime under test.
+  for (const [symbol, px] of [
+    ["EURUSD", 1.0006],
+    ["USDJPY", 128.003],
+  ] as const) {
+    assert.ok(!Number.isInteger(px * 1e6), `${symbol} ${px}: px * 1e6 is not an integer here`);
+    const di = nextDay();
+    const call = reg(di, { symbol, ...entry(di, px), ...exit(di, px) });
+    assert.equal((await post(body(call))).status, 200, `${symbol} ${px}: first post`);
+    assert.deepEqual((await post(body(call))).body, { inserted: 0, scored: 0, filled: 0, unchanged: 1 }, `${symbol} ${px}: repost`);
+  }
 });
 
 test("409: each family, and the whole batch is rolled back", async () => {

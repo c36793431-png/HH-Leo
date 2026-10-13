@@ -248,10 +248,14 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
     and sent different; a scored row whose sent exitPx differs (a rescoring is a correction, and corrections
     go to marcus as SQL). Fable m67446, kept m67483: "entryPx or exitPx differing from a stored non-null
     value -> 409".
-  - Prices are compared on the SCALED INTEGER (fable A1 m67483): a sent price is Math.round(px * 1e6) and the
-    stored one is stored_px * 1e6; "unchanged" and 409 compare those two integers, never the sent float with
-    the stored decimal. Else a repost that carries a 7th decimal of the same price 409s against the stored
-    6-dp value and the retry is no longer safe.
+  - Prices are compared on the SCALED INTEGER (fable A1 m67483): BOTH sides are rounded to an integer. The
+    sent price is Math.round(px * 1e6); the stored one is (stored_px * 1000000)::bigint, taken in Postgres
+    numeric, which is exact decimal, so no float product exists on that side. If the stored side is ever
+    read in JS, it is Math.round(Number(stored_px) * 1e6), never the bare product (fable S1 m67514:
+    Number("1.0006") * 1e6 is not an integer, so an unrounded side 409s an IDENTICAL repost). "unchanged" and
+    409 compare those two integers, never the sent float with the stored decimal. Else a repost that carries
+    a 7th decimal of the same price, or the same price exactly, 409s against the stored 6-dp value and the
+    retry is no longer safe.
   - new key: insert, `received_at` = now(); with entryPx, also entry_bar_ts and `entry_px_at` = now(); if
     entry_px and exit_px are both known, score it, exit_bar_ts, and `scored_at` = now().
   - same key, nothing new: no write ("unchanged").
@@ -445,7 +449,9 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
   entryPx sent or stored, entryPx without entryBarTs and the reverse, exitPx without exitBarTs and the
   reverse, a bar ts before entry_ts and one at exit_ts. Window: entry_ts and exit_ts stored as sessionDate
   06:00Z and 21:00Z. Upsert: register then score; entry_px_at = the fill's now(), not sent; identical repost
-  unchanged; a repost carrying a 7th decimal of the same price unchanged, not 409 (fable A1 m67483); a price
+  unchanged; a repost carrying a 7th decimal of the same price unchanged, not 409 (fable A1 m67483); an
+  identical repost at EURUSD 1.0006 and USDJPY 128.003 (prices whose px * 1e6 is not an integer) unchanged,
+  not 409 (fable S1 m67514); a price
   with 7 decimals stored at 6; changed direction 409 and nothing in the batch written (the R5 rewritten day);
   set entry_px changed 409; set entryBarTs changed 409; set meta changed 409; changed exitPx or exitBarTs on
   a scored row 409. Dead-band edges (N4, fable m67474's inputs, RUN on her side): EURUSD 1.0850 -> 1.0855 up
