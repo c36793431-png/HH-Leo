@@ -2,9 +2,54 @@
 
 Status: STARTED at S0.1 (marcus m67424, 2026-10-13), fields added at S0.2 (marcus m67429/m67435), bars and
 rulings added at S1 (fable m67474 D5, marcus m67465), meta.source enum and the repost rules at S1.1 (fable
-m67483). The route is NOT BUILT. This file holds what is ruled
-for the sender. The full contract (curl line, token generation, responses, the retry rule) is written here
-at S2b; until then the design is docs/specs/axiom-signals-dashboard-plan.md section 4.
+m67483), the full contract at S2b (marcus m67548: setup, request, answers, retry, limits). The route is
+src/app/api/signals/ingest/[source]/route.ts, the logic src/lib/signal-ingest.ts; the design is
+docs/specs/axiom-signals-dashboard-plan.md section 4. The route is NOT LIVE until the setup below is done.
+
+## Setup, in this order
+
+1. **marcus applies** `db/migrations/0110_signal_calls.sql` on prod, then merges (marcus m67548: "0110
+   first, then the merge"). With no token hash set, the route answers every request
+   `401 {"error":"unauthorized"}`. A preview answers `404 {"error":"not found"}` whatever its env: previews
+   share the production database, so a preview must not write.
+2. **Token**, generated on Ubuntu-Axiom; the token itself never leaves that box (not on the bus, not in
+   Vercel):
+   ```
+   umask 077
+   openssl rand -base64 32 | tr -d '\n' > <token file>     # 32 random bytes, 44 chars
+   sha256sum < <token file> | cut -d' ' -f1                 # prints ONLY the sha256 hex
+   ```
+   The hash is of the token bytes exactly, no trailing newline. The portal refuses a token under 32 chars.
+3. **coxwell sets** `SIGNAL_INGEST_SHA256_AXIOM` = that hash, **Production scope only**, and redeploys.
+   `SIGNAL_INGEST_ALLOWED_IP_AXIOM` stays unset (marcus R7 m67429: no static IP for Ubuntu-Axiom); if set,
+   any other caller IP gets `403 {"error":"forbidden"}`.
+
+Revoke: blank `SIGNAL_INGEST_SHA256_AXIOM` and redeploy; every request then answers 401. After any
+incident, generate a new token (step 2) and set its hash (step 3).
+
+## Request
+
+```
+curl -sS -X POST https://portal.horizonhft.com/api/signals/ingest/axiom \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer $(cat <token file>)" \
+  --data-binary @calls.json
+```
+
+Body: `{ "source": "axiom", "calls": [ { ...one object per call, fields below... } ] }`. The body's
+`source` must equal the source in the path (else 400). Unknown fields are refused (400), at the top level
+and in each call.
+
+```
+{ "source": "axiom", "calls": [
+  { "symbol": "EURUSD", "sessionDate": "2026-10-13", "direction": "up",
+    "entryPx": 1.0850, "entryBarTs": "2026-10-13T06:00:00Z", "meta": { "source": "card" } },
+  { "symbol": "USDJPY", "sessionDate": "2026-10-13", "direction": "neutral", "meta": { "source": "card" } }
+] }
+```
+
+The scoring post for the first call, after 21:00Z, sends symbol, sessionDate and direction again, plus the exit fields:
+`{ "symbol": "EURUSD", "sessionDate": "2026-10-13", "direction": "up", "exitPx": 1.0862, "exitBarTs": "2026-10-13T20:00:00Z" }`.
 
 ## Fields per call
 
@@ -27,9 +72,14 @@ at S2b; until then the design is docs/specs/axiom-signals-dashboard-plan.md sect
 - Refused (400): entryPx without entryBarTs or the reverse; exitPx without exitBarTs or the reverse; a bar
   time outside the window (before 06:00Z, or at or after 21:00Z, of sessionDate); exitPx with no entryPx in
   the same post or already stored (fable N6 m67474).
+- Prices are JSON numbers, positive (a string such as `"1.0850"` is refused, 400; fable m67547 call 9).
+  Bar times carry seconds: `2026-10-13T06:00:00Z`, milliseconds optional; `2026-10-13T06:00Z` is refused
+  (400; fable m67547 call 8).
 - The portal records the bar time you send, so a fallback price is visible on its side, not hidden. It also
-  records its own clock when entryPx first arrives; an entryPx that first arrives after 21:00Z is shown on
-  the page as "entry priced after close" (fable D1 m67474).
+  records its own clock when entryPx first arrives; on a LIVE call (one the portal first received before
+  21:00Z of its sessionDate), an entryPx that first arrives at or after 21:00Z is shown on the page as "entry
+  priced after close" (fable D1 m67474; LIVE qualifier fable N1 m67501, plan section 5). A backfilled call
+  (first received at or after 21:00Z) is not in that count.
 
 ## Price series (marcus R3 m67429; Axiom's track_record.py:33-40 via m67429)
 
@@ -71,3 +121,41 @@ m67446, kept m67483).
   values is always safe and answers "unchanged".
 - Send `meta` with the registration post or not at all (fable G2 m67417). meta can be set once, the same
   rule as entryPx: a later post with a different meta is refused (409).
+
+## Answers
+
+Every answer the handler gives is JSON with `cache-control: no-store`. A failure to get a database
+connection happens before the handler's try (src/lib/signal-ingest.ts:248), so it is not one of these: it
+reaches the caller as a 5xx without this body, and nothing was written.
+
+| Code | Body | Meaning |
+|---|---|---|
+| 200 | `{ "inserted", "scored", "filled", "unchanged" }` | Every call applied, in one transaction. Each call is in exactly one count (fable m67547 call 1): `inserted` = a new call (a new call sent with both prices is scored in the same write and still counts here); `scored` = a stored call given its exitPx (and its entryPx, if that comes in the same post); `filled` = a stored call given its entryPx or meta, not scored; `unchanged` = nothing new |
+| 400 | `{ "error" }`, plus `index` when one call caused it, and `symbol` for an unknown symbol | The body is refused, NOTHING is written. The first bad call in index order is the one named (fable m67547 call 6). Also used for a wrong content-type and a body over the cap (call 3) |
+| 401 | `{ "error": "unauthorized" }` | Bad or missing token, OR an unknown or unconfigured source: one body for all (fable C2 m67410) |
+| 403 | `{ "error": "forbidden" }` | IP rule set and the caller is not that IP (not set for axiom) |
+| 404 | `{ "error": "not found" }` | Not production |
+| 409 | `{ "error", "index" }` | Call `index` conflicts with the stored call (the 409 lines in the rules above, or a changed direction). The WHOLE batch is rolled back, calls before `index` too |
+| 500 | `{ "error": "internal error; nothing was written" }` | The transaction failed and was rolled back |
+
+Calls in one POST are applied in index order, so a later call sees an earlier one: the same key twice
+with the same values answers 1 inserted + 1 unchanged, and a registration in call 0 with its exit in call 1
+answers 1 inserted + 1 scored (fable m67547 call 5, probed on her side).
+
+## Retry
+
+- 200: done. Nothing to resend.
+- Any 5xx, a timeout, or no answer at all: resend the SAME body. Any POST is safe to repeat: the same key with
+  the same values answers "unchanged", so a call that was in fact written before the connection dropped is
+  not written twice (plan section 4, Retry).
+- 400 or 409: do not resend the same body; it will get the same answer. A 409 on a set entryPx, entryBarTs
+  or meta, or on a scored call's exitPx or exitBarTs, is fixed only by marcus's correction SQL.
+- 401, 403, 404: setup, not data. Stop and report; do not loop.
+
+## Limits
+
+- 1 to 200 calls per POST, body at most 64 KB (65,536 bytes of UTF-8). Over either: 400, nothing written.
+- A backfill is a loop of POSTs. Chunk by bytes AS WELL AS by count: close a chunk at 200 calls or before
+  the next call would take the body past 64 KB, whichever comes first (fable N4 m67547: 200 calls with a
+  40-char meta note measured 52,428 B on her side, so a meta past about 100 B per call reaches 64 KB before
+  200 calls).

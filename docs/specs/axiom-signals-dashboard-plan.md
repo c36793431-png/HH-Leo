@@ -288,8 +288,9 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
     (m67410, m67417). Her m67416 G3 text and the 422 paragraph of m67410 are superseded. With no outcome sent
     there is nothing to disagree with. My m67432 calls 2 (mismatched existing row meta fill) and 3 (camelCase
     sent keys) are MOOT with it (m67446, kept m67483).
-- Response 200: `{ inserted, scored, unchanged }`. Each call lands in exactly one ("scored" = an existing row
-  given its scored form; call 4 CONFIRMED m67474). 400/401/403/404/409: `{ error }`, plus `index` (and
+- Response 200: `{ inserted, scored, filled, unchanged }`. Each call lands in exactly one ("scored" = an
+  existing row given its scored form; call 4 CONFIRMED m67474; "filled" = an existing row given entry_px or
+  meta and not scored, my S2a call 1, ACCEPTED fable m67547). 400/401/403/404/409: `{ error }`, plus `index` (and
   `symbol` for an unknown symbol) when one call caused it.
 - Retry: any POST is safe to repeat. Same key + same values (prices compared as scaled integers, above) ->
   "unchanged"; entryPx or exitPx differing from a stored non-null value -> 409, whole batch rolled back.
