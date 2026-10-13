@@ -27,6 +27,16 @@
 .sg-ch th { text-align: right; font-weight: 600; color: #71717a; padding: 4px 6px; border-bottom: 1px solid #27272a; white-space: nowrap; }
 .sg-ch td { text-align: right; padding: 4px 6px; border-bottom: 1px solid #27272a; white-space: nowrap; }
 .sg-ch th:first-child, .sg-ch td:first-child { text-align: left; }
+/* S5 price charts: a call marker is a glyph whose colour and fill both give the outcome. Right / wrong are the dataviz
+   reference palette's status good #0ca30c / critical #d03b3b (both clear 3:1 on a dark surface); flat, not scored and
+   neutral are grey. The 2px text-shadow is the surface ring where a marker overlaps the line. */
+.sg-mk { position: absolute; transform: translate(-50%, 50%); font-size: 13px; line-height: 1; pointer-events: none; text-shadow: 0 0 2px #09090b; }
+.sg-mk.sg-mk-floor { transform: translate(-50%, 0); }
+.sg-mk-right { color: #0ca30c; }
+.sg-mk-wrong { color: #d03b3b; }
+.sg-mk-none { color: #a1a1aa; }
+.sg-ch-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 11px; color: #a1a1aa; }
+.sg-ch-legend span { margin-right: 4px; }
 @media (max-width: 900px) {
   .sg-ch-grid { grid-template-columns: minmax(0, 1fr); }
 }

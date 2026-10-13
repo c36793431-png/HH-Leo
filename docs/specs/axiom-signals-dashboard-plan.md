@@ -416,8 +416,8 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
 | src/app/api/signals/ingest/[source]/route.ts | S2 |
 | docs/signal-ingest.md | S0.1 (timing values, poster rules), S0.2 (fields, Yahoo series, no outcome), S1 (bars, bar-ts fields), S1.1 (meta.source enum, call 7, 6-dp repost), S2b (the rest) |
 | src/lib/signal-stats.ts (pure), signal-stats.test.ts | S3 |
-| src/lib/signal-calls.ts (the page's one read query) | S4 |
-| src/app/admin/signals/page.tsx, signals.css | S4 |
+| src/lib/signal-calls.ts (the page's one read query), signal-calls.test.ts | S4, S5 (the two prices + bar starts) |
+| src/app/admin/signals/page.tsx, signals.css | S4, S5 (section 4 + marker CSS) |
 | src/components/admin/signal-charts.tsx | S4, S5 |
 
 ## 7. Tests (node:test, the repo's runner line `npx tsx --test <file>`)

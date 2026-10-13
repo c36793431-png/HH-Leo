@@ -12,13 +12,13 @@ import {
   type SignalTally,
 } from "@/lib/signal-stats";
 import { SIGNAL_INSTRUMENTS, signalInstrument } from "@/lib/signal-instruments";
-import { SignalCharts, fmtHit, fmtMove } from "@/components/admin/signal-charts";
+import { SignalCharts, SignalPriceCharts, fmtHit, fmtMove } from "@/components/admin/signal-charts";
 import "./signals.css";
 
 /** Signal calls dashboard (Axiom signals dashboard S4, marcus GO m67643; plan
  * docs/specs/axiom-signals-dashboard-plan.md section 5 at d52245c, :327-406). Admin only, no nav link (Q8 m67403),
- * reads only. Sections 1-3: headline by lead-time row, per-pair table, cumulative charts. Section 4 (per-pair
- * price line with call markers) is S5.
+ * reads only. Sections 1-3: headline by lead-time row, per-pair table, cumulative charts. Section 4: per-pair
+ * price line with call markers (S5, marcus GO m67677).
  *
  * Gate: proxy.ts and admin/layout.tsx already gate /admin; this page repeats isAdminUser because it is meant to
  * be narrower than admin (plan :330-335, Q5 m67403). ONE new Date() per request is now (fable m67641). */
@@ -54,6 +54,9 @@ const HEADLINE_NOTE =
 const PAIRS_NOTE =
   "Net move = the sum over scored calls if every call was followed, in the pair's own unit. Under " +
   `${SMALL_SAMPLE_SCORED} scored calls a row is tagged n<${SMALL_SAMPLE_SCORED} and its percentages are muted.`;
+const PRICES_NOTE =
+  "Only the prices each call was scored on: a segment from the entry bar's open to the exit bar's close, each at " +
+  "its own hour. Nothing is drawn between sessions, because no price was sent for those hours.";
 
 const TH = "py-1 pr-3 font-medium";
 const TD = "py-1 pr-3 tabular-nums";
@@ -225,6 +228,12 @@ export default async function AdminSignalsPage({
           <section data-section="charts">
             <h2 className="text-sm font-medium text-zinc-300">Over time</h2>
             <SignalCharts stats={stats} />
+          </section>
+
+          <section data-section="prices">
+            <h2 className="text-sm font-medium text-zinc-300">Price at each call</h2>
+            <p className="mt-1 text-xs text-zinc-500">{PRICES_NOTE}</p>
+            <SignalPriceCharts rows={rows} symbols={stats.pairs.map((p) => p.symbol)} />
           </section>
         </>
       )}

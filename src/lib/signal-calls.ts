@@ -12,7 +12,18 @@ import type { SignalStatsRow } from "./signal-stats";
  * sender_label = meta->>'source' is the only source-specific key read, and no number keys on it (fable N5
  * m67474, plan :350-353). Only 'card' / 'backfill' pass through, anything else is null (S4.1, fable VERDICT-S4 S1
  * m67678): 0110 has no CHECK on meta, and signal-stats tally() counts labels[senderLabel ?? "none"], so a raw
- * off-enum value would drop the row out of card / backfill / none. The query is the boundary; signal-stats is unchanged. */
+ * off-enum value would drop the row out of card / backfill / none. The query is the boundary; signal-stats is unchanged.
+ * S5 (marcus GO m67677) adds the two prices, as text like move, and the two bar starts the price chart plots. */
+
+/** A stats row plus what the S5 price chart plots. signalStats takes it as a SignalStatsRow. */
+export interface SignalCallRow extends SignalStatsRow {
+  /** The numeric's text, as move: "1.085000". null until filled (entry) / scored (exit). */
+  entryPx: string | null;
+  exitPx: string | null;
+  /** START of the bar each price came from (docs/signal-ingest.md :62, :64); null exactly when its price is. */
+  entryBarTs: Date | null;
+  exitBarTs: Date | null;
+}
 
 export interface SignalCallsFilter {
   source: string;
@@ -48,9 +59,15 @@ interface RawRow {
   outcome: SignalStatsRow["outcome"];
   move: string | null;
   sender_label: SignalStatsRow["senderLabel"];
+  entry_px: string | null;
+  exit_px: string | null;
+  entry_bar_ts: Date | string | null;
+  exit_bar_ts: Date | string | null;
 }
 
-const toRow = (r: RawRow): SignalStatsRow => ({
+const dateOrNull = (v: Date | string | null) => (v === null ? null : new Date(v));
+
+const toRow = (r: RawRow): SignalCallRow => ({
   symbol: r.symbol,
   sessionDate: r.session_date,
   direction: r.direction,
@@ -61,13 +78,18 @@ const toRow = (r: RawRow): SignalStatsRow => ({
   outcome: r.outcome,
   move: r.move,
   senderLabel: r.sender_label,
+  entryPx: r.entry_px,
+  exitPx: r.exit_px,
+  entryBarTs: dateOrNull(r.entry_bar_ts),
+  exitBarTs: dateOrNull(r.exit_bar_ts),
 });
 
-export async function listSignalCallsOn(db: Db, f: SignalCallsFilter): Promise<SignalStatsRow[]> {
+export async function listSignalCallsOn(db: Db, f: SignalCallsFilter): Promise<SignalCallRow[]> {
   const { rows } = await db.query(
     `select symbol, session_date::text as session_date, direction, entry_ts, exit_ts, received_at, entry_px_at,
             outcome, move::text as move,
-            case when meta->>'source' in ('card', 'backfill') then meta->>'source' end as sender_label
+            case when meta->>'source' in ('card', 'backfill') then meta->>'source' end as sender_label,
+            entry_px::text as entry_px, exit_px::text as exit_px, entry_bar_ts, exit_bar_ts
      from signal_calls
      where source = $1
        and ($2::date is null or session_date >= $2::date)
