@@ -1057,3 +1057,11 @@ export function renamedLessonSlug(slug: string): string | undefined {
 export function lessonHref(lesson: Pick<EducationLesson, "slug">): string {
   return `/education/${lesson.slug}`;
 }
+
+/** The course lesson after this one (lesson 7 -> the final check), for the 'Next lesson' link (marcus m67166).
+ * None for the final check and for any lesson that is not in a course. */
+export function nextCourseLesson(lesson: Pick<EducationLesson, "course">): EducationLesson | undefined {
+  const at = lesson.course;
+  if (!at || at.final) return undefined;
+  return EDUCATION_LESSONS.find((l) => l.course?.name === at.name && l.course.lesson === at.lesson + 1);
+}

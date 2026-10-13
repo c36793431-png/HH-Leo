@@ -4,6 +4,8 @@ import {
   EDUCATION_MANUAL_VERSION,
   type EducationBlock,
   type EducationLesson,
+  lessonHref,
+  nextCourseLesson,
 } from "@/lib/education";
 import type { SignedOutLesson } from "@/lib/education-signed-out";
 import { strategyCardImage } from "@/lib/basket-catalogue";
@@ -108,6 +110,18 @@ function LessonBlock({ block }: { block: EducationBlock }) {
   );
 }
 
+/** The foot of a course lesson: a link to the next one (marcus m67166). Lesson 7 leads to the final check. */
+function NextCourseLesson({ lesson }: { lesson: EducationLesson }) {
+  const next = nextCourseLesson(lesson);
+  if (!next) return null;
+  return (
+    <a className="lesson-next" href={lessonHref(next)}>
+      <span>{next.course?.final ? "Next" : "Next lesson"}</span>
+      <b>{next.title} →</b>
+    </a>
+  );
+}
+
 export function LessonDetail({ lesson, isPaidTier }: { lesson: EducationLesson; isPaidTier: boolean }) {
   const locked = !lesson.free && !isPaidTier;
 
@@ -141,6 +155,7 @@ export function LessonDetail({ lesson, isPaidTier }: { lesson: EducationLesson; 
         ))}
       </div>
       {lesson.closing && <p className="lesson-closing">{lesson.closing}</p>}
+      <NextCourseLesson lesson={lesson} />
     </div>
   );
 }
