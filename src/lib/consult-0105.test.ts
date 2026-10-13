@@ -79,11 +79,12 @@ async function makeUser() {
   const r = await sql(`insert into users (email) values ($1) returning id`, [`consult${seq}@example.invalid`]);
   return r.rows[0].id as string;
 }
-/** A consult_services row with every required column filled; `cols` overrides. */
+/** A consult_services row with every required column filled; `cols` overrides. The kind follows
+ * the owner (house package or consultant service) unless given, so a refusal names one check. */
 function insertService(cols: Record<string, unknown>) {
   const row: Record<string, unknown> = {
     slug: `svc-${++seq}`,
-    kind: "consultant",
+    kind: cols.owner_user_id ? "consultant" : "human_expert",
     name: `Service ${seq}`,
     summary: "A short summary.",
     availability: "available",
@@ -103,6 +104,17 @@ async function houseServiceId(slug: string) {
 test("0105 applies on the real chain: both tables exist and the ledger row is in", async () => {
   for (const t of ["consult_services", "consult_requests"]) assert.notEqual((await sql(`select to_regclass($1) as r`, [t])).rows[0].r, null, t);
   assert.deepEqual((await sql(`select name from schema_migrations where version = '0105'`)).rows, [{ name: MIGRATION_0105 }]);
+});
+
+// Before any test inserts: the seed is the whole table.
+test("seed: the Human expert house package and nothing else (no Horizon AI rows, Q6); live, no price, no split", async () => {
+  const seeded = (await sql(
+    `select slug, kind, owner_user_id, name, availability, status, price_cents, consultant_split_pct from consult_services`,
+  )).rows;
+  assert.deepEqual(seeded, [{
+    slug: "human-expert", kind: "human_expert", owner_user_id: null, name: "Human expert",
+    availability: "available", status: "live", price_cents: null, consultant_split_pct: null,
+  }]);
 });
 
 test("slug CHECK is consult-slug.ts's pattern, cap and reserved list, literally (Fable A1(a))", async () => {
@@ -130,8 +142,7 @@ test("the DB and isConsultSlug agree on every candidate; 'ask', 'apply', 'Bad Sl
 });
 
 test("kind: no 'ai_agent' (Q6); a house package is human_expert and a consultant service has an owner", async () => {
-  await refused(insertService({ kind: "ai_agent" }), "23514", "consult_services_kind_check");
-  await refused(insertService({ kind: "consultant", owner_user_id: null }), "23514", "consult_services_owner_kind_check");
+  await refused(insertService({ kind: "ai_agent", owner_user_id: await makeUser() }), "23514", "consult_services_kind_check");  await refused(insertService({ kind: "consultant", owner_user_id: null }), "23514", "consult_services_owner_kind_check");
   await refused(insertService({ kind: "human_expert", owner_user_id: await makeUser() }), "23514", "consult_services_owner_kind_check");
   await insertService({ kind: "human_expert", owner_user_id: null, status: "retired" });
   await insertService({ kind: "consultant", owner_user_id: await makeUser() });
@@ -177,20 +188,6 @@ test("text caps, split 0..100, status and availability vocabularies", async () =
   await refused(insertService({ owner_user_id: owner, status: "approved" }), "23514", "consult_services_status_check");
   await refused(insertService({ owner_user_id: owner, availability: "soon" }), "23514", "consult_services_availability_check");
   await insertService({ owner_user_id: owner, summary: "x".repeat(280), description: "x".repeat(4000), delivery: "x".repeat(500), consultant_split_pct: 0, availability: "coming-soon" });
-});
-
-test("seed: the Human expert house package only, live and available, no price, no split, no AI rows", async () => {
-  const seeded = (await sql(
-    `select slug, kind, owner_user_id, name, availability, status, price_cents, consultant_split_pct
-       from consult_services where slug = 'human-expert'`,
-  )).rows;
-  assert.deepEqual(seeded, [{
-    slug: "human-expert", kind: "human_expert", owner_user_id: null, name: "Human expert",
-    availability: "available", status: "live", price_cents: null, consultant_split_pct: null,
-  }]);
-  for (const s of ["ask-anything", "guided", "always-on", "custom"]) {
-    assert.equal((await sql(`select 1 from consult_services where slug = $1`, [s])).rows.length, 0, `${s} is Horizon AI, not consulting (Q6)`);
-  }
 });
 
 test("consult_requests: a request needs a package, a question doesn't; one pending request per client per package", async () => {
