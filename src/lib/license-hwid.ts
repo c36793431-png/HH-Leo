@@ -20,7 +20,7 @@ export const MAX_HWID_LENGTH = 256;
 export const HWID_ERROR_PREFIX = "HWID-ERROR-";
 
 /**
- * 2.0.9+ (0111, HWID wire contract v1 + Fable m67568 S2/S3/C1). hardwareid2 = hid2, SHA-256('hid2|MachineGuid|SMBIOS
+ * 2.0.9+ (0111, HWID wire contract v2 md5 687b1ef7, Fable PASS m67592: 3.1-3.4, 3.8 C1). hardwareid2 = hid2, SHA-256('hid2|MachineGuid|SMBIOS
  * UUID')[:32] uppercase; hwdegraded = which identity sources failed. Both are optional and ABSENT when the key is not
  * sent. A value that fails its shape check is treated as ABSENT, never a 400: a 400 blocks the client's startup.
  */
@@ -118,10 +118,10 @@ export async function recordValidateHardwareId(
 }
 
 /**
- * True only when ANOTHER PC holds the binding. Order (contract v1 3.3 + Fable S3):
- *   3.3a both sides have a hid2: it alone decides; the hid is ignored (it is still recorded in seen).
- *   S3   otherwise a fallback hid is never refused.
- *   3.3b otherwise the hid decides, as for 2.0.8 clients: refused only when a different hid is bound.
+ * True only when ANOTHER PC holds the binding. Order (contract v2 3.4, b) before c)):
+ *   a) both sides have a hid2: it alone decides; the hid is ignored (it is still recorded in seen).
+ *   b) otherwise a fallback hid is never refused (3.3, Fable S3).
+ *   c) otherwise the hid decides, as for 2.0.8 clients: refused only when a different hid is bound.
  */
 export function isForeignPc(bound: BoundIdentity, identity: ValidateIdentity): boolean {
   if (identity.hwid2 !== null && bound.hardwareId2 !== null) return identity.hwid2 !== bound.hardwareId2;

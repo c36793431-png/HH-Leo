@@ -23,7 +23,8 @@ m63422; Fable's review m63552 (PASS WITH STRIKES); build GO m63554. Migration `0
 
 ## 2.0.9: the second identity (`0111_license_hwid2.sql`)
 
-HWID wire contract v1 as amended by Fable m67568/m67569 (S2, S3, C1-C5). Enforcement is still `HWID_ENFORCE`, OFF.
+HWID wire contract v2 (`wire-contract-hwid-v2.txt`, md5 687b1ef7, Fable PASS m67592), sections 3.1-3.6 and 3.8
+(C1-C5). Enforcement is still `HWID_ENFORCE`, OFF.
 
 - `/v1/validate` accepts two optional fields. `hardwareid2` (hid2) counts only if it matches `^[0-9A-F]{32}$`.
   `hwdegraded` counts only if it is comma-separated tokens from `cpu,disk,mac,guid,uuid`, at most 32 chars. Any other
@@ -33,13 +34,46 @@ HWID wire contract v1 as amended by Fable m67568/m67569 (S2, S3, C1-C5). Enforce
   binds only while no hid2 is bound, or the request carries the bound one.
 - A **fallback hid** is one where `hwdegraded` names cpu, disk or mac, or the hid starts `HWID-ERROR-`. It never binds
   and is never refused (S3).
-- The match runs in this order: both sides have a hid2, so the hid2 alone decides (3.3a). Otherwise a fallback hid
-  passes. Otherwise the hid decides, exactly as for 2.0.8.
+- The match runs in this order (3.4): both sides have a hid2, so the hid2 alone decides (a). Otherwise a fallback hid
+  passes (b). Otherwise the hid decides, exactly as for 2.0.8 (c).
+- `activated_at` is set by the first binding of EITHER identity, so a hid2-only bind (degraded first validate) stamps
+  it too. Reset PC never clears it.
 - `license_hwid_seen.last_hwid2` / `last_hwdegraded` record what the latest validate from that (licence, hwid)
   carried (C4). This is the read for the separate enforcement-ON decision.
 - `/v1/hb` is unchanged: `hid2`/`hdg` land in `client_heartbeats.raw` only (C3).
 - The pre-flip rebind SQL below predates 0111 and moves the hid only. For a 2.0.9 client with a bound hid2, the hid2
   still decides.
+
+### ON-decision notes (read before turning `HWID_ENFORCE` on)
+
+- **Would lock on ON** (Fable N2, m67592). A licence bound to hid A by 2.0.8 whose owner's hid then changed for good
+  (adapter order, USB disk) never binds a hid2 under OFF (S2), so under ON its next clean validate is a 3.4 c) mismatch.
+  The remedy is Reset PC. This read-only query lists the active licences whose LATEST validate would be refused today:
+  a hid bound, no hid2 bound, and the latest seen row is a clean hid that is not the bound one. Rows = the count.
+
+  ```sql would-lock
+  with latest as (
+    select distinct on (s.license_id) s.license_id, s.hwid, s.last_hwdegraded, s.last_seen, s.last_version
+    from license_hwid_seen s
+    order by s.license_id, s.last_seen desc, s.hwid
+  )
+  select l.id as license_id, l.hardware_id as bound_hid, t.hwid as latest_hwid, t.last_seen, t.last_version
+  from licenses l join latest t on t.license_id = l.id
+  where l.status <> 'revoked' and l.expires_at > now()
+    and l.hardware_id is not null and l.hardware_id2 is null
+    and t.hwid <> l.hardware_id
+    and left(t.hwid, 11) <> 'HWID-ERROR-'
+    and coalesce(t.last_hwdegraded, '') !~ '(^|,)(cpu|disk|mac)(,|$)'
+  order by l.id;
+  ```
+
+  `src/lib/license-hwid.test.ts` test 35 runs this block and checks each row against what ON actually answers.
+- **G2, a sharing gap, not a lockout.** Under ON, a licence with only a hid2 bound (its first validate was degraded,
+  so no hid bound) passes ANY request that carries no hid2: 3.4 c) has no bound hid to compare. It closes when the
+  owner's clean validate binds the hid. It can be permanent (Fable N3): if the owner's uuid later becomes a definite
+  non-usable answer (a BIOS update blanks it), hid2 is absent for good, the mirror guard never lets the hid bind, and the
+  licence stays hid2-only. Still never a lockout. Count them with
+  `select count(*) from licenses where hardware_id is null and hardware_id2 is not null`.
 
 ## The flag: `HWID_ENFORCE` (env var, OFF at ship)
 
