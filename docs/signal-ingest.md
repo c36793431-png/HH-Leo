@@ -96,7 +96,7 @@ Prices come from the same Yahoo series Axiom scores with. Gold and the Dow are F
 
 ## Timing values
 
-Both are named constants in src/lib/signal-stats.ts (not built yet) and are shown in the page's method note.
+Both are named constants in src/lib/signal-stats.ts (S3) and are shown in the page's method note (S4, not built yet).
 Values set by marcus m67424 ("I accept fable's proposal as-is"), proposed by fable m67417 (G5).
 
 | Constant | Value | Meaning |
