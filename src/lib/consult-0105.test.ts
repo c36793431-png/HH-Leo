@@ -10,6 +10,8 @@
  *  - house-package names are unique while open: `nulls not distinct`, so two owner-NULL rows
  *    can't share a name (Fable S3), with the race tested on house rows too;
  *  - one pending request per client per package; a question needs no package;
+ *  - consult_requests.topic is capped at CONSULT_ASK_TOPIC_MAX and every CONSULT_ASK_TOPICS key is
+ *    slug-shaped and fits (marcus Q1/Q2 m66313);
  *  - the rollback refuses while client or consultant rows exist.
  * Real Postgres, no prod: the PGlite harness of basket-requests.test.ts (the REAL migration chain,
  * same prod-data preflight seeds). */
@@ -220,6 +222,28 @@ test("consult_requests: vocabularies and caps (body 2000, telegram_handle 2..64 
   await refused(q("kind, telegram_handle", ["question", "x"]), "23514", "consult_requests_telegram_handle_check");
   await refused(q("kind, telegram_handle", ["question", "x".repeat(65)]), "23514", "consult_requests_telegram_handle_check");
   await q("kind, body, telegram_handle", ["question", "x".repeat(2000), "ab"]);
+});
+
+test("consult_requests.topic: the CHECK caps at CONSULT_ASK_TOPIC_MAX; every topic key is slug-shaped and stored as-is (marcus Q1/Q2)", async () => {
+  const { CONSULT_ASK_TOPICS, CONSULT_ASK_TOPIC_MAX, isConsultAskTopic } = await import("./consult-ask-topics");
+  const { isConsultSlug } = await import("./consult-slug");
+  const def = (await sql(`select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'consult_requests_topic_check'`)).rows[0]?.def as string;
+  assert.ok(def, "consult_requests_topic_check is named");
+  assert.ok(def.includes(`<= ${CONSULT_ASK_TOPIC_MAX}`), def);
+  const client = await makeUser();
+  const keys = Object.keys(CONSULT_ASK_TOPICS);
+  assert.deepEqual(keys, ["general", "custom", "guided", "always-on"]);
+  for (const key of keys) {
+    assert.ok(isConsultSlug(key) && key.length <= CONSULT_ASK_TOPIC_MAX, `${key} is slug-shaped and fits`);
+    assert.ok(isConsultAskTopic(key), key);
+    const r = await sql(`insert into consult_requests (user_id, kind, topic) values ($1, 'question', $2) returning topic`, [client, key]);
+    assert.equal(r.rows[0].topic, key);
+  }
+  for (const bad of ["General", "ask", "__proto__", "toString", "hasOwnProperty", ""]) assert.equal(isConsultAskTopic(bad), false, bad);
+  const insertTopic = (topic: string) => sql(`insert into consult_requests (user_id, kind, topic) values ($1, 'question', $2)`, [client, topic]);
+  await refused(insertTopic(""), "23514", "consult_requests_topic_check");
+  await refused(insertTopic("x".repeat(CONSULT_ASK_TOPIC_MAX + 1)), "23514", "consult_requests_topic_check");
+  await insertTopic("x".repeat(CONSULT_ASK_TOPIC_MAX));
 });
 
 test("deleting a client removes their requests; a consultant who owns a service can't be deleted", async () => {

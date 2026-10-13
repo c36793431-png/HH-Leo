@@ -24,6 +24,9 @@
 --   service_id NULL only for a question (a general question names no package).
 --   telegram_handle: 0093's rule - asked only when the account has no Telegram on file; never
 --     written back to users. The client's email is never stored here (Fable S1(ii)).
+--   topic: the Ask form's prefill (www's Custom / Guided / Always-on buttons land on /ask, m66302).
+--     The server writes only CONSULT_ASK_TOPICS keys (src/lib/consult-ask-topics.ts, marcus Q1
+--     m66313); the CHECK caps the length only, so a new topic needs no migration.
 --   routed_to_user_id: the service owner, snapshotted at accept.
 --   One pending request/interest per client per package (partial unique index).
 --
@@ -83,6 +86,8 @@ create table if not exists consult_requests (
     constraint consult_requests_body_check check (body is null or length(body) <= 2000),
   telegram_handle text
     constraint consult_requests_telegram_handle_check check (telegram_handle is null or length(telegram_handle) between 2 and 64),
+  topic text
+    constraint consult_requests_topic_check check (topic is null or length(topic) between 1 and 32),
   status text not null default 'pending'
     constraint consult_requests_status_check check (status in ('pending', 'accepted', 'declined', 'answered', 'closed')),
   routed_to_user_id uuid references users(id) on delete set null,
