@@ -1,7 +1,8 @@
 # Signal ingest (POST /api/signals/ingest/[source])
 
 Status: STARTED at S0.1 (marcus m67424, 2026-10-13), fields added at S0.2 (marcus m67429/m67435), bars and
-rulings added at S1 (fable m67474 D5, marcus m67465). The route is NOT BUILT. This file holds what is ruled
+rulings added at S1 (fable m67474 D5, marcus m67465), meta.source enum and the repost rules at S1.1 (fable
+m67483). The route is NOT BUILT. This file holds what is ruled
 for the sender. The full contract (curl line, token generation, responses, the retry rule) is written here
 at S2b; until then the design is docs/specs/axiom-signals-dashboard-plan.md section 4.
 
@@ -16,7 +17,7 @@ at S2b; until then the design is docs/specs/axiom-signals-dashboard-plan.md sect
 | `entryBarTs` | with `entryPx`, and only with it | START of the bar entryPx came from, ISO-8601 UTC: `<sessionDate>T06:00:00Z`, or the 07:00Z / 08:00Z fallback (fable m67474) |
 | `exitPx` | no; up/down only, at scoring | CLOSE of the 20:00Z hourly bar (the last bar before 21:00, NOT the 21:00Z bar); if missing, the 19:00Z bar's close, then the 18:00Z bar's (axiom via marcus m67465) |
 | `exitBarTs` | with `exitPx`, and only with it | START of the bar exitPx came from, ISO-8601 UTC: `<sessionDate>T20:00:00Z`, or the 19:00Z / 18:00Z fallback (fable m67474) |
-| `meta` | no | `{ "source": "card" }` or `{ "source": "backfill: read from market_card_<date>.jpg" }`, Axiom's own string (marcus R8 m67429) |
+| `meta` | no | `{ "source": "card" }` or `{ "source": "backfill" }`, nothing else for `source` (fable R8 m67446, kept m67483). Axiom's file string "backfill: read from market_card_<date>.jpg" is sent as `backfill`; any other `source` value is refused (400) |
 
 - Do NOT send an outcome or a move: the portal scores every call itself, with a dead-band Axiom's
   track_record.py does not have, so the two hit rates differ (marcus R4 m67429; fable N2 m67474). Sending
@@ -50,16 +51,23 @@ Values set by marcus m67424 ("I accept fable's proposal as-is"), proposed by fab
 
 | Constant | Value | Meaning |
 |---|---|---|
-| `UNSCORED_AFTER_CLOSE_GRACE_MS` | 2 h | A call still unscored 2 h after its window closes (exit_ts + 2 h < now) is shown as "unscored after close", not "pending". Post the scored form within 2 h of the close. |
+| `UNSCORED_AFTER_CLOSE_GRACE_MS` | 2 h | An up/down call first received before its window closed and still unscored 2 h after the close (exit_ts + 2 h < now) is shown as "unscored after close", not "pending". Post the scored form within 2 h of the close. |
 | `LEAD_WITHIN_WINDOW_MS` | 15 min | A call first received in the first 15 min after its window opens (entry_ts <= received_at < entry_ts + 15 min) is shown as "within 15 min after open", not "later in window". The other buckets: before open (received_at < entry_ts), later in window (up to exit_ts), after close (received_at >= exit_ts). |
 
-received_at is the portal's own clock at the first receipt of the call, never the sender's.
+received_at is the portal's own clock at the first receipt of the call, never the sender's. The page's
+headline is split by these buckets; `meta.source` is shown beside them as the sender's label (fable R8
+m67446, kept m67483).
 
 ## Rules for the sender
 
-- Send `entryPx` and `entryBarTs` with the registration post of an up/down call (fable P1 m67410, D5 m67474).
-  They can be set once: a later post with a different entryPx or entryBarTs is refused (409). Reason (P1):
-  an entry price that arrives after the fact can be chosen, and move is computed from it.
+- Send `entryPx` and `entryBarTs` with the registration post of an up/down call (fable P1 m67410, D5 m67474),
+  and only once you hold the bar it comes from (fable m67446 call 7, kept m67483). They can be set once: a
+  later post with a different entryPx or entryBarTs is refused (409), and only a correction by marcus fixes a
+  wrong one. Reason (P1): an entry price that arrives after the fact can be chosen, and move is computed
+  from it.
 - Once a call is scored, a later post with a different exitPx or exitBarTs is refused (409).
+- Prices are kept to 6 decimals, rounded at receipt, and a repost is compared at those 6 decimals (fable A1
+  m67483): a repost of the same price with a 7th decimal answers "unchanged", not 409. Reposting the same
+  values is always safe and answers "unchanged".
 - Send `meta` with the registration post or not at all (fable G2 m67417). meta can be set once, the same
   rule as entryPx: a later post with a different meta is refused (409).

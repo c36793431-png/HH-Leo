@@ -19,6 +19,14 @@ carried. Diff for review: 7eb9a73..S1 on the two docs. Rulings folded: N1 (neutr
 (entryTs/exitTs unknown fields), N4 (integer arithmetic), N5 (headline split on received_at), N6, P3, Q9
 mechanics (bar-ts columns), D1 (entry_px_at), and marcus m67465 (Axiom's bars, relayed).
 
+Revision S1.1 (doc only, on 6b10fb4): folds in fable m67483 (copy to marcus m67478, 18:40Z, room
+axiom-dashboard), her read of S0.3 5f14a38, written before she had 6b10fb4. Her REVERT list matched what S1
+already restored from 7eb9a73. This revision carries the S0.3 items she KEEPS (meta.source enum, the shared
+received_at vs exit_ts comparison and its two edge tests, call 6 test scope, call 7 line, 409 on a differing
+stored price, the retired 422 text) and her rulings on my m67467 A1-A3 (A1 6-dp storage and the scaled-integer
+repost compare, A2 the outcome-null partition, A3 the four-row headline with two subtotals; A4 MOOT). Diff for
+review stays 7eb9a73..S1.1 on the two docs. No SQL or test file changes.
+
 Everything below about the repo was read at 544f6fc. Nothing about Ubuntu-Axiom was read by me:
 predictions.jsonl and track_record.py are on a box I cannot reach. Every statement about them is axiom's
 reply m67428 (18:22Z, quoted from its own files) as relayed by marcus m67429, cited "track_record.py:NN
@@ -211,7 +219,7 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
      src/lib/signal-instruments.ts (fable P5(b) m67410; whole batch per G4 m67417, the 400 body names the
      index and the symbol: a symbol with no unit size and dead-band can never be scored, and the regex alone
      lets a leaked token fill the table with junk symbols), a neutral call with entryPx or exitPx (section
-     3), an exitPx with no entryPx in the same post or on the stored row (N6, ACCEPTED m67474), entryPx
+     3), a meta.source outside {card, backfill} (fable R8 m67446, kept m67483), an exitPx with no entryPx in the same post or on the stored row (N6, ACCEPTED m67474), entryPx
      without entryBarTs or entryBarTs without entryPx, exitPx without exitBarTs or exitBarTs without exitPx,
      and a bar ts outside [entry_ts, exit_ts) (Q9 mechanics, m67474).
 - Body (S1): `{ "source": "axiom", "calls": [ { symbol, sessionDate, direction, entryPx?, entryBarTs?, exitPx?,
@@ -227,16 +235,23 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
     unknown fields, so the strict parser refuses them (400). A later source with another window is a code
     entry, as adding a source already is (C2).
   - No move / outcome (R4 m67429; N2 CONFIRMED m67474). The strict parser refuses them as unknown fields (400).
-  - meta for axiom carries Axiom's own "source" string verbatim under `meta.source` ("card" or "backfill:
-    read from market_card_<date>.jpg") (R8 m67429). Name clash, flagged: this is not the `source` column
-    ('axiom'). It stays in meta (N5 KEEP IN META, m67474); see section 5 for the one place it is read.
+  - meta.source (fable R8 m67446, kept m67483; amends m67429's "verbatim"): enum {card, backfill},
+    FILL-ONLY at registration like the rest of meta (G2). Axiom's file string "backfill: read from
+    market_card_<date>.jpg" is sent as "backfill"; the poster maps it. Name clash, flagged: this is not the
+    `source` column ('axiom'). It stays in meta (N5 KEEP IN META, m67474); see section 5 for the one place it
+    is read.
 - Per call, one upsert on (source, symbol, entry_ts), all calls in one transaction. A field the post omits
   is not a change. Order per call: the 409 checks, then scoring.
   - 409, WHOLE BATCH rolled back (bugs; stopping is right, m67410), the same three families as the trigger:
     a NEVER column sent and different from the stored row (direction; symbol and session_date give the key,
     the window is derived, source is the path); a FILL-ONLY column (entry_px P1, meta G2) stored non-null
     and sent different; a scored row whose sent exitPx differs (a rescoring is a correction, and corrections
-    go to marcus as SQL).
+    go to marcus as SQL). Fable m67446, kept m67483: "entryPx or exitPx differing from a stored non-null
+    value -> 409".
+  - Prices are compared on the SCALED INTEGER (fable A1 m67483): a sent price is Math.round(px * 1e6) and the
+    stored one is stored_px * 1e6; "unchanged" and 409 compare those two integers, never the sent float with
+    the stored decimal. Else a repost that carries a 7th decimal of the same price 409s against the stored
+    6-dp value and the retry is no longer safe.
   - new key: insert, `received_at` = now(); with entryPx, also entry_bar_ts and `entry_px_at` = now(); if
     entry_px and exit_px are both known, score it, exit_bar_ts, and `scored_at` = now().
   - same key, nothing new: no write ("unchanged").
@@ -256,39 +271,50 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
   - Arithmetic (N4 AMENDED, fable m67474), integers only, the move is never rounded:
     pi = Math.round(px * 1e6) for entry and exit (exact for any quote with <= 6 decimals); ui = unit * 1e6
     (100 for 0.0001, 10000 for 0.01, 1000000 for 1.0); d = exit_i - entry_i, sign flipped for down;
-    flat = |d| < band * ui, compared as integers; move = d / ui, stored (exact decimal, 2 dp for FX).
+    flat = |d| < band * ui, compared as integers; move = d / ui, stored (exact decimal, 2 dp for FX; 5 for an
+    exact 5-pip move). entry_px and exit_px are stored as pi / 1e6, 6 dp (my A1, ACCEPTED fable m67483: 6 dp
+    loses nothing Yahoo sends); a price with more decimals is rounded at receipt.
     Why (fable, RUN on her side, not by me): (1.0855 - 1.0850) / 0.0001 = 4.999999999999449 in a double, so
     an exact 5-pip EURUSD move would score FLAT by accident (1.0850 - 1.0845 the same); USDJPY 150.05 -
     150.00 lands at 5.000000000001137, the other side. Rounding the move instead would turn a true 4.96-pip
     move (Yahoo FX quotes carry 5-6 decimals) into 5.0 and rewrite coxwell's "under 5". Range: US30 45000 *
     1e6 = 4.5e10 < 2^53.
-  - RETIRED by R4 (N2 CONFIRMED, fable m67474): the outcome cross-check, the per-call skip, `mismatched[]`, and
-    G3's mismatched-row insert (m67410, m67417). With no outcome sent there is nothing to disagree with.
+  - RETIRED by R4 (N2 CONFIRMED, fable m67474; text kept from S0.3 per m67483): the outcome cross-check, the
+    per-call skip, `mismatched[]`, sent/computed, G3's mismatched new-row shape and the fill-and-score variant
+    (m67410, m67417). Her m67416 G3 text and the 422 paragraph of m67410 are superseded. With no outcome sent
+    there is nothing to disagree with. My m67432 calls 2 (mismatched existing row meta fill) and 3 (camelCase
+    sent keys) are MOOT with it (m67446, kept m67483).
 - Response 200: `{ inserted, scored, unchanged }`. Each call lands in exactly one ("scored" = an existing row
   given its scored form; call 4 CONFIRMED m67474). 400/401/403/404/409: `{ error }`, plus `index` (and
   `symbol` for an unknown symbol) when one call caused it.
-- Retry: any POST is safe to repeat. Calls already written answer "unchanged".
-- Consequence of P1, not a new rule: if the registration post carried an entry_px and THAT is wrong, a
-  corrected post changes a set FILL-ONLY column, so it is a 409; only marcus's correction SQL fixes that
-  row.
+- Retry: any POST is safe to repeat. Same key + same values (prices compared as scaled integers, above) ->
+  "unchanged"; entryPx or exitPx differing from a stored non-null value -> 409, whole batch rolled back.
+- Consequence of P1, not a new rule (ACCEPTED, m67446 call 7, kept m67483): if the registration post carried
+  an entry_px and THAT is wrong, a corrected post changes a set FILL-ONLY column, so it is a 409; only
+  marcus's correction SQL fixes that row. docs/signal-ingest.md says so in one line: the poster sends
+  entryPx only once it holds the bar.
 - docs/signal-ingest.md: created at S0.1 with the two timing values (section 5) as marcus asked (m67424)
   and the two poster rules fable said it must state (send entryPx with the registration post, P1 m67410;
   send meta with the registration post or not at all, G2 m67417). S0.2 adds the fields, the Yahoo series
-  per symbol, and "no outcome"; S1 adds the bars, the two bar-ts fields and the rulings (D5 m67474). The rest of the contract (curl line, token generation, the responses above,
+  per symbol, and "no outcome"; S1 adds the bars, the two bar-ts fields and the rulings (D5 m67474); S1.1 adds
+  the meta.source enum, the call 7 line and the 6-dp repost rule (m67483). The rest of the contract (curl line, token generation, the responses above,
   the retry rule) is written into it at S2b, from this section.
 
 ### signal-instruments (S2a; R3 + R4 m67429)
 
-| symbol | Yahoo series Axiom prices from (:33-40) | unit (1 move = ) | dead-band (move units) | page label |
-|---|---|---|---|---|
-| EURUSD | EURUSD=X | 0.0001 | 5 | pips |
-| GBPUSD | GBPUSD=X | 0.0001 | 5 | pips |
-| AUDUSD | AUDUSD=X | 0.0001 | 5 | pips |
-| USDJPY | JPY=X (quotes USDJPY) | 0.01 | 5 | pips |
-| XAUUSD | GC=F (gold futures) | 1.0 | 2 | $ |
-| US30 | YM=F (Dow futures) | 1.0 | 20 | points |
+| symbol | yahoo_ticker (:33-40) | unit (1 move = ) | band (move units) | band (int at 1e6) | page label |
+|---|---|---|---|---|---|
+| EURUSD | EURUSD=X | 0.0001 | 5 | 500 | pips |
+| GBPUSD | GBPUSD=X | 0.0001 | 5 | 500 | pips |
+| AUDUSD | AUDUSD=X | 0.0001 | 5 | 500 | pips |
+| USDJPY | JPY=X (quotes USDJPY) | 0.01 | 5 | 50000 | pips |
+| XAUUSD | GC=F (gold futures) | 1.0 | 2 | 2000000 | $ |
+| US30 | YM=F (Dow futures) | 1.0 | 20 | 20000000 | points |
 
 - Unit sizes and dead-bands are marcus's m67429 values (XAUUSD 2.0 and US30 20.0 "in price units").
+- Fields per symbol (fable m67483): yahoo_ticker, unit (non-null), band in units, and the band at 1e6
+  WRITTEN OUT as a literal in the file (band * unit * 1e6). The S2a test asserts literal = band * unit * 1e6
+  per row, so the two columns cannot drift. No pip_size field: the unit is the pip for FX (m67483).
 - XAUUSD and US30 prices are FUTURES prices (GC=F, YM=F), not spot (R3). The Yahoo ticker is a field of
   each row and is printed in docs/signal-ingest.md and the page's method note, so nobody later compares a
   stored price with spot.
@@ -308,22 +334,33 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
   (src/components/portal/sidebar.tsx:79), a shared file, so only on marcus's word (Q8).
 - Query string: `?source=axiom&from=YYYY-MM-DD&to=YYYY-MM-DD` (default: source axiom, all dates).
 - Sections:
-  1. Headline: calls / right / wrong / flat / neutral / pending / unscored after close / hit %, with the
+  1. Headline: calls / right / wrong / flat / neutral / pending / unscored after close / unpriced / hit %, with the
      first and last session_date, and the lead-time buckets below (in place of 8909f17's binary "registered
      before the window opened", fable P4 m67410: a card posted at 06:00:30 is an honest pre-market call that
      fails received_at < entry_ts, so a sender doing the right thing would read 0 of M).
-     Split live vs backfilled (R8 m67429, "the honest headline"; mechanics fable N5 m67474): every headline
-     number twice, live = received_at < exit_ts, backfilled = received_at >= exit_ts. That is the portal's
-     clock on a shared column, so C2 holds inside signal-stats. Under the split, sender-label counts card /
-     backfill / no source, from the page's one read query (src/lib/signal-calls.ts) projecting
-     `meta->>'source'` as `sender_label`: the only place a source-specific key is read. A "card" row received
-     after close shows under backfilled with its label; nothing is reconciled.
+     Split (R8 m67429, "the honest headline"; mechanics fable N5 m67474; layout my A3, ACCEPTED fable m67483):
+     the headline is FOUR rows, one per lead-time bucket (before open / within 15 min after open / later in
+     window / after close), each carrying the headline numbers, with the sender-label counts card / backfill /
+     none beside each row. Two subtotals under them: live = rows 1-3 (received_at < exit_ts), backfilled = row
+     4 (received_at >= exit_ts), so live vs backfilled still reads in one glance. The bucket is the portal's
+     clock on a shared column, so C2 holds inside signal-stats. The labels come from the page's one read query
+     (src/lib/signal-calls.ts) projecting `meta->>'source'` as `sender_label`: the only place a source-specific
+     key is read, and no number is keyed on it. A "card" row received after close shows in the after-close
+     row with its label; nothing is reconciled.
      Counts beside the headline, each its own number:
-     - unscored after close (P3, fable m67446 as restated m67474): direction up/down AND received_at < exit_ts
-       AND outcome null AND exit_ts + 2 h < now.
-     - unpriced (marcus m67465 (2)): backfilled rows (received_at >= exit_ts) with no price.
-     - neutral: its own count, never in pending, unscored after close or unpriced.
-     - entry priced after close (fable D1 m67474), muted: a live row with entry_px_at >= exit_ts.
+     - neutral: counted by direction first, and in none of pending / unscored after close / unpriced (fable
+       m67483 carve-out to A2).
+     - pending / unscored after close / unpriced: a PARTITION of the up/down rows with outcome null (my A2,
+       ACCEPTED fable m67483). exit_ts + 2 h >= now -> pending; else P3 holds -> unscored after close; else ->
+       unpriced. P3 (fable m67446 as restated m67474, kept m67483) = direction up/down AND received_at <
+       exit_ts AND outcome null AND exit_ts + 2 h < now. So "unpriced" is a backfilled up/down row past the
+       grace; a backfilled row posted for a session that closed more than 2 h ago is unpriced from its first
+       minute (m67483: "which is right").
+     - P3 and the "after close" lead-time bucket key on the SAME comparison, received_at vs exit_ts (m67446
+       call 5, kept m67483): P3's received_at < exit_ts is exactly "not after close", and the live /
+       backfilled subtotals use it too.
+     - entry priced after close (fable D1 m67474), muted: a live row with entry_px_at >= exit_ts. A separate
+       count over live rows, scored or not, orthogonal to the partition above (m67483).
      Residual, accepted (m67474): a LIVE call Axiom cannot price after its three fallbacks shows as unscored
      after close, the same as an abandoned one; rare, marcus can look. Backlog N7: an explicit no-price post at
      close, if it ever happens.
@@ -345,7 +382,8 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
     "unscored after close" when exit_ts + 2 h < now, else "pending" (fable P3 m67410, the live condition
     m67446/m67474). Without it a sender could register calls and never score the losers; pending-forever is
     the one hindsight hole C3 opens, so it is shown, not pooled. Neutral calls are in neither bucket (R1
-    m67429: must not count as abandoned; section 3); a backfilled row with no price is "unpriced".
+    m67429: must not count as abandoned; section 3); a backfilled up/down row past the grace is "unpriced"
+    (the A2 partition above, m67483).
   - `LEAD_WITHIN_WINDOW_MS` = 15 min. Lead-time bucket per call, from received_at against the window (fable
     P4 m67410: before open / within 15 min after open / later in window / after close):
     before open = received_at < entry_ts; within 15 min = entry_ts <= received_at < entry_ts + 15 min;
@@ -368,10 +406,10 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
 |---|---|
 | db/migrations/0110_signal_calls.sql, 0110_rollback.sql | S1 |
 | src/lib/signal-calls-0110.test.ts | S1 |
-| src/lib/signal-instruments.ts (unit size, dead-band, unit label per symbol) | S2 |
+| src/lib/signal-instruments.ts (yahoo_ticker, unit, band in units and at 1e6, unit label per symbol) | S2 |
 | src/lib/signal-ingest.ts, signal-ingest.test.ts | S2 |
 | src/app/api/signals/ingest/[source]/route.ts | S2 |
-| docs/signal-ingest.md | S0.1 (timing values, poster rules), S0.2 (fields, Yahoo series, no outcome), S1 (bars, bar-ts fields), S2b (the rest) |
+| docs/signal-ingest.md | S0.1 (timing values, poster rules), S0.2 (fields, Yahoo series, no outcome), S1 (bars, bar-ts fields), S1.1 (meta.source enum, call 7, 6-dp repost), S2b (the rest) |
 | src/lib/signal-stats.ts (pure), signal-stats.test.ts | S3 |
 | src/lib/signal-calls.ts (the page's one read query) | S4 |
 | src/app/admin/signals/page.tsx, signals.css | S4 |
@@ -387,6 +425,9 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
   "neutral with exit_px" and "neutral with an outcome" into the scored-form row); the unique key refuses a
   second call for the same window; the rollback refuses while rows exist, then drops the table, the function
   and its ledger row.
+  Scope (fable m67446 call 6, kept m67483): S1 tests the three trigger families, the correction GUC, and the
+  CHECKs she names (direction enum, the stamps, the neutral CHECK, now signal_calls_neutral_unscored); the
+  rest of this list is on top of hers, not instead of it.
   Trigger (fable P2 m67410, D2/D3 m67474): each NEVER column refused; the fill statement (entry_px +
   entry_px_at + entry_bar_ts, one statement) passes; meta null -> value passes; each FILL-ONLY column (entry_px,
   entry_px_at, entry_bar_ts, meta) value -> other value refused, with and without an outcome; each
@@ -399,24 +440,32 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
   is not read before step 5 passes; source assertion that the compare is timingSafeEqual, as
   agent-api.test.ts:227. Body 400s: unknown field, 0 and 201 calls, 64 KB + 1, bad date, bad direction, body
   source != path source, unknown symbol (whole batch, nothing written, index + symbol in the body), a
-  `move` or `outcome` field, an `entryTs` or `exitTs` field, a neutral call with entryPx, exitPx with no
+  `move` or `outcome` field, an `entryTs` or `exitTs` field, a neutral call with entryPx, meta.source
+  'card-ish' (not in the enum), exitPx with no
   entryPx sent or stored, entryPx without entryBarTs and the reverse, exitPx without exitBarTs and the
   reverse, a bar ts before entry_ts and one at exit_ts. Window: entry_ts and exit_ts stored as sessionDate
   06:00Z and 21:00Z. Upsert: register then score; entry_px_at = the fill's now(), not sent; identical repost
-  unchanged; changed direction 409 and nothing in the batch written (the R5 rewritten day); set entry_px
-  changed 409; set entryBarTs changed 409; set meta changed 409; changed exitPx or exitBarTs on a scored row
-  409. Dead-band edges (N4, fable m67474's inputs): EURUSD 1.0850 -> 1.0855 up is 5 pips, NOT flat (a double
-  gives 4.999999999999449); 1.0845 -> 1.0850 the same; USDJPY 150.00 -> 150.05 is 5 pips, not flat, and
-  move stored as exactly 5; a true 4.96-pip move stays FLAT (not rounded to 5); XAUUSD $2.00 vs $1.99,
-  US30 20 vs 19.9; up and down signs. The G3 mismatch cases are dropped with G3 (section 4).
+  unchanged; a repost carrying a 7th decimal of the same price unchanged, not 409 (fable A1 m67483); a price
+  with 7 decimals stored at 6; changed direction 409 and nothing in the batch written (the R5 rewritten day);
+  set entry_px changed 409; set entryBarTs changed 409; set meta changed 409; changed exitPx or exitBarTs on
+  a scored row 409. Dead-band edges (N4, fable m67474's inputs, RUN on her side): EURUSD 1.0850 -> 1.0855 up
+  is 5 pips, NOT flat (a double gives 4.999999999999449); 1.0845 -> 1.0850 the same; USDJPY 150.00 -> 150.05
+  is 5 pips, not flat, and move stored as exactly 5 (a double gives 5.000000000001137); EURUSD 1.0835 ->
+  1.0840 at the band, by sign (S0.3 line, kept m67483); a true 4.96-pip move stays FLAT (not rounded to 5);
+  XAUUSD $2.00 vs $1.99, US30 20 vs 19.9; up and down signs. Each edge test uses float-literal inputs (as
+  JSON.parse gives them). signal-instruments: per row, the 1e6 band literal = band * unit * 1e6 (m67483).
+  The G3 mismatch cases are dropped with G3 (section 4).
 - S3 signal-stats.test.ts: a hand-built fixture of about 14 calls over 3 pairs with every expected number
   written out by hand in the test (headline, per pair, up/down split, avg right/wrong, the n<10 flag at 9
   and 10, cumulative series in date order, flats and neutrals outside the hit % denominator, pending outside
-  everything, live / backfilled on received_at vs exit_ts with the card / backfill / no-source label counts
-  under it, a "card" row received after close counted as backfilled). Plus: unscored after close at exit_ts +
-  2 h exactly and 1 ms either side; a backfilled up/down row past the grace is unscored-after-close NO and
-  unpriced YES; a neutral row past the grace is in neither pending, unscored after close nor unpriced; entry
-  priced after close at entry_px_at = exit_ts and 1 ms before; each lead-time bucket at both of its edges.
+  everything, the four lead-time rows with the card / backfill / none label counts beside each and the live
+  (rows 1-3) / backfilled (row 4) subtotals, a "card" row received after close shown in the after-close row).
+  Plus: unscored after close at exit_ts + 2 h exactly and 1 ms either side; a backfilled up/down row past the
+  grace is unscored-after-close NO and unpriced YES; a backfilled up/down row inside the grace is pending; a
+  neutral row past the grace is in neither pending, unscored after close nor unpriced; received_at = exit_ts -
+  1 ms is P3-eligible and live, received_at = exit_ts is neither (the shared comparison, call 5, kept m67483);
+  entry priced after close at entry_px_at = exit_ts and 1 ms before; each lead-time bucket at both of its
+  edges.
 - Every test is seen failing against a stub before the code passes (CLAUDE.md rule 7).
 - NOT RUNNABLE ON MY BOX: `npx tsx --test` was refused here on 2026-10-13 (consult thread). I will retry it per
   slice. If refused, the run goes to Leo or marcus with the exact line, and I report it as not run by me.
@@ -432,6 +481,7 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
 | S0.1 | this revision + docs/signal-ingest.md (timing values, poster rules) | doc only | marcus GO m67424 |
 | S0.2 | Axiom's answers + R1-R8 (m67429) | doc only | marcus m67435 |
 | S1 | 0110 (table + trigger) + rollback + pglite test + doc deltas D4-D8 | ~450 | fable PASS of 5abac28 + S0.2 (marcus m67429/m67435), given m67474 WITH CHANGES; 0110 re-checked before push (m67403) |
+| S1.1 | fable m67483: S0.3 KEEP items + A1-A3 | doc only | fable m67483 (marcus's GO unchanged) |
 | S2a | signal-instruments + signal-ingest lib + tests | ~400 | S1 |
 | S2b | route + docs/signal-ingest.md | ~120 | S2a |
 | S3 | signal-stats (pure) + tests | ~300 | S2a |
