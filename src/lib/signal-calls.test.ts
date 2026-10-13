@@ -4,7 +4,8 @@
  * fable's S3 notes (m67641) as marcus ruled them requirements:
  *  - move arrives as the numeric's TEXT at its stored scale ("-8.00", "15.000000", "0.000001"), never a float;
  *  - every timestamp is a Date object; session_date is the YYYY-MM-DD text;
- *  - sender_label = meta->>'source', null when meta is null;
+ *  - sender_label = meta->>'source' when it is 'card' or 'backfill', else null (null meta, off-enum value), and an
+ *    off-enum row is still returned and counted (S4.1, fable VERDICT-S4 S1 m67678, marcus GO m67677);
  *  - source and the inclusive from / to bounds filter; rows come in session_date, symbol order;
  *  - parseSignalCallsFilter: default source axiom, a bad source or an impossible date reads as the default / no bound.
  * Real Postgres, no prod: the PGlite harness of signal-ingest.test.ts (the REAL migration chain, same seeds), behind
@@ -14,6 +15,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { tally } from "./signal-stats";
 
 const MIGRATIONS = path.join(process.cwd(), "db/migrations");
 const SEED_PROVIDER = "00000000-0000-4000-8000-0000000000a1";
@@ -122,6 +124,24 @@ test("sender_label is meta->>'source', null without meta; the other columns pass
       ["US30", "neutral", null, "card"],
     ]
   );
+});
+
+test("an off-enum meta.source reads as a null senderLabel and the row is still counted", async () => {
+  // Own source, so the axiom fixture the other tests read is untouched. 0110 has no CHECK on meta, so a hand edit
+  // can store "Card"; signal-stats keys labels on senderLabel, so only 'card' / 'backfill' may pass the query.
+  await query(
+    `insert into signal_calls (source, symbol, session_date, direction, entry_ts, exit_ts, meta, received_at)
+     values ('offenum', 'EURUSD', '2026-10-09', 'neutral', '2026-10-09T06:00:00Z', '2026-10-09T21:00:00Z',
+             '{"source":"Card"}', '2026-10-09T05:59:00Z')`
+  );
+  const rows = await lib.listSignalCalls({ source: "offenum", from: null, to: null });
+  assert.deepEqual(
+    rows.map((r) => [r.symbol, r.senderLabel]),
+    [["EURUSD", null]]
+  );
+  const t = tally(rows, new Date("2026-10-13T12:00:00Z"));
+  assert.equal(t.calls, 1);
+  assert.deepEqual(t.labels, { card: 0, backfill: 0, none: 1 });
 });
 
 test("source and the inclusive date bounds filter", async () => {
