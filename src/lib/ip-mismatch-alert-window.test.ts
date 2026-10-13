@@ -4,7 +4,8 @@
  * "heartbeat" (marcus m66787: licence 522408a4 on two boxes alternated IPs on its 30-min re-validates and fired 18
  * alerts in 6h). The REAL captureConnectionIp on PGlite with the real migration chain through db.ts's global._pgPool
  * seam, as in src/lib/license-hwid.test.ts. fetch is stubbed: Telegram sends are captured, ip-api answers "fail" so geo
- * is null and the country-change alert stays out of the counts. */
+ * is null and the country-change alert stays out of the counts -- except for IP_DE / IP_US, which are seeded into
+ * geoip_cache in different countries for the '🌍 captured IP changed country' tests (same window, marcus m66798). */
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -41,7 +42,10 @@ const SEEDS: Record<string, string> = {
 const DECLARED = "192.0.2.1";
 const IP_A = "203.0.113.10";
 const IP_B = "198.51.100.20";
+const IP_DE = "203.0.113.30";
+const IP_US = "198.51.100.40";
 const MISMATCH = "🚩 declared/actual IP mismatch";
+const COUNTRY = "🌍 captured IP changed country";
 const ADMIN_URL = "https://portal.horizonhft.com/admin/connections/x";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -60,6 +64,11 @@ before(async () => {
     if (SEEDS[f]) await db.exec(SEEDS[f]);
     await db.exec(readFileSync(path.join(MIGRATIONS, f), "utf8"));
   }
+  await sql(
+    `insert into geoip_cache (ip, country, city, isp, org, resolved_at)
+     values ($1, 'Germany', 'Frankfurt', null, null, now()), ($2, 'United States', 'New York', null, null, now())`,
+    [IP_DE, IP_US]
+  );
   (globalThis as any)._pgPool = { query: sql, connect: async () => ({ query: sql, release() {} }), end: async () => {} };
   Object.assign(process.env, { NEON_DATABASE_URL: "postgres://unused", TELEMETRY_BOT_TOKEN: "test" });
   (globalThis as any).fetch = async (url: string, init?: RequestInit) => {
@@ -96,6 +105,7 @@ async function capture(licenseId: string, ip: string, source: string) {
 }
 
 const mismatchAlerts = () => sent.filter((t) => t.startsWith(MISMATCH));
+const countryAlertIps = () => sent.filter((t) => t.startsWith(COUNTRY)).map((t) => /new ip: (\S+)/.exec(t)?.[1]);
 const alertedIps = () => mismatchAlerts().map((t) => /actual ip: (\S+)/.exec(t)?.[1]);
 const captured = async (id: string) =>
   (await sql(`select ip, source from connection_ips where license_id = $1 order by captured_at, id`, [id])).rows;
@@ -166,4 +176,29 @@ test("an unchanged IP still writes nothing and alerts nothing; multiple_ips_ok s
   await capture(quiet, IP_A, "validate");
   assert.equal(mismatchAlerts().length, 0);
   assert.equal((await captured(quiet)).length, 2);
+});
+
+test("country change, two boxes in different countries: A,B,A,B,A,B validates give at most 1 country alert per new IP", async () => {
+  const id = await newRegisteredLicence(IP_DE);
+  const hops = [IP_DE, IP_US, IP_DE, IP_US, IP_DE, IP_US];
+  for (const ip of hops) await capture(id, ip, "validate");
+  // DE is the first sighting (no previous, so no country change); US alerts once, on the first DE -> US hop.
+  assert.deepEqual(countryAlertIps(), [IP_US]);
+  assert.deepEqual(alertedIps(), [IP_US]);
+  assert.equal(sent.length, 2);
+  assert.deepEqual((await captured(id)).map((r) => r.ip), hops);
+});
+
+test("country change: any source counts, and a sighting older than 24h does not suppress", async () => {
+  const id = await newRegisteredLicence(IP_DE);
+  await capture(id, IP_US, "heartbeat");
+  await capture(id, IP_DE, "heartbeat");
+  await capture(id, IP_US, "validate");
+  await capture(id, IP_DE, "verify-license");
+  // US first sighting: no previous; DE: alerts (US -> DE); then both inside the window.
+  assert.deepEqual(countryAlertIps(), [IP_DE]);
+
+  await sql(`update connection_ips set captured_at = captured_at - interval '25 hours' where license_id = $1`, [id]);
+  await capture(id, IP_US, "validate");
+  assert.deepEqual(countryAlertIps(), [IP_DE, IP_US]);
 });

@@ -569,8 +569,8 @@ interface ConnectionRow {
 /** Dedupes against the most recent capture for this license — every desktop-client call
  * hitting this on an unchanged IP would otherwise flood connection_ips for no signal. A
  * row only lands when the IP actually changed, which is also the trigger point for the
- * mismatch/country-change alerts below — with one extra 24h guard on the mismatch alert,
- * see inline. Fire-and-forget from route handlers. */
+ * mismatch/country-change alerts below — both behind one extra 24h guard, see inline.
+ * Fire-and-forget from route handlers. */
 export async function captureConnectionIp(
   licenseId: string,
   ip: string,
@@ -589,10 +589,12 @@ export async function captureConnectionIp(
   // A licence used from two boxes alternates A->B->A->B, and every hop is a "change" here.
   // /v1/hb beats every 180s per open tab, and /v1/validate is NOT one-shot either: the
   // 2.0.7+ client re-validates every 30 min (LicenseMonitor.cs:132, FOC12 audit), which is
-  // what spammed licence 522408a4 (marcus m66787). So the mismatch ALERT is windowed at one
-  // per (license, ip) per 24h for EVERY source, and a sighting from any source counts. The
-  // connection_ips row below is still written on every change, so the capture log and the
-  // admin history keep full fidelity; only the notification is suppressed.
+  // what spammed licence 522408a4 (marcus m66787). So the mismatch and country-change
+  // ALERTS are both windowed at one per (license, ip) per 24h for EVERY source, and a
+  // sighting from any source counts (marcus m66798: one read gates both). The country alert
+  // is keyed on the NEW ip only, not the (from, to) pair. The connection_ips row below is
+  // still written on every change, so the capture log and the admin history keep full
+  // fidelity; only the notifications are suppressed.
   //
   // The window is read off connection_ips itself rather than a new alert-log table
   // (marcus's ruling: cheapest form, and 0085 is already queued for coxwell). That makes
@@ -608,7 +610,7 @@ export async function captureConnectionIp(
       limit 1`,
     [licenseId, ip]
   );
-  const mismatchAlertWindowed = recent.rows.length > 0;
+  const alertsWindowed = recent.rows.length > 0;
 
   await pool.query(
     `insert into connection_ips (license_id, ip, source) values ($1, $2, $3)`,
@@ -634,7 +636,9 @@ export async function captureConnectionIp(
   const feeds = feedLabels(ownerRow?.feed_types);
   if (!registration || registration.multipleIpsOk) return;
 
-  if (registration.declaredIp && registration.declaredIp !== ip && !mismatchAlertWindowed) {
+  if (alertsWindowed) return;
+
+  if (registration.declaredIp && registration.declaredIp !== ip) {
     await notifyIpMismatch({
       client,
       serverName: registration.serverName,
