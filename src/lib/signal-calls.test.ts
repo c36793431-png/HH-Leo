@@ -6,6 +6,8 @@
  *  - every timestamp is a Date object; session_date is the YYYY-MM-DD text;
  *  - sender_label = meta->>'source' when it is 'card' or 'backfill', else null (null meta, off-enum value), and an
  *    off-enum row is still returned and counted (S4.1, fable VERDICT-S4 S1 m67678, marcus GO m67677);
+ *  - entry_px / exit_px arrive as the numeric's text too, entry_bar_ts / exit_bar_ts as Dates, null when unset (S5,
+ *    marcus GO m67677: the price chart plots them);
  *  - source and the inclusive from / to bounds filter; rows come in session_date, symbol order;
  *  - parseSignalCallsFilter: default source axiom, a bad source or an impossible date reads as the default / no bound.
  * Real Postgres, no prod: the PGlite harness of signal-ingest.test.ts (the REAL migration chain, same seeds), behind
@@ -124,6 +126,20 @@ test("sender_label is meta->>'source', null without meta; the other columns pass
       ["US30", "neutral", null, "card"],
     ]
   );
+});
+
+test("prices are the numeric's text and bar starts are Dates (S5's price chart); all null on a neutral row", async () => {
+  const rows = await lib.listSignalCalls(ALL);
+  assert.deepEqual(
+    rows.map((r) => [r.symbol, r.entryPx, r.exitPx, r.entryBarTs?.toISOString() ?? null, r.exitBarTs?.toISOString() ?? null]),
+    [
+      ["EURUSD", "1.085000", "1.085800", "2026-10-06T06:00:00.000Z", "2026-10-06T20:00:00.000Z"],
+      ["USDJPY", "150.000000", "150.150000", "2026-10-06T06:00:00.000Z", "2026-10-06T20:00:00.000Z"],
+      ["XAUUSD", "2650.000000", "2650.000001", "2026-10-07T06:00:00.000Z", "2026-10-07T20:00:00.000Z"],
+      ["US30", null, null, null, null],
+    ]
+  );
+  for (const r of rows) assert.ok(r.entryBarTs === null || r.entryBarTs instanceof Date);
 });
 
 test("an off-enum meta.source reads as a null senderLabel and the row is still counted", async () => {
