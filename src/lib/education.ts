@@ -152,7 +152,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
           { text: "Newer MT5 builds no longer show the server address in the Journal tab. Windows still shows it." },
           {
             label: "Option 1, Command Prompt (fastest)",
-            text: "With MT5 open and logged in, open Command Prompt and paste this as one line:",
+            text: "With MT5 open and logged in, press Windows + R, type cmd, press Enter (Command Prompt, not PowerShell), then paste this as one line:",
           },
           // Typed at the prompt, so a single %a (a .bat file would need %%a).
           { code: "for /f \"tokens=2\" %a in ('tasklist ^| findstr terminal64') do netstat -ano | findstr %a" },
