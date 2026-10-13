@@ -2,7 +2,7 @@ import { listDownloads } from "@/lib/downloads";
 import { signDownloadToken } from "@/lib/download-token";
 import { auth } from "@/lib/auth";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { deleteDownloadAction, updateDownloadAction } from "./actions";
+import { deleteDownloadAction, publishDownloadAction, unpublishDownloadAction, updateDownloadAction } from "./actions";
 import { ActionButton } from "@/components/admin/action-button";
 import { EditDownloadForm } from "@/components/admin/edit-download-form";
 import { UploadBuildForm } from "@/components/admin/upload-build-form";
@@ -58,13 +58,25 @@ export default async function AdminDownloadsPage() {
               {downloads.map((d) => {
                 const { token, expires } = signDownloadToken(adminUserId, d.id);
                 const previewUrl = `/api/download/file?id=${d.id}&expires=${expires}&token=${token}`;
+                const draft = d.publishedAt === null;
                 return (
                   <tr key={d.id}>
-                    <td className="py-2 pr-4 text-zinc-200">v{d.version}</td>
+                    <td className="py-2 pr-4 text-zinc-200">
+                      v{d.version}
+                      {draft && (
+                        <span className="ml-2 rounded border border-amber-500/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+                          Draft
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2 pr-4 text-zinc-400">{d.platform}</td>
-                    <td className="py-2 pr-4 text-zinc-400">{formatBytes(d.sizeBytes)}</td>
+                    <td className="py-2 pr-4 text-zinc-400">
+                      {formatBytes(d.sizeBytes)}
+                      {/* Exact bytes and the full sha on a draft: what the publish GO is compared against. */}
+                      {draft && <span className="block font-mono text-xs text-zinc-500">{d.sizeBytes} B</span>}
+                    </td>
                     <td className="py-2 pr-4 font-mono text-xs text-zinc-500" title={d.sha256}>
-                      {d.sha256.slice(0, 12)}…
+                      {draft ? <span className="break-all text-amber-200">{d.sha256}</span> : <>{d.sha256.slice(0, 12)}…</>}
                     </td>
                     <td className="py-2 pr-4 text-zinc-400">
                       {formatAbsoluteUtc(d.uploadedAt)} <span className="text-zinc-600">({formatRelative(d.uploadedAt)})</span>
@@ -85,6 +97,25 @@ export default async function AdminDownloadsPage() {
                             </a>
                           </div>
                         </details>
+                        {draft ? (
+                          <ActionButton
+                            action={publishDownloadAction}
+                            hiddenFields={{ id: d.id }}
+                            label="Publish"
+                            successMessage={`v${d.version} published`}
+                            confirmMessage={`Publish v${d.version} (${d.platform}) to customers?\n\nsha256 ${d.sha256}\nsize ${d.sizeBytes} B\n\nCompare both with the build log before you click OK.`}
+                            className="rounded border border-amber-500/60 px-2 py-1 text-xs text-amber-200 hover:border-emerald-500 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          />
+                        ) : (
+                          <ActionButton
+                            action={unpublishDownloadAction}
+                            hiddenFields={{ id: d.id }}
+                            label="Unpublish"
+                            successMessage={`v${d.version} unpublished`}
+                            confirmMessage={`Unpublish v${d.version} (${d.platform})? Customers stop seeing it at once; the previous published version becomes the latest. The file is kept.`}
+                            className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-amber-500 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          />
+                        )}
                         <EditDownloadForm
                           action={updateDownloadAction}
                           id={d.id}

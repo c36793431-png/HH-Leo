@@ -25,12 +25,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "link expired" }, { status: 403 });
   }
 
-  const paid = (await isPaidUser(session.user.id).catch(() => false)) || isAdminUser(session.user);
+  const admin = isAdminUser(session.user);
+  const paid = admin || (await isPaidUser(session.user.id).catch(() => false));
   if (!paid) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const download = await getDownloadById(id);
+  // A draft is downloadable by an admin only (the Preview link in /admin/downloads), so it can be
+  // test-installed before it is published.
+  const download = await getDownloadById(id, { includeDrafts: admin });
   if (!download) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }

@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { del } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { finalizeDownloadUpload, PLATFORMS, type Platform } from "@/lib/downloads";
+import { finalizeDownloadUpload, PLATFORMS, SHA256_HEX, type Platform } from "@/lib/downloads";
 import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 
 export async function POST(req: NextRequest) {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     typeof version !== "string" ||
     !version ||
     typeof sha256 !== "string" ||
-    sha256.length !== 64 ||
+    !SHA256_HEX.test(sha256) ||
     typeof sizeBytes !== "number" ||
     sizeBytes <= 0
   ) {
