@@ -79,7 +79,7 @@ export async function revokeLicenseFromListAction(
   });
 }
 
-/** "Reset PC": frees the licence's one-PC binding so the next PC to validate binds (0099). activated_at is kept. */
+/** "Reset PC": frees the licence's one-PC binding, hid and hid2, so the next PC to validate binds (0099, 0111). activated_at is kept. */
 export async function resetLicenseHardwareAction(
   _prevState: ActionResult | null,
   formData: FormData
@@ -88,9 +88,15 @@ export async function resetLicenseHardwareAction(
     const adminUserId = await requireAdminUsersPanel();
     const licenseId = formData.get("licenseId") as string;
     const ownerId = await getLicenseOwner(licenseId);
-    const previousHardwareId = await resetLicenseHardwareId(licenseId);
-    if (previousHardwareId === null) throw new Error("License is not bound to a PC");
-    await logAdminAction(adminUserId, "admin_licenses_reset_hwid", ownerId, { licenseId, previousHardwareId }, licenseId);
+    const previous = await resetLicenseHardwareId(licenseId);
+    if (previous === null) throw new Error("License is not bound to a PC");
+    await logAdminAction(
+      adminUserId,
+      "admin_licenses_reset_hwid",
+      ownerId,
+      { licenseId, previousHardwareId: previous.hardwareId, previousHardwareId2: previous.hardwareId2 },
+      licenseId
+    );
     revalidateLicenses(ownerId);
   });
 }

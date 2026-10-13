@@ -16,9 +16,30 @@ m63422; Fable's review m63552 (PASS WITH STRIKES); build GO m63554. Migration `0
   waits on the row lock, re-reads the winner's binding and keeps it. That is correct by Postgres semantics but NOT
   measured: the tests run on one PGlite session (Fable m63564, delta 5).
 - `/v1/hb` never binds: its `hid` stays telemetry in `client_heartbeats`.
-- `/admin/licenses`: **Reset PC** on any bound row (confirm step). Clears `hardware_id` and `hardware_bound_at`,
-  keeps `activated_at` and the seen rows, writes `admin_actions` `admin_licenses_reset_hwid` with
-  `previousHardwareId`. Refuses on an unbound licence and writes nothing.
+- `/admin/licenses`: **Reset PC** on any bound row (confirm step). Clears `hardware_id` and `hardware_bound_at`
+  (and, since 0111, `hardware_id2` and `hardware_id2_bound_at`), keeps `activated_at` and the seen rows, writes
+  `admin_actions` `admin_licenses_reset_hwid` with `previousHardwareId` and `previousHardwareId2`. Refuses on a
+  licence with neither bound and writes nothing.
+
+## 2.0.9: the second identity (`0111_license_hwid2.sql`)
+
+HWID wire contract v1 as amended by Fable m67568/m67569 (S2, S3, C1-C5). Enforcement is still `HWID_ENFORCE`, OFF.
+
+- `/v1/validate` accepts two optional fields. `hardwareid2` (hid2) counts only if it matches `^[0-9A-F]{32}$`.
+  `hwdegraded` counts only if it is comma-separated tokens from `cpu,disk,mac,guid,uuid`, at most 32 chars. Any other
+  value is treated as absent, never a 400.
+- **One** bound hid2 per licence (`licenses.hardware_id2`), set once, in the same statement as the hid. It binds only
+  while the licence has no bound hid, or the request's hid IS the bound one (S2). The mirror rule also holds: the hid
+  binds only while no hid2 is bound, or the request carries the bound one.
+- A **fallback hid** is one where `hwdegraded` names cpu, disk or mac, or the hid starts `HWID-ERROR-`. It never binds
+  and is never refused (S3).
+- The match runs in this order: both sides have a hid2, so the hid2 alone decides (3.3a). Otherwise a fallback hid
+  passes. Otherwise the hid decides, exactly as for 2.0.8.
+- `license_hwid_seen.last_hwid2` / `last_hwdegraded` record what the latest validate from that (licence, hwid)
+  carried (C4). This is the read for the separate enforcement-ON decision.
+- `/v1/hb` is unchanged: `hid2`/`hdg` land in `client_heartbeats.raw` only (C3).
+- The pre-flip rebind SQL below predates 0111 and moves the hid only. For a 2.0.9 client with a bound hid2, the hid2
+  still decides.
 
 ## The flag: `HWID_ENFORCE` (env var, OFF at ship)
 

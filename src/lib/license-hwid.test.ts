@@ -260,7 +260,7 @@ test("8 (C6): Reset PC clears the binding, keeps activated_at and the seen rows,
   assert.equal(audit.length, 1);
   assert.equal(audit[0].admin_user_id, ADMIN);
   assert.equal(audit[0].target_user_id, l.userId);
-  assert.deepEqual(audit[0].details_json, { licenseId: l.id, previousHardwareId: PC_A });
+  assert.deepEqual(audit[0].details_json, { licenseId: l.id, previousHardwareId: PC_A, previousHardwareId2: null });
 
   process.env.HWID_ENFORCE = "1";
   const r = await validate(l.key, PC_B);
@@ -539,4 +539,250 @@ test("pre-flip rebind SQL in docs/licence-pc-lock.md: preview lists exactly the 
     (await sql(preview)).rows.filter((r) => mine.has(r.license_id)).map((r) => [r.license_id, r.dominant, r.seen_before_binding, r.apply_target]),
     [[k7.id, PC_A, true, PC_B]]
   );
+});
+
+/* 2.0.9 B2: hid2 + hwdegraded (0111; HWID wire contract v1 as amended by Fable m67568/m67569: S2 binding model,
+ * S3 fallback never refused, C1-C5). A 2.0.9 client sends hardwareid2/hwdegraded only when it has them: ABSENT = the
+ * key is not in the body. */
+const HID2_A = "A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2";
+const HID2_B = "B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2";
+const FALLBACK = "FB00FB00FB00FB00FB00FB00FB00FB00"; // a hid computed with cpu/disk/mac missing
+
+async function validate9(key: string, hwid: string, extra: { hid2?: unknown; hdg?: unknown } = {}, version = "2.0.9") {
+  const route = await import("../app/v1/validate/route");
+  const body: Record<string, unknown> = { licensekey: key, hardwareid: hwid, currentversion: version };
+  if ("hid2" in extra) body.hardwareid2 = extra.hid2;
+  if ("hdg" in extra) body.hwdegraded = extra.hdg;
+  const res = await route.POST(
+    new Request("https://portal.horizonhft.com/v1/validate", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.9" },
+      body: JSON.stringify(body),
+    }) as any
+  );
+  const text = await res.text();
+  return { status: res.status, text, body: JSON.parse(text) as any };
+}
+
+async function bindings(id: string) {
+  return (
+    await sql(`select hardware_id, hardware_id2, hardware_bound_at, hardware_id2_bound_at, activated_at from licenses where id = $1`, [id])
+  ).rows[0];
+}
+
+async function seen2(id: string) {
+  return (await sql(`select hwid, last_hwid2, last_hwdegraded from license_hwid_seen where license_id = $1 order by hwid`, [id])).rows;
+}
+
+test("22 (Fable S2 pin): a sharer's 2.0.9 never binds hid2; the owner's upgrade does; ON refuses the sharer, not the owner", async () => {
+  const l = await newLicence();
+  await validate(l.key, PC_A, "2.0.8");
+  const b = await validate9(l.key, PC_B, { hid2: HID2_B });
+  assert.equal(b.body.data.status, "active");
+  assert.equal((await bindings(l.id)).hardware_id2, null);
+  const a = await validate9(l.key, PC_A, { hid2: HID2_A });
+  assert.equal(a.body.data.status, "active");
+  const row = await bindings(l.id);
+  assert.equal(row.hardware_id, PC_A);
+  assert.equal(row.hardware_id2, HID2_A);
+  assert.ok(row.hardware_id2_bound_at instanceof Date);
+  process.env.HWID_ENFORCE = "1";
+  assert.equal((await validate9(l.key, PC_B, { hid2: HID2_B })).body.data.status, "hwid_mismatch");
+  assert.equal((await validate9(l.key, PC_A, { hid2: HID2_A })).body.data.status, "active");
+  const rows = await seen2(l.id);
+  assert.deepEqual(rows.find((x) => x.hwid === PC_A), { hwid: PC_A, last_hwid2: HID2_A, last_hwdegraded: null });
+  assert.deepEqual(rows.find((x) => x.hwid === PC_B), { hwid: PC_B, last_hwid2: HID2_B, last_hwdegraded: null });
+});
+
+test("23 (3.3a, N3): both sides have a hid2 -> it alone decides; a drifted hid on the owner's PC passes and is recorded", async () => {
+  const l = await newLicence();
+  await validate9(l.key, PC_A, { hid2: HID2_A });
+  const before = await bindings(l.id);
+  assert.equal(before.hardware_id, PC_A);
+  assert.equal(before.hardware_id2, HID2_A);
+  process.env.HWID_ENFORCE = "1";
+  assert.equal((await validate9(l.key, PC_C, { hid2: HID2_A })).body.data.status, "active");
+  assert.equal((await validate9(l.key, PC_A, { hid2: HID2_B })).body.data.status, "hwid_mismatch");
+  assert.deepEqual(await bindings(l.id), before);
+  assert.deepEqual((await seen2(l.id)).map((x) => x.hwid).sort(), [PC_A, PC_C].sort());
+});
+
+test("24 (Fable S3): a fallback hid (hwdegraded names cpu/disk/mac, or HWID-ERROR-) never binds and is never refused", async () => {
+  const l = await newLicence();
+  process.env.HWID_ENFORCE = "1";
+  for (const hdg of ["cpu", "disk", "mac", "guid,mac", "cpu,disk,mac,guid,uuid"]) {
+    assert.equal((await validate9(l.key, FALLBACK, { hdg })).body.data.status, "active", hdg);
+  }
+  assert.equal((await bindings(l.id)).hardware_id, null);
+  assert.equal((await bindings(l.id)).activated_at, null);
+  await validate9(l.key, PC_A, { hid2: HID2_A });
+  const cases: [string, string | undefined][] = [
+    [FALLBACK, "cpu"],
+    [FALLBACK, "uuid,disk"],
+    ["HWID-ERROR-PC1", "cpu,disk,mac"],
+    ["HWID-ERROR-PC1", undefined],
+  ];
+  for (const [hwid, hdg] of cases) {
+    const r = await validate9(l.key, hwid, hdg === undefined ? {} : { hdg });
+    assert.equal(r.body.data.status, "active", `${hwid} ${hdg}`);
+    assert.deepEqual(Object.keys(r.body.data), ACTIVE_KEYS);
+  }
+  const row = await bindings(l.id);
+  assert.equal(row.hardware_id, PC_A);
+  assert.equal(row.hardware_id2, HID2_A);
+  assert.deepEqual((await seen2(l.id)).find((x) => x.hwid === FALLBACK), { hwid: FALLBACK, last_hwid2: null, last_hwdegraded: "uuid,disk" });
+  // guid/uuid alone do not make the hid a fallback: the hid is clean and 3.3b refuses another PC's.
+  assert.equal((await validate9(l.key, PC_B, { hdg: "guid" })).body.data.status, "hwid_mismatch");
+  assert.equal((await validate9(l.key, PC_B, { hdg: "uuid,guid" })).body.data.status, "hwid_mismatch");
+});
+
+test("25 (Fable S3 + 3.3a): a fallback hid that carries a hid2 is still decided by the bound hid2", async () => {
+  const l = await newLicence();
+  await validate9(l.key, PC_A, { hid2: HID2_A });
+  process.env.HWID_ENFORCE = "1";
+  assert.equal((await validate9(l.key, FALLBACK, { hid2: HID2_B, hdg: "cpu" })).body.data.status, "hwid_mismatch");
+  assert.equal((await validate9(l.key, FALLBACK, { hid2: HID2_A, hdg: "cpu" })).body.data.status, "active");
+  assert.equal((await validate9(l.key, "HWID-ERROR-PC1", { hid2: HID2_B, hdg: "cpu,disk,mac" })).body.data.status, "hwid_mismatch");
+});
+
+test("26 (Fable C1): a bad hardwareid2 or hwdegraded is ABSENT, never a 400; a malformed hwdegraded does not make a fallback", async () => {
+  const { parseHardwareId2, parseHwDegraded } = await import("./license-hwid");
+  const badHid2: unknown[] = [HID2_A.toLowerCase(), HID2_A.slice(0, 31), `${HID2_A}0`, ` ${HID2_A}`, "G".repeat(32), "", 7, null, true, [HID2_A], { a: 1 }];
+  for (const bad of badHid2) assert.equal(parseHardwareId2(bad), null, JSON.stringify(bad));
+  assert.equal(parseHardwareId2(HID2_A), HID2_A);
+  const badHdg: unknown[] = ["", "CPU", "cpu,", ",cpu", "cpu,,disk", "cpu disk", "cpu;disk", "cpu ", "gpu", 1, null, ["cpu"]];
+  for (const bad of badHdg) assert.equal(parseHwDegraded(bad), null, JSON.stringify(bad));
+  for (const ok of ["cpu", "uuid", "cpu,disk,mac,guid,uuid", "uuid,cpu"]) assert.equal(parseHwDegraded(ok), ok);
+  assert.equal(parseHwDegraded("cpu,disk,mac,guid,uuid,cpu,uuid"), "cpu,disk,mac,guid,uuid,cpu,uuid"); // 31 chars
+  assert.equal(parseHwDegraded("cpu,disk,mac,guid,uuid,disk,mac"), "cpu,disk,mac,guid,uuid,disk,mac"); // 31 chars
+  assert.equal(parseHwDegraded("cpu,disk,mac,guid,uuid,guid,uuid"), "cpu,disk,mac,guid,uuid,guid,uuid"); // 32 chars
+  assert.equal(parseHwDegraded("cpu,disk,mac,guid,uuid,disk,disk"), "cpu,disk,mac,guid,uuid,disk,disk"); // 32 chars
+  assert.equal(parseHwDegraded("disk,disk,disk,disk,disk,disk,cpu"), null); // 33 chars, every token valid
+
+  const l = await newLicence();
+  const r = await validate9(l.key, PC_A, { hid2: HID2_A.toLowerCase(), hdg: "CPU" });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.data.status, "active");
+  const row = await bindings(l.id);
+  assert.equal(row.hardware_id, PC_A);
+  assert.equal(row.hardware_id2, null);
+  assert.deepEqual(await seen2(l.id), [{ hwid: PC_A, last_hwid2: null, last_hwdegraded: null }]);
+  for (const hid2 of [123, null, { x: 1 }, "x".repeat(10000)]) {
+    assert.equal((await validate9(l.key, PC_A, { hid2 })).status, 200, JSON.stringify(hid2).slice(0, 20));
+  }
+});
+
+test("27 (3.3b): a request without hid2 matches on the hid even when a hid2 is bound (2.0.8 and guid/uuid-failed 2.0.9)", async () => {
+  const l = await newLicence();
+  await validate9(l.key, PC_A, { hid2: HID2_A });
+  process.env.HWID_ENFORCE = "1";
+  assert.equal((await validate(l.key, PC_A, "2.0.8")).body.data.status, "active");
+  assert.equal((await validate9(l.key, PC_A, { hdg: "uuid" })).body.data.status, "active");
+  assert.equal((await validate(l.key, PC_B, "2.0.8")).body.data.status, "hwid_mismatch");
+  assert.equal((await validate9(l.key, PC_B, { hdg: "guid" })).body.data.status, "hwid_mismatch");
+  const before = await bindings(l.id);
+  await validate9(l.key, PC_A, { hid2: HID2_A });
+  assert.deepEqual(await bindings(l.id), before);
+});
+
+test("28 (mirror of S2): with only a hid2 bound, a PC carrying another hid2, or none, can't take the hid; the owner's PC does", async () => {
+  const l = await newLicence();
+  await validate9(l.key, FALLBACK, { hid2: HID2_A, hdg: "disk" });
+  let row = await bindings(l.id);
+  assert.equal(row.hardware_id, null);
+  assert.equal(row.hardware_id2, HID2_A);
+  assert.ok(row.activated_at instanceof Date);
+  await validate9(l.key, PC_B, { hid2: HID2_B });
+  await validate(l.key, PC_C, "2.0.8");
+  assert.equal((await bindings(l.id)).hardware_id, null);
+  process.env.HWID_ENFORCE = "1";
+  assert.equal((await validate9(l.key, PC_B, { hid2: HID2_B })).body.data.status, "hwid_mismatch");
+  assert.equal((await validate9(l.key, PC_A, { hid2: HID2_A })).body.data.status, "active");
+  row = await bindings(l.id);
+  assert.equal(row.hardware_id, PC_A);
+  assert.equal(row.hardware_id2, HID2_A);
+});
+
+test("29 (S2): Reset PC clears hid and hid2 with both stamps, audits both; a hid2-only binding is resettable", async () => {
+  const l = await newLicence();
+  await validate9(l.key, PC_A, { hid2: HID2_A });
+  assert.deepEqual(await resetForm(l.id), { ok: true });
+  const row = await bindings(l.id);
+  assert.deepEqual([row.hardware_id, row.hardware_id2, row.hardware_bound_at, row.hardware_id2_bound_at], [null, null, null, null]);
+  assert.ok(row.activated_at instanceof Date);
+  assert.deepEqual((await adminRows(l.id))[0].details_json, { licenseId: l.id, previousHardwareId: PC_A, previousHardwareId2: HID2_A });
+  process.env.HWID_ENFORCE = "1";
+  assert.equal((await validate9(l.key, PC_B, { hid2: HID2_B })).body.data.status, "active");
+  assert.equal((await bindings(l.id)).hardware_id2, HID2_B);
+
+  const h = await newLicence();
+  await validate9(h.key, FALLBACK, { hid2: HID2_A, hdg: "cpu" });
+  assert.deepEqual(await resetForm(h.id), { ok: true });
+  assert.equal((await bindings(h.id)).hardware_id2, null);
+  assert.deepEqual((await adminRows(h.id))[0].details_json, { licenseId: h.id, previousHardwareId: null, previousHardwareId2: HID2_A });
+  assert.deepEqual(await resetForm(h.id), { ok: false, error: "License is not bound to a PC" });
+});
+
+test("30 (Fable C2): two first 2.0.9 validates from different PCs: one PC wins hid AND hid2, the other is refused", async () => {
+  const l = await newLicence();
+  process.env.HWID_ENFORCE = "1";
+  const [a, b] = await Promise.all([validate9(l.key, PC_A, { hid2: HID2_A }), validate9(l.key, PC_B, { hid2: HID2_B })]);
+  assert.deepEqual([a.body.data.status, b.body.data.status].sort(), ["active", "hwid_mismatch"]);
+  const row = await bindings(l.id);
+  assert.deepEqual([row.hardware_id, row.hardware_id2], a.body.data.status === "active" ? [PC_A, HID2_A] : [PC_B, HID2_B]);
+  assert.equal((await seen2(l.id)).length, 2);
+});
+
+test("31 (Fable C5): a 2.0.9 mismatch is test 15's shape; a 2.0.9 active echoes nothing of hid2/hwdegraded", async () => {
+  const { HWID_MISMATCH_MESSAGE } = await import("./license-hwid");
+  const l = await newLicence();
+  const a = await validate9(l.key, PC_A, { hid2: HID2_A, hdg: "uuid" });
+  assert.deepEqual(Object.keys(a.body.data), ACTIVE_KEYS);
+  assert.ok(sigOk(a.body));
+  process.env.HWID_ENFORCE = "1";
+  const r = await validate9(l.key, PC_B, { hid2: HID2_B });
+  assert.equal(r.status, 200);
+  assert.deepEqual(Object.keys(r.body.data), [...ACTIVE_KEYS, "message"]);
+  assert.equal(r.body.data.status, "hwid_mismatch");
+  assert.equal(r.body.data.message, HWID_MISMATCH_MESSAGE);
+  assert.equal(r.body.data.version, "2.0.9");
+  assert.match(r.text, /^[\x20-\x7e]+$/);
+  assert.ok(sigOk(r.body));
+});
+
+test("32 (C2): a database error in the seen write rolls back a hid2 bind too, and answers 500", async () => {
+  const l = await newLicence();
+  const r = await withSeenWriteFailing(() => validate9(l.key, PC_A, { hid2: HID2_A }));
+  assert.equal(r.status, 500);
+  const row = await bindings(l.id);
+  assert.deepEqual([row.hardware_id, row.hardware_id2, row.activated_at], [null, null, null]);
+});
+
+test("33: 0111 is additive, rolls back cleanly and re-applies (PG 17.5); its CHECK refuses a malformed hid2", async () => {
+  const fresh: any = new PGlite();
+  await chain(fresh, "0111"); // every migration before 0111, so 0110_signal_calls is in the ledger first, as on prod
+  const cols = async (t: string) =>
+    (await fresh.query(`select column_name from information_schema.columns where table_name = $1 order by column_name`, [t])).rows.map(
+      (r: any) => r.column_name
+    );
+  const before = { l: await cols("licenses"), s: await cols("license_hwid_seen") };
+  const forward = readFileSync(path.join(MIGRATIONS, "0111_license_hwid2.sql"), "utf8");
+  const rollback = readFileSync(path.join(MIGRATIONS, "0111_rollback.sql"), "utf8");
+  await fresh.exec(forward);
+  assert.deepEqual((await cols("licenses")).filter((c: string) => !before.l.includes(c)), ["hardware_id2", "hardware_id2_bound_at"]);
+  assert.deepEqual((await cols("license_hwid_seen")).filter((c: string) => !before.s.includes(c)), ["last_hwdegraded", "last_hwid2"]);
+  await fresh.exec(forward);
+  const u = await fresh.query(`insert into users (email) values ('hwid2-0111@example.invalid') returning id`);
+  await assert.rejects(
+    fresh.query(`insert into licenses (user_id, license_key, expires_at, hardware_id2) values ($1, 'K-0111', now(), $2)`, [u.rows[0].id, HID2_A.toLowerCase()]),
+    /check constraint/
+  );
+  await fresh.query(`insert into licenses (user_id, license_key, expires_at, hardware_id2) values ($1, 'K-0111', now(), $2)`, [u.rows[0].id, HID2_A]);
+  await fresh.exec(rollback);
+  assert.deepEqual(await cols("licenses"), before.l);
+  assert.deepEqual(await cols("license_hwid_seen"), before.s);
+  assert.equal((await fresh.query(`select count(*)::int as n from schema_migrations where version = '0111'`)).rows[0].n, 0);
+  await fresh.exec(forward);
+  assert.equal((await fresh.query(`select count(*)::int as n from schema_migrations where version = '0111'`)).rows[0].n, 1);
+  await fresh.close();
 });
