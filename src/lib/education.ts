@@ -23,11 +23,21 @@ export const EDUCATION_CATEGORIES: EducationCategory[] = [
 
 export type EducationBlockType = "info" | "setting" | "warning" | "blocked";
 
+/** One step of a block, shown in order after the body: a bold label, a sentence, and/or a command in a monospace box
+ * (marcus m66405: the broker-IP tip's Command Prompt line). */
+export type EducationPart = {
+  label?: string;
+  text?: string;
+  code?: string;
+};
+
 export type EducationBlock = {
   type: EducationBlockType;
   heading: string;
   body: string;
   items?: string[];
+  /** Members-only for now: education-signed-out.ts copies block fields by name and does not copy this one. */
+  parts?: EducationPart[];
 };
 
 export type EducationLesson = {
@@ -133,6 +143,24 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
         type: "setting",
         heading: "MT4 Support",
         body: "MT4 is supported as a secondary path for brokers who haven't migrated to MT5.",
+      },
+      {
+        type: "info",
+        heading: "Find your broker's server IP",
+        body: "Newer MT5 builds no longer show the server address in the Journal tab. Windows still shows it.",
+        parts: [
+          {
+            label: "Option 1, Command Prompt (fastest)",
+            text: "With MT5 open and logged in, open Command Prompt and paste this as one line:",
+          },
+          // Typed at the prompt, so a single %a (a .bat file would need %%a).
+          { code: "for /f \"tokens=2\" %a in ('tasklist ^| findstr terminal64') do netstat -ano | findstr %a" },
+          { text: "The line with ESTABLISHED and :443 is your broker's server. The IP is the part before :443." },
+          {
+            label: "Option 2, Resource Monitor",
+            text: "Press Windows + R, type resmon, press Enter. Open Network, then TCP Connections, tick terminal64.exe. The Remote Address on port 443 is the broker's server IP; Latency (ms) shows your ping.",
+          },
+        ],
       },
       {
         type: "warning",
