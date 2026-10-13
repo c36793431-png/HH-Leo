@@ -8,7 +8,9 @@ import {
   HWID_MISMATCH_MESSAGE,
   MAX_HWID_LENGTH,
   hwidEnforced,
-  isForeignHardwareId,
+  isForeignPc,
+  parseHardwareId2,
+  parseHwDegraded,
   recordValidateHardwareId,
 } from "@/lib/license-hwid";
 
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest) {
   const httpErr = httpsViolation(req);
   if (httpErr) return httpErr;
 
-  let body: { licensekey?: unknown; hardwareid?: unknown; currentversion?: unknown };
+  let body: { licensekey?: unknown; hardwareid?: unknown; currentversion?: unknown; hardwareid2?: unknown; hwdegraded?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -47,6 +49,8 @@ export async function POST(req: NextRequest) {
   }
   // currentversion is informational for now; captured but not gated on.
   const currentVersion = typeof body.currentversion === "string" ? body.currentversion : null;
+  // 2.0.9+ only, both optional. A bad shape reads as absent, never a 400 (Fable C1: a 400 blocks the client's startup).
+  const identity = { hwid: hardwareId, hwid2: parseHardwareId2(body.hardwareid2), hwdegraded: parseHwDegraded(body.hwdegraded) };
 
   const ip = clientIp(req);
   if (!(await checkValidateRateLimit(licenseKey, ip))) {
@@ -64,21 +68,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // One licence, one PC (0099, src/lib/license-hwid.ts). Active licences only: an expired or
-  // revoked key never binds and writes no row. Every active validate binds first-seen (clean
-  // values only) and records the (licence, hwid) pair; it is refused only under HWID_ENFORCE,
-  // which is off at ship. A database error here is a 500, never a mismatch, so an outage can't
-  // look like key sharing.
+  // One licence, one PC (0099 + 0110, src/lib/license-hwid.ts). Active licences only: an expired
+  // or revoked key never binds and writes no row. Every active validate binds first-seen hid and
+  // hid2 (rules in recordValidateHardwareId) and records the (licence, hwid) pair; it is refused
+  // only under HWID_ENFORCE, which is off at ship. A database error here is a 500, never a
+  // mismatch, so an outage can't look like key sharing.
   let foreignPc = false;
   if (result.status === "active" && result.licenseId) {
     try {
-      const boundHwid = await recordValidateHardwareId(
+      const bound = await recordValidateHardwareId(
         result.licenseId,
-        hardwareId,
+        identity,
         currentVersion ? currentVersion.slice(0, 64) : null,
         ip === "unknown" ? null : ip
       );
-      foreignPc = isForeignHardwareId(boundHwid, hardwareId);
+      foreignPc = isForeignPc(bound, identity);
     } catch (err) {
       console.error("[v1/validate] hwid record failed", err);
       return NextResponse.json({ error: "internal error" }, { status: 500 });
