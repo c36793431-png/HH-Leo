@@ -147,8 +147,9 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
       {
         type: "info",
         heading: "Find your broker's server IP",
-        body: "Newer MT5 builds no longer show the server address in the Journal tab. Windows still shows it.",
+        body: "(MT4: replace terminal64 with terminal.)",
         parts: [
+          { text: "Newer MT5 builds no longer show the server address in the Journal tab. Windows still shows it." },
           {
             label: "Option 1, Command Prompt (fastest)",
             text: "With MT5 open and logged in, open Command Prompt and paste this as one line:",
@@ -156,10 +157,12 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
           // Typed at the prompt, so a single %a (a .bat file would need %%a).
           { code: "for /f \"tokens=2\" %a in ('tasklist ^| findstr terminal64') do netstat -ano | findstr %a" },
           { text: "The line with ESTABLISHED and :443 is your broker's server. The IP is the part before :443." },
+          { text: "MT5 can show several connections (MQL5 community, news, updates). Your broker is the one that stays connected while you're logged in; the others come and go." },
           {
             label: "Option 2, Resource Monitor",
             text: "Press Windows + R, type resmon, press Enter. Open Network, then TCP Connections, tick terminal64.exe. The Remote Address on port 443 is the broker's server IP; Latency (ms) shows your ping.",
           },
+          { text: "MT5 can show several connections (MQL5 community, news, updates). Your broker is the one that stays connected while you're logged in; the others come and go." },
         ],
       },
       {
