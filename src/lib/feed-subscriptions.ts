@@ -1790,6 +1790,16 @@ export class DuplicateTierGrantError extends Error {
   }
 }
 
+/** Thrown by assignFeedTierSubscription when the (server, tier) row is live and was granted by a
+ * Horizon Complete bundle that is still active (Fable 5a S2): re-granting it here would strip the
+ * bundle's stamp, and End bundle could then no longer reach it. */
+export class BundleOwnedTierGrantError extends Error {
+  constructor(tierName: string) {
+    super(`${tierName} is live as part of this client's Horizon Complete bundle -- manage it from the bundle, not here`);
+    this.name = "BundleOwnedTierGrantError";
+  }
+}
+
 /** Thrown by assignFeedTierSubscription when the target subscriber holds no active, unexpired
  * licence. A feed grant is bound to a licence (feed_subscriptions.license_id, NOT NULL since
  * 0081) because that is the grain a grant has -- one server's access on one licence -- so there
@@ -1949,10 +1959,12 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
 
     // Live rows are unique per (server, tier) (0086 live index); lapsed history may hold more
     // than one, so prefer the live row, then the newest.
-    const existing = await client.query<{ id: string; provider_user_id: string }>(
-      `select id, provider_user_id from feed_subscriptions
-       where server_registration_id = $1 and feed_tier_id = $2
-       order by (status = 'lapsed'), created_at desc
+    const existing = await client.query<{ id: string; provider_user_id: string; status: string; bundle_status: string | null }>(
+      `select s.id, s.provider_user_id, s.status, b.status as bundle_status
+       from feed_subscriptions s
+       left join bundle_subscriptions b on b.id = s.bundle_subscription_id
+       where s.server_registration_id = $1 and s.feed_tier_id = $2
+       order by (s.status = 'lapsed'), s.created_at desc
        limit 1`,
       [sr.id, feedTierId]
     );
@@ -1962,10 +1974,14 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
     if (existing.rowCount) {
       const row = existing.rows[0];
       subscriptionId = row.id;
+      // A live row a running bundle granted is the bundle's to end (Fable 5a S2). Both UPDATEs below
+      // clear the stamp, which is right only for a lapsed row or one from an ended bundle: without the
+      // clear, a row re-sold separately would keep counting as bundle rows and bundle money.
+      if (row.status !== "lapsed" && row.bundle_status === "active") throw new BundleOwnedTierGrantError(tierName);
       if (row.provider_user_id === providerUserId) {
         outcome = "reactivated";
         await client.query(
-          `update feed_subscriptions set status = 'active', lapsed_at = null, ends_at = $2, updated_at = now() where id = $1`,
+          `update feed_subscriptions set status = 'active', lapsed_at = null, ends_at = $2, bundle_subscription_id = null, updated_at = now() where id = $1`,
           [row.id, license.expiresAt]
         );
       } else {
@@ -1976,7 +1992,7 @@ export async function assignFeedTierSubscription(subscriberUserId: string, tierK
         await assignPseudonymSeq(client, providerUserId, subscriberUserId);
         await client.query(
           `update feed_subscriptions
-           set provider_user_id = $2, status = 'active', lapsed_at = null, ends_at = $3, updated_at = now()
+           set provider_user_id = $2, status = 'active', lapsed_at = null, ends_at = $3, bundle_subscription_id = null, updated_at = now()
            where id = $1`,
           [row.id, providerUserId, license.expiresAt]
         );
