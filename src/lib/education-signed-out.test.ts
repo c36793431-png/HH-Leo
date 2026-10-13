@@ -17,10 +17,14 @@ const BANNED = ["stealth", "order mixer", "disguis", "footprint"];
 /** Every string a member sees that the visitor must not: the hidden blocks whole, and the items of
  * a one-block lesson's block. */
 function hiddenText(lesson: EducationLesson, shownCount: number): string[] {
-  const hidden = lesson.blocks.slice(shownCount).flatMap((b) => [b.heading, b.body, ...(b.items ?? [])]);
+  const hidden = lesson.blocks
+    .slice(shownCount)
+    .flatMap((b) => [b.heading, b.body, ...(b.items ?? []), ...(b.qa ?? []).flatMap((x) => [x.q, x.a]), ...(b.links ?? []).map((x) => x.label)])
+    .filter((t) => t !== "" && t !== lesson.title); // the title is shown; a block heading may repeat it (the final check)
   if (lesson.blocks.length === 1) hidden.push(...(lesson.blocks[0].items ?? []));
   // A lesson with a public intro keeps its member intro for members.
   if (lesson.publicIntro) hidden.push(lesson.intro);
+  if (lesson.closing) hidden.push(lesson.closing);
   return hidden;
 }
 
@@ -39,6 +43,15 @@ const EXPECTED_SHOWN: Record<string, number> = {
   "risk-and-lot-sizing": 1,
   "timing-protection": 1,
   "tools-and-troubleshooting": 2,
+  // The agentic trading course is members-only (m67088): no blocks signed out.
+  "agentic-trading-what-it-is": 0,
+  "agentic-trading-where-it-is-today": 0,
+  "agentic-trading-what-can-go-wrong": 0,
+  "agentic-trading-safe-structure": 0,
+  "agentic-trading-testing": 0,
+  "agentic-trading-rules": 0,
+  "agentic-trading-horizon-ai": 0,
+  "agentic-trading-final-check": 0,
 };
 
 test("the cut: first half of the blocks, rounded down, at least one", () => {
@@ -61,6 +74,14 @@ test("the cut: first half of the blocks, rounded down, at least one", () => {
     "risk-and-lot-sizing": "1/2 hidden 1",
     "timing-protection": "1/2 hidden 1",
     "tools-and-troubleshooting": "2/4 hidden 2",
+    "agentic-trading-what-it-is": "0/6 hidden 6",
+    "agentic-trading-where-it-is-today": "0/9 hidden 9",
+    "agentic-trading-what-can-go-wrong": "0/6 hidden 6",
+    "agentic-trading-safe-structure": "0/7 hidden 7",
+    "agentic-trading-testing": "0/6 hidden 6",
+    "agentic-trading-rules": "0/6 hidden 6",
+    "agentic-trading-horizon-ai": "0/5 hidden 5",
+    "agentic-trading-final-check": "0/1 hidden 1",
   });
 });
 

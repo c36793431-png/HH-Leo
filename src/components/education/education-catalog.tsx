@@ -40,7 +40,8 @@ export function EducationCatalog({
         >
           All <span className="n">{lessons.length}</span>
         </button>
-        {EDUCATION_CATEGORIES.map((cat) => (
+        {/* A category with no lessons in this list (the members-only course, signed out) gets no chip. */}
+        {EDUCATION_CATEGORIES.filter((cat) => chipCounts.has(cat.key)).map((cat) => (
           <button
             key={cat.key}
             type="button"

@@ -9,7 +9,7 @@ import { DO_NOT_PUBLISH } from "./education-public";
  * A public surface, so lesson 11 shows its public title and intro and the do-not-publish words are checked
  * here as in the public catalogue (marcus, m59051/m59062). Fields are copied by name, so a field
  * added to EducationLesson or EducationBlock later stays private until it is added here. */
-export type SignedOutLesson = Pick<EducationLesson, "slug" | "title" | "category" | "section" | "intro" | "strategy"> & {
+export type SignedOutLesson = Pick<EducationLesson, "slug" | "title" | "category" | "section" | "intro" | "strategy" | "course"> & {
   shownBlocks: EducationBlock[];
   /** Blocks the visitor doesn't see. Drawn as that many placeholder blocks; no text from them. */
   hiddenBlockCount: number;
@@ -20,7 +20,8 @@ export type SignedOutLesson = Pick<EducationLesson, "slug" | "title" | "category
  * free shows no blocks, as a signed-in member without the plan sees it (LessonDetail's locked view). */
 function cut(lesson: EducationLesson): { shown: EducationBlock[]; hidden: number } {
   const n = lesson.blocks.length;
-  if (!lesson.free || n === 0) return { shown: [], hidden: Math.max(n, 1) };
+  // A course lesson is members-only (marcus m67088): signed out it shows the header and intro, no blocks.
+  if (!lesson.free || n === 0 || lesson.course) return { shown: [], hidden: Math.max(n, 1) };
   if (n === 1) {
     const [{ type, heading, body }] = lesson.blocks;
     return { shown: [{ type, heading, body }], hidden: 1 };
@@ -39,6 +40,7 @@ export function signedOutLesson(lesson: EducationLesson): SignedOutLesson {
     section: lesson.section,
     intro: lesson.publicIntro ?? lesson.intro,
     strategy: lesson.strategy,
+    course: lesson.course,
     shownBlocks: shown,
     hiddenBlockCount: hidden,
   };

@@ -15,7 +15,7 @@ const BLOCK_LABEL: Record<EducationBlock["type"], string> = {
   blocked: "Requirement",
 };
 
-function LessonHeader({ lesson }: { lesson: Pick<EducationLesson, "title" | "section" | "category"> }) {
+function LessonHeader({ lesson }: { lesson: Pick<EducationLesson, "title" | "section" | "category" | "course"> }) {
   const category = EDUCATION_CATEGORIES.find((c) => c.key === lesson.category);
   return (
     <div className="lesson-head">
@@ -23,13 +23,20 @@ function LessonHeader({ lesson }: { lesson: Pick<EducationLesson, "title" | "sec
         ← Back to Horizon Academy
       </a>
       <div className="lesson-head-row">
-        <div className="lesson-badge">{lesson.section}</div>
+        <div className="lesson-badge">{lesson.course ? (lesson.course.final ? "✓" : lesson.course.lesson) : lesson.section}</div>
         <div className="lesson-head-txt">
           <h1>{lesson.title}</h1>
-          <span>
-            Horizon HFT User Tutorial {EDUCATION_MANUAL_VERSION} · Section {lesson.section} of{" "}
-            {EDUCATION_MANUAL_TOTAL_SECTIONS} · {category?.label}
-          </span>
+          {lesson.course ? (
+            <span>
+              {lesson.course.name} ·{" "}
+              <span className="nw">{lesson.course.final ? "Final check" : `Lesson ${lesson.course.lesson} of ${lesson.course.of}`}</span>
+            </span>
+          ) : (
+            <span>
+              Horizon HFT User Tutorial {EDUCATION_MANUAL_VERSION} · Section {lesson.section} of{" "}
+              {EDUCATION_MANUAL_TOTAL_SECTIONS} · {category?.label}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -54,10 +61,10 @@ function LessonBlock({ block }: { block: EducationBlock }) {
   return (
     <div className={`lesson-block ${block.type}`}>
       <div className="lb-head">
-        <span className="lb-tag">{BLOCK_LABEL[block.type]}</span>
+        <span className="lb-tag">{block.tag ?? BLOCK_LABEL[block.type]}</span>
         <h3>{block.heading}</h3>
       </div>
-      <p>{block.body}</p>
+      {block.body && <p>{block.body}</p>}
       {block.items && block.items.length > 0 && (
         <ul>
           {block.items.map((item) => (
@@ -76,6 +83,27 @@ function LessonBlock({ block }: { block: EducationBlock }) {
           )}
         </div>
       ))}
+      {block.qa && block.qa.length > 0 && (
+        <div className="lb-qa">
+          {block.qa.map((x) => (
+            <details key={x.q}>
+              <summary>{x.q}</summary>
+              <p>{x.a}</p>
+            </details>
+          ))}
+        </div>
+      )}
+      {block.links && block.links.length > 0 && (
+        <ul className="lb-links">
+          {block.links.map((x) => (
+            <li key={x.href}>
+              <a href={x.href} target="_blank" rel="noopener noreferrer">
+                {x.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -112,6 +140,7 @@ export function LessonDetail({ lesson, isPaidTier }: { lesson: EducationLesson; 
           <LessonBlock key={block.heading} block={block} />
         ))}
       </div>
+      {lesson.closing && <p className="lesson-closing">{lesson.closing}</p>}
     </div>
   );
 }

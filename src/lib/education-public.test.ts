@@ -22,7 +22,11 @@ test("lesson 11 carries its public title and description", () => {
 
 test("every lesson is card fields only, with no intro or blocks", () => {
   const { lessons, categories } = publicEducationCatalogue();
-  assert.equal(lessons.length, EDUCATION_LESSONS.length);
+  // Every lesson but the members-only agentic trading course (m67088), and not its category either.
+  assert.equal(lessons.length, EDUCATION_LESSONS.filter((l) => !l.course).length);
+  assert.equal(lessons.length, 12);
+  assert.ok(!categories.some((c) => c.key === "agentic-trading"));
+  assert.ok(!lessons.some((l) => l.slug.startsWith("agentic-trading")));
   for (const lesson of lessons) {
     assert.deepEqual(Object.keys(lesson).sort(), ["category", "description", "free", "minutes", "section", "slug", "title"]);
   }

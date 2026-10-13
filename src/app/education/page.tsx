@@ -16,8 +16,7 @@ export default async function EducationPage() {
   // TODO: gate by license.tier once real license check is wired up — assume free-tier for now.
   const isPaidTier = false;
 
-  const freeCount = EDUCATION_LESSONS.filter((l) => l.free).length;
-
+  // Counted from the list the page shows: signed out it has no members-only course lessons (m67088).
   const page = (lessons: EducationLessonCard[]) => (
     <>
       <div className="edu-hero">
@@ -29,15 +28,15 @@ export default async function EducationPage() {
         </p>
         <div className="edu-stats">
           <div className="stat">
-            <b>{EDUCATION_LESSONS.length}</b>
+            <b>{lessons.length}</b>
             <span>Lessons</span>
           </div>
           <div className="stat">
-            <b>{EDUCATION_CATEGORIES.length}</b>
+            <b>{EDUCATION_CATEGORIES.filter((c) => lessons.some((l) => l.category === c.key)).length}</b>
             <span>Categories</span>
           </div>
           <div className="stat">
-            <b>{freeCount}</b>
+            <b>{lessons.filter((l) => l.free).length}</b>
             <span>Free intro</span>
           </div>
         </div>

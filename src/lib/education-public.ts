@@ -23,8 +23,9 @@ export type PublicEducationCatalogue = {
  * `next build` and the deploy, and the live payload stays the previous one. */
 export function publicEducationCatalogue(): PublicEducationCatalogue {
   const catalogue: PublicEducationCatalogue = {
-    categories: EDUCATION_CATEGORIES.map(({ key, label, subtitle }) => ({ key, label, subtitle })),
-    lessons: EDUCATION_LESSONS.map((lesson) => ({
+    // Course lessons are members-only (marcus m67088) and www has no pages for them: their category and lessons stay out.
+    categories: EDUCATION_CATEGORIES.filter((c) => EDUCATION_LESSONS.some((l) => l.category === c.key && !l.course)).map(({ key, label, subtitle }) => ({ key, label, subtitle })),
+    lessons: EDUCATION_LESSONS.filter((lesson) => !lesson.course).map((lesson) => ({
       slug: lesson.slug,
       title: lesson.publicTitle ?? lesson.title,
       description: lesson.publicDescription ?? lesson.description,
