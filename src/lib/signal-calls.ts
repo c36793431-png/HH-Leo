@@ -10,7 +10,9 @@ import type { SignalStatsRow } from "./signal-stats";
  * - now is not read here: the page takes ONE new Date() per request and passes it to signalStats.
  * session_date is projected as text too: node-postgres parses a bare `date` into a local-midnight Date.
  * sender_label = meta->>'source' is the only source-specific key read, and no number keys on it (fable N5
- * m67474, plan :350-353). */
+ * m67474, plan :350-353). Only 'card' / 'backfill' pass through, anything else is null (S4.1, fable VERDICT-S4 S1
+ * m67678): 0110 has no CHECK on meta, and signal-stats tally() counts labels[senderLabel ?? "none"], so a raw
+ * off-enum value would drop the row out of card / backfill / none. The query is the boundary; signal-stats is unchanged. */
 
 export interface SignalCallsFilter {
   source: string;
@@ -64,7 +66,8 @@ const toRow = (r: RawRow): SignalStatsRow => ({
 export async function listSignalCallsOn(db: Db, f: SignalCallsFilter): Promise<SignalStatsRow[]> {
   const { rows } = await db.query(
     `select symbol, session_date::text as session_date, direction, entry_ts, exit_ts, received_at, entry_px_at,
-            outcome, move::text as move, meta->>'source' as sender_label
+            outcome, move::text as move,
+            case when meta->>'source' in ('card', 'backfill') then meta->>'source' end as sender_label
      from signal_calls
      where source = $1
        and ($2::date is null or session_date >= $2::date)
