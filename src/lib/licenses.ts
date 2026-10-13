@@ -1351,6 +1351,8 @@ export interface AdminLicenseRow {
   issuedAt: Date;
   expiresAt: Date;
   hardwareId: string | null;
+  /** 0111: the bound hid2; a licence can have it without a hid (degraded first validate), and Reset PC clears it. */
+  hardwareId2: string | null;
   lastVerifiedAt: Date | null;
   userId: string | null;
   email: string | null;
@@ -1413,7 +1415,7 @@ export async function listAllLicenses(
   params.push(offset);
   const result = await pool.query(
     `select l.id, l.license_key, l.status, l.tier, l.issued_at, l.expires_at,
-            l.hardware_id, l.last_verified_at, l.user_id, u.email, l.claim_email,
+            l.hardware_id, l.hardware_id2, l.last_verified_at, l.user_id, u.email, l.claim_email,
             ${LICENSE_COMPUTED_STATUS_SQL} as computed_status
      from licenses l
      left join users u on u.id = l.user_id
@@ -1434,6 +1436,7 @@ export async function listAllLicenses(
       issuedAt: r.issued_at,
       expiresAt: r.expires_at,
       hardwareId: r.hardware_id,
+      hardwareId2: r.hardware_id2,
       lastVerifiedAt: r.last_verified_at,
       userId: r.user_id,
       email: r.email,

@@ -11,6 +11,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { generateKeyPairSync, verify } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
+import { renderToStaticMarkup } from "react-dom/server";
 import { canonicalize } from "./response-signing";
 
 const MIGRATIONS = path.join(process.cwd(), "db/migrations");
@@ -541,8 +542,8 @@ test("pre-flip rebind SQL in docs/licence-pc-lock.md: preview lists exactly the 
   );
 });
 
-/* 2.0.9 B2: hid2 + hwdegraded (0111; HWID wire contract v1 as amended by Fable m67568/m67569: S2 binding model,
- * S3 fallback never refused, C1-C5). A 2.0.9 client sends hardwareid2/hwdegraded only when it has them: ABSENT = the
+/* 2.0.9 B2: hid2 + hwdegraded (0111; HWID wire contract v2 md5 687b1ef7, Fable PASS m67592: 3.1-3.2 binding model,
+ * 3.3 fallback never refused, 3.4 match order, 3.8 C1-C5). A 2.0.9 client sends hardwareid2/hwdegraded only when it has them: ABSENT = the
  * key is not in the body. */
 const HID2_A = "A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2";
 const HID2_B = "B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2";
@@ -594,7 +595,7 @@ test("22 (Fable S2 pin): a sharer's 2.0.9 never binds hid2; the owner's upgrade 
   assert.deepEqual(rows.find((x) => x.hwid === PC_B), { hwid: PC_B, last_hwid2: HID2_B, last_hwdegraded: null });
 });
 
-test("23 (3.3a, N3): both sides have a hid2 -> it alone decides; a drifted hid on the owner's PC passes and is recorded", async () => {
+test("23 (3.4a, N3): both sides have a hid2 -> it alone decides; a drifted hid on the owner's PC passes and is recorded", async () => {
   const l = await newLicence();
   await validate9(l.key, PC_A, { hid2: HID2_A });
   const before = await bindings(l.id);
@@ -631,12 +632,12 @@ test("24 (Fable S3): a fallback hid (hwdegraded names cpu/disk/mac, or HWID-ERRO
   assert.equal(row.hardware_id, PC_A);
   assert.equal(row.hardware_id2, HID2_A);
   assert.deepEqual((await seen2(l.id)).find((x) => x.hwid === FALLBACK), { hwid: FALLBACK, last_hwid2: null, last_hwdegraded: "uuid,disk" });
-  // guid/uuid alone do not make the hid a fallback: the hid is clean and 3.3b refuses another PC's.
+  // guid/uuid alone do not make the hid a fallback: the hid is clean and 3.4c refuses another PC's.
   assert.equal((await validate9(l.key, PC_B, { hdg: "guid" })).body.data.status, "hwid_mismatch");
   assert.equal((await validate9(l.key, PC_B, { hdg: "uuid,guid" })).body.data.status, "hwid_mismatch");
 });
 
-test("25 (Fable S3 + 3.3a): a fallback hid that carries a hid2 is still decided by the bound hid2", async () => {
+test("25 (Fable S3 + 3.4a): a fallback hid that carries a hid2 is still decided by the bound hid2", async () => {
   const l = await newLicence();
   await validate9(l.key, PC_A, { hid2: HID2_A });
   process.env.HWID_ENFORCE = "1";
@@ -672,12 +673,15 @@ test("26 (Fable C1): a bad hardwareid2 or hwdegraded is ABSENT, never a 400; a m
   }
 });
 
-test("27 (3.3b): a request without hid2 matches on the hid even when a hid2 is bound (2.0.8 and guid/uuid-failed 2.0.9)", async () => {
+test("27 (3.4c): a request without hid2 matches on the hid even when a hid2 is bound (2.0.8 and guid/uuid-failed 2.0.9)", async () => {
   const l = await newLicence();
   await validate9(l.key, PC_A, { hid2: HID2_A });
   process.env.HWID_ENFORCE = "1";
   assert.equal((await validate(l.key, PC_A, "2.0.8")).body.data.status, "active");
+  // C4 (Fable N2 on 615573a): seen holds what the LATEST validate carried, so a later request without hid2 nulls it.
+  assert.deepEqual((await seen2(l.id)).find((x) => x.hwid === PC_A), { hwid: PC_A, last_hwid2: null, last_hwdegraded: null });
   assert.equal((await validate9(l.key, PC_A, { hdg: "uuid" })).body.data.status, "active");
+  assert.deepEqual((await seen2(l.id)).find((x) => x.hwid === PC_A), { hwid: PC_A, last_hwid2: null, last_hwdegraded: "uuid" });
   assert.equal((await validate(l.key, PC_B, "2.0.8")).body.data.status, "hwid_mismatch");
   assert.equal((await validate9(l.key, PC_B, { hdg: "guid" })).body.data.status, "hwid_mismatch");
   const before = await bindings(l.id);
@@ -785,4 +789,65 @@ test("33: 0111 is additive, rolls back cleanly and re-applies (PG 17.5); its CHE
   await fresh.exec(forward);
   assert.equal((await fresh.query(`select count(*)::int as n from schema_migrations where version = '0111'`)).rows[0].n, 1);
   await fresh.close();
+});
+
+test("34 (marcus m67605 G1): /admin/licenses renders Reset PC when the hid OR the hid2 is bound, and not when neither is", async () => {
+  const hidOnly = await newLicence();
+  await validate(hidOnly.key, PC_A, "2.0.8");
+  const hid2Only = await newLicence();
+  await validate9(hid2Only.key, FALLBACK, { hid2: HID2_A, hdg: "cpu" });
+  const unbound = await newLicence();
+  assert.deepEqual([(await bindings(hid2Only.id)).hardware_id, (await bindings(hid2Only.id)).hardware_id2], [null, HID2_A]);
+  // Oldest expiry first, so all three are on page 1 of the page's own order (expires_at asc, 50 per page).
+  await sql(`update licenses set expires_at = '2001-01-01' where id = any($1::uuid[])`, [[hidOnly.id, hid2Only.id, unbound.id]]);
+  const { default: Page } = await import("../app/admin/licenses/page");
+  const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
+  const row = (id: string) => {
+    const tr = html.split("<tr").find((t) => t.includes(`value="${id}"`));
+    assert.ok(tr, `no row for ${id}`);
+    return tr;
+  };
+  assert.match(row(hidOnly.id), /Reset PC/);
+  assert.match(row(hid2Only.id), /Reset PC/);
+  assert.doesNotMatch(row(unbound.id), /Reset PC/);
+});
+
+test("35 (Fable N2): the doc's would-lock query lists exactly the licences whose latest validate ON refuses", async () => {
+  const doc = readFileSync(path.join(process.cwd(), "docs/licence-pc-lock.md"), "utf8");
+  const blocks = [...doc.matchAll(/```sql would-lock\n([\s\S]*?)```/g)].map((m) => m[1]);
+  assert.equal(blocks.length, 1);
+  type Req = [string, { hid2?: string; hdg?: string }];
+  /** Binds PC_A first (2.0.8, or 2.0.9 with HID2_A), then sends `latest` and pins it as the newest seen row. */
+  async function licence(latest: Req, opts: { ownerHid2?: boolean; expired?: boolean } = {}) {
+    const l = await newLicence();
+    if (opts.ownerHid2) await validate9(l.key, PC_A, { hid2: HID2_A });
+    else await validate(l.key, PC_A, "2.0.8");
+    await validate9(l.key, latest[0], latest[1]);
+    await sql(`update license_hwid_seen set last_seen = now() + interval '1 minute' where license_id = $1 and hwid = $2`, [l.id, latest[0]]);
+    if (opts.expired) await sql(`update licenses set expires_at = now() - interval '1 day' where id = $1`, [l.id]);
+    return { ...l, latest };
+  }
+  const drifted = await licence([PC_B, {}]); // the N2 case: 2.0.8 bound A, the owner's hid is now B
+  const drifted9 = await licence([PC_B, { hid2: HID2_B, hdg: "uuid" }]); // 2.0.9 on B: hid2 can't bind (S2), uuid isn't a fallback
+  const back = await licence([PC_A, {}]); // the bound PC is the latest
+  const owner9 = await licence([PC_B, { hid2: HID2_A }], { ownerHid2: true }); // hid2 bound: 3.4a decides, passes
+  const fallback = await licence([FALLBACK, { hdg: "disk" }]); // S3: never refused
+  const wmi = await licence(["HWID-ERROR-PC7", {}]);
+  const expired = await licence([PC_B, {}], { expired: true });
+  const mine = [drifted, drifted9, back, owner9, fallback, wmi, expired];
+  const ids = new Set(mine.map((l) => l.id));
+  const listed = (await sql(blocks[0])).rows.filter((r) => ids.has(r.license_id));
+  assert.deepEqual(
+    listed.map((r) => [r.license_id, r.bound_hid, r.latest_hwid]).sort(),
+    [
+      [drifted.id, PC_A, PC_B],
+      [drifted9.id, PC_A, PC_B],
+    ].sort()
+  );
+  // The discriminator: replay each active licence's latest request under ON. Listed <=> refused.
+  process.env.HWID_ENFORCE = "1";
+  for (const l of mine.filter((x) => x !== expired)) {
+    const status = (await validate9(l.key, l.latest[0], l.latest[1])).body.data.status;
+    assert.equal(status, listed.some((r) => r.license_id === l.id) ? "hwid_mismatch" : "active", l.latest[0]);
+  }
 });

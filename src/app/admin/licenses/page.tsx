@@ -216,7 +216,7 @@ export default async function AdminLicensesPage({
                           />
                         </>
                       )}
-                      {l.hardwareId && (
+                      {(l.hardwareId || l.hardwareId2) && (
                         <ActionButton
                           action={resetLicenseHardwareAction}
                           hiddenFields={{ licenseId: l.id }}

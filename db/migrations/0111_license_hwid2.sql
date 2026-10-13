@@ -1,5 +1,5 @@
--- One licence, one PC: the second identity (2.0.9 B2, HWID wire contract v1 as amended by Fable's verdict m67568/m67569:
--- S2 binding model, S3 fallback never refused, C1-C5). Builds on 0099; enforcement is still HWID_ENFORCE, OFF.
+-- One licence, one PC: the second identity (2.0.9 B2, HWID wire contract v2 md5 687b1ef7, Fable PASS m67592:
+-- 3.1-3.2 binding model, 3.3 fallback never refused, 3.8 C1-C5). Builds on 0099; enforcement is still HWID_ENFORCE, OFF.
 --
 -- licenses.hardware_id2: the ONE bound hid2 (SHA-256('hid2|MachineGuid|SMBIOS UUID')[:32], uppercase hex, sent by
 --   2.0.9+ as hardwareid2). Set once by /v1/validate in the same statement as hardware_id, and only while the licence
