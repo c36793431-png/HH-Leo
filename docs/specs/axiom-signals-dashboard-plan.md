@@ -5,11 +5,30 @@ Branch: kai/axiom-signals-dashboard-2026-10-13, off main 544f6fc. Reviewer: fabl
 
 Revision S0.1 (doc only, on 8909f17; marcus named GO m67424 18:20Z): folds in fable's review m67410 (18:08Z,
 P1-P5 + the 422 ruling) and her answers to my gaps m67417 (18:14Z, G1-G5), and marcus's G5 values (m67424).
-Each changed rule below names the message it comes from. S1 is NOT GO: it waits on Q4 (marcus m67424).
+Each changed rule below names the message it comes from.
 
-Everything below about the repo was read at 544f6fc. Nothing about Ubuntu-Axiom was read: predictions.jsonl
-and track_record.py are on a box I cannot reach, so every statement about them is marcus's m67349 text, and
-the open questions in section 9 must be answered from the files themselves before S2.
+Revision S0.2 (doc only, on 5abac28; marcus m67435 18:24Z): folds in Axiom's answers and marcus's product
+rulings R1-R8 (m67429 18:22Z). Fable reads 5abac28 + S0.2 as one doc (m67435). S1 GO attaches to fable's
+PASS of this doc (m67429, m67435); Q4 is answered (no 4H bars), so nothing else holds S1.
+
+Everything below about the repo was read at 544f6fc. Nothing about Ubuntu-Axiom was read by me:
+predictions.jsonl and track_record.py are on a box I cannot reach. Every statement about them is axiom's
+reply m67428 (18:22Z, quoted from its own files) as relayed by marcus m67429, cited "track_record.py:NN
+(axiom m67428 via marcus m67429)". Those line numbers are axiom's, not checked by me.
+
+### What Axiom's files say (axiom m67428 via marcus m67429)
+
+- predictions.jsonl: one line per DATE, `{"date":"YYYY-MM-DD","pairs":[{"pair":SYM,"direction":"up"|"down"|"neutral"}],"source":"card" | "backfill: read from market_card_<date>.jpg"}`.
+  load_history() keys on date; the LAST write for a date wins (:52). No prices in the file.
+- Symbols (:33-40): XAUUSD -> GC=F, US30 -> YM=F (futures: spot does not trade the whole window),
+  EURUSD -> EURUSD=X, GBPUSD -> GBPUSD=X, USDJPY -> JPY=X, AUDUSD -> AUDUSD=X.
+- Scoring: Yahoo chart API hourly bars (interval=1h, range=3mo, :66-79), fetched live, nothing cached.
+  Window START_H, END_H = 6, 21, fixed UTC all year (:41, :77). Hit = end > start for up, end < start for
+  down, strict (:108). No pip or point sizes, no dead-band. Neutral calls skipped before scoring (:102).
+  Hit % = hits / scored up+down calls; neutrals not in the denominator (:118-124).
+- NOT KNOWN to me: which bar field "start" and "end" are (06:00 bar open? 20:00 bar close?). The relay
+  gives :77 and :108 but not the expression. S2 does not depend on it (the portal takes the prices Axiom
+  sends), but docs/signal-ingest.md must name it before the poster is built (Q9).
 
 ## 1. Transport: PUSH (Axiom POSTs to a token-auth ingest route). Not pull.
 
@@ -29,6 +48,11 @@ Why push:
 Cost of push: Axiom needs a small poster (curl or python, about 30 lines) and a retry on failure. The ingest
 is idempotent (section 4), so a retry is always safe.
 
+Q6 (axiom m67428 via marcus m67429): a POST at call time (~06:10Z card) and one after 21:00 scoring is
+feasible with the urllib it already uses. Not built. Outbound from Ubuntu-Axiom to a new host is UNVERIFIED
+(its own bus POST hit a network wall that turn). The poster and backfill come later and need FOC17 for
+outbound network; not this week's blocker (marcus m67429).
+
 ## 2. Migration number: 0110 (ASKED, not claimed)
 
 - main 544f6fc tops out at 0107. 0107's own header (db/migrations/0107_bundle_subscriptions.sql:17) names
@@ -46,12 +70,12 @@ create table if not exists signal_calls (
   source text not null check (source ~ '^[a-z][a-z0-9-]{1,31}$'),   -- 'axiom' now; 'sentiment', 'cot' later
   symbol text not null check (symbol ~ '^[A-Z0-9]{3,12}$'),         -- 'EURUSD', 'XAUUSD', 'US30'
   session_date date not null,
-  direction text not null check (direction in ('buy', 'sell')),
-  entry_ts timestamptz not null,                                    -- window start (06:00 for Axiom)
-  exit_ts timestamptz not null,                                     -- window end (21:00 for Axiom)
+  direction text not null check (direction in ('up', 'down', 'neutral')),   -- Axiom's words (R1 m67429)
+  entry_ts timestamptz not null,                                    -- window start (session_date 06:00Z for Axiom)
+  exit_ts timestamptz not null,                                     -- window end (session_date 21:00Z for Axiom)
   entry_px numeric,                                                 -- fill-only; required once scored (stamp)
   exit_px numeric,
-  move numeric,          -- signed, in the symbol's unit (pips FX, points XAUUSD/US30), + = in the call's favour
+  move numeric,          -- signed, in the symbol's unit (signal-instruments), + = in the call's favour
   outcome text check (outcome in ('right', 'wrong', 'flat')),
   meta jsonb,                                                       -- fill-only; source-specific: confidence, card id, ...
   received_at timestamptz not null default now(),                   -- first receipt; never rewritten
@@ -62,6 +86,9 @@ create table if not exists signal_calls (
     ((outcome is null) = (exit_px is null)) and ((outcome is null) = (move is null))
     and ((outcome is null) = (scored_at is null)) and (outcome is null or entry_px is not null)
   ),
+  constraint signal_calls_neutral_unscored check (
+    direction <> 'neutral' or (entry_px is null and exit_px is null and outcome is null)
+  ),
   constraint signal_calls_one_per_window unique (source, symbol, entry_ts)
 );
 create index if not exists signal_calls_source_date_idx on signal_calls(source, session_date);
@@ -70,6 +97,20 @@ create index if not exists signal_calls_source_date_idx on signal_calls(source, 
 Plus the schema_migrations ledger row, begin/commit, and 0110_rollback.sql (drop table, which drops the
 trigger with it; the rollback also drops the trigger function) as 0105/0107 do.
 The stamp CHECK is conjoined equalities, not `a = b = c` (0107:9 note).
+
+Neutral calls (R1 m67429: registered, shown, excluded from hit %; fable rules how they sit against the stamp
+and the P3 bucket). My proposal, not ruled:
+- A neutral row is a registration that is never scored: no prices, outcome null forever
+  (signal_calls_neutral_unscored; with the stamp that also forces move and scored_at null). The stamp CHECK
+  is unchanged, so it needs no neutral arm.
+- The ingest refuses a neutral call that carries entryPx or exitPx (400, whole batch, index named), the same
+  as any other malformed call. Axiom has no prices for them anyway: its scorer skips neutrals before it
+  fetches anything (:102).
+- The page counts neutral by direction, never by outcome, so a neutral row is never "pending" and never
+  "unscored after close" (section 5). It does get a lead-time bucket: when it was registered is still
+  evidence.
+- The alternative for fable: a fourth outcome value 'neutral' stamped at registration. I did not pick it
+  because it puts a non-result into the result column and every outcome query then has to exclude it.
 
 Trigger (fable P2 m67410, G1/G2 m67417): one plpgsql function + BEFORE UPDATE trigger on signal_calls, in
 0110. It raises on any UPDATE that breaks one of three column families:
@@ -107,9 +148,12 @@ Choices for fable:
   m67410 C4 + P2: a 409 in one route protects the evidence columns only against that route). Corrections
   are a SQL file to marcus (CLAUDE.md rule 4) using the allow_correction setting.
 
-Not in 0110: price bars for the 4H chart. See S5 and Q4. If marcus answers Q4 yes before S1, I add
-`signal_bars (source, symbol, tf, ts, o, h, l, c, unique (source, symbol, tf, ts))` to 0110 so it is one
-apply, not two.
+Not in 0110: price bars. Q4 answered no (axiom m67428: no 4H bars, only live Yahoo hourlies, nothing
+cached), so no signal_bars table (R6 m67429). S5 is the price line through each call's own entry/exit.
+
+- R5 (m67429): predictions.jsonl is last-write-wins per date (:52), so a day can be rewritten on Axiom's
+  side. That is why C4 stays: a rewritten day reaching the ingest gets 409 on the changed NEVER column
+  (direction), never an overwrite.
 
 ## 4. Ingest: POST /api/signals/ingest/[source]
 
@@ -127,8 +171,8 @@ apply, not two.
      64 hex chars -> 401. One code and one body for all three, so an unknown source and an unconfigured one
      are indistinguishable (fable C2, m67410).
   3. IP rule, only if `SIGNAL_INGEST_ALLOWED_IP_AXIOM` (per source) is set: x-forwarded-for first hop must
-     match (agent-api's rule) -> else 403. Default unset: one non-money table, and Ubuntu-Axiom's egress IP is
-     unknown to me (Q7).
+     match (agent-api's rule) -> else 403. Unset for axiom (R7 m67429: Q7 could not be checked, so treat
+     Ubuntu-Axiom as having no static IP). The step stays in the code for a later source.
   4. Token: `Authorization: Bearer <token>`, token >= 32 chars, sha256 compared with timingSafeEqual against
      the step-2 env var -> else 401.
   5. Only now `req.text()`. Body checks, any failure -> 400 for the whole batch, nothing written:
@@ -136,51 +180,77 @@ apply, not two.
      each field's type/format, body `source` != path source, and each call's symbol not in
      src/lib/signal-instruments.ts (fable P5(b) m67410; whole batch per G4 m67417, the 400 body names the
      index and the symbol: a symbol with no unit size and dead-band can never be scored, and the regex alone
-     lets a leaked token fill the table with junk symbols).
-- Body: `{ "source": "axiom", "calls": [ { symbol, sessionDate, direction, entryTs, exitTs, entryPx?, exitPx?, move?, outcome?, meta? } ] }`
-  1 to 200 calls per POST, so the history backfill is a loop of POSTs. Field names wait on Q2.
+     lets a leaked token fill the table with junk symbols), a neutral call with entryPx or exitPx (section
+     3), an exitPx with no entryPx in the same post or on the stored row.
+- Body (S0.2): `{ "source": "axiom", "calls": [ { symbol, sessionDate, direction, entryPx?, exitPx?, meta? } ] }`
+  1 to 200 calls per POST, so the history backfill is a loop of POSTs.
+  - symbol = Axiom's "pair" (XAUUSD, US30, EURUSD, GBPUSD, USDJPY, AUDUSD), not the Yahoo ticker.
+    sessionDate = Axiom's "date" (R2 m67429). direction = up | down | neutral (R1).
+  - No entryTs / exitTs (my change, not ruled): R2 fixes Axiom's window at session_date 06:00Z -> 21:00Z, so
+    the portal derives both from sessionDate and a per-source window in code (`{ axiom: [6, 21] }` UTC
+    hours, beside the token map). A sender then cannot post a wrong window, and the 400 for one is gone. A
+    later source with another window is a code entry, as adding a source already is (C2).
+  - No move / outcome (R4 m67429, "Axiom sends prices + direction, NOT an outcome, and the portal scores";
+    fable to confirm or amend). The strict parser refuses them as unknown fields (400).
+  - meta for axiom carries Axiom's own "source" string verbatim under `meta.source` ("card" or "backfill:
+    read from market_card_<date>.jpg") (R8 m67429). Name clash, flagged: this is not the `source` column
+    ('axiom').
 - Per call, one upsert on (source, symbol, entry_ts), all calls in one transaction. A field the post omits
-  is not a change (needed for G3's "the retry does not need to resend meta"). Order per call: the 409 checks,
-  then the recompute.
+  is not a change. Order per call: the 409 checks, then scoring.
   - 409, WHOLE BATCH rolled back (bugs; stopping is right, m67410), the same three families as the trigger:
-    a NEVER column sent and different from the stored row (direction, session_date, exit_ts; symbol and
-    entry_ts are the key, source is the path); a FILL-ONLY column (entry_px P1, meta G2) stored non-null and
-    sent different; a scored row whose sent scored values differ (a rescoring is a correction, and
-    corrections go to marcus as SQL).
-  - new key, recompute agrees (or no scored form sent): insert, `received_at` = now(); if scored,
+    a NEVER column sent and different from the stored row (direction; symbol and session_date give the key,
+    the window is derived, source is the path); a FILL-ONLY column (entry_px P1, meta G2) stored non-null
+    and sent different; a scored row whose sent exitPx differs (a rescoring is a correction, and corrections
+    go to marcus as SQL).
+  - new key: insert, `received_at` = now(); if entry_px and exit_px are both known, score it and
     `scored_at` = now().
   - same key, nothing new: no write ("unchanged").
-  - same key, fills a null entry_px or meta, or brings the scored form to an unscored row (recompute agrees):
-    update, `scored_at` = now() when scored.
-- Outcome cross-check: the portal recomputes move and outcome from entry_px, exit_px, direction and its own
-  instrument table (src/lib/signal-instruments.ts: unit size and dead-band per symbol; marcus m67349: under
-  5 pips FX, under $2 XAUUSD, under 20 pts US30 = FLAT). The portal is the scorer of record: its move and
-  outcome are what is stored; Axiom's sent values go nowhere but the response (fable m67410, replacing the
-  8909f17 422).
-  - Disagreement = PER-CALL SKIP, the rest of the batch is written (m67410). Why not refuse the batch: one
-    dead-band edge would stall a 200-call backfill and every retry. Why not store-and-flag: with C4 in force a
-    wrong stored outcome needs SQL corrections across immutable rows; skipping writes nothing wrong.
-  - A mismatched NEW key is inserted with source, symbol, entry_ts, exit_ts, session_date, direction,
-    received_at and meta as sent; entry_px NULL; scored columns null (G3 m67417). It then shows as pending,
-    and after the grace as "unscored after close" (section 5).
-  - A mismatched EXISTING key: no entry_px and no scored column is written. Whether a null meta on that row
-    is filled by the same post is NOT ruled (my reading of "no partial write" is: nothing written); fable.
-- Response 200: `{ inserted, scored, unchanged, mismatched: [ { index, sent: { entryPx, exitPx, move, outcome }, computed: { move, outcome } } ] }`
-  (G3 detail 1 m67417, so marcus can see which input was wrong; fable wrote the sent keys in the column
-  case, I use the body's case). Each call lands in exactly one of inserted / scored / unchanged /
-  mismatched (my definition, not ruled). 400/401/403/404/409: `{ error }`, plus `index` (and `symbol` for
-  an unknown symbol) when one call caused it.
-- Retry (G3 detail 2 m67417): any POST is safe to repeat. Calls already written answer "unchanged". A
-  corrected retry of a mismatched call hits the idempotent path as fill-and-score, not 409: same key,
-  entry_px null -> fill, recompute, write. A retry that still mismatches leaves the row unscored again, no
-  partial write.
-- Consequence of P1, not a new rule: if the registration post carried an entry_px and THAT is the wrong
-  input, the corrected retry changes a set FILL-ONLY column, so it is a 409; only marcus's correction SQL
-  fixes that row.
+  - same key, fills a null entry_px or meta, or brings exitPx to an unscored row: update, scoring and
+    `scored_at` = now() when both prices are then known.
+- Scoring (R4 m67429): the portal is the scorer of record and the only one. It computes move and outcome
+  from entry_px, exit_px, direction and src/lib/signal-instruments.ts. Coxwell's scoreboard rule (m67335 as
+  quoted in m67349 and m67429; I have not read m67335 itself): under 5 pips FX, under $2 XAUUSD, under 20
+  pts US30 = FLAT. Axiom's own scorer is sign-only with no dead-band (:108), so the portal's numbers will
+  differ from track_record's (marcus m67429 quotes 16/33). Expected; the page's method note says so in one
+  line (section 5).
+  - move = (exit_px - entry_px) / unit for up, (entry_px - exit_px) / unit for down; FLAT when |move| <
+    dead-band (strict, "under"); else right if move > 0, wrong if move < 0.
+  - Float edge (my finding, my proposed fix, not ruled): Yahoo prices arrive as binary floats and none of
+    1.0855, 1.085, 0.0001 is exact in binary, so (1.0855 - 1.085) / 0.0001 can land a hair either side of
+    5.0 and an exact-edge call scores FLAT or not by accident. NOT RUN here (`node -e` needs approval on this
+    box); S2a's edge tests show it. Proposal: round move to 0.1 of the unit before the dead-band compare, and
+    store that rounded move.
+  - RETIRED by R4 (fable to confirm): the outcome cross-check, the per-call skip, `mismatched[]`, and G3's
+    mismatched-row insert (m67410, m67417). With no outcome sent there is nothing to disagree with, so G3
+    cannot fire on Axiom's missing dead-band, which is what m67429 asks for.
+- Response 200: `{ inserted, scored, unchanged }`. Each call lands in exactly one (my definition, not
+  ruled; "scored" = an existing row given its scored form). 400/401/403/404/409: `{ error }`, plus `index`
+  (and `symbol` for an unknown symbol) when one call caused it.
+- Retry: any POST is safe to repeat. Calls already written answer "unchanged".
+- Consequence of P1, not a new rule: if the registration post carried an entry_px and THAT is wrong, a
+  corrected post changes a set FILL-ONLY column, so it is a 409; only marcus's correction SQL fixes that
+  row.
 - docs/signal-ingest.md: created at S0.1 with the two timing values (section 5) as marcus asked (m67424)
   and the two poster rules fable said it must state (send entryPx with the registration post, P1 m67410;
-  send meta with the registration post or not at all, G2 m67417). The rest of the contract (curl line, token
-  generation, fields, the responses above, the retry rule) is written into it at S2b, from this section.
+  send meta with the registration post or not at all, G2 m67417). S0.2 adds the fields, the Yahoo series
+  per symbol, and "no outcome". The rest of the contract (curl line, token generation, the responses above,
+  the retry rule) is written into it at S2b, from this section.
+
+### signal-instruments (S2a; R3 + R4 m67429)
+
+| symbol | Yahoo series Axiom prices from (:33-40) | unit (1 move = ) | dead-band (move units) | page label |
+|---|---|---|---|---|
+| EURUSD | EURUSD=X | 0.0001 | 5 | pips |
+| GBPUSD | GBPUSD=X | 0.0001 | 5 | pips |
+| AUDUSD | AUDUSD=X | 0.0001 | 5 | pips |
+| USDJPY | JPY=X (quotes USDJPY) | 0.01 | 5 | pips |
+| XAUUSD | GC=F (gold futures) | 1.0 | 2 | $ |
+| US30 | YM=F (Dow futures) | 1.0 | 20 | points |
+
+- Unit sizes and dead-bands are marcus's m67429 values (XAUUSD 2.0 and US30 20.0 "in price units").
+- XAUUSD and US30 prices are FUTURES prices (GC=F, YM=F), not spot (R3). The Yahoo ticker is a field of
+  each row and is printed in docs/signal-ingest.md and the page's method note, so nobody later compares a
+  stored price with spot.
 
 ## 5. Page: /admin/signals (portal host only, admin only, no nav link)
 
@@ -197,29 +267,43 @@ apply, not two.
   (src/components/portal/sidebar.tsx:79), a shared file, so only on marcus's word (Q8).
 - Query string: `?source=axiom&from=YYYY-MM-DD&to=YYYY-MM-DD` (default: source axiom, all dates).
 - Sections:
-  1. Headline: calls / right / wrong / flat / pending / unscored after close / hit %, with the first and
-     last session_date, and the lead-time buckets below (in place of 8909f17's binary "registered before
-     the window opened", fable P4 m67410: a card posted at 06:00:30 is an honest pre-market call that fails
-     received_at < entry_ts, so a sender doing the right thing would read 0 of M).
+  1. Headline: calls / right / wrong / flat / neutral / pending / unscored after close / hit %, with the
+     first and last session_date, and the lead-time buckets below (in place of 8909f17's binary "registered
+     before the window opened", fable P4 m67410: a card posted at 06:00:30 is an honest pre-market call that
+     fails received_at < entry_ts, so a sender doing the right thing would read 0 of M).
+     Split live vs backfilled (R8 m67429, "the honest headline"): every headline number twice, live =
+     meta.source "card", backfilled = meta.source starting "backfill", plus a "no source given" row if any.
+     meta.source is the sender's claim; received_at is the portal's clock. Both show: a "card" row whose
+     lead-time bucket is "after close" is visible as such, not reconciled by the page.
+     This is the page reading a source-specific meta key, against C2's "the page reads only shared columns".
+     Flagged for fable: keep it in meta (marcus's word) or make it a column.
   2. Per-pair table: calls, hit %, net move in the pair's unit if every call was followed, avg move when
-     right, avg move when wrong, buy hit % (n), sell hit % (n), unscored after close. Under 10 scored calls:
-     an "n<10" tag on the row and its percentages muted.
+     right, avg move when wrong, up hit % (n), down hit % (n), neutral count (R1), unscored after close.
+     Under 10 scored calls: an "n<10" tag on the row and its percentages muted.
   3. Cumulative hit rate over time (one line, all pairs), and cumulative net move PER PAIR (one line per pair).
      Not one summed line: 5 FX pips and 20 US30 points are different units, so a sum across pairs is not a
      number. (If coxwell wants one line, the honest one is move / dead-band per call; a decision for marcus.)
   4. Per-pair chart with each call marked: see S5.
-- Hit % = right / (right + wrong); flats are counted and shown, not in the denominator. This must equal
-  track_record.py's definition or the page and Axiom's own report disagree in front of coxwell (Q2).
+- Hit % = right / (right + wrong); flats and neutrals are counted and shown, not in the denominator.
+  track_record.py's is hits / scored up+down calls with neutrals out (:118-124) and no flat class, so the
+  formulas agree and only the dead-band separates the two numbers (R4). Method note, one line: "Scored with
+  a dead-band (5 pips FX, $2 gold, 20 points US30 = flat); Axiom's own track record has none, so its hit %
+  differs." Wording is mine; marcus or fable may replace it.
 - Two named constants in src/lib/signal-stats.ts (fable G5 m67417; values marcus m67424, "I accept fable's
   proposal as-is"), each named with its meaning in docs/signal-ingest.md and in the page's method note:
-  - `UNSCORED_AFTER_CLOSE_GRACE_MS` = 2 h. A call with outcome null is "unscored after close" when
+  - `UNSCORED_AFTER_CLOSE_GRACE_MS` = 2 h. An up/down call with outcome null is "unscored after close" when
     exit_ts + 2 h < now, else "pending" (fable P3 m67410). Without it a sender could register calls and never
     score the losers; pending-forever is the one hindsight hole C3 opens, so it is shown, not pooled.
+    Neutral calls are in neither bucket (R1 m67429: must not count as abandoned; section 3).
   - `LEAD_WITHIN_WINDOW_MS` = 15 min. Lead-time bucket per call, from received_at against the window (fable
     P4 m67410: before open / within 15 min after open / later in window / after close):
     before open = received_at < entry_ts; within 15 min = entry_ts <= received_at < entry_ts + 15 min;
     later in window = entry_ts + 15 min <= received_at < exit_ts; after close = received_at >= exit_ts
     (every backfilled row). The half-open edges are my choice, not ruled.
+    Axiom's card goes out ~06:10Z (axiom m67428 via marcus m67429), 10 min after entry_ts, so a live call
+    lands in "within 15 min after open" at best. The page states that, it does not hide it: those 10 min of
+    price are known when the call is made.
+  - Window labels: fixed UTC all year, "06:00-21:00 UTC" (Q3 answered, :41 :77). No BST handling.
   - Constant names are mine; the values are marcus's.
 - Charts: NO chart library is in package.json at 544f6fc (dependencies: next, react, next-auth, neon,
   upstash, blob, resend, lucide-react, flag-icons). No new dependency: the charts follow
@@ -236,7 +320,7 @@ apply, not two.
 | src/lib/signal-instruments.ts (unit size, dead-band, unit label per symbol) | S2 |
 | src/lib/signal-ingest.ts, signal-ingest.test.ts | S2 |
 | src/app/api/signals/ingest/[source]/route.ts | S2 |
-| docs/signal-ingest.md | S0.1 (timing values, poster rules), S2b (the rest) |
+| docs/signal-ingest.md | S0.1 (timing values, poster rules), S0.2 (fields, Yahoo series, no outcome), S2b (the rest) |
 | src/lib/signal-stats.ts (pure), signal-stats.test.ts | S3 |
 | src/lib/signal-calls.ts (the page's one read query) | S4 |
 | src/app/admin/signals/page.tsx, signals.css | S4 |
@@ -245,8 +329,8 @@ apply, not two.
 ## 7. Tests (node:test, the repo's runner line `npx tsx --test <file>`)
 
 - S1 signal-calls-0110.test.ts, pglite, the consult-0105.test.ts shape (applies every migration in order,
-  then 0110): good row in; each CHECK refuses its bad row (direction, source format, window, each arm of the
-  stamp); the unique key refuses a second call for the same window; rollback drops cleanly and its ledger row.
+  then 0110): good row in, one per direction; each CHECK refuses its bad row (direction 'buy', source format,
+  window, each arm of the stamp, a neutral row with entry_px, with exit_px, with an outcome); the unique key refuses a second call for the same window; rollback drops cleanly and its ledger row.
   Trigger (fable P2 m67410): each NEVER column refused; entry_px and meta null -> value passes, value ->
   other value refused, with and without an outcome; each FROZEN-ONCE-SCORED column refused once scored; the
   register-then-score update passes; the `set local signal_calls.allow_correction = 'on'` path passes for
@@ -256,19 +340,19 @@ apply, not two.
   IP rule set and wrong 403; short token 401, wrong token 401, axiom token on the sentiment path 401; the body
   is not read before step 5 passes; source assertion that the compare is timingSafeEqual, as
   agent-api.test.ts:227. Body 400s: unknown field, 0 and 201 calls, 64 KB + 1, bad date, bad direction, body
-  source != path source, unknown symbol (whole batch, nothing written, index + symbol in the body). Upsert:
-  register then score; identical repost unchanged; changed direction 409 and nothing in the batch written;
-  set entry_px changed 409; set meta changed 409; rescoring 409. Dead-band edges per class: exactly 5.0 pips
-  not FLAT, 4.9 FLAT, a JPY pair's pip, XAUUSD $2.00 vs $1.99, US30 20 vs 19.9. Mismatch (G3 m67417): a
-  mismatched new call is inserted with entry_px null and scored columns null while the rest of the batch is
-  written, mismatched[] carries sent + computed; the corrected retry scores it; a retry that still
-  mismatches leaves it unscored, no partial write. Fable listed the G3 cases under S1; they need the ingest
-  code, so they are here, and "shows in unscored after close" is in S3.
+  source != path source, unknown symbol (whole batch, nothing written, index + symbol in the body), a
+  `move` or `outcome` field, an `entryTs` field, a neutral call with entryPx, exitPx with no entryPx sent or
+  stored. Window: entry_ts and exit_ts stored as sessionDate 06:00Z and 21:00Z. Upsert: register then score;
+  identical repost unchanged; changed direction 409 and nothing in the batch written (the R5 rewritten
+  day); set entry_px changed 409; set meta changed 409; changed exitPx on a scored row 409. Dead-band edges
+  per class, with Yahoo-shaped float inputs: exactly 5.0 pips not FLAT, 4.9 FLAT, a JPY pair's pip, XAUUSD
+  $2.00 vs $1.99, US30 20 vs 19.9; up and down signs. The G3 mismatch cases are dropped with G3 (section 4).
 - S3 signal-stats.test.ts: a hand-built fixture of about 14 calls over 3 pairs with every expected number
-  written out by hand in the test (headline, per pair, buy/sell split, avg right/wrong, the n<10 flag at 9
-  and 10, cumulative series in date order, flats outside the hit % denominator, pending outside everything).
-  Plus: unscored after close at exit_ts + 2 h exactly and 1 ms either side; each lead-time bucket at both of
-  its edges; a mismatched-then-unscored row (G3) lands in unscored after close.
+  written out by hand in the test (headline, per pair, up/down split, avg right/wrong, the n<10 flag at 9
+  and 10, cumulative series in date order, flats and neutrals outside the hit % denominator, pending outside
+  everything, the live / backfilled / no-source split). Plus: unscored after close at exit_ts + 2 h exactly
+  and 1 ms either side; a neutral row past the grace is in neither pending nor unscored after close; each
+  lead-time bucket at both of its edges.
 - Every test is seen failing against a stub before the code passes (CLAUDE.md rule 7).
 - NOT RUNNABLE ON MY BOX: `npx tsx --test` was refused here on 2026-10-13 (consult thread). I will retry it per
   slice. If refused, the run goes to Leo or marcus with the exact line, and I report it as not run by me.
@@ -282,16 +366,18 @@ apply, not two.
 |---|---|---|---|
 | S0 | this plan | ~200 | fable review, marcus GO |
 | S0.1 | this revision + docs/signal-ingest.md (timing values, poster rules) | doc only | marcus GO m67424 |
-| S1 | 0110 (table + trigger) + rollback + pglite test | ~230 | Q1 (number, answered m67403), Q4 (bars in or out) |
-| S2a | signal-instruments + signal-ingest lib + tests | ~400 | Q2 (fields, units, scorer rules) |
+| S0.2 | Axiom's answers + R1-R8 (m67429) | doc only | marcus m67435 |
+| S1 | 0110 (table + trigger) + rollback + pglite test | ~230 | fable PASS of 5abac28 + S0.2 (marcus m67429/m67435); 0110 re-checked before push (m67403) |
+| S2a | signal-instruments + signal-ingest lib + tests | ~400 | S1 |
 | S2b | route + docs/signal-ingest.md | ~120 | S2a |
-| S3 | signal-stats (pure) + tests | ~300 | Q2 (hit % definition) |
+| S3 | signal-stats (pure) + tests | ~300 | S2a |
 | S4 | page sections 1-3, charts, css | ~400 | S3; dataviz skill read first |
-| S5 | per-pair chart with call markers | ~200 (+~250 if bars) | Q4 |
+| S5 | per-pair price-line chart with call markers | ~200 | S4 |
 
-About 1,600 lines without bars. S5 default: a price line through each call's entry_px and exit_px (two
-points a day, no new data), a marker at each entry coloured by outcome with a buy/sell glyph, so colour is
-never the only signal. Real 4H candles need bars from somewhere (Q4).
+About 1,600 lines. S5 (R6 m67429, no bars): a price line through each call's entry_px and exit_px (two
+points a day, no new data), a marker at each entry coloured by outcome with an up/down glyph, so colour is
+never the only signal. Neutral calls: a hollow marker on the date with no price point (they have none).
+The axis for XAUUSD and US30 is labelled with the futures ticker (GC=F, YM=F).
 
 Rollout (not mine to do; listed so nothing is assumed):
 - R1 marcus applies 0110 before the code merges (the ingest and the page both name the table).
@@ -307,6 +393,11 @@ Status at S0.1: Q1 ANSWERED (marcus m67403: 0110 is mine; re-check main, every o
 isAdminUser alone in v1, no allowlist). Q8 ANSWERED (m67403: no sidebar link in v1). Q4 asked of Axiom by
 marcus (m67425) and gates S1; Q2/Q3/Q6/Q7 asked in the same message.
 
+Status at S0.2 (axiom m67428 via marcus m67429): Q2 ANSWERED as relayed text with axiom's line numbers
+(fields, symbols, scorer, hit %; no pip sizes in Axiom's files, so the sizes are marcus's R4), not as a
+paste; Q3 ANSWERED fixed UTC; Q4 ANSWERED no bars; Q6 ANSWERED feasible, not built, outbound unverified;
+Q7 could not be checked, treated as no static IP. New: Q9.
+
 - Q1 Confirm migration number 0110.
 - Q2 Paste 5 lines of predictions.jsonl and track_record.py's scoring code: field names, the symbol list,
   the pip/point size per symbol (is an XAUUSD "point" $1 or $0.01?), whether "under 5 pips" is strict, and
@@ -320,6 +411,9 @@ marcus (m67425) and gates S1; Q2/Q3/Q6/Q7 asked in the same message.
 - Q6 Can Axiom post each call twice (at call time, then scored)? Who builds the poster on Ubuntu-Axiom?
 - Q7 Does Ubuntu-Axiom have a static egress IP (for the optional IP rule)?
 - Q8 Sidebar link: none in v1 (URL only), unless you want the append.
+- Q9 (not a blocker before S2b) Which bar field are track_record's "start" and "end" (:77, :108): 06:00
+  bar open and 20:00 bar close, or something else? docs/signal-ingest.md must tell the poster exactly
+  which price is entryPx and exitPx, and whether entryPx exists at ~06:10Z when the card posts.
 
 Later, not in this plan: the tester-group view (a role or an email list on the same page lib), and a Horizon
 One surface. Both read the same table and the same stats lib; neither needs a schema change.
