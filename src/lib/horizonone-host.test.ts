@@ -53,7 +53,7 @@ test("/login goes to the portal's /login with the query kept (fable S1, marcus m
 });
 
 test("other /admin pages go to the portal at the same path and query (marcus m68786 (c))", () => {
-  for (const path of ["/admin", "/admin/users", "/admin/finance", "/admin/signalsx"]) {
+  for (const path of ["/admin", "/admin/users", "/admin/finance", "/admin/signalsx", "/admin/x.json"]) {
     assert.deepEqual(horizonOneRoute(path, "?a=1"), { kind: "redirect", to: `${PORTAL_ORIGIN}${path}?a=1` }, path);
   }
 });
@@ -65,7 +65,7 @@ test("the page and static files pass", () => {
 });
 
 test("every other non-admin path 404s, signup included", () => {
-  for (const path of ["/signup", "/dashboard/x", "/marketplace", "/account", "/feed", "/partner"]) {
+  for (const path of ["/signup", "/dashboard/x", "/marketplace", "/account", "/feed", "/partner", "/adminx"]) {
     assert.deepEqual(horizonOneRoute(path, ""), { kind: "not-found" }, path);
   }
 });
