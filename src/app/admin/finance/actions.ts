@@ -61,7 +61,7 @@ export async function addPaymentAction(
       throw new Error("Invalid date");
     }
 
-    // A row a referrer can earn on (software or, since marcus m64769, feed access) is linked to the client by email.
+    // A row a referrer can earn on (any category in REFERRAL_CATEGORIES) is linked to the client by email.
     const earnsReferral = REFERRAL_CATEGORIES.includes(category);
     const userId = earnsReferral ? await resolveUserIdByEmail(counterparty) : null;
 

@@ -360,7 +360,8 @@ export interface ActivateBundleResult {
 /** ONE transaction: the licence (issued, or adopted and extended), the bundle row, the ONE 'bundle' payment and,
  * when the licence already has a server, the feed grant. No auto list-price payment on any path (5a B3).
  * After commit, exactly one notify per path: new licence -> activation; adopted trial -> upgraded; adopted paid
- * -> none. Then the referral hook, which is a no-op for 'bundle' until coxwell rules the referral split. */
+ * -> none. Then the referral hook: a plain referrer earns on the gross payment, a partner-linked one books it into
+ * their partner_deals row (REFERRAL_CATEGORIES in referrals.ts decides which categories earn). */
 export async function activateBundle(args: ActivateBundleArgs): Promise<ActivateBundleResult> {
   const bundleDef = bundleByKey(args.bundleKey);
   if (!bundleDef) throw new Error(`Unknown bundle: ${args.bundleKey}`);

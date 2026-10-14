@@ -287,6 +287,31 @@ test("T1b partner-linked referrer: the bundle payment books into the partner's d
   assert.deepEqual(created.payment_ids, [await payOf(noDeal)]);
 });
 
+test("T1c Renew earns again for a partner-linked referrer: the renewal payment joins the SAME deal, no flat earning", async () => {
+  // Fable's measured T1c (m68569 N4): every bundle payment books, not only the first (renewals earn, m68496).
+  const partnerUser = await makeUser();
+  const partnerId = (await db.query(`insert into partners (name, user_id, status) values ($1, $2, 'active') returning id`, [`Partner ${seq}`, partnerUser])).rows[0].id;
+  const u = await makeUser();
+  await db.query(`update users set referred_by_user_id = $2 where id = $1`, [u, partnerUser]);
+
+  const r = await paid(u);
+  await lic.settleLicenseBackgroundTasks();
+  await b.renewBundle({ actorUserId: ADMIN, bundleId: r.bundleId, termDays: 30, amountUsd: 100 });
+  await lic.settleLicenseBackgroundTasks();
+
+  const earnings = (await db.query(`select count(*)::int as n from referral_earnings where referred_user_id = $1`, [u])).rows[0].n;
+  assert.equal(earnings, 0, "no flat-30% earning on either payment");
+
+  const pays = (await db.query(`select id from payments where user_id = $1 and category = 'bundle' order by id`, [u])).rows.map((p: any) => p.id);
+  assert.equal(pays.length, 2, "activation + renewal");
+  const deals = (await db.query(`select id, partner_id, gross_usd from partner_deals where client_user_id = $1`, [u])).rows;
+  assert.equal(deals.length, 1, "the renewal joins the deal the activation opened");
+  assert.equal(deals[0].partner_id, partnerId);
+  assert.equal(Number(deals[0].gross_usd), 200);
+  const booked = (await db.query(`select payment_id from deal_payments where deal_id = $1 order by payment_id`, [deals[0].id])).rows.map((p: any) => p.payment_id);
+  assert.deepEqual(booked, pays, "both 'bundle' payments are booked, and nothing else");
+});
+
 test("T1/T3 grant: refuses with no server; LD then writes 3 stamped rows + 3 open allowlist records at the configured share", async () => {
   const u = await makeUser();
   const r = await paid(u);
