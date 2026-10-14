@@ -497,6 +497,23 @@ test("T8 phone bar (m67960 #3): the sum when EVERY line shows a price, else 'Con
   assert.doesNotMatch(readFileSync(path.join(process.cwd(), "src/components/marketplace/basket-view.tsx"), "utf8"), /Set when terms are agreed/);
 });
 
+test("T8 desktop follows the bar (m67972 #2): every line priced -> 'Total <sum>'; any unpriced line -> today's 'No total.' text", async () => {
+  const bar = (out: string) => out.match(/<div class="bk-bar-total"><span>Total<\/span><b>([^<]*)<\/b>/)?.[1];
+  const desk = (out: string) =>
+    out.match(/<div class="bk-nototal">(.*?)<\/div>/)?.[1].replace(/<!-- -->/g, "").replace(/<[^>]+>/g, "");
+  storedLines = [LD];
+  const lone = await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } });
+  assert.equal(desk(lone), "Total $100/month");
+  assert.equal(desk(lone), `Total ${bar(lone)}`, "desktop = bar on the lone priced bundle");
+  assert.doesNotMatch(lone, /No total\.|priced by agreement/);
+  assert.equal(desk(await basketView({ account: ACCOUNT })), "No total. Every line is priced by agreement.", "no price row");
+  storedLines = [LD, { kind: "feed", key: "ny-base", servers: 1 }];
+  const mixed = await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } });
+  assert.equal(desk(mixed), "No total. Lines without a price are priced by agreement.", "one line unpriced");
+  assert.equal(bar(mixed), "Confirmed when we reply");
+  storedLines = [];
+});
+
 test("T8 M2 render: with a bundle line the 30-day trial box is HIDDEN for an eligible account; without one it shows", async () => {
   storedLines = [LD];
   assert.doesNotMatch(await basketView({ account: ACCOUNT }), /Start with a 30-day trial/);

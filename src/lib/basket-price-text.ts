@@ -32,11 +32,19 @@ export function linePriceText(
   return line.kind === "bundle" && priceAfterSignIn ? "Price shown after sign-in" : BY_AGREEMENT;
 }
 
-/** The phone sticky bar's total (marcus m67960 #3): the sum when EVERY line shows a price, else TOTAL_ON_REPLY.
- * Signed out no line carries an amount, so the bar never shows "$" there (C6). Today only a bundle can be priced
- * and a basket holds one bundle (basket-catalogue C4), so the one priced case is a lone bundle: "$100/month". */
-export function basketTotalText(lines: { kind: BasketLineKind; key: string }[], bundlePrices: Record<string, number> | undefined): string {
+/** The basket's total in usd per month, or null when it has none: the sum when EVERY line shows a price; null when
+ * any line is unpriced or the basket is empty. The phone bar and the desktop summary both read it (marcus m67972 #2),
+ * so they can't disagree on whether a total exists. Signed out no line carries an amount, so this is always null
+ * there (C6). Today only a bundle can be priced and a basket holds one bundle (basket-catalogue C4), so the one
+ * priced case is a lone bundle. */
+export function basketTotalUsd(lines: { kind: BasketLineKind; key: string }[], bundlePrices: Record<string, number> | undefined): number | null {
   const amounts = lines.map((l) => lineUsd(l, bundlePrices));
-  if (amounts.length === 0 || amounts.some((a) => a === null)) return TOTAL_ON_REPLY;
-  return formatUsdPerMonth((amounts as number[]).reduce((sum, a) => sum + a, 0));
+  if (amounts.length === 0 || amounts.some((a) => a === null)) return null;
+  return (amounts as number[]).reduce((sum, a) => sum + a, 0);
+}
+
+/** The phone sticky bar's total (marcus m67960 #3): basketTotalUsd as "$100/month", else TOTAL_ON_REPLY. */
+export function basketTotalText(lines: { kind: BasketLineKind; key: string }[], bundlePrices: Record<string, number> | undefined): string {
+  const usd = basketTotalUsd(lines, bundlePrices);
+  return usd === null ? TOTAL_ON_REPLY : formatUsdPerMonth(usd);
 }

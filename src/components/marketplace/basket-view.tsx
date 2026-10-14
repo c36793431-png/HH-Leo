@@ -16,7 +16,7 @@ import {
 } from "@/lib/basket-store";
 import { submitBasketAction, type SubmitReach } from "@/app/marketplace/basket/actions";
 import { SUPPORT_HANDLE, SUPPORT_TELEGRAM_URL } from "@/lib/support-contact";
-import { BY_AGREEMENT, basketTotalText, linePriceText } from "@/lib/basket-price-text";
+import { BY_AGREEMENT, basketTotalText, basketTotalUsd, linePriceText } from "@/lib/basket-price-text";
 
 /**
  * /marketplace/basket (Iris sheets 3-5 + r2 2-4; rulings marcus m59146). A REQUEST basket, not a
@@ -126,6 +126,9 @@ export function BasketView({
   const bundleFeedKey = bundleLine?.stored.feed;
   const priceText = (l: { kind: BasketEntry["kind"]; key: string }) => linePriceText(l, bundlePrices, priceAfterSignIn);
   const anyPriceShown = lines.some((l) => priceText(l.entry) !== BY_AGREEMENT);
+  // One predicate for both totals (marcus m67972 #2): the desktop summary follows the phone bar.
+  const hasTotal = basketTotalUsd(lines.map((l) => l.entry), bundlePrices) !== null;
+  const totalText = basketTotalText(lines.map((l) => l.entry), bundlePrices);
 
   // The portal topbar titles the page by step ("Request sent").
   useEffect(() => {
@@ -508,7 +511,15 @@ export function BasketView({
             <h2>Your request</h2>
             {summaryRows}
             <div className="bk-nototal">
-              <b>No total.</b> {anyPriceShown ? "Lines without a price are priced by agreement." : "Every line is priced by agreement."}
+              {hasTotal ? (
+                <>
+                  <b>Total</b> {totalText}
+                </>
+              ) : (
+                <>
+                  <b>No total.</b> {anyPriceShown ? "Lines without a price are priced by agreement." : "Every line is priced by agreement."}
+                </>
+              )}
             </div>
           </div>
           {trialOffered && (
@@ -537,7 +548,7 @@ export function BasketView({
       <div className="bk-bar">
         <div className="bk-bar-total">
           <span>Total</span>
-          <b>{basketTotalText(lines.map((l) => l.entry), bundlePrices)}</b>
+          <b>{totalText}</b>
         </div>
         {nextStep}
       </div>
