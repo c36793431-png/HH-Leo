@@ -351,6 +351,10 @@ export interface ActivateBundleResult {
   bundleId: string;
   licenseId: string;
   licenseNumber: number;
+  /** The carrying licence's key and expiry, so a caller can send the key (scripts/activate-bundle.mts, plan
+   * m69164 step 2; GO m69165) without re-reading the row. A secret: mask it anywhere it is printed or logged. */
+  licenseKey: string;
+  expiresAt: Date;
   outcome: "new-licence" | "adopted-paid" | "adopted-trial";
   paymentId: string | null;
   /** null when the licence has no server yet: the feed waits for one (plan F3). */
@@ -394,6 +398,8 @@ export async function activateBundle(args: ActivateBundleArgs): Promise<Activate
 
     let licenseId: string;
     let licenseNumber: number;
+    let licenseKey: string;
+    let expiresAt: Date;
     let outcome: ActivateBundleResult["outcome"];
     let newLicence: { licenseKey: string; tier: string; expiresAt: Date } | null = null;
     let upgradedFrom: { tier: string; licenseKey: string } | null = null;
@@ -408,6 +414,8 @@ export async function activateBundle(args: ActivateBundleArgs): Promise<Activate
       });
       licenseId = issued.id;
       licenseNumber = issued.licenseNumber;
+      licenseKey = issued.licenseKey;
+      expiresAt = issued.expiresAt;
       outcome = "new-licence";
       newLicence = { licenseKey: issued.licenseKey, tier: issued.tier, expiresAt: issued.expiresAt };
     } else {
@@ -422,7 +430,9 @@ export async function activateBundle(args: ActivateBundleArgs): Promise<Activate
       }
       licenseId = picked.id;
       licenseNumber = Number(picked.license_number);
-      await extendLicenseOn(client, licenseId, new Date(new Date(picked.expires_at).getTime() + termMs));
+      licenseKey = picked.license_key;
+      expiresAt = new Date(new Date(picked.expires_at).getTime() + termMs);
+      await extendLicenseOn(client, licenseId, expiresAt);
       await client.query(
         `update licenses set feed_types = array_append(feed_types, $2) where id = $1 and not ($2 = any(feed_types))`,
         [licenseId, feedType]
@@ -467,7 +477,7 @@ export async function activateBundle(args: ActivateBundleArgs): Promise<Activate
       feed = await grantBundleFeedOn(client, bundle, await lockLicence(client, licenseId));
     }
 
-    return { bundleId, licenseId, licenseNumber, outcome, paymentId, feed, newLicence, upgradedFrom };
+    return { bundleId, licenseId, licenseNumber, licenseKey, expiresAt, outcome, paymentId, feed, newLicence, upgradedFrom };
   });
 
   if (done.newLicence) {
@@ -490,6 +500,8 @@ export async function activateBundle(args: ActivateBundleArgs): Promise<Activate
     bundleId: done.bundleId,
     licenseId: done.licenseId,
     licenseNumber: done.licenseNumber,
+    licenseKey: done.licenseKey,
+    expiresAt: done.expiresAt,
     outcome: done.outcome,
     paymentId: done.paymentId,
     feed: done.feed,
