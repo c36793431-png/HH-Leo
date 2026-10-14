@@ -5,6 +5,7 @@ import { REFERRAL_COOKIE, REFERRAL_COOKIE_MAX_AGE_DAYS } from "@/lib/referrals";
 import { getActivePartnerReferralCode } from "@/lib/partners";
 import { isAdminFeedRoute, portalAdminRedirect } from "@/lib/feed-host-admin";
 import { horizonOneRoute, isHorizonOneHost, isSignalsPath, signalsHostOk } from "@/lib/horizonone-host";
+import { consultRoute, isConsultHost } from "@/lib/consult-host";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 const FEED_HOST = "feed.horizonhft.com";
@@ -48,6 +49,19 @@ export default auth(async (req) => {
     const route = horizonOneRoute(pathname, req.nextUrl.search);
     if (route.kind === "redirect") return NextResponse.redirect(new URL(route.to, req.nextUrl), 307);
     if (route.kind === "not-found") return new NextResponse("Not Found", { status: 404 });
+  }
+
+  if (isConsultHost(host)) {
+    // consult.horizonhft.com serves the consultant application page at its root, nothing else (marcus m68993,
+    // m69004 ruling 1; Fable m69076 ask 4); every other path, /admin and /login included, goes to the portal at the
+    // same path and query. The routing and its reasons live in lib/consult-host.ts, with its tests.
+    const route = consultRoute(pathname, req.nextUrl.search);
+    if (route.kind === "redirect") return NextResponse.redirect(route.to, 307);
+    if (route.kind === "rewrite") {
+      const url = req.nextUrl.clone();
+      url.pathname = route.to;
+      return NextResponse.rewrite(url);
+    }
   }
 
   if (isPartnerHost) {
