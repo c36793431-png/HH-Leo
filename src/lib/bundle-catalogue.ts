@@ -38,6 +38,18 @@ export const BUNDLES: BundleDefinition[] = [
   },
 ];
 
+/** Bundle art (coxwell 10-14 via marcus m68634: Iris's variant A), the one map for the shelf card's plate and the
+ * product page's hero (coxwell 10-14 via marcus m69323). Keyed by BundleKey, so a new bundle can't render without
+ * art. The key content sits in a 1.85:1 centre band, so the card plate's cover crop is safe from 222px (desktop) to
+ * 318px (mobile) wide; the hero shows the whole 8:3 frame, uncropped. */
+export const BUNDLE_CARD_ART: Record<BundleKey, { src640: string; src960: string; alt: string }> = {
+  "horizon-complete": {
+    src640: "/marketplace/bundles/horizon-complete-card-640.webp",
+    src960: "/marketplace/bundles/horizon-complete-card-960.webp",
+    alt: "A Base feed stream, the Horizon app and the strategy pack, joined into one on a horizon line",
+  },
+};
+
 export const BUNDLE_FEED_CHOICES: BundleFeedChoice[] = ["ld-base", "ny-base"];
 
 /** The strategy pack: every strategy a licence unlocks except OBI, which coxwell sells separately (Q-A, m66858).

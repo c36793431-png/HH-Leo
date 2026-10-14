@@ -406,6 +406,26 @@ test("T14 What's included: names from the catalogues, the 4 strategies (no OBI),
   }
 });
 
+test("T14b hero (m69323): the shelf card's art, sized 960x360 with alt, above What's included, signed in and out", async () => {
+  const art = bc.BUNDLE_CARD_ART["horizon-complete"];
+  for (const who of ["out", "in"] as const) {
+    if (who === "in") {
+      const u = await makeUser();
+      signIn(u.id, u.email);
+    } else signOut();
+    const out = await productPage("horizon-complete");
+    const hero = out.match(/<div class="mkt-media mkt-media-hero"><img [^>]*>/)?.[0];
+    assert.ok(hero, `${who}: hero present`);
+    assert.ok(hero.includes(`src="${art.src960}"`) && hero.includes(`${art.src640} 640w`), who);
+    assert.ok(hero.includes(`alt="${art.alt}"`) && /width="960"/.test(hero) && /height="360"/.test(hero), who);
+    const included = out.indexOf('class="mkd-plate-title">What');
+    assert.ok(included > 0 && out.indexOf(hero) < included, `${who}: hero above What's included`);
+  }
+  signOut();
+  // The card and the hero read one map: the shelf shows the same file.
+  assert.ok((await shelf()).includes(`src="${art.src960}"`));
+});
+
 test("T12 route: a bundle key renders the bundle; listing pages are untouched; keys never collide", async () => {
   signOut();
   const listingKeys = new Set(mc.MARKETPLACE_LISTINGS.map((l) => l.key));
