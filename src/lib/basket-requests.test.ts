@@ -141,9 +141,11 @@ test("lines: empty, over 20, a repeated product, and bad server counts are refus
   }
 });
 
-test("catalogue: what the basket offers is exactly the available listings plus the strategy entries", () => {
+test("catalogue: what the basket offers is exactly the bundles, the available listings and the strategy entries", () => {
   const keys = cat.basketCatalogue().map((e) => `${e.kind}:${e.key}`);
   assert.deepEqual(keys, [
+    // Bundles first (bundles S2, Q-L m66848); everything after it keeps its kind and order.
+    "bundle:horizon-complete",
     "software:horizon-terminal",
     "feed:ld-base",
     "feed:ny-base",

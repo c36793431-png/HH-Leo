@@ -74,7 +74,7 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
   const { key } = await params;
   // A bundle key gets the bundle's own page (bundles S2); every listing below is unchanged.
   const bundle = bundleByKey(key);
-  if (bundle) return <BundleProductPage bundle={bundle} />;
+  if (bundle) return BundleProductPage({ bundle });
   const listing = listingByKey(key);
   if (!listing) notFound();
 
