@@ -27,6 +27,8 @@ test("static files pass", () => {
   for (const path of ["/favicon.ico", "/logo.png", "/brand/horizon-logo-paid.png"]) {
     assert.deepEqual(consultRoute(path, ""), { kind: "pass" }, path);
   }
+  // A dotted path under /admin is not a static file: it 307s before the static rule (ruling 1, Fable S1 m69219).
+  assert.deepEqual(consultRoute("/admin/x.json", ""), { kind: "redirect", to: `${PORTAL_ORIGIN}/admin/x.json` });
 });
 
 test("every other path goes to the portal at the same path and query: /admin (ruling 1), /login, /adminx, /consult/apply/x", () => {
@@ -39,7 +41,7 @@ test("every other path goes to the portal at the same path and query: /admin (ru
 test("the redirect target is always the portal origin (no open redirect)", () => {
   for (const path of ["//evil.com", "/\\evil.com", "/@evil.com"]) {
     const r = consultRoute(path, "");
-    assert.equal(r.kind, "redirect", path);
+    assert.notEqual(r.kind, "rewrite", path);
     if (r.kind === "redirect") assert.equal(new URL(r.to).origin, PORTAL_ORIGIN, path);
   }
 });

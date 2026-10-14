@@ -135,7 +135,7 @@ test("CHECKs: lengths, vocabularies, the decided stamp and the decline note", as
   await refused(insertRow({ expertise: "" }), "23514", "consultant_applications_expertise_check");
   await refused(insertRow({ expertise: "x".repeat(1001) }), "23514", "consultant_applications_expertise_check");
   await refused(insertRow({ background: "x".repeat(2001) }), "23514", "consultant_applications_background_check");
-  await refused(insertRow({ status: "accepted" }), "23514", "consultant_applications_status_check");
+  await refused(insertRow({ status: "accepted", decided_at: new Date() }), "23514", "consultant_applications_status_check");
   await refused(insertRow({ status: "approved" }), "23514", "consultant_applications_decided_check");
   await refused(insertRow({ decided_at: new Date() }), "23514", "consultant_applications_decided_check");
   await refused(insertRow({ status: "declined", decided_at: new Date() }), "23514", "consultant_applications_decline_note_required");

@@ -20,7 +20,8 @@ export type ConsultRoute = { kind: "rewrite"; to: string } | { kind: "redirect";
  * What the consult host does with a path (Fable m69076 ask 4).
  * - "/" renders the apply page (a rewrite, so the address stays the host root; its form posts to "/" too, as the
  *   partner host's rewritten forms do, Fable N3).
- * - The apply page itself and static files pass.
+ * - The apply page itself and static files pass. /admin and anything under it is checked first, so a dotted path
+ *   such as /admin/x.json goes to the portal too and never reaches the /admin guard on this host (Fable S1 m69219).
  * - Every other path goes to the portal at the same path and query: the page renders inside PortalShell for a
  *   signed-in visitor, whose nav links are portal paths, so a 404 here would be a dead link. /admin (ruling 1) and
  *   /login are two cases of this rule. The target is always PORTAL_ORIGIN, so it is no open redirect.
@@ -28,6 +29,7 @@ export type ConsultRoute = { kind: "rewrite"; to: string } | { kind: "redirect";
 export function consultRoute(pathname: string, search: string): ConsultRoute {
   if (pathname === "/") return { kind: "rewrite", to: CONSULT_APPLY_PATH };
   if (pathname === CONSULT_APPLY_PATH) return { kind: "pass" };
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return { kind: "redirect", to: `${PORTAL_ORIGIN}${pathname}${search}` };
   if (/\.[a-zA-Z0-9]+$/.test(pathname)) return { kind: "pass" };
   return { kind: "redirect", to: `${PORTAL_ORIGIN}${pathname}${search}` };
 }
