@@ -27,8 +27,19 @@ import { ListingFigures, listingFigureMembers } from "@/components/marketplace/l
 import { ListingMedia } from "@/components/marketplace/listing-media";
 import { AddToBasketButton, StrategyPreselect } from "@/components/marketplace/basket-controls";
 import { basketCatalogue, bundleDetailHref, strategyEntryKeyForSlug } from "@/lib/basket-catalogue";
-import { BUNDLES } from "@/lib/bundle-catalogue";
+import { BUNDLES, type BundleKey } from "@/lib/bundle-catalogue";
 import { MAIN_SITE_URL } from "@/lib/main-site";
+
+/** Bundle card art (coxwell 10-14 via marcus m68634: Iris's variant A). Keyed by BundleKey, so a new bundle can't
+ * render without art. The key content sits in a 1.85:1 centre band, so the plate's cover crop is safe from 222px
+ * (desktop) to 318px (mobile) wide. */
+const BUNDLE_CARD_ART: Record<BundleKey, { src640: string; src960: string; alt: string }> = {
+  "horizon-complete": {
+    src640: "/marketplace/bundles/horizon-complete-card-640.webp",
+    src960: "/marketplace/bundles/horizon-complete-card-960.webp",
+    alt: "A Base feed stream, the Horizon app and the strategy pack, joined into one on a horizon line",
+  },
+};
 
 /**
  * /marketplace — the catalogue of what Horizon sells (coxwell via marcus, 2026-09-14).
@@ -197,10 +208,12 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
           <div className="mkt-grid">
             {bundleItems.map(({ bundle, available }) => {
               const availability = available ? "available" : "unavailable";
+              const art = BUNDLE_CARD_ART[bundle.key];
               return (
                 <div key={bundle.key} className={`card mkt-card mkt-${availability} bk-bundle-card`}>
-                  <div className="bk-strategy-plate" aria-hidden="true">
-                    <span>Bundle</span>
+                  <div className="bk-strategy-plate bk-strategy-plate-img">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={art.src960} srcSet={`${art.src640} 640w, ${art.src960} 960w`} sizes="320px" alt={art.alt} width={320} height={120} />
                   </div>
                   <div className="mkt-top">
                     <span className={`mkt-pill mkt-pill-${availability}`}>{MARKETPLACE_AVAILABILITY_LABELS[availability]}</span>
