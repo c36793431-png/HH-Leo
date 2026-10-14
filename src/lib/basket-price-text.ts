@@ -7,8 +7,8 @@ export const BY_AGREEMENT = "Priced by agreement";
 /** The phone bar's total while any line is unpriced (coxwell copy OK via marcus m67960 #3). */
 export const TOTAL_ON_REPLY = "Confirmed when we reply";
 
-/** The one money format: "$100/month". bundle-price.ts formats the product page's price with it too, so a line,
- * the product page and the total can never disagree on how an amount reads. */
+/** The one money format: "$100/month", for a line and the total alike, so they can never disagree on how an
+ * amount reads. */
 export function formatUsdPerMonth(usd: number): string {
   return `$${usd.toLocaleString("en-US")}/month`;
 }

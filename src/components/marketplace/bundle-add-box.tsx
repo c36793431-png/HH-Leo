@@ -6,9 +6,10 @@ import type { BundleFeedChoiceEntry } from "@/lib/basket-catalogue";
 import type { BundleFeedChoice } from "@/lib/bundle-catalogue";
 import { basketPut, useBasket } from "@/lib/basket-store";
 
-/** The bundle's product page control, signed in (bundles S2 plan part 1 (B)). Everything it shows comes in as
- * props from the server page: the feed choices with their listing titles and availability (Fable S2 C1/C2: a
- * client module never value-imports a catalogue), and the price string, read server-side inside `if (user)`.
+/** The bundle's feed pick, signed in: the product page's Access box, and the shelf card's once its Add is pressed
+ * (bundles S2 plan part 1 (B); card m68725). Everything it shows comes in as props from the server page: the feed
+ * choices with their listing titles and availability (Fable S2 C1/C2: a client module never value-imports a
+ * catalogue). NO PRICE: it shows only at the basket steps (coxwell 10-14 via marcus m68725).
  *
  * NO DEFAULT FEED: Add stays disabled until one is picked, so nobody requests a region by not looking. A choice
  * whose listing can't be requested today is shown disabled. Adding writes {kind:'bundle', key, feed}; adding again
@@ -17,13 +18,10 @@ export function BundleAddBox({
   bundleKey,
   bundleTitle,
   choices,
-  price,
 }: {
   bundleKey: string;
   bundleTitle: string;
   choices: BundleFeedChoiceEntry[];
-  /** "$100/month", or null when no price is set: then no price line at all. */
-  price: string | null;
 }) {
   const lines = useBasket();
   const existing = lines.find((l) => l.kind === "bundle" && l.key === bundleKey);
@@ -52,7 +50,6 @@ export function BundleAddBox({
           </label>
         ))}
       </div>
-      {price && <div className="bk-bundle-price">{price}</div>}
       <p className="fp-note">Your feed is switched on once you register a server. Everything else starts when we confirm.</p>
       {existing && (
         <div className="bk-mono bk-adds">
@@ -81,5 +78,44 @@ export function BundleAddBox({
         <p className="fp-note">Nothing is charged and nothing is committed. Your basket becomes one request when you send it.</p>
       )}
     </div>
+  );
+}
+
+/** The shelf card's foot for an available bundle, signed in (coxwell 10-14 via marcus m68725): See more beside
+ * "+ Add to basket", like every listing card. A bundle can't be basketed without its feed, so Add opens the same
+ * feed pick as the product page under the foot, and the line is written from there. A bundle already in the basket
+ * reads "✓ In basket", as AddToBasketButton does. */
+export function BundleCardFoot({
+  bundleKey,
+  bundleTitle,
+  choices,
+  detailHref,
+}: {
+  bundleKey: string;
+  bundleTitle: string;
+  choices: BundleFeedChoiceEntry[];
+  detailHref: string;
+}) {
+  const lines = useBasket();
+  const [open, setOpen] = useState(false);
+  const inBasket = lines.some((l) => l.kind === "bundle" && l.key === bundleKey);
+  return (
+    <>
+      <div className="mkt-foot bk-foot">
+        <Link href={detailHref} className="btn ghost sm mkt-cta">
+          See more →
+        </Link>
+        {open ? null : inBasket ? (
+          <Link href="/marketplace/basket" className="btn ghost sm bk-inbasket" aria-label={`${bundleTitle} is in your basket. View basket`}>
+            ✓ In basket
+          </Link>
+        ) : (
+          <button type="button" className="btn primary sm bk-add" onClick={() => setOpen(true)}>
+            + Add to basket
+          </button>
+        )}
+      </div>
+      {open && <BundleAddBox bundleKey={bundleKey} bundleTitle={bundleTitle} choices={choices} />}
+    </>
   );
 }

@@ -26,7 +26,8 @@ import {
 import { ListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
 import { ListingMedia } from "@/components/marketplace/listing-media";
 import { AddToBasketButton, StrategyPreselect } from "@/components/marketplace/basket-controls";
-import { basketCatalogue, bundleDetailHref, strategyEntryKeyForSlug } from "@/lib/basket-catalogue";
+import { BundleCardFoot } from "@/components/marketplace/bundle-add-box";
+import { basketCatalogue, bundleDetailHref, bundleFeedChoiceEntries, strategyEntryKeyForSlug } from "@/lib/basket-catalogue";
 import { BUNDLES, type BundleKey } from "@/lib/bundle-catalogue";
 import { MAIN_SITE_URL } from "@/lib/main-site";
 
@@ -192,10 +193,11 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
 
   // Bundles FIRST (coxwell Q-L via marcus m66848; bundles S2 m67879): one card per bundle, at the FRONT of the
   // sections so its chip is the first after All. Not a MarketplaceCategory, like Strategies below. NO PRICE, signed
-  // in or out: the page's own rule above stays whole, and the price lives on the purchase steps only. No "+ Add to
-  // basket" either: a bundle can't be basketed without its feed pick, which is made on the product page. A bundle
+  // in or out: the page's own rule above stays whole, and the price lives on the basket steps only. See more and
+  // "+ Add to basket" like a listing card (coxwell 10-14 via marcus m68725); signed in, Add opens the feed pick
+  // (BundleCardFoot), signed out it goes through sign-in to the product page, where the pick is made. A bundle
   // none of whose feeds can be requested reads "Not available at this moment" (the catalogue's own label, Fable S2
-  // C7) and sorts after the available ones, the :104-107 ordering.
+  // C7), has no Add, and sorts after the available ones, the :104-107 ordering.
   const bundleCards = BUNDLES.map((b) => ({ bundle: b, available: catalogue.some((e) => e.kind === "bundle" && e.key === b.key) }));
   const bundleItems = [...bundleCards.filter((c) => c.available), ...bundleCards.filter((c) => !c.available)];
   if (bundleItems.length > 0) {
@@ -224,11 +226,27 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
                     </Link>
                   </h3>
                   <p className="mkt-desc">{bundle.blurb}</p>
-                  <div className="mkt-foot bk-foot">
-                    <Link href={bundleDetailHref(bundle)} className="btn primary sm mkt-cta">
-                      Choose your feed →
-                    </Link>
-                  </div>
+                  {available && user ? (
+                    <BundleCardFoot
+                      bundleKey={bundle.key}
+                      bundleTitle={bundle.title}
+                      choices={bundleFeedChoiceEntries(bundle)}
+                      detailHref={bundleDetailHref(bundle)}
+                    />
+                  ) : (
+                    <div className="mkt-foot bk-foot">
+                      <Link href={bundleDetailHref(bundle)} className="btn ghost sm mkt-cta">
+                        See more →
+                      </Link>
+                      {available ? (
+                        <Link href={authPageHref("/login", bundleDetailHref(bundle))} className="btn primary sm bk-add">
+                          + Add to basket
+                        </Link>
+                      ) : (
+                        <span className="bk-foot-note">Nothing to add right now.</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

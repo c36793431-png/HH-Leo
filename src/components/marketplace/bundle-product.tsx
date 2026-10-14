@@ -10,7 +10,6 @@ import { PublicShell } from "@/components/marketplace/public-shell";
 import { MARKETPLACE_AVAILABILITY_LABELS } from "@/lib/marketplace-catalogue";
 import { basketEntry, bundleDetailHref, bundleFeedChoiceEntries } from "@/lib/basket-catalogue";
 import { bundleIncludedLines, type BundleDefinition } from "@/lib/bundle-catalogue";
-import { getBundleListPrice } from "@/lib/bundle-price";
 import { BundleAddBox } from "@/components/marketplace/bundle-add-box";
 
 /**
@@ -22,9 +21,8 @@ import { BundleAddBox } from "@/components/marketplace/bundle-add-box";
  * member stories. "What's included" is bundleIncludedLines: names read from the catalogues, never a price or a
  * tier price (coxwell "tier NAMES only", marcus M0 m67867).
  *
- * THE PRICE IS READ ONLY SIGNED IN, inside `if (user)`, and handed to the Access box as its own prop. Signed out
- * there is no price and no hint of one: "Sign in to request →", like every listing (Fable S2 C6 applies to the
- * basket, where a boolean is passed; here nothing is).
+ * NO PRICE, signed in or out: it shows only at the basket steps (coxwell 10-14 via marcus m68725, "prices shown at
+ * purchase, not on the page"). Signed out: "Sign in to request →", like every listing.
  */
 export async function BundleProductPage({ bundle }: { bundle: BundleDefinition }) {
   const session = await auth();
@@ -37,9 +35,6 @@ export async function BundleProductPage({ bundle }: { bundle: BundleDefinition }
   const availability = available ? "available" : "unavailable";
   const choices = bundleFeedChoiceEntries(bundle);
   const signInHref = authPageHref("/login", bundleDetailHref(bundle));
-
-  let price: string | null = null;
-  if (user) price = await getBundleListPrice(bundle.key);
 
   const page = (
     <>
@@ -87,7 +82,7 @@ export async function BundleProductPage({ bundle }: { bundle: BundleDefinition }
                 Sign in to request →
               </Link>
             ) : (
-              <BundleAddBox bundleKey={bundle.key} bundleTitle={bundle.title} choices={choices} price={price} />
+              <BundleAddBox bundleKey={bundle.key} bundleTitle={bundle.title} choices={choices} />
             )}
           </div>
         </div>

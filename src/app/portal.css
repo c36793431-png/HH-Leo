@@ -1521,7 +1521,6 @@
 .portal-shell .bk-radio.off { cursor: not-allowed; opacity: 0.55; }
 .portal-shell .bk-radio input { accent-color: var(--hz-cyan); margin: 0; }
 .portal-shell .bk-radio-off { display: block; font-size: 11px; color: var(--hz-ink-3); }
-.portal-shell .bk-bundle-price { font-size: 20px; font-weight: 700; color: var(--hz-ink); }
 .portal-shell .bk-price-set { color: var(--hz-ink); }
 .portal-shell .bk-stepper {
   display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; border-radius: 9px;

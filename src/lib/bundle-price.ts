@@ -1,10 +1,9 @@
 import { pool } from "./db";
 import type { BundleKey } from "./bundle-catalogue";
-import { formatUsdPerMonth } from "./basket-price-text";
 
 /** A bundle's list price, the ONE price the portal shows (coxwell Q-I m66858 "$100/month"; marcus M0 m67867):
- * signed-in only, at the purchase steps (the product page's Access box and the three basket steps). Member tiers
- * are shown by name only, never priced.
+ * signed-in only, at the three basket steps. Never on the shelf card or the product page (coxwell 10-14 via marcus
+ * m68725). Member tiers are shown by name only, never priced.
  *
  * SERVER ONLY. No "use client" file may import this module (pinned by bundle-s2.test.ts; the repo has no
  * server-only package, so that pin is the guard). A page reads it inside `if (user)` and passes the string as its
@@ -28,12 +27,6 @@ export function bundleListPriceUsd(value: unknown, key: BundleKey): number | nul
   return usd;
 }
 
-/** The display string for one bundle, from the config value as stored. Null = show no price. */
-export function formatBundleListPrice(value: unknown, key: BundleKey): string | null {
-  const usd = bundleListPriceUsd(value, key);
-  return usd === null ? null : formatUsdPerMonth(usd);
-}
-
 /** The config value as stored, or null. A failed read is null too: every surface then shows "Priced by
  * agreement", never a guess. */
 async function readBundleListPriceConfig(): Promise<unknown> {
@@ -43,11 +36,6 @@ async function readBundleListPriceConfig(): Promise<unknown> {
   } catch {
     return null;
   }
-}
-
-/** "$100/month", or null: the product page's Access box. */
-export async function getBundleListPrice(key: BundleKey): Promise<string | null> {
-  return formatBundleListPrice(await readBundleListPriceConfig(), key);
 }
 
 /** Every bundle's whole usd per month, for the basket's three signed-in steps and the phone bar's total (the

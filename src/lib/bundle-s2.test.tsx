@@ -308,7 +308,7 @@ test("T7d forward: a bundle line is never forwarded as a provider access request
 // ---- T8 price reader ----
 
 test("T8 reader: refuses rather than guesses; only a positive whole usd per month reads", async () => {
-  const f = (v: unknown) => price.formatBundleListPrice(v, "horizon-complete");
+  const f = (v: unknown) => price.bundleListPriceUsd(v, "horizon-complete");
   for (const v of [
     undefined,
     null,
@@ -326,15 +326,13 @@ test("T8 reader: refuses rather than guesses; only a positive whole usd per mont
   ]) {
     assert.equal(f(v), null, JSON.stringify(v));
   }
-  assert.equal(f(PRICE_ROW), "$100/month");
-  assert.equal(f({ "horizon-complete": { usd: 1250, per: "month" } }), "$1,250/month");
+  assert.equal(f(PRICE_ROW), 100);
+  assert.equal((await import("./basket-price-text")).formatUsdPerMonth(f({ "horizon-complete": { usd: 1250, per: "month" } })!), "$1,250/month");
 
-  // Through the DB: missing row -> null (there is NO fallback number), the row -> the string.
+  // Through the DB: missing row -> no key (there is NO fallback number), the row -> the number.
   await setPriceRow(null);
-  assert.equal(await price.getBundleListPrice("horizon-complete"), null);
   assert.deepEqual(await price.getBundleListPrices(["horizon-complete"]), {});
   await setPriceRow(PRICE_ROW);
-  assert.equal(await price.getBundleListPrice("horizon-complete"), "$100/month");
   assert.deepEqual(await price.getBundleListPrices(["horizon-complete"]), { "horizon-complete": 100 });
 });
 
@@ -369,22 +367,18 @@ test("T8/T14 product page SIGNED OUT: no price and no hint of one, even with the
   assert.doesNotMatch(out, /type="radio"/, "no feed picker signed out");
 });
 
-test("T8/T14 product page SIGNED IN: the price, two radios with NONE checked, Add disabled; an unavailable feed is disabled", async () => {
+test("T8/T14 product page SIGNED IN: NO price even with the row set (m68725); two radios with NONE checked, Add disabled; an unavailable feed is disabled", async () => {
   const u = await makeUser();
   signIn(u.id, u.email);
   await setPriceRow(PRICE_ROW);
   const out = await productPage("horizon-complete");
-  assert.match(out, /\$100\/month/);
+  assert.doesNotMatch(out, ANY_PRICE);
+  assert.doesNotMatch(out, /bundle_list_price|per month|\/month/i);
   assert.equal(out.match(/type="radio"/g)?.length, 2);
   assert.doesNotMatch(out, /checked=""/, "no pre-checked feed");
   assert.match(out, /<button[^>]*disabled=""[^>]*>\+ Add to basket<\/button>/);
   assert.match(out, /London · Base/);
   assert.match(out, /Your feed is switched on once you register a server\. Everything else starts when we confirm\./);
-  // No row: no price line at all, and nothing guessed.
-  await setPriceRow(null);
-  const bare = await productPage("horizon-complete");
-  assert.doesNotMatch(bare, ANY_PRICE);
-  await setPriceRow(PRICE_ROW);
   // One feed off: its radio is disabled with its own line; the other stays pickable.
   const off = await withAvailability("ny-base", "maintenance", () => productPage("horizon-complete"));
   assert.match(off, /<input(?=[^>]*value="ny-base")(?=[^>]*disabled="")[^>]*>/);
@@ -427,7 +421,7 @@ test("T12 route: a bundle key renders the bundle; listing pages are untouched; k
   await assert.rejects(productPage("horizon-nope"), /notFound/);
 });
 
-test("T8/T13 shelf: Bundles is section 0 and the first chip after All; no Add on its card; its link is the product page; no price signed in or out", async () => {
+test("T8/T13 shelf: Bundles is section 0 and the first chip after All; See more + '+ Add to basket' on its card (m68725); no price signed in or out", async () => {
   await setPriceRow(PRICE_ROW);
   for (const who of ["out", "in"] as const) {
     if (who === "in") {
@@ -443,10 +437,19 @@ test("T8/T13 shelf: Bundles is section 0 and the first chip after All; no Add on
     assert.equal(out.indexOf('id="bundles"'), out.lastIndexOf('id="bundles"'));
     assert.ok(out.indexOf('id="bundles"') < out.indexOf("<h2", firstSection + 1) || out.slice(firstSection, firstSection + 80).includes('id="bundles"'), `${who}: Bundles first`);
     const card = out.slice(out.indexOf('id="bundles"'), out.indexOf("</h2>", out.indexOf("Software</h2>") - 200));
-    assert.match(card, /href="\/marketplace\/horizon-complete"[^>]*>Choose your feed →/);
-    assert.doesNotMatch(card, /Add to basket/);
+    assert.match(card, /href="\/marketplace\/horizon-complete"[^>]*>See more →/);
+    assert.doesNotMatch(card, /Choose your feed/, `${who}: the feed pick stays closed until Add is pressed`);
+    if (who === "out") assert.match(card, /<a[^>]*href="\/login[^"]*horizon-complete"[^>]*>\+ Add to basket<\/a>/, "signed out: Add goes through sign-in");
+    else assert.match(card, /<button[^>]*>\+ Add to basket<\/button>/, "signed in: Add is the button that opens the feed pick");
     assert.match(card, /Available/);
   }
+  // Signed in with the bundle already in the basket: "✓ In basket", like a listing card.
+  storedLines = [LD];
+  const inBasket = await shelf();
+  const card = inBasket.slice(inBasket.indexOf('id="bundles"'), inBasket.indexOf("Software</h2>"));
+  assert.match(card, /href="\/marketplace\/basket"[^>]*>✓ In basket/);
+  assert.doesNotMatch(card, /\+ Add to basket/);
+  storedLines = [];
   signOut();
 });
 
@@ -456,6 +459,7 @@ test("T13 C7: with neither feed requestable the card reads the catalogue's own '
   const card = out.slice(out.indexOf('id="bundles"'), out.indexOf("Software</h2>"));
   assert.match(card, /Not available at this moment/);
   assert.doesNotMatch(card, /Add to basket/);
+  assert.match(card, /Nothing to add right now\./);
 });
 
 test("T8 basket step: the bundle's price shows only with the server's prop; signed out a boolean says 'after sign-in'; no row = by agreement", async () => {
