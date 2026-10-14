@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { ShoppingBasket } from "lucide-react";
 import type { BasketEntry, BasketLine } from "@/lib/basket-catalogue";
 import {
@@ -22,7 +22,8 @@ import { SUPPORT_HANDLE, SUPPORT_TELEGRAM_URL } from "@/lib/support-contact";
  * checkout: no price field, no total, nothing charged. Three steps on one page: Basket, Review,
  * Sent. Rules carried from the sheets:
  * - Every line reads "Priced by agreement · talk to us"; no total and no subtotal while a line is
- *   unpriced, which today is every line.
+ *   unpriced, which today is every line. The one exception is a bundle line (bundles S2, marcus
+ *   m67867 M0/M1): signed in, it shows the server's price string on all three steps; still no total.
  * - Notes inform and never block: a feed line says whether a registered server is on file, a
  *   strategy line that it comes with a licence. The basket writes no envelope, so no server check
  *   runs at submit.
@@ -44,12 +45,22 @@ export interface BasketAccount {
 
 type Step = BasketStep;
 
-const PRICE = (
-  <div className="bk-price">
-    Priced by agreement
-    <small>talk to us</small>
-  </div>
-);
+const BY_AGREEMENT = "Priced by agreement";
+
+/** What a line's price slot says. Only a bundle can carry a price, and only signed in: `bundlePrices` holds the
+ * server's string per bundle key (portal_config, read inside `if (user)`), never a number computed here. Signed
+ * out, `priceAfterSignIn` says a price exists without carrying it (Fable S2 C6). Everything else, and any bundle
+ * with no price row, is priced by agreement. */
+export function linePriceText(
+  line: { kind: BasketEntry["kind"]; key: string },
+  bundlePrices: Record<string, string> | undefined,
+  priceAfterSignIn: boolean | undefined,
+): string {
+  if (line.kind !== "bundle") return BY_AGREEMENT;
+  const price = bundlePrices?.[line.key];
+  if (price) return price;
+  return priceAfterSignIn ? "Price shown after sign-in" : BY_AGREEMENT;
+}
 
 function Thumb({ entry }: { entry: BasketEntry }) {
   if (!entry.image) return <div className="bk-thumb bk-thumb-plate" aria-hidden="true" />;
@@ -65,21 +76,40 @@ function Thumb({ entry }: { entry: BasketEntry }) {
   );
 }
 
-const KIND_TAG: Record<BasketEntry["kind"], string> = { software: "Software", strategy: "Strategy", feed: "Feed" };
+const KIND_TAG: Record<BasketEntry["kind"], string> = { software: "Software", strategy: "Strategy", feed: "Feed", bundle: "Bundle" };
 
 function serversText(n: number) {
   return `${n} server${n === 1 ? "" : "s"}`;
+}
+
+/** A bundle line's picked feed, titled from the entry's own choices (a prop, Fable S2 C2). Undefined when the
+ * pick is not one the catalogue offers today: that line is dropped like any product taken off sale. */
+function bundleFeed(entry: BasketEntry, stored: StoredBasketLine) {
+  return entry.feedChoices?.find((c) => c.key === stored.feed && c.available);
+}
+
+/** M3 (marcus m67867, Fable C3): a line the bundle in this basket already covers gets a note, never a block. The
+ * terminal is the bundle's licence; a feed line is covered only when it is the bundle's CHOSEN feed. */
+function coveredByBundle(entry: BasketEntry, bundleFeedKey: string | undefined): boolean {
+  if (bundleFeedKey === undefined) return false;
+  return (entry.kind === "software" && entry.key === "horizon-terminal") || (entry.kind === "feed" && entry.key === bundleFeedKey);
 }
 
 export function BasketView({
   catalogue,
   account,
   signInHref,
+  bundlePrices,
+  priceAfterSignIn,
 }: {
   catalogue: BasketEntry[];
   /** null = signed out. */
   account: BasketAccount | null;
   signInHref: string;
+  /** Signed in only: bundle key -> its price string, from the server. */
+  bundlePrices?: Record<string, string>;
+  /** Signed out only: a bundle price exists and shows after sign-in. A boolean, never the amount (Fable S2 C6). */
+  priceAfterSignIn?: boolean;
 }) {
   const stored = useBasket();
   const [step, setStep] = useState<Step>("basket");
@@ -89,15 +119,28 @@ export function BasketView({
   const [pending, startTransition] = useTransition();
 
   const byId = useMemo(() => new Map(catalogue.map((e) => [`${e.kind}:${e.key}`, e])), [catalogue]);
+  const offered = useCallback(
+    (l: StoredBasketLine) => {
+      const entry = byId.get(`${l.kind}:${l.key}`);
+      return entry != null && (l.kind !== "bundle" || bundleFeed(entry, l) != null);
+    },
+    [byId],
+  );
   const lines = stored
-    .map((l) => ({ stored: l, entry: byId.get(`${l.kind}:${l.key}`) }))
-    .filter((l): l is { stored: StoredBasketLine; entry: BasketEntry } => l.entry != null);
+    .filter(offered)
+    .map((l) => ({ stored: l, entry: byId.get(`${l.kind}:${l.key}`) as BasketEntry }));
 
-  // A stored line the catalogue no longer offers (a product taken off sale since it was added) is
-  // dropped from the store, so the count and the send agree with what this page shows.
+  // A stored line the catalogue no longer offers (a product taken off sale since it was added, or a
+  // bundle whose picked feed can't be requested now) is dropped from the store, so the count and the
+  // send agree with what this page shows.
   useEffect(() => {
-    basketKeepOnly((l) => byId.has(`${l.kind}:${l.key}`));
-  }, [stored, byId]);
+    basketKeepOnly(offered);
+  }, [stored, offered]);
+
+  const bundleLine = lines.find((l) => l.entry.kind === "bundle");
+  const bundleFeedKey = bundleLine?.stored.feed;
+  const priceText = (l: { kind: BasketEntry["kind"]; key: string }) => linePriceText(l, bundlePrices, priceAfterSignIn);
+  const anyPriceShown = lines.some((l) => priceText(l.entry) !== BY_AGREEMENT);
 
   // The portal topbar titles the page by step ("Request sent").
   useEffect(() => {
@@ -106,12 +149,15 @@ export function BasketView({
   useEffect(() => () => setBasketStep("basket"), []);
 
   const counts = {
+    bundle: lines.filter((l) => l.entry.kind === "bundle").length,
     software: lines.filter((l) => l.entry.kind === "software").length,
     strategy: lines.filter((l) => l.entry.kind === "strategy").length,
     feed: lines.filter((l) => l.entry.kind === "feed").length,
     servers: lines.reduce((n, l) => n + (l.entry.kind === "feed" ? (l.stored.servers ?? 1) : 0), 0),
   };
-  const trialOffered = account?.trialEligible === true;
+  // No self-serve trial with a bundle: its trial is decided at Activate (coxwell Q-B; marcus M2). The server
+  // refuses the pair too (createBasketRequest), so hiding the box is the courtesy, not the guard.
+  const trialOffered = account?.trialEligible === true && counts.bundle === 0;
   const trialOn = trialOffered && wantTrial;
 
   function send() {
@@ -203,7 +249,7 @@ export function BasketView({
                     {l.kind === "strategy" && " · Included with a Horizon licence"}
                   </div>
                 </div>
-                <span className="bk-row-price">Priced by agreement</span>
+                <span className="bk-row-price">{priceText(l)}</span>
               </div>
             ))}
             {sent.hasTrial && (
@@ -222,7 +268,7 @@ export function BasketView({
             </Link>
             {/* A feed needs a server before it can be switched on; the Servers tab is open to every
                 account now (marcus m65584 Q-S4). Same feedReady the basket's feed-line note reads. */}
-            {sent.lines.some((l) => l.kind === "feed") && !account?.feedReady && (
+            {sent.lines.some((l) => l.kind === "feed" || l.kind === "bundle") && !account?.feedReady && (
               <Link href="/account/servers" className="btn ghost">
                 Add your server →
               </Link>
@@ -255,6 +301,12 @@ export function BasketView({
 
   const summaryRows = (
     <>
+      {counts.bundle > 0 && (
+        <div className="bk-sum-row">
+          <span>Bundles</span>
+          <b>{counts.bundle}</b>
+        </div>
+      )}
       <div className="bk-sum-row">
         <span>Software</span>
         <b>{counts.software}</b>
@@ -293,11 +345,12 @@ export function BasketView({
                   <div className="bk-sub">
                     {KIND_TAG[entry.kind]}
                     {entry.kind !== "strategy" && entry.chips.length > 0 && ` · ${entry.chips.join(" · ")}`}
+                    {entry.kind === "bundle" && ` · Feed ${bundleFeed(entry, s)?.title}`}
                     {entry.kind === "feed" && ` · ${serversText(s.servers ?? 1)}`}
                     {entry.kind === "strategy" && " · Included with a Horizon licence"}
                   </div>
                 </div>
-                <span className="bk-row-price">Priced by agreement</span>
+                <span className="bk-row-price">{priceText(entry)}</span>
               </div>
             ))}
             <button type="button" className="bk-link" onClick={() => setStep("basket")}>
@@ -359,6 +412,8 @@ export function BasketView({
           </div>
           {lines.map(({ stored: s, entry }) => {
             const servers = s.servers ?? 1;
+            const chips = entry.kind === "bundle" ? [`Feed ${bundleFeed(entry, s)?.title}`] : entry.chips;
+            const price = priceText(entry);
             return (
               <div key={`${entry.kind}:${entry.key}`} className="bk-line">
                 <Thumb entry={entry} />
@@ -369,9 +424,9 @@ export function BasketView({
                         {entry.detailHref ? <Link href={entry.detailHref}>{entry.name}</Link> : entry.name}
                         <span className="bk-tag">{KIND_TAG[entry.kind]}</span>
                       </div>
-                      {entry.chips.length > 0 && (
+                      {chips.length > 0 && (
                         <div className="bk-chips">
-                          {entry.chips.map((c) => (
+                          {chips.map((c) => (
                             <span key={c} className="bk-chip">
                               {c}
                             </span>
@@ -379,16 +434,29 @@ export function BasketView({
                         </div>
                       )}
                     </div>
-                    {PRICE}
+                    {price === BY_AGREEMENT ? (
+                      <div className="bk-price">
+                        {BY_AGREEMENT}
+                        <small>talk to us</small>
+                      </div>
+                    ) : (
+                      <div className="bk-price bk-price-set">{price}</div>
+                    )}
                   </div>
 
+                  {coveredByBundle(entry, bundleFeedKey) && (
+                    <div className="bk-note">
+                      <b>Included in Horizon Complete.</b> The bundle in this basket already covers this line, so you
+                      may not need it. You can still send it.
+                    </div>
+                  )}
                   {entry.kind === "strategy" && (
                     <div className="bk-note">
                       <b>Included with a Horizon licence.</b>{" "}
                       If you don&apos;t have one yet, we&apos;ll sort that out with you.
                     </div>
                   )}
-                  {entry.kind === "feed" &&
+                  {(entry.kind === "feed" || entry.kind === "bundle") &&
                     (account?.feedReady ? (
                       <div className="bk-note bk-note-ok">
                         <b>Server registered.</b> Nothing else needed for this line.
@@ -424,12 +492,20 @@ export function BasketView({
                         </button>
                       </div>
                     ) : (
-                      <span className="bk-sub">{entry.kind === "software" ? "One licence, for you" : "One strategy"}</span>
+                      <span className="bk-sub">
+                        {entry.kind === "software" ? "One licence, for you" : entry.kind === "bundle" ? "One bundle, for you" : "One strategy"}
+                      </span>
                     )}
                     {/* The tier picker is the feed's own product page (marcus m59367 d1): no picker here. */}
                     {entry.kind === "feed" && entry.detailHref && (
                       <Link href={entry.detailHref} className="bk-link bk-link-strong">
                         Change tier
+                      </Link>
+                    )}
+                    {/* Same for a bundle's feed: the pick is made on the bundle's product page. */}
+                    {entry.kind === "bundle" && entry.detailHref && (
+                      <Link href={entry.detailHref} className="bk-link bk-link-strong">
+                        Change feed
                       </Link>
                     )}
                     <button type="button" className="bk-link" onClick={() => basketRemove(entry.kind, entry.key)}>
@@ -447,7 +523,7 @@ export function BasketView({
             <h2>Your request</h2>
             {summaryRows}
             <div className="bk-nototal">
-              <b>No total.</b> Every line is priced by agreement.
+              <b>No total.</b> {anyPriceShown ? "Lines without a price are priced by agreement." : "Every line is priced by agreement."}
             </div>
           </div>
           {trialOffered && (

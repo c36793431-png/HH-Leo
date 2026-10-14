@@ -9,6 +9,8 @@ import { PublicShell } from "@/components/marketplace/public-shell";
 import { basketCatalogue } from "@/lib/basket-catalogue";
 import { getBasketAccountState } from "@/lib/basket-requests";
 import { BasketView, type BasketAccount } from "@/components/marketplace/basket-view";
+import { BUNDLES } from "@/lib/bundle-catalogue";
+import { getBundleListPrices } from "@/lib/bundle-price";
 
 /**
  * /marketplace/basket: the request basket (coxwell 2026-10-03 via marcus m59124, rulings m59146;
@@ -26,10 +28,18 @@ export default async function BasketPage() {
 
   const catalogue = basketCatalogue();
   const signInHref = authPageHref("/login", "/marketplace/basket");
+  const bundleKeys = BUNDLES.map((b) => b.key);
   let account: BasketAccount | null = null;
+  // The bundle price never rides the catalogue prop, which reaches signed-out payloads too (plan 5b P1). Signed
+  // in, the strings go as their own prop; signed out, only a boolean that one exists (Fable S2 C6).
+  let bundlePrices: Record<string, string> | undefined;
+  let priceAfterSignIn: boolean | undefined;
   if (user) {
     const state = await getBasketAccountState(user.id);
     account = { email: state.email, trialEligible: state.trialEligible, feedReady: state.feedReady };
+    bundlePrices = await getBundleListPrices(bundleKeys);
+  } else {
+    priceAfterSignIn = Object.keys(await getBundleListPrices(bundleKeys)).length > 0;
   }
 
   const page = (
@@ -38,7 +48,13 @@ export default async function BasketPage() {
         <h1>Basket</h1>
         <p>Pick what you need and send it to us as one request. Nothing is charged.</p>
       </div>
-      <BasketView catalogue={catalogue} account={account} signInHref={signInHref} />
+      <BasketView
+        catalogue={catalogue}
+        account={account}
+        signInHref={signInHref}
+        bundlePrices={bundlePrices}
+        priceAfterSignIn={priceAfterSignIn}
+      />
       <div className="foot">HORIZON HFT · customer portal</div>
     </>
   );

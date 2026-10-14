@@ -26,7 +26,8 @@ import {
 import { ListingFigures, listingFigureMembers } from "@/components/marketplace/listing-figures";
 import { ListingMedia } from "@/components/marketplace/listing-media";
 import { AddToBasketButton, StrategyPreselect } from "@/components/marketplace/basket-controls";
-import { basketCatalogue, strategyEntryKeyForSlug } from "@/lib/basket-catalogue";
+import { basketCatalogue, bundleDetailHref, strategyEntryKeyForSlug } from "@/lib/basket-catalogue";
+import { BUNDLES } from "@/lib/bundle-catalogue";
 import { MAIN_SITE_URL } from "@/lib/main-site";
 
 /**
@@ -93,7 +94,7 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
   // What the request basket can carry today (available listings + strategies), from the same
   // catalogue the submit action validates against.
   const catalogue = basketCatalogue();
-  const basketable = new Set(catalogue.filter((e) => e.kind !== "strategy").map((e) => e.key));
+  const basketable = new Set(catalogue.filter((e) => e.kind === "software" || e.kind === "feed").map((e) => e.key));
 
   const sections: MarketplaceSection[] = MARKETPLACE_CATEGORY_ORDER.flatMap((category) => {
     const inCategory = listings.filter(({ listing }) => listing.category === category);
@@ -177,6 +178,52 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
       },
     ];
   });
+
+  // Bundles FIRST (coxwell Q-L via marcus m66848; bundles S2 m67879): one card per bundle, at the FRONT of the
+  // sections so its chip is the first after All. Not a MarketplaceCategory, like Strategies below. NO PRICE, signed
+  // in or out: the page's own rule above stays whole, and the price lives on the purchase steps only. No "+ Add to
+  // basket" either: a bundle can't be basketed without its feed pick, which is made on the product page. A bundle
+  // none of whose feeds can be requested reads "Not available at this moment" (the catalogue's own label, Fable S2
+  // C7) and sorts after the available ones, the :104-107 ordering.
+  const bundleCards = BUNDLES.map((b) => ({ bundle: b, available: catalogue.some((e) => e.kind === "bundle" && e.key === b.key) }));
+  const bundleItems = [...bundleCards.filter((c) => c.available), ...bundleCards.filter((c) => !c.available)];
+  if (bundleItems.length > 0) {
+    sections.unshift({
+      key: "bundles",
+      label: "Bundles",
+      content: (
+        <div key="bundles" id="bundles" className="fp-section mkt-section">
+          <h2 className="fp-section-title">Bundles</h2>
+          <div className="mkt-grid">
+            {bundleItems.map(({ bundle, available }) => {
+              const availability = available ? "available" : "unavailable";
+              return (
+                <div key={bundle.key} className={`card mkt-card mkt-${availability} bk-bundle-card`}>
+                  <div className="bk-strategy-plate" aria-hidden="true">
+                    <span>Bundle</span>
+                  </div>
+                  <div className="mkt-top">
+                    <span className={`mkt-pill mkt-pill-${availability}`}>{MARKETPLACE_AVAILABILITY_LABELS[availability]}</span>
+                  </div>
+                  <h3 className="mkt-name">
+                    <Link href={bundleDetailHref(bundle)} className="mkt-name-link">
+                      {bundle.title}
+                    </Link>
+                  </h3>
+                  <p className="mkt-desc">{bundle.blurb}</p>
+                  <div className="mkt-foot bk-foot">
+                    <Link href={bundleDetailHref(bundle)} className="btn primary sm mkt-cta">
+                      Choose your feed →
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ),
+    });
+  }
 
   // Strategies as a live section under the shelf (Iris r2 sheet 1; marcus m59146/m59173): the
   // basket's strategy entries, data-driven so a "Base Strategy package" can replace them. Not a

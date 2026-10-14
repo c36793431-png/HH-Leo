@@ -24,6 +24,8 @@ import { scoreNamesForTierKeys } from "@/lib/feed-comparison-scores";
 import { basketEntry } from "@/lib/basket-catalogue";
 import { BasketAddBox } from "@/components/marketplace/basket-controls";
 import { MemberSuccessStories } from "@/components/marketplace/member-success-stories";
+import { bundleByKey } from "@/lib/bundle-catalogue";
+import { BundleProductPage } from "@/components/marketplace/bundle-product";
 
 /**
  * /marketplace/[key]: the product page behind every shelf card's "See more →" (coxwell
@@ -70,6 +72,9 @@ import { MemberSuccessStories } from "@/components/marketplace/member-success-st
  */
 export default async function MarketplaceProductPage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
+  // A bundle key gets the bundle's own page (bundles S2); every listing below is unchanged.
+  const bundle = bundleByKey(key);
+  if (bundle) return <BundleProductPage bundle={bundle} />;
   const listing = listingByKey(key);
   if (!listing) notFound();
 
