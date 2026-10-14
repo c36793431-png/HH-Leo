@@ -198,9 +198,10 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
 - Route file src/app/api/signals/ingest/[source]/route.ts (fable P5(a) m67410; path accepted m67417), logic in
   src/lib/signal-ingest.ts (testable without Next). The source is in the PATH so the gate picks its env var
   before the body is read; at 8909f17 it came from the body, which put JSON parsing before auth.
-- proxy.ts matcher excludes /api (src/proxy.ts:172), so the route's own checks are the only gate. Ahead of
-  the list below, route.ts answers 404 `{"error":"not found"}` (step 1's answer) on any host but
-  horizonone.horizonhft.com (marcus m68767 Q3, hard cutover; section 5).
+- proxy.ts matcher excludes /api (src/proxy.ts:172), so the route's own gate is the only gate. Its second
+  line, after the not-production 404, answers the same 404 `{"error":"not found"}` on the wrong host, i.e.
+  any host but horizonone.horizonhft.com (marcus m68767 Q3, hard cutover; fable S3 m68780: in
+  gateSignalIngest, not route.ts; section 5). Local dev passes any host (signalsHostOk).
 - Each source has its own env var holding the sha256 hex of its token, e.g. `SIGNAL_INGEST_SHA256_AXIOM`;
   code map `{ axiom: "SIGNAL_INGEST_SHA256_AXIOM" }`. A token is bound to its source: the axiom token cannot
   write sentiment rows. The token is generated on Ubuntu-Axiom; only its sha256 goes into Vercel env.
@@ -329,15 +330,25 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
 ## 5. Page: /admin/signals (horizonone.horizonhft.com only, admin only, no nav link)
 
 Moved off the portal host (coxwell 17:39Z 2026-10-14 via marcus m68727; plan kai m68750; PLAN GO with rulings
-marcus m68767). Routing in src/lib/horizonone-host.ts, with its tests; proxy.ts calls it.
+marcus m68767; fable plan read m68780 S1-S3, folded per marcus m68786). Routing in src/lib/horizonone-host.ts,
+with its tests; proxy.ts calls it.
 - horizonone.horizonhft.com: / and /dashboard -> 307 /admin/signals (/dashboard because /login sends a
-  signed-in user on an unknown host there, post-auth-redirect.ts getPostAuthRedirect). /login, static files and
-  /admin/signals[/...] pass, then meet the /admin checks below. Every other path 404s, other /admin pages too.
+  signed-in user on an unknown host there, post-auth-redirect.ts getPostAuthRedirect). /admin/signals[/...]
+  and static files pass, then meet the /admin checks below. /login -> 307 https://portal.horizonhft.com/login,
+  query kept. Any other /admin path -> 307 the same path and query on the portal (portalAdminRedirect style).
+  Every other path 404s.
+- Two predicates (fable S2): isHorizonOneHost(host) is pure, lower-cases the host, used by the block above
+  only; signalsHostOk(host, env) = isHorizonOneHost(host) || NODE_ENV === "development", used by the portal-side
+  404 below and the ingest gate. A dev bypass inside isHorizonOneHost would turn every dev request into the
+  horizonone host.
 - Every other host 404s /admin/signals[/...], after the 403 like FEED_ONLY_ADMIN_ROUTES. Local dev serves it on
   any host: the bypass is NODE_ENV === "development" only (m68767 Q1); previews run as production and 404 it
   (Q2). Feed host: portalAdminRedirect still sends it to the portal, which now 404s it (one wasted hop, no
   leak: an admin gets 404, anyone else the portal's 403 or /login).
-- Sign-in on horizonone is magic-link only (m68767 P4). The bot's BotFather domain is never changed.
+- No login page renders on horizonone (fable S1): sign-in happens on the portal, where both methods work, and
+  the .horizonhft.com session cookie (auth.ts) carries it back. No auto-return: safeCallbackPath stays
+  portal-only (post-auth-redirect.ts), not widened. This meets m68767 P4 by construction; no Leo file, no
+  widget to hide, the bot's BotFather domain is never changed.
 - Order (m68767): this code merges FIRST, FOC16 adds the domain AFTER, so the host never serves the whole portal.
   Until the domain is live the page is unreachable on every host.
 

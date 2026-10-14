@@ -138,7 +138,7 @@ connection is the 500 below, with its body and the server log line `signal-inges
 | 400 | `{ "error" }`, plus `index` when one call caused it, and `symbol` for an unknown symbol | The body is refused, NOTHING is written. The first bad call in index order is the one named (fable m67547 call 6). Also used for a wrong content-type and a body over the cap (call 3) |
 | 401 | `{ "error": "unauthorized" }` | Bad or missing token, OR an unknown or unconfigured source: one body for all (fable C2 m67410) |
 | 403 | `{ "error": "forbidden" }` | IP rule set and the caller is not that IP (not set for axiom) |
-| 404 | `{ "error": "not found" }` | Not production, or not the horizonone.horizonhft.com host |
+| 404 | `{ "error": "not found" }` | Not production, or the wrong host (anything but horizonone.horizonhft.com). Checked before the token, so a VALID token posted to portal.horizonhft.com gets 404, not 401: 404 = non-production or wrong host, 401 = token (fable S3 m68780) |
 | 409 | `{ "error", "index" }` | Call `index` conflicts with the stored call (the 409 lines in the rules above, or a changed direction). The WHOLE batch is rolled back, calls before `index` too |
 | 500 | `{ "error": "internal error; nothing was written" }` | The database could not be reached, or the transaction failed and was rolled back |
 

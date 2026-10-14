@@ -54,6 +54,8 @@ const TOKEN = randomBytes(32).toString("hex");
 const HASH = createHash("sha256").update(TOKEN, "utf8").digest("hex");
 const ENV = { VERCEL_ENV: "production", SIGNAL_INGEST_SHA256_AXIOM: HASH };
 const AUTH = { authorization: `Bearer ${TOKEN}` };
+/** Every request carries the horizonone host unless a case overrides it (fable S3 m68780). */
+const HOST = { host: "horizonone.horizonhft.com" };
 const UNAUTHORIZED = { status: 401, body: { error: "unauthorized" } };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -92,7 +94,7 @@ const body = (...calls: unknown[]) => ({ source: "axiom", calls });
 function request(raw: string, headers: Record<string, string> = {}) {
   const r = {
     reads: 0,
-    headers: new Headers({ "content-type": "application/json", ...AUTH, ...headers }),
+    headers: new Headers({ "content-type": "application/json", ...HOST, ...AUTH, ...headers }),
     text: async () => {
       r.reads++;
       return raw;
@@ -131,11 +133,24 @@ test("signal-instruments: the six symbols, and per row the 1e6 band literal = ba
 
 test("the gate, in the section 4 order", () => {
   const g = (source: string, headers: Record<string, string>, env: Record<string, string>, sources?: any) =>
-    ing.gateSignalIngest(source, new Headers(headers), env, sources);
+    ing.gateSignalIngest(source, new Headers({ ...HOST, ...headers }), env, sources);
+  const NOT_FOUND = { status: 404, body: { error: "not found" } };
 
   // 1. Not production -> 404, whatever else is right.
-  assert.deepEqual(g("axiom", AUTH, { ...ENV, VERCEL_ENV: "preview" }), { status: 404, body: { error: "not found" } });
+  assert.deepEqual(g("axiom", AUTH, { ...ENV, VERCEL_ENV: "preview" }), NOT_FOUND);
   assert.equal(g("axiom", AUTH, { SIGNAL_INGEST_SHA256_AXIOM: HASH })?.status, 404);
+
+  // 1b. Not the horizonone host -> the same 404, before the source and the token (fable S3 m68780). A valid
+  // token on the old portal URL is 404, not 401.
+  assert.deepEqual(g("axiom", { ...AUTH, host: "portal.horizonhft.com" }, ENV), NOT_FOUND, "portal with a valid token");
+  assert.deepEqual(g("sentiment", { ...AUTH, host: "portal.horizonhft.com" }, ENV), NOT_FOUND, "host before source");
+  assert.deepEqual(g("axiom", { host: "portal.horizonhft.com" }, ENV), NOT_FOUND, "host before token");
+  assert.deepEqual(g("axiom", { ...AUTH, host: "xhorizonone.horizonhft.com" }, ENV), NOT_FOUND, "not a suffix match");
+  assert.deepEqual(g("axiom", { ...AUTH, host: "localhost:3000" }, ENV), NOT_FOUND, "localhost without the dev bypass");
+  assert.deepEqual(ing.gateSignalIngest("axiom", new Headers(AUTH), ENV), NOT_FOUND, "no host header");
+  assert.equal(g("axiom", { ...AUTH, host: "horizonone.horizonhft.com:443" }, ENV), null, "with a port");
+  assert.equal(g("axiom", { ...AUTH, host: "HorizonOne.HorizonHFT.com" }, ENV), null, "any case");
+  assert.equal(g("axiom", { ...AUTH, host: "localhost:3000" }, { ...ENV, NODE_ENV: "development" }), null, "dev bypass");
 
   // 2. Bad format, not in the map, env unset, env malformed: one code and one body for all four.
   assert.deepEqual(g("Axiom", AUTH, ENV), UNAUTHORIZED, "bad format");
@@ -185,6 +200,7 @@ test("a refused gate reads no body and writes nothing; a passed one reads it onc
   const n0 = await rowCount();
   const cases: [string, Record<string, string>, Record<string, string>, number][] = [
     ["axiom", {}, { ...ENV, VERCEL_ENV: "preview" }, 404],
+    ["axiom", { host: "portal.horizonhft.com" }, ENV, 404],
     ["sentiment", {}, ENV, 401],
     ["axiom", {}, { VERCEL_ENV: "production" }, 401],
     ["axiom", { "x-forwarded-for": "203.0.113.9" }, { ...ENV, SIGNAL_INGEST_ALLOWED_IP_AXIOM: "198.51.100.7" }, 403],

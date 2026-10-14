@@ -2,13 +2,14 @@ import { createHash, timingSafeEqual } from "crypto";
 import type { PoolClient } from "@neondatabase/serverless";
 import { pool, type Db } from "./db";
 import { signalInstrument } from "./signal-instruments";
+import { signalsHostOk } from "./horizonone-host";
 
 /** POST /api/signals/ingest/[source], minus NextResponse (Axiom signals dashboard S2a; plan
  * docs/specs/axiom-signals-dashboard-plan.md section 4 at 0e61f2c). A source registers its daily calls and
  * later sends the prices; the portal stores them in signal_calls (0110) and is the only scorer (R4 m67429).
  *
- * Layers, outermost first, each only if every one above it passed (fable m67417): production only, then a
- * known and configured source, then the source's IP if one is set, then the bearer token's sha256 in constant
+ * Layers, outermost first, each only if every one above it passed (fable m67417): production only, then the
+ * horizonone.horizonhft.com host (fable S3 m68780), then a known and configured source, then the source's IP if one is set, then the bearer token's sha256 in constant
  * time; only then the body, strict, any failure 400 with nothing written; then one transaction for the whole
  * batch, any 409 rolls all of it back. */
 
@@ -95,6 +96,9 @@ export function gateSignalIngest(
 ): SignalIngestResult | null {
   // Previews share the production database, so a preview must not write.
   if (env.VERCEL_ENV !== "production") return { status: 404, body: { error: "not found" } };
+  // horizonone.horizonhft.com only, hard cutover (marcus m68767 Q3): any other host, portal.* included, gets the
+  // same 404 before the token is looked at, so a valid token on the old URL is 404, not 401 (fable S3 m68780).
+  if (!signalsHostOk(headers.get("host"), env)) return { status: 404, body: { error: "not found" } };
 
   const s = SOURCE_RE.test(source) && Object.hasOwn(sources, source) ? sources[source] : undefined;
   const expectedHex = s ? env[s.tokenEnv]?.trim().toLowerCase() : undefined;
