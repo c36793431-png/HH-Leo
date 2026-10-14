@@ -15,19 +15,20 @@ export type SignedOutLesson = Pick<EducationLesson, "slug" | "title" | "category
   hiddenBlockCount: number;
 };
 
-/** The cut: the first half of the blocks, rounded down, and never none. A one-block lesson (1 Leg)
- * shows its heading and sentence and keeps the list under it for members. A lesson that is not
- * free shows no blocks, as a signed-in member without the plan sees it (LessonDetail's locked view). */
+/** The cut: the first quarter of the blocks, rounded up, so at least one full block (coxwell 'maybe 25%' via
+ * marcus m67291; was the first half). The agentic trading course is cut the same way (it showed no blocks before).
+ * A one-block lesson (1 Leg, the course's final check) shows its heading and sentence and keeps the list, the
+ * questions and the links under it for members. A lesson that is not free shows no blocks, as a signed-in member
+ * without the plan sees it (LessonDetail's locked view). Shown blocks carry type, tag, heading, body and items only. */
 function cut(lesson: EducationLesson): { shown: EducationBlock[]; hidden: number } {
   const n = lesson.blocks.length;
-  // A course lesson is members-only (marcus m67088): signed out it shows the header and intro, no blocks.
-  if (!lesson.free || n === 0 || lesson.course) return { shown: [], hidden: Math.max(n, 1) };
+  if (!lesson.free || n === 0) return { shown: [], hidden: Math.max(n, 1) };
   if (n === 1) {
-    const [{ type, heading, body }] = lesson.blocks;
-    return { shown: [{ type, heading, body }], hidden: 1 };
+    const [{ type, tag, heading, body }] = lesson.blocks;
+    return { shown: [{ type, ...(tag ? { tag } : {}), heading, body }], hidden: 1 };
   }
-  const k = Math.floor(n / 2);
-  return { shown: lesson.blocks.slice(0, k).map(({ type, heading, body, items }) => ({ type, heading, body, items })), hidden: n - k };
+  const k = Math.ceil(n / 4);
+  return { shown: lesson.blocks.slice(0, k).map(({ type, tag, heading, body, items }) => ({ type, ...(tag ? { tag } : {}), heading, body, items })), hidden: n - k };
 }
 
 /** Throws when a do-not-publish word is in what a signed-out visitor would get. */

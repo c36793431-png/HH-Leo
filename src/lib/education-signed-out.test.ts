@@ -17,11 +17,17 @@ const BANNED = ["stealth", "order mixer", "disguis", "footprint"];
 /** Every string a member sees that the visitor must not: the hidden blocks whole, and the items of
  * a one-block lesson's block. */
 function hiddenText(lesson: EducationLesson, shownCount: number): string[] {
+  const shownText = JSON.stringify(lesson.blocks.slice(0, lesson.blocks.length === 1 ? 0 : shownCount));
   const hidden = lesson.blocks
     .slice(shownCount)
     .flatMap((b) => [b.heading, b.body, ...(b.items ?? []), ...(b.qa ?? []).flatMap((x) => [x.q, x.a]), ...(b.links ?? []).map((x) => x.label)])
-    .filter((t) => t !== "" && t !== lesson.title); // the title is shown; a block heading may repeat it (the final check)
-  if (lesson.blocks.length === 1) hidden.push(...(lesson.blocks[0].items ?? []));
+    .filter((t) => t !== "" && t !== lesson.title) // the title is shown; a block heading may repeat it (the final check)
+    // A takeaway may repeat a sentence of a shown block word for word: shown either way, not a leak.
+    .filter((t) => !shownText.includes(t));
+  if (lesson.blocks.length === 1) {
+    const [only] = lesson.blocks;
+    hidden.push(...(only.items ?? []), ...(only.qa ?? []).flatMap((x) => [x.q, x.a]), ...(only.links ?? []).map((x) => x.label));
+  }
   // A lesson with a public intro keeps its member intro for members.
   if (lesson.publicIntro) hidden.push(lesson.intro);
   if (lesson.closing) hidden.push(lesson.closing);
@@ -33,7 +39,7 @@ function hiddenText(lesson: EducationLesson, shownCount: number): string[] {
 const EXPECTED_SHOWN: Record<string, number> = {
   "getting-started": 1,
   interface: 1,
-  "broker-connections": 2,
+  "broker-connections": 1,
   "fast-feed": 1,
   "1-leg-latency-arb": 1,
   "2-leg-lock-hedge-arb": 1,
@@ -42,19 +48,18 @@ const EXPECTED_SHOWN: Record<string, number> = {
   "grid-arbitrage": 1,
   "risk-and-lot-sizing": 1,
   "timing-protection": 1,
-  "tools-and-troubleshooting": 2,
-  // The agentic trading course is members-only (m67088): no blocks signed out.
-  "agentic-trading-what-it-is": 0,
-  "agentic-trading-where-it-is-today": 0,
-  "agentic-trading-what-can-go-wrong": 0,
-  "agentic-trading-safe-structure": 0,
-  "agentic-trading-testing": 0,
-  "agentic-trading-rules": 0,
-  "agentic-trading-horizon-ai": 0,
-  "agentic-trading-final-check": 0,
+  "tools-and-troubleshooting": 1,
+  "agentic-trading-what-it-is": 2,
+  "agentic-trading-where-it-is-today": 3,
+  "agentic-trading-what-can-go-wrong": 2,
+  "agentic-trading-safe-structure": 2,
+  "agentic-trading-testing": 2,
+  "agentic-trading-rules": 2,
+  "agentic-trading-horizon-ai": 2,
+  "agentic-trading-final-check": 1,
 };
 
-test("the cut: first half of the blocks, rounded down, at least one", () => {
+test("the cut: first quarter of the blocks, rounded up, so at least one full block (m67291)", () => {
   const cuts = Object.fromEntries(
     EDUCATION_LESSONS.map((l) => {
       const v = signedOutLesson(l);
@@ -64,7 +69,7 @@ test("the cut: first half of the blocks, rounded down, at least one", () => {
   assert.deepEqual(cuts, {
     "getting-started": "1/3 hidden 2",
     interface: "1/2 hidden 1",
-    "broker-connections": "2/4 hidden 2",
+    "broker-connections": "1/4 hidden 3",
     "fast-feed": "1/2 hidden 1",
     "1-leg-latency-arb": "1/1 hidden 1",
     "2-leg-lock-hedge-arb": "1/3 hidden 2",
@@ -73,15 +78,15 @@ test("the cut: first half of the blocks, rounded down, at least one", () => {
     "grid-arbitrage": "1/3 hidden 2",
     "risk-and-lot-sizing": "1/2 hidden 1",
     "timing-protection": "1/2 hidden 1",
-    "tools-and-troubleshooting": "2/4 hidden 2",
-    "agentic-trading-what-it-is": "0/6 hidden 6",
-    "agentic-trading-where-it-is-today": "0/9 hidden 9",
-    "agentic-trading-what-can-go-wrong": "0/6 hidden 6",
-    "agentic-trading-safe-structure": "0/7 hidden 7",
-    "agentic-trading-testing": "0/6 hidden 6",
-    "agentic-trading-rules": "0/6 hidden 6",
-    "agentic-trading-horizon-ai": "0/5 hidden 5",
-    "agentic-trading-final-check": "0/1 hidden 1",
+    "tools-and-troubleshooting": "1/4 hidden 3",
+    "agentic-trading-what-it-is": "2/6 hidden 4",
+    "agentic-trading-where-it-is-today": "3/9 hidden 6",
+    "agentic-trading-what-can-go-wrong": "2/6 hidden 4",
+    "agentic-trading-safe-structure": "2/7 hidden 5",
+    "agentic-trading-testing": "2/6 hidden 4",
+    "agentic-trading-rules": "2/6 hidden 4",
+    "agentic-trading-horizon-ai": "2/5 hidden 3",
+    "agentic-trading-final-check": "1/1 hidden 1",
   });
 });
 
