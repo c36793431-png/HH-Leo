@@ -16,7 +16,7 @@ import {
 } from "@/lib/basket-store";
 import { submitBasketAction, type SubmitReach } from "@/app/marketplace/basket/actions";
 import { SUPPORT_HANDLE, SUPPORT_TELEGRAM_URL } from "@/lib/support-contact";
-import { BY_AGREEMENT, linePriceText } from "@/lib/basket-price-text";
+import { BY_AGREEMENT, basketTotalText, linePriceText } from "@/lib/basket-price-text";
 
 /**
  * /marketplace/basket (Iris sheets 3-5 + r2 2-4; rulings marcus m59146). A REQUEST basket, not a
@@ -24,7 +24,8 @@ import { BY_AGREEMENT, linePriceText } from "@/lib/basket-price-text";
  * Sent. Rules carried from the sheets:
  * - Every line reads "Priced by agreement · talk to us"; no total and no subtotal while a line is
  *   unpriced, which today is every line. The one exception is a bundle line (bundles S2, marcus
- *   m67867 M0/M1): signed in, it shows the server's price string on all three steps; still no total.
+ *   m67867 M0/M1): signed in, it shows the server's price on all three steps. The phone bar sums the
+ *   prices only when EVERY line shows one (marcus m67960 #3); the desktop summary still has no total.
  * - Notes inform and never block: a feed line says whether a registered server is on file, a
  *   strategy line that it comes with a licence. The basket writes no envelope, so no server check
  *   runs at submit.
@@ -90,8 +91,8 @@ export function BasketView({
   /** null = signed out. */
   account: BasketAccount | null;
   signInHref: string;
-  /** Signed in only: bundle key -> its price string, from the server. */
-  bundlePrices?: Record<string, string>;
+  /** Signed in only: bundle key -> its whole usd per month, from the server. */
+  bundlePrices?: Record<string, number>;
   /** Signed out only: a bundle price exists and shows after sign-in. A boolean, never the amount (Fable S2 C6). */
   priceAfterSignIn?: boolean;
 }) {
@@ -536,7 +537,7 @@ export function BasketView({
       <div className="bk-bar">
         <div className="bk-bar-total">
           <span>Total</span>
-          <b>Set when terms are agreed</b>
+          <b>{basketTotalText(lines.map((l) => l.entry), bundlePrices)}</b>
         </div>
         {nextStep}
       </div>

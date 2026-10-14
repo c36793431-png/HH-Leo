@@ -31,8 +31,8 @@ export default async function BasketPage() {
   const bundleKeys = BUNDLES.map((b) => b.key);
   let account: BasketAccount | null = null;
   // The bundle price never rides the catalogue prop, which reaches signed-out payloads too (plan 5b P1). Signed
-  // in, the strings go as their own prop; signed out, only a boolean that one exists (Fable S2 C6).
-  let bundlePrices: Record<string, string> | undefined;
+  // in, the amounts go as their own prop; signed out, only a boolean that one exists (Fable S2 C6).
+  let bundlePrices: Record<string, number> | undefined;
   let priceAfterSignIn: boolean | undefined;
   if (user) {
     const state = await getBasketAccountState(user.id);

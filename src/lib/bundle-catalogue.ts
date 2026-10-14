@@ -44,10 +44,10 @@ export const BUNDLE_FEED_CHOICES: BundleFeedChoice[] = ["ld-base", "ny-base"];
  * Today OBI still unlocks with any licence, so this list understates and never overclaims (Fable S2 N2). */
 export const BUNDLE_STRATEGY_KEYS: StrategyKey[] = ["1leg", "2leg_lock", "trend_impulse", "grid"];
 
-/** The Nova line in "What's included", or null for none. coxwell picks one of three (marcus m67879):
- * (0) null, no line until N-S1 is live; (a) "Nova"; (b) "Nova (set up with you after purchase)".
- * Null until he picks, so the build ships no promise nobody can switch on yet (Fable 5b C4). His pick is this one line. */
-export const BUNDLE_NOVA_LINE: string | null = null;
+/** The Nova line in "What's included", or null for none. Of the three variants (marcus m67879: (0) null; (a) "Nova";
+ * (b) this one), coxwell picked (b) while N-S1 is unbuilt (copy OK via marcus m67960 #1): it says Nova is set up
+ * with the client, not switched on at purchase (Fable 5b C4). */
+export const BUNDLE_NOVA_LINE: string | null = "Nova (set up with you after purchase)";
 
 /** "What's included" on the product page. Every name is read from the catalogues, none typed here: the
  * strategies from STRATEGY_DISPLAY_META, the feeds from their listing titles. No price, no share, no tier price. */

@@ -335,7 +335,7 @@ test("T8 reader: refuses rather than guesses; only a positive whole usd per mont
   assert.deepEqual(await price.getBundleListPrices(["horizon-complete"]), {});
   await setPriceRow(PRICE_ROW);
   assert.equal(await price.getBundleListPrice("horizon-complete"), "$100/month");
-  assert.deepEqual(await price.getBundleListPrices(["horizon-complete"]), { "horizon-complete": "$100/month" });
+  assert.deepEqual(await price.getBundleListPrices(["horizon-complete"]), { "horizon-complete": 100 });
 });
 
 // ---- renders ----
@@ -394,15 +394,16 @@ test("T8/T14 product page SIGNED IN: the price, two radios with NONE checked, Ad
   signOut();
 });
 
-test("T14 What's included: names from the catalogues, the 4 strategies (no OBI), one Base feed; no Nova line while the constant is null", async () => {
+test("T14 What's included: names from the catalogues, the 4 strategies (no OBI), one Base feed; coxwell's Nova line (b)", async () => {
   signOut();
   const out = await productPage("horizon-complete");
   for (const k of bc.BUNDLE_STRATEGY_KEYS) assert.ok(out.includes((await import("./strategy-catalogue")).STRATEGY_DISPLAY_META[k].name.replace(/&/g, "&amp;")), k);
   assert.doesNotMatch(out, /Order Book Imbalance/);
   assert.match(out, /Horizon licence/);
   assert.match(out, /One Base feed, your choice: London · Base or New York · Base/);
-  assert.equal(bc.BUNDLE_NOVA_LINE, null);
-  assert.doesNotMatch(out, /Nova/);
+  assert.equal(bc.BUNDLE_NOVA_LINE, "Nova (set up with you after purchase)");
+  assert.equal(out.match(/Nova/g)?.length, 1);
+  assert.match(out, /<li>Nova \(set up with you after purchase\)<\/li>/);
   // Each of coxwell's three variants is a one-line change: the list follows the constant.
   for (const nova of [null, "Nova", "Nova (set up with you after purchase)"]) {
     const lines = bc.bundleIncludedLines(bc.BUNDLES[0], nova);
@@ -459,7 +460,7 @@ test("T13 C7: with neither feed requestable the card reads the catalogue's own '
 
 test("T8 basket step: the bundle's price shows only with the server's prop; signed out a boolean says 'after sign-in'; no row = by agreement", async () => {
   storedLines = [LD, { kind: "feed", key: "ny-base", servers: 1 }];
-  const priced = await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": "$100/month" } });
+  const priced = await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } });
   assert.match(priced, /\$100\/month/);
   assert.match(priced, /Lines without a price are priced by agreement\./);
   assert.match(priced, /Feed London · Base/);
@@ -473,6 +474,27 @@ test("T8 basket step: the bundle's price shows only with the server's prop; sign
   assert.doesNotMatch(out, ANY_PRICE);
   assert.match(out, /Price shown after sign-in/);
   storedLines = [];
+});
+
+test("T8 phone bar (m67960 #3): the sum when EVERY line shows a price, else 'Confirmed when we reply'; never '$' signed out", async () => {
+  const bar = (out: string) => out.match(/<div class="bk-bar-total"><span>Total<\/span><b>([^<]*)<\/b>/)?.[1];
+  storedLines = [LD];
+  assert.equal(bar(await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } })), "$100/month", "every line priced");
+  storedLines = [LD, { kind: "feed", key: "ny-base", servers: 1 }];
+  assert.equal(bar(await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } })), "Confirmed when we reply", "one line unpriced");
+  storedLines = [LD];
+  assert.equal(bar(await basketView({ account: ACCOUNT })), "Confirmed when we reply", "signed in, no price row");
+  const out = await basketView({ account: null, priceAfterSignIn: true });
+  assert.equal(bar(out), "Confirmed when we reply", "signed out");
+  assert.doesNotMatch(out, /\$/, "no $ anywhere signed out (C6)");
+  storedLines = [];
+  // The total is a sum, not the one line's string: two priced lines add up; an empty list has no total.
+  const { basketTotalText } = await import("./basket-price-text");
+  const two = [{ kind: "bundle" as const, key: "a" }, { kind: "bundle" as const, key: "b" }];
+  assert.equal(basketTotalText(two, { a: 100, b: 1250 }), "$1,350/month");
+  assert.equal(basketTotalText(two, { a: 100 }), "Confirmed when we reply");
+  assert.equal(basketTotalText([], { a: 100 }), "Confirmed when we reply");
+  assert.doesNotMatch(readFileSync(path.join(process.cwd(), "src/components/marketplace/basket-view.tsx"), "utf8"), /Set when terms are agreed/);
 });
 
 test("T8 M2 render: with a bundle line the 30-day trial box is HIDDEN for an eligible account; without one it shows", async () => {
@@ -496,7 +518,7 @@ test("T8 M3/C3: 'Included in Horizon Complete' on the terminal and on the CHOSEN
 
 test("T8 price text: one function for all three steps (basket, Review :300, Sent :206)", async () => {
   const { linePriceText } = await import("./basket-price-text");
-  const prices = { "horizon-complete": "$100/month" };
+  const prices = { "horizon-complete": 100 };
   assert.equal(linePriceText({ kind: "bundle", key: "horizon-complete" }, prices, undefined), "$100/month");
   assert.equal(linePriceText({ kind: "bundle", key: "horizon-complete" }, undefined, true), "Price shown after sign-in");
   assert.equal(linePriceText({ kind: "bundle", key: "horizon-complete" }, undefined, undefined), "Priced by agreement");
@@ -564,7 +586,7 @@ test("T8b no AI vendor or model name on any bundle client string (BUNDLES, every
   const u = await makeUser();
   signIn(u.id, u.email);
   storedLines = [LD, { kind: "software", key: "horizon-terminal" }];
-  const surfaces = [await productPage("horizon-complete"), await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": "$100/month" } }), await basketView({ account: null, priceAfterSignIn: true })];
+  const surfaces = [await productPage("horizon-complete"), await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } }), await basketView({ account: null, priceAfterSignIn: true })];
   signOut();
   surfaces.push(await productPage("horizon-complete"));
   for (const s of surfaces) assert.doesNotMatch(s.replace(/<[^>]+>/g, " "), VENDOR_NAMES);
