@@ -16,23 +16,25 @@ import {
 } from "@/lib/basket-store";
 import { submitBasketAction, type SubmitReach } from "@/app/marketplace/basket/actions";
 import { SUPPORT_HANDLE, SUPPORT_TELEGRAM_URL } from "@/lib/support-contact";
-import { BY_AGREEMENT, basketTotalText, basketTotalUsd, linePriceText } from "@/lib/basket-price-text";
+
+/** The one price line, under the summary on Basket and Review (marcus m68882; coxwell 10-14 19:17Z, which
+ * supersedes m59928 for this line only). */
+const PRICE_CONFIRM_LINE ="We confirm the price with you on Telegram or by email.";
 
 /**
  * /marketplace/basket (Iris sheets 3-5 + r2 2-4; rulings marcus m59146). A REQUEST basket, not a
- * checkout: no price field, no total, nothing charged. Three steps on one page: Basket, Review,
- * Sent. Rules carried from the sheets:
- * - Every line reads "Priced by agreement · talk to us"; no total and no subtotal while a line is
- *   unpriced, which today is every line. The one exception is a bundle line (bundles S2, marcus
- *   m67867 M0/M1): signed in, it shows the server's price on all three steps. The phone bar sums the
- *   prices only when EVERY line shows one (marcus m67960 #3); the desktop summary still has no total.
+ * checkout: nothing charged. Three steps on one page: Basket, Review, Sent. Rules carried from the
+ * sheets:
+ * - NO PRICE on any step, signed in or out, and no price slot on a line, no total (coxwell 10-14 via
+ *   marcus m68871, m68882). The only word on price is PRICE_CONFIRM_LINE under the summary; on a
+ *   phone's basket step, where the summary hides, the sticky bar carries it instead.
  * - Notes inform and never block: a feed line says whether a registered server is on file, a
  *   strategy line that it comes with a licence. The basket writes no envelope, so no server check
  *   runs at submit.
  * - The trial is ONE basket-level choice in the summary box (m59146/m59154), off by default, amber
  *   when ticked, shown only to an eligible signed-in account; on Review it is a read-only row.
- * - We confirm by email only (coxwell 13:54Z via marcus m59928): Review shows the account's email
- *   read-only and asks for nothing; Telegram is not mentioned on any client step.
+ * - We confirm by email (coxwell 13:54Z via marcus m59928): Review shows the account's email
+ *   read-only and asks for nothing. The exception is PRICE_CONFIRM_LINE, which names Telegram.
  * - Sent uses the m59928 line word for word plus the support contact, no reply time, and the count
  *   goes back to 0.
  * - Phone (r2 sheet 4, marcus m59367 d4): on the basket step the summary card keeps only the trial
@@ -84,17 +86,11 @@ export function BasketView({
   catalogue,
   account,
   signInHref,
-  bundlePrices,
-  priceAfterSignIn,
 }: {
   catalogue: BasketEntry[];
   /** null = signed out. */
   account: BasketAccount | null;
   signInHref: string;
-  /** Signed in only: bundle key -> its whole usd per month, from the server. */
-  bundlePrices?: Record<string, number>;
-  /** Signed out only: a bundle price exists and shows after sign-in. A boolean, never the amount (Fable S2 C6). */
-  priceAfterSignIn?: boolean;
 }) {
   const stored = useBasket();
   const [step, setStep] = useState<Step>("basket");
@@ -124,11 +120,6 @@ export function BasketView({
 
   const bundleLine = lines.find((l) => l.entry.kind === "bundle");
   const bundleFeedKey = bundleLine?.stored.feed;
-  const priceText = (l: { kind: BasketEntry["kind"]; key: string }) => linePriceText(l, bundlePrices, priceAfterSignIn);
-  const anyPriceShown = lines.some((l) => priceText(l.entry) !== BY_AGREEMENT);
-  // One predicate for both totals (marcus m67972 #2): the desktop summary follows the phone bar.
-  const hasTotal = basketTotalUsd(lines.map((l) => l.entry), bundlePrices) !== null;
-  const totalText = basketTotalText(lines.map((l) => l.entry), bundlePrices);
 
   // The portal topbar titles the page by step ("Request sent").
   useEffect(() => {
@@ -237,7 +228,6 @@ export function BasketView({
                     {l.kind === "strategy" && " · Included with a Horizon licence"}
                   </div>
                 </div>
-                <span className="bk-row-price">{priceText(l)}</span>
               </div>
             ))}
             {sent.hasTrial && (
@@ -338,7 +328,6 @@ export function BasketView({
                     {entry.kind === "strategy" && " · Included with a Horizon licence"}
                   </div>
                 </div>
-                <span className="bk-row-price">{priceText(entry)}</span>
               </div>
             ))}
             <button type="button" className="bk-link" onClick={() => setStep("basket")}>
@@ -353,6 +342,7 @@ export function BasketView({
           <aside className="card bk-summary">
             <h2>Send request</h2>
             {summaryRows}
+            <p className="bk-price-note">{PRICE_CONFIRM_LINE}</p>
             {trialOn && (
               <div className="bk-trial on bk-trial-ro">
                 <b>✓ Start with a 30-day trial</b>
@@ -401,7 +391,6 @@ export function BasketView({
           {lines.map(({ stored: s, entry }) => {
             const servers = s.servers ?? 1;
             const chips = entry.kind === "bundle" ? [`Feed ${bundleFeed(entry, s)?.title}`] : entry.chips;
-            const price = priceText(entry);
             return (
               <div key={`${entry.kind}:${entry.key}`} className="bk-line">
                 <Thumb entry={entry} />
@@ -422,14 +411,6 @@ export function BasketView({
                         </div>
                       )}
                     </div>
-                    {price === BY_AGREEMENT ? (
-                      <div className="bk-price">
-                        {BY_AGREEMENT}
-                        <small>talk to us</small>
-                      </div>
-                    ) : (
-                      <div className="bk-price bk-price-set">{price}</div>
-                    )}
                   </div>
 
                   {coveredByBundle(entry, bundleFeedKey) && (
@@ -510,17 +491,7 @@ export function BasketView({
           <div className="bk-desk">
             <h2>Your request</h2>
             {summaryRows}
-            <div className="bk-nototal">
-              {hasTotal ? (
-                <>
-                  <b>Total</b> {totalText}
-                </>
-              ) : (
-                <>
-                  <b>No total.</b> {anyPriceShown ? "Lines without a price are priced by agreement." : "Every line is priced by agreement."}
-                </>
-              )}
-            </div>
+            <p className="bk-price-note">{PRICE_CONFIRM_LINE}</p>
           </div>
           {trialOffered && (
             <label className={`bk-trial${wantTrial ? " on" : ""}`}>
@@ -546,10 +517,7 @@ export function BasketView({
         </aside>
       </div>
       <div className="bk-bar">
-        <div className="bk-bar-total">
-          <span>Total</span>
-          <b>{totalText}</b>
-        </div>
+        <p className="bk-price-note">{PRICE_CONFIRM_LINE}</p>
         {nextStep}
       </div>
     </div>

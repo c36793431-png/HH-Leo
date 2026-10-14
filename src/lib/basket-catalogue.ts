@@ -3,7 +3,7 @@ import { MAIN_SITE_URL } from "./main-site";
 import { MARKETPLACE_LISTINGS, listingByKey, listingDetailHref, tierAvailability, type ListingMark } from "./marketplace-catalogue";
 import { STRATEGY_DISPLAY_META } from "./strategy-catalogue";
 import type { StrategyKey } from "./setfiles";
-import { BUNDLES, bundleByKey, isBundleFeedChoice, type BundleDefinition, type BundleFeedChoice } from "./bundle-catalogue";
+import { BUNDLES, BUNDLE_CARD_ART, bundleByKey, isBundleFeedChoice, type BundleDefinition, type BundleFeedChoice } from "./bundle-catalogue";
 
 /**
  * What the request basket can carry, and the one validator for a submitted basket (coxwell
@@ -186,11 +186,21 @@ export function bundleFeedChoiceEntries(bundle: BundleDefinition): BundleFeedCho
 }
 
 /** A bundle's entry, or null when none of its feeds can be requested (then there is nothing to pick). NO price
- * field: this entry rides the catalogue prop into signed-out pages (plan 5b P1). Plain plate, no image (M4). */
+ * field: the portal shows clients no price (marcus m68882). The line thumb is the shelf card's 640 art (marcus
+ * m68882 D, replacing the plain plate of M4). */
 function bundleEntry(bundle: BundleDefinition): BasketEntry | null {
   const feedChoices = bundleFeedChoiceEntries(bundle);
   if (!feedChoices.some((c) => c.available)) return null;
-  return { kind: "bundle", key: bundle.key, name: bundle.title, chips: [], blurb: bundle.blurb, detailHref: bundleDetailHref(bundle), feedChoices };
+  return {
+    kind: "bundle",
+    key: bundle.key,
+    name: bundle.title,
+    chips: [],
+    blurb: bundle.blurb,
+    image: BUNDLE_CARD_ART[bundle.key].src640,
+    detailHref: bundleDetailHref(bundle),
+    feedChoices,
+  };
 }
 
 /** The entry for one line, or null when the basket can't carry it (unknown key, wrong kind, not

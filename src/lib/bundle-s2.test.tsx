@@ -10,6 +10,7 @@ import { test, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import * as React from "react";
 import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PGlite } from "@electric-sql/pglite";
@@ -39,9 +40,13 @@ const SEEDS: Record<string, string> = {
         values ('${l}', '${u}', 'SEED-${i}', now() + interval '90 days', array['london']);`).join("")}`,
 };
 const SKIPPED = new Set(["0082_provider_client_pseudonyms_backfill.sql"]);
+/** The prod row (marcus applied it 10-14; it stays, m68882). The tests set it so "no price" can't pass for want of one. */
 const PRICE_ROW = { "horizon-complete": { usd: 100, per: "month" } };
 /** "$" followed by a digit: any price at all, not only "$100/month" (Fable S2 C6). */
 const ANY_PRICE = /\$\s*\d/;
+/** Any price wording the basket used to show (m68882 A1-A3 + the slot). */
+const PRICE_WORDS = /\/month|per month|Priced by agreement|talk to us|after sign-in|No total|Total|Confirmed when we reply/i;
+const PRICE_CONFIRM = "We confirm the price with you on Telegram or by email.";
 /** AI vendor and model names (m66854 hard rule: none on a client surface). */
 const VENDOR_NAMES = /\b(claude|anthropic|openai|chatgpt|gpt|gemini|google ai|llama|meta ai|mistral|sonnet|opus|haiku|grok|deepseek|copilot|qwen)\b/i;
 
@@ -51,14 +56,39 @@ let cat: typeof import("./basket-catalogue");
 let bc: typeof import("./bundle-catalogue");
 let mc: typeof import("./marketplace-catalogue");
 let br: typeof import("./basket-requests");
-let price: typeof import("./bundle-price");
 let store: typeof import("./basket-store");
 const session: { user: any } | null = { user: null };
 const telegramSends: string[] = [];
 /** What the mocked useBasket returns: the stored lines a client-side render would read from localStorage. */
 let storedLines: any[] = [];
+/** Every query the shipped code sends, with its params, while a test records (the read spy). */
+let queries: { text: string; params: unknown[] }[] | null = null;
+
+/** Review and Sent are useState steps a static render can't click to. A test reaches them by FORCING BasketView's
+ * own state (as the shots harness does): its first useState is useState("basket"), its 4th the sent payload. Null =
+ * the real useState, untouched. */
+let forced: { step: "review" | "sent"; sent: any } | null = null;
+let afterBasket = -1;
+const realUseState = React.useState;
+function useStateForced(init: any) {
+  if (forced && init === "basket") {
+    afterBasket = 0;
+    realUseState(init);
+    return [forced.step, () => {}];
+  }
+  if (afterBasket >= 0) {
+    afterBasket++;
+    if (afterBasket === 3) {
+      afterBasket = -1;
+      realUseState(init);
+      return [forced!.sent, () => {}];
+    }
+  }
+  return realUseState(init);
+}
 
 async function sql(text: string, params: unknown[] = []) {
+  queries?.push({ text, params });
   const r = await db.query(text, params);
   return { rows: r.rows as any[], rowCount: (r.rows.length || r.affectedRows || 0) as number };
 }
@@ -96,6 +126,7 @@ before(async () => {
     if (String(url).includes("/sendMessage") && init?.body) telegramSends.push(String(JSON.parse(init.body).text));
     return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
   };
+  mock.module("react", { defaultExport: { ...React, useState: useStateForced }, namedExports: { ...React, useState: useStateForced } });
   // The real store first, for its pure functions; then every component that imports it gets useBasket mocked.
   store = await import("./basket-store");
   mock.module("@/lib/basket-store", { namedExports: { ...store, useBasket: () => storedLines, useBasketStep: () => "basket" } });
@@ -120,7 +151,6 @@ before(async () => {
   bc = await import("./bundle-catalogue");
   mc = await import("./marketplace-catalogue");
   br = await import("./basket-requests");
-  price = await import("./bundle-price");
 });
 
 after(() => {
@@ -150,10 +180,13 @@ function withAvailability<T>(key: string, availability: string, fn: () => T): T 
 /** Runs fn with a second bundle defined, for the one-bundle-of-any-key rule (C4). */
 function withSecondBundle<T>(fn: () => T): T {
   bc.BUNDLES.push({ key: "horizon-two" as any, title: "Horizon Two", blurb: "x", licenceTier: "paid", feedChoices: ["ld-base", "ny-base"] });
+  // A real second bundle can't compile without art (Record<BundleKey>); the fixture borrows the first one's.
+  (bc.BUNDLE_CARD_ART as any)["horizon-two"] = bc.BUNDLE_CARD_ART["horizon-complete"];
   try {
     return fn();
   } finally {
     bc.BUNDLES.pop();
+    delete (bc.BUNDLE_CARD_ART as any)["horizon-two"];
   }
 }
 
@@ -230,8 +263,21 @@ test("T7 PIN: the catalogue is the bundle first, then every listing and strategy
     { key: "ny-base", title: mc.listingByKey("ny-base")!.title, available: true },
   ]);
   assert.equal(entry.detailHref, "/marketplace/horizon-complete");
-  assert.equal(entry.image, undefined, "plate only (M4)");
   for (const field of Object.keys(entry)) assert.doesNotMatch(field, /price|usd|cents|share/i, field);
+});
+
+test("T7 thumb (m68882 D): the bundle line's image is the shelf card's 640 art, from the one map, and the file ships", () => {
+  const entry = cat.basketEntry("bundle", "horizon-complete")!;
+  assert.equal(entry.image, "/marketplace/bundles/horizon-complete-card-640.webp");
+  assert.equal(entry.image, bc.BUNDLE_CARD_ART["horizon-complete"].src640, "one source for the card and the basket");
+  for (const b of bc.BUNDLES) {
+    const art = bc.BUNDLE_CARD_ART[b.key];
+    for (const src of [art.src640, art.src960]) assert.ok(statSync(path.join(process.cwd(), "public", src)).size > 0, src);
+  }
+  // The shelf reads the same map: no second copy of the art paths in the page.
+  const shelfSrc = readFileSync(path.join(process.cwd(), "src/app/marketplace/page.tsx"), "utf8");
+  assert.match(shelfSrc, /BUNDLE_CARD_ART\b.*from "@\/lib\/bundle-catalogue"|import \{[^}]*BUNDLE_CARD_ART[^}]*\} from "@\/lib\/bundle-catalogue"/);
+  assert.doesNotMatch(shelfSrc, /horizon-complete-card-\d+\.webp/);
 });
 
 // ---- T7b store ----
@@ -305,35 +351,44 @@ test("T7d forward: a bundle line is never forwarded as a provider access request
   assert.equal((await sql(`select count(*)::int n from access_requests where user_id = $1`, [u.id])).rows[0].n, 0);
 });
 
-// ---- T8 price reader ----
+// ---- T8 no price read (m68882 A4) ----
 
-test("T8 reader: refuses rather than guesses; only a positive whole usd per month reads", async () => {
-  const f = (v: unknown) => price.bundleListPriceUsd(v, "horizon-complete");
-  for (const v of [
-    undefined,
-    null,
-    {},
-    [],
-    "100",
-    { "horizon-other": { usd: 100, per: "month" } },
-    { "horizon-complete": null },
-    { "horizon-complete": { usd: 0, per: "month" } },
-    { "horizon-complete": { usd: -1, per: "month" } },
-    { "horizon-complete": { usd: "100", per: "month" } },
-    { "horizon-complete": { usd: 99.5, per: "month" } },
-    { "horizon-complete": { usd: 100, per: "year" } },
-    { "horizon-complete": { usd: 100 } },
-  ]) {
-    assert.equal(f(v), null, JSON.stringify(v));
+/** The props the basket page hands BasketView: what an RSC payload would carry to the client. */
+function basketViewProps(node: unknown): Record<string, unknown> | null {
+  if (!node || typeof node !== "object") return null;
+  if (Array.isArray(node)) {
+    for (const n of node) {
+      const hit = basketViewProps(n);
+      if (hit) return hit;
+    }
+    return null;
   }
-  assert.equal(f(PRICE_ROW), 100);
-  assert.equal((await import("./basket-price-text")).formatUsdPerMonth(f({ "horizon-complete": { usd: 1250, per: "month" } })!), "$1,250/month");
+  const el = node as { type?: { name?: string }; props?: Record<string, unknown> };
+  if (el.type?.name === "BasketView") return el.props ?? null;
+  return basketViewProps(el.props?.children);
+}
 
-  // Through the DB: missing row -> no key (there is NO fallback number), the row -> the number.
-  await setPriceRow(null);
-  assert.deepEqual(await price.getBundleListPrices(["horizon-complete"]), {});
+test("T8 NO READ (m68882 A4): the basket page, signed in and out WITH the row present, never asks for bundle_list_price and hands the view no amount", async () => {
   await setPriceRow(PRICE_ROW);
-  assert.deepEqual(await price.getBundleListPrices(["horizon-complete"]), { "horizon-complete": 100 });
+  const { default: Page } = await import("../app/marketplace/basket/page");
+  const u = await makeUser();
+  storedLines = [LD];
+  for (const who of ["in", "out"] as const) {
+    if (who === "in") signIn(u.id, u.email);
+    else signOut();
+    queries = [];
+    const tree = await Page();
+    const asked = queries;
+    queries = null;
+    assert.ok(asked.length > 0 || who === "out", `${who}: the spy sees the page's queries`);
+    for (const q of asked) assert.doesNotMatch(`${q.text} ${JSON.stringify(q.params)}`, /bundle_list_price/, `${who}: ${q.text}`);
+    const props = basketViewProps(tree);
+    assert.ok(props, `${who}: found BasketView`);
+    assert.deepEqual(Object.keys(props!).sort(), ["account", "catalogue", "signInHref"], `${who}: no price prop`);
+    assert.doesNotMatch(JSON.stringify(props), /"usd"|:100\b|\/month|after sign-in/i, `${who}: no amount in the payload`);
+  }
+  storedLines = [];
+  signOut();
 });
 
 // ---- renders ----
@@ -482,60 +537,96 @@ test("T13 C7: with neither feed requestable the card reads the catalogue's own '
   assert.match(card, /Nothing to add right now\./);
 });
 
-test("T8 basket step: the bundle's price shows only with the server's prop; signed out a boolean says 'after sign-in'; no row = by agreement", async () => {
+/** Visible text only: tags out, so an attribute or class name can't satisfy or fail a copy pin. */
+const visible = (out: string) => out.replace(/<[^>]+>/g, " ").replace(/&#x27;|&#39;/g, "'").replace(/\s+/g, " ");
+
+test("T8 NO PRICE on all 3 steps (m68882): signed in WITH the row present, Basket / Review / Sent show no '$', no '/month', no price slot, no total", async () => {
+  await setPriceRow(PRICE_ROW);
+  const u = await makeUser();
+  signIn(u.id, u.email);
+  const lines = [LD, { kind: "feed", key: "ny-base", servers: 1 }, { kind: "software", key: "horizon-terminal" }];
+  storedLines = lines;
+  const basket = await basketPage();
+  forced = { step: "review", sent: null };
+  const review = await basketPage();
+  forced = null;
+  const { submitBasketAction } = await import("../app/marketplace/basket/actions");
+  const res = (await submitBasketAction({ lines: lines as any, wantTrial: false })) as any;
+  assert.equal(res.ok, true, JSON.stringify(res));
+  forced = { step: "sent", sent: { reference: res.reference, lines: res.lines, hasTrial: res.hasTrial, reach: res.reach } };
+  storedLines = [];
+  const sent = await basketPage();
+  forced = null;
+  signOut();
+  // Each render is the step it claims, with the bundle line on it.
+  for (const [name, out, marker] of [
+    ["basket", basket, /Review request →/],
+    ["review", review, /Send request →/],
+    ["sent", sent, /Request sent/],
+  ] as const) {
+    assert.match(out, marker, `${name}: is the ${name} step`);
+    assert.match(out, /Horizon Complete/, `${name}: carries the bundle line`);
+    assert.doesNotMatch(out, ANY_PRICE, `${name}: no $<digit>`);
+    assert.doesNotMatch(out, /\$/, `${name}: no $ at all`);
+    assert.doesNotMatch(visible(out), PRICE_WORDS, `${name}: no price wording`);
+    assert.doesNotMatch(out, /bk-price"|bk-price-set|bk-nototal|bk-bar-total/, `${name}: no price slot or total`);
+  }
+  // The ONE line (m68882 COPY Q): under the summary on Basket and Review, not on Sent. On Basket the desktop summary
+  // and the phone bar each carry it (one shows per width: .bk-desk hides on a phone, .bk-bar on desktop).
+  assert.equal(visible(basket).split(PRICE_CONFIRM).length - 1, 2, "basket: desktop summary + phone bar");
+  assert.match(basket, /<div class="bk-desk">(?:(?!<\/aside>)[\s\S])*bk-price-note">We confirm the price with you on Telegram or by email\.</);
+  assert.match(basket, /<div class="bk-bar"><p class="bk-price-note">We confirm the price/);
+  assert.equal(visible(review).split(PRICE_CONFIRM).length - 1, 1, "review: once, in the summary");
+  assert.match(review, /<aside class="card bk-summary">(?:(?!<\/aside>)[\s\S])*bk-price-note/);
+  assert.equal(visible(sent).split(PRICE_CONFIRM).length - 1, 0, "sent: not ruled there");
+});
+
+test("T8 NO PRICE signed out (m68882 A3): with the row present the basket says nothing about a price after sign-in", async () => {
+  await setPriceRow(PRICE_ROW);
+  signOut();
   storedLines = [LD, { kind: "feed", key: "ny-base", servers: 1 }];
-  const priced = await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } });
-  assert.match(priced, /\$100\/month/);
-  assert.match(priced, /Lines without a price are priced by agreement\./);
-  assert.match(priced, /Feed London · Base/);
-  assert.match(priced, /One bundle, for you/);
-  assert.match(priced, /href="\/marketplace\/horizon-complete"[^>]*>Change feed/);
-  assert.match(priced, /<span>Bundles<\/span><b>1<\/b>/);
-  const unpriced = await basketView({ account: ACCOUNT });
-  assert.doesNotMatch(unpriced, ANY_PRICE);
-  assert.match(unpriced, /Every line is priced by agreement\./);
-  const out = await basketView({ account: null, priceAfterSignIn: true });
-  assert.doesNotMatch(out, ANY_PRICE);
-  assert.match(out, /Price shown after sign-in/);
+  const out = await basketPage();
+  assert.match(out, /Sign in to send →/);
+  assert.doesNotMatch(out, /\$/);
+  assert.doesNotMatch(visible(out), PRICE_WORDS);
+  assert.match(visible(out), /We confirm the price with you on Telegram or by email\./);
   storedLines = [];
 });
 
-test("T8 phone bar (m67960 #3): the sum when EVERY line shows a price, else 'Confirmed when we reply'; never '$' signed out", async () => {
-  const bar = (out: string) => out.match(/<div class="bk-bar-total"><span>Total<\/span><b>([^<]*)<\/b>/)?.[1];
-  storedLines = [LD];
-  assert.equal(bar(await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } })), "$100/month", "every line priced");
-  storedLines = [LD, { kind: "feed", key: "ny-base", servers: 1 }];
-  assert.equal(bar(await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } })), "Confirmed when we reply", "one line unpriced");
-  storedLines = [LD];
-  assert.equal(bar(await basketView({ account: ACCOUNT })), "Confirmed when we reply", "signed in, no price row");
-  const out = await basketView({ account: null, priceAfterSignIn: true });
-  assert.equal(bar(out), "Confirmed when we reply", "signed out");
-  assert.doesNotMatch(out, /\$/, "no $ anywhere signed out (C6)");
+test("T8 thumb render (m68882 D): the bundle line's thumb is the 640 art, not the empty plate", async () => {
+  storedLines = [LD, { kind: "strategy", key: "obi" }];
+  const out = await basketView({ account: ACCOUNT });
+  const line = out.slice(out.indexOf('class="bk-line"'), out.indexOf("Horizon Complete"));
+  assert.match(line, /<div class="bk-thumb"><img src="\/marketplace\/bundles\/horizon-complete-card-640\.webp" alt=""\/>/);
+  assert.doesNotMatch(line, /bk-thumb-plate/);
   storedLines = [];
-  // The total is a sum, not the one line's string: two priced lines add up; an empty list has no total.
-  const { basketTotalText } = await import("./basket-price-text");
-  const two = [{ kind: "bundle" as const, key: "a" }, { kind: "bundle" as const, key: "b" }];
-  assert.equal(basketTotalText(two, { a: 100, b: 1250 }), "$1,350/month");
-  assert.equal(basketTotalText(two, { a: 100 }), "Confirmed when we reply");
-  assert.equal(basketTotalText([], { a: 100 }), "Confirmed when we reply");
-  assert.doesNotMatch(readFileSync(path.join(process.cwd(), "src/components/marketplace/basket-view.tsx"), "utf8"), /Set when terms are agreed/);
 });
 
-test("T8 desktop follows the bar (m67972 #2): every line priced -> 'Total <sum>'; any unpriced line -> today's 'No total.' text", async () => {
-  const bar = (out: string) => out.match(/<div class="bk-bar-total"><span>Total<\/span><b>([^<]*)<\/b>/)?.[1];
-  const desk = (out: string) =>
-    out.match(/<div class="bk-nototal">(.*?)<\/div>/)?.[1].replace(/<!-- -->/g, "").replace(/<[^>]+>/g, "");
-  storedLines = [LD];
-  const lone = await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } });
-  assert.equal(desk(lone), "Total $100/month");
-  assert.equal(desk(lone), `Total ${bar(lone)}`, "desktop = bar on the lone priced bundle");
-  assert.doesNotMatch(lone, /No total\.|priced by agreement/);
-  assert.equal(desk(await basketView({ account: ACCOUNT })), "No total. Every line is priced by agreement.", "no price row");
-  storedLines = [LD, { kind: "feed", key: "ny-base", servers: 1 }];
-  const mixed = await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } });
-  assert.equal(desk(mixed), "No total. Lines without a price are priced by agreement.", "one line unpriced");
-  assert.equal(bar(mixed), "Confirmed when we reply");
-  storedLines = [];
+test("T8 NO PRICE on product pages (m68882): the Add box on every basket product's page, signed in and out, has no price line", async () => {
+  await setPriceRow(PRICE_ROW);
+  const u = await makeUser();
+  // Every product the basket can carry that has its own /marketplace/<key> page (strategies link to the shelf).
+  const keys = cat
+    .basketCatalogue()
+    .map((e) => e.detailHref?.match(/^\/marketplace\/([\w-]+)$/)?.[1])
+    .filter((k): k is string => !!k);
+  assert.ok(keys.length >= 5 && keys.includes("horizon-complete") && keys.includes("ld-base"), keys.join(","));
+  for (const who of ["in", "out"] as const) {
+    if (who === "in") signIn(u.id, u.email);
+    else signOut();
+    // A tier-backed listing with no tier rows in this fixture 404s (chicago); the page has nothing to check then.
+    const rendered: string[] = [];
+    for (const key of keys) {
+      const out = await productPage(key).catch((err) => (/notFound/.test(String(err)) ? null : Promise.reject(err)));
+      if (out === null) continue;
+      rendered.push(key);
+      assert.match(out, /class="card bk-addbox"|bk-bundle-box|Sign in to request →/, `${who} ${key}: the page has its Add box`);
+      assert.doesNotMatch(visible(out), /Priced by agreement|talk to us|\/month/i, `${who} ${key}`);
+      assert.doesNotMatch(out, /bk-addbox-lead/, `${who} ${key}`);
+    }
+    for (const k of ["horizon-complete", "horizon-terminal", "ld-base", "ny-base"]) assert.ok(rendered.includes(k), `${who}: ${k} rendered`);
+  }
+  signOut();
 });
 
 test("T8 M2 render: with a bundle line the 30-day trial box is HIDDEN for an eligible account; without one it shows", async () => {
@@ -554,35 +645,6 @@ test("T8 M3/C3: 'Included in Horizon Complete' on the terminal and on the CHOSEN
   assert.equal((await basketView({ account: ACCOUNT })).match(note)?.length, 1, "ld-base beside an ld-base bundle");
   storedLines = [NY, { kind: "feed", key: "ld-base", servers: 1 }, { kind: "software", key: "horizon-terminal" }];
   assert.equal((await basketView({ account: ACCOUNT })).match(note)?.length, 1, "the terminal only");
-  storedLines = [];
-});
-
-test("T8 price text: one function for all three steps (basket, Review :300, Sent :206)", async () => {
-  const { linePriceText } = await import("./basket-price-text");
-  const prices = { "horizon-complete": 100 };
-  assert.equal(linePriceText({ kind: "bundle", key: "horizon-complete" }, prices, undefined), "$100/month");
-  assert.equal(linePriceText({ kind: "bundle", key: "horizon-complete" }, undefined, true), "Price shown after sign-in");
-  assert.equal(linePriceText({ kind: "bundle", key: "horizon-complete" }, undefined, undefined), "Priced by agreement");
-  for (const kind of ["software", "feed", "strategy"] as const) assert.equal(linePriceText({ kind, key: "horizon-complete" }, prices, true), "Priced by agreement", kind);
-  // The three steps all read it: no literal "Priced by agreement" price cell left in the file.
-  const src = readFileSync(path.join(process.cwd(), "src/components/marketplace/basket-view.tsx"), "utf8");
-  assert.doesNotMatch(src, /bk-row-price">Priced by agreement/);
-  assert.equal(src.match(/\{priceText\((l|entry)\)\}/g)?.length, 2, "Review + Sent cells");
-});
-
-test("T8 basket page SIGNED OUT with the row set: no price digits anywhere; the signed-out prop is a boolean", async () => {
-  await setPriceRow(PRICE_ROW);
-  signOut();
-  storedLines = [LD];
-  const out = await basketPage();
-  assert.doesNotMatch(out, ANY_PRICE);
-  assert.match(out, /Price shown after sign-in/);
-  // No row: not even the boolean.
-  await setPriceRow(null);
-  const none = await basketPage();
-  assert.doesNotMatch(none, /after sign-in/);
-  assert.match(none, /Priced by agreement/);
-  await setPriceRow(PRICE_ROW);
   storedLines = [];
 });
 
@@ -605,8 +667,15 @@ test("T8 static: the two catalogues carry no price, usd, cents or share in code"
   }
 });
 
-test("T8 static C1: no 'use client' module value-imports bundle-price, bundle-catalogue, basket-catalogue or marketplace-catalogue", () => {
-  const forbidden = /^import\s+(?!type\b)[^;]*from\s+["'](@\/lib\/|\.\.?\/(?:[\w-]+\/)*)(bundle-price|bundle-catalogue|basket-catalogue|marketplace-catalogue)["']/m;
+test("T8 static: nothing in src reads bundle_list_price (m68882 A4: the row stays, unread)", () => {
+  const readers = walk(path.join(process.cwd(), "src"))
+    .filter((f) => !/\.test\.tsx?$/.test(f))
+    .filter((f) => /bundle_list_price/.test(readFileSync(f, "utf8")));
+  assert.deepEqual(readers, []);
+});
+
+test("T8 static C1: no 'use client' module value-imports bundle-catalogue, basket-catalogue or marketplace-catalogue", () => {
+  const forbidden = /^import\s+(?!type\b)[^;]*from\s+["'](@\/lib\/|\.\.?\/(?:[\w-]+\/)*)(bundle-catalogue|basket-catalogue|marketplace-catalogue)["']/m;
   const offenders = walk(path.join(process.cwd(), "src"))
     .filter((f) => !/\.test\.tsx?$/.test(f))
     .filter((f) => /^\s*["']use client["']/.test(readFileSync(f, "utf8")))
@@ -627,7 +696,7 @@ test("T8b no AI vendor or model name on any bundle client string (BUNDLES, every
   const u = await makeUser();
   signIn(u.id, u.email);
   storedLines = [LD, { kind: "software", key: "horizon-terminal" }];
-  const surfaces = [await productPage("horizon-complete"), await basketView({ account: ACCOUNT, bundlePrices: { "horizon-complete": 100 } }), await basketView({ account: null, priceAfterSignIn: true })];
+  const surfaces = [await productPage("horizon-complete"), await basketView({ account: ACCOUNT }), await basketView({ account: null })];
   signOut();
   surfaces.push(await productPage("horizon-complete"));
   for (const s of surfaces) assert.doesNotMatch(s.replace(/<[^>]+>/g, " "), VENDOR_NAMES);

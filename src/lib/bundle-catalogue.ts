@@ -11,8 +11,8 @@ import { STRATEGY_DISPLAY_META } from "./strategy-catalogue";
  * - the strategy pack is the 4 strategies every licence unlocks once OBI is gated separately (coxwell Q-A, m66858);
  * - Nova follows the licence and is read only through novaEntitlement(), never from bundle code (plan 5b).
  *
- * NO PRICE in this file, ever (plan 5b P1): the price is a portal_config read in a signed-in server page,
- * so it can never ride a catalogue prop into a signed-out RSC payload. */
+ * NO PRICE in this file, ever: the portal shows clients no price anywhere (coxwell 10-14 via marcus m68871,
+ * m68882), and a field here would ride the catalogue prop into every basket payload. */
 
 export type BundleKey = "horizon-complete";
 export type BundleFeedChoice = "ld-base" | "ny-base";
@@ -38,10 +38,11 @@ export const BUNDLES: BundleDefinition[] = [
   },
 ];
 
-/** Bundle art (coxwell 10-14 via marcus m68634: Iris's variant A), the one map for the shelf card's plate and the
- * product page's hero (coxwell 10-14 via marcus m69323). Keyed by BundleKey, so a new bundle can't render without
- * art. The key content sits in a 1.85:1 centre band, so the card plate's cover crop is safe from 222px (desktop) to
- * 318px (mobile) wide; the hero shows the whole 8:3 frame, uncropped. */
+/** Bundle art (coxwell 10-14 via marcus m68634: Iris's variant A), the one map for the shelf card's plate, the
+ * product page's hero (coxwell 10-14 via marcus m69323) and the basket line's thumb (marcus m68882 D). Keyed by
+ * BundleKey, so a new bundle can't render without art. The key content sits in a 1.85:1 centre band, so the card
+ * plate's cover crop is safe from 222px (desktop) to 318px (mobile) wide; the hero shows the whole 8:3 frame,
+ * uncropped; the basket thumb (88x56, 1.57:1) trims about 8% of the band on each side. */
 export const BUNDLE_CARD_ART: Record<BundleKey, { src640: string; src960: string; alt: string }> = {
   "horizon-complete": {
     src640: "/marketplace/bundles/horizon-complete-card-640.webp",

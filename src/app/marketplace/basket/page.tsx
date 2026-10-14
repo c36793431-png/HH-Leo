@@ -9,8 +9,6 @@ import { PublicShell } from "@/components/marketplace/public-shell";
 import { basketCatalogue } from "@/lib/basket-catalogue";
 import { getBasketAccountState } from "@/lib/basket-requests";
 import { BasketView, type BasketAccount } from "@/components/marketplace/basket-view";
-import { BUNDLES } from "@/lib/bundle-catalogue";
-import { getBundleListPrices } from "@/lib/bundle-price";
 
 /**
  * /marketplace/basket: the request basket (coxwell 2026-10-03 via marcus m59124, rulings m59146;
@@ -20,6 +18,9 @@ import { getBundleListPrices } from "@/lib/bundle-price";
  * The page passes the catalogue (what may be in a basket today, with names) and, signed in, the
  * account facts the sheets need: trial eligibility (the five-source predicate, re-checked at
  * submit), whether a feed line could be switched on today, and the email we confirm on.
+ *
+ * NO PRICE, signed in or out (coxwell 10-14 via marcus m68871, m68882 A4): the page reads none, so no
+ * amount can reach the payload. The bundle's portal_config price row may still exist; nothing reads it.
  */
 export default async function BasketPage() {
   const session = await auth();
@@ -28,18 +29,10 @@ export default async function BasketPage() {
 
   const catalogue = basketCatalogue();
   const signInHref = authPageHref("/login", "/marketplace/basket");
-  const bundleKeys = BUNDLES.map((b) => b.key);
   let account: BasketAccount | null = null;
-  // The bundle price never rides the catalogue prop, which reaches signed-out payloads too (plan 5b P1). Signed
-  // in, the amounts go as their own prop; signed out, only a boolean that one exists (Fable S2 C6).
-  let bundlePrices: Record<string, number> | undefined;
-  let priceAfterSignIn: boolean | undefined;
   if (user) {
     const state = await getBasketAccountState(user.id);
     account = { email: state.email, trialEligible: state.trialEligible, feedReady: state.feedReady };
-    bundlePrices = await getBundleListPrices(bundleKeys);
-  } else {
-    priceAfterSignIn = Object.keys(await getBundleListPrices(bundleKeys)).length > 0;
   }
 
   const page = (
@@ -48,13 +41,7 @@ export default async function BasketPage() {
         <h1>Basket</h1>
         <p>Pick what you need and send it to us as one request. Nothing is charged.</p>
       </div>
-      <BasketView
-        catalogue={catalogue}
-        account={account}
-        signInHref={signInHref}
-        bundlePrices={bundlePrices}
-        priceAfterSignIn={priceAfterSignIn}
-      />
+      <BasketView catalogue={catalogue} account={account} signInHref={signInHref} />
       <div className="foot">HORIZON HFT · customer portal</div>
     </>
   );

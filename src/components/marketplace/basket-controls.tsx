@@ -98,7 +98,6 @@ export function BasketAddBox({
   return (
     <div className="card bk-addbox">
       <div className="mkd-plate-title">Basket</div>
-      <p className="bk-addbox-lead">Priced by agreement · talk to us</p>
       {isFeed && (
         <>
           <div className="bk-label">How many servers?</div>
