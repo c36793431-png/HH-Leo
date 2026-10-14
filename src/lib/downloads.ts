@@ -12,6 +12,25 @@ export const PLATFORMS: Platform[] = ["windows", "macos"];
 /** Lowercase hex sha256, the only form any write path accepts (Fable S2, m66680). */
 export const SHA256_HEX = /^[0-9a-f]{64}$/;
 
+/** The name a client's download is saved as (coxwell via marcus m68501/m68509): "HorizonHFT-<version>.zip", or
+ * "HorizonHFT-<version>-macos.zip", never the stored Blob name (the manual upload adds a random suffix, and Windows
+ * "Extract All" names the folder after the file). The version is reduced to [A-Za-z0-9._-] (runs of anything else
+ * become one "-", repeated "-" collapse, ends trimmed) because the manual flow does not check its format; with nothing usable left it falls
+ * back to "HorizonHFT". The extension is the stored file's when it is one (a letter then up to 7 letters/digits:
+ * .zip, .dmg), else ".zip". */
+export function downloadFilename(version: string, platform: Platform, pathname: string): string {
+  const v = version.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/-{2,}/g, "-").replace(/^[._-]+|[._-]+$/g, "");
+  const base = /[A-Za-z0-9]/.test(v) ? `HorizonHFT-${v}` : "HorizonHFT";
+  const ext = /\.[A-Za-z][A-Za-z0-9]{0,7}$/.exec(pathname.split("/").pop() ?? "")?.[0] ?? ".zip";
+  return `${base}${platform === "macos" ? "-macos" : ""}${ext}`;
+}
+
+/** The Content-Disposition header for that name: a plain filename plus the RFC 5987 filename*. downloadFilename()
+ * only returns [A-Za-z0-9._-], so neither form can carry a quote or a line break. */
+export function downloadContentDisposition(filename: string): string {
+  return `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
 export interface DownloadRow {
   id: string;
   version: string;

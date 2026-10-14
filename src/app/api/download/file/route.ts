@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { isPaidUser } from "@/lib/licenses";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { verifyDownloadToken } from "@/lib/download-token";
-import { getDownloadById } from "@/lib/downloads";
+import { downloadContentDisposition, downloadFilename, getDownloadById } from "@/lib/downloads";
 
 /** Streams the private Blob content server-side — the Blob store is never reachable directly by the browser. */
 export async function GET(req: NextRequest) {
@@ -43,11 +43,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "installer fetch failed" }, { status: 502 });
   }
 
-  const filename = download.blobPathname.split("/").pop() ?? `horizon-hft-${download.version}`;
+  // The client's file name is "HorizonHFT-<version>.zip", not the stored Blob name with its random suffix (m68509).
+  const filename = downloadFilename(download.version, download.platform, download.blobPathname);
   return new NextResponse(blob.stream, {
     headers: {
       "content-type": "application/octet-stream",
-      "content-disposition": `attachment; filename="${filename}"`,
+      "content-disposition": downloadContentDisposition(filename),
     },
   });
 }
