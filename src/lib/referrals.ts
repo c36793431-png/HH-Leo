@@ -48,9 +48,10 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
   throw new Error("getOrCreateReferralCode: failed to generate a unique code after 5 attempts");
 }
 
-/** The payment categories that earn a referrer: software ('customer') and, since marcus m64769
- * (coxwell's "referral commission applies to feed purchases"), feed access ('feed_access'). */
-export const REFERRAL_CATEGORIES: readonly string[] = ["customer", "feed_access"];
+/** The payment categories that earn a referrer: software ('customer'), since marcus m64769
+ * (coxwell's "referral commission applies to feed purchases") feed access ('feed_access'), and since
+ * marcus m68455 (coxwell: "they would earn 30% from the $100") a bundle, on the GROSS amount paid. */
+export const REFERRAL_CATEGORIES: readonly string[] = ["customer", "feed_access", "bundle"];
 
 /** Hooked after a payment row is written (Finance's Add payment, a paid licence's auto-payment,
  * the admin queue's paid feed approve): an 'in' payment of a REFERRAL_CATEGORIES category from a

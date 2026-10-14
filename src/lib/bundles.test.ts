@@ -192,7 +192,7 @@ async function rejectsWith(p: Promise<unknown>, name: string) {
   });
 }
 
-test("T1 activate, new licence: licence + bundle + ONE 'bundle' payment in one tx; zero auto rows; exactly one activation notify; referral parked", async () => {
+test("T1 activate, new licence: licence + bundle + ONE 'bundle' payment in one tx; zero auto rows; exactly one activation notify; referrer earns 30% of the gross", async () => {
   const referrer = await makeUser();
   const u = await makeUser();
   await db.query(`update users set referred_by_user_id = $2 where id = $1`, [u, referrer]);
@@ -227,8 +227,14 @@ test("T1 activate, new licence: licence + bundle + ONE 'bundle' payment in one t
   assert.equal(sent("💰 new paid signup"), 1, "exactly one activation notify");
   assert.equal(sends.length, 1, "and nothing else");
 
-  const earnings = (await db.query(`select count(*)::int as n from referral_earnings where referred_user_id = $1`, [u])).rows[0].n;
-  assert.equal(earnings, 0, "'bundle' is not in REFERRAL_CATEGORIES until coxwell rules the referral split");
+  // coxwell via marcus m68455: "they would earn 30% from the $100" -- the gross paid, not the net after the feed share.
+  const earnings = (await db.query(`select referrer_user_id, payment_id, amount_usd, rate, status from referral_earnings where referred_user_id = $1`, [u])).rows;
+  assert.equal(earnings.length, 1, "one earning for the one bundle payment");
+  assert.equal(earnings[0].referrer_user_id, referrer);
+  assert.equal(earnings[0].payment_id, (await db.query(`select id from payments where user_id = $1`, [u])).rows[0].id);
+  assert.equal(Number(earnings[0].amount_usd), 30);
+  assert.equal(Number(earnings[0].rate), 0.3);
+  assert.equal(earnings[0].status, "pending");
 });
 
 test("T1/T3 grant: refuses with no server; LD then writes 3 stamped rows + 3 open allowlist records at the configured share", async () => {
