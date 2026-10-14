@@ -28,19 +28,8 @@ import { ListingMedia } from "@/components/marketplace/listing-media";
 import { AddToBasketButton, StrategyPreselect } from "@/components/marketplace/basket-controls";
 import { BundleCardFoot } from "@/components/marketplace/bundle-add-box";
 import { basketCatalogue, bundleDetailHref, bundleFeedChoiceEntries, strategyEntryKeyForSlug } from "@/lib/basket-catalogue";
-import { BUNDLES, type BundleKey } from "@/lib/bundle-catalogue";
+import { BUNDLES, BUNDLE_CARD_ART } from "@/lib/bundle-catalogue";
 import { MAIN_SITE_URL } from "@/lib/main-site";
-
-/** Bundle card art (coxwell 10-14 via marcus m68634: Iris's variant A). Keyed by BundleKey, so a new bundle can't
- * render without art. The key content sits in a 1.85:1 centre band, so the plate's cover crop is safe from 222px
- * (desktop) to 318px (mobile) wide. */
-const BUNDLE_CARD_ART: Record<BundleKey, { src640: string; src960: string; alt: string }> = {
-  "horizon-complete": {
-    src640: "/marketplace/bundles/horizon-complete-card-640.webp",
-    src960: "/marketplace/bundles/horizon-complete-card-960.webp",
-    alt: "A Base feed stream, the Horizon app and the strategy pack, joined into one on a horizon line",
-  },
-};
 
 /**
  * /marketplace — the catalogue of what Horizon sells (coxwell via marcus, 2026-09-14).

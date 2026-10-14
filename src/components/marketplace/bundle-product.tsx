@@ -9,7 +9,7 @@ import { authPageHref } from "@/lib/post-auth-redirect";
 import { PublicShell } from "@/components/marketplace/public-shell";
 import { MARKETPLACE_AVAILABILITY_LABELS } from "@/lib/marketplace-catalogue";
 import { basketEntry, bundleDetailHref, bundleFeedChoiceEntries } from "@/lib/basket-catalogue";
-import { bundleIncludedLines, type BundleDefinition } from "@/lib/bundle-catalogue";
+import { BUNDLE_CARD_ART, bundleIncludedLines, type BundleDefinition } from "@/lib/bundle-catalogue";
 import { BundleAddBox } from "@/components/marketplace/bundle-add-box";
 
 /**
@@ -20,6 +20,10 @@ import { BundleAddBox } from "@/components/marketplace/bundle-add-box";
  * Same shape as a listing's page (identity block, product left, Access right), with no comparison board and no
  * member stories. "What's included" is bundleIncludedLines: names read from the catalogues, never a price or a
  * tier price (coxwell "tier NAMES only", marcus M0 m67867).
+ *
+ * The hero above "What's included" is the shelf card's art (BUNDLE_CARD_ART, coxwell 10-14 via marcus m69323), in a
+ * listing hero's .mkt-media-hero frame. Its width/height reserve the 8:3 box before the file arrives, so nothing
+ * below it shifts.
  *
  * NO PRICE, signed in or out: it shows only at the basket steps (coxwell 10-14 via marcus m68725, "prices shown at
  * purchase, not on the page"). Signed out: "Sign in to request →", like every listing.
@@ -35,6 +39,7 @@ export async function BundleProductPage({ bundle }: { bundle: BundleDefinition }
   const availability = available ? "available" : "unavailable";
   const choices = bundleFeedChoiceEntries(bundle);
   const signInHref = authPageHref("/login", bundleDetailHref(bundle));
+  const art = BUNDLE_CARD_ART[bundle.key];
 
   const page = (
     <>
@@ -51,6 +56,19 @@ export async function BundleProductPage({ bundle }: { bundle: BundleDefinition }
 
       <div className="mkd-grid">
         <div className="mkd-col">
+          <div className="mkt-media mkt-media-hero">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="mkt-image"
+              src={art.src960}
+              srcSet={`${art.src640} 640w, ${art.src960} 960w`}
+              sizes="(max-width: 900px) 100vw, 760px"
+              alt={art.alt}
+              width={960}
+              height={360}
+            />
+          </div>
+
           <div className="card">
             <div className="mkd-plate-title">What&apos;s included</div>
             <ul className="mkd-included">
