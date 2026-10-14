@@ -495,7 +495,7 @@ test("T8 M3/C3: 'Included in Horizon Complete' on the terminal and on the CHOSEN
 });
 
 test("T8 price text: one function for all three steps (basket, Review :300, Sent :206)", async () => {
-  const { linePriceText } = await import("../components/marketplace/basket-view");
+  const { linePriceText } = await import("./basket-price-text");
   const prices = { "horizon-complete": "$100/month" };
   assert.equal(linePriceText({ kind: "bundle", key: "horizon-complete" }, prices, undefined), "$100/month");
   assert.equal(linePriceText({ kind: "bundle", key: "horizon-complete" }, undefined, true), "Price shown after sign-in");

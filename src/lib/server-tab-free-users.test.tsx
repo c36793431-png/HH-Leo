@@ -314,7 +314,8 @@ test("Q-S4 the basket's Request sent state links 'Add your server →' to /accou
   const src = readFileSync(path.join(process.cwd(), "src/components/marketplace/basket-view.tsx"), "utf8");
   const sentBlock = src.slice(src.indexOf("// ---- 3 · SENT ----"), src.indexOf("// ---- EMPTY ----"));
   assert.ok(
-    /sent\.lines\.some\(\(l\) => l\.kind === "feed"\) && !account\?\.feedReady && \(\s*<Link href="\/account\/servers" className="btn ghost">\s*Add your server →\s*<\/Link>/.test(sentBlock),
+    // A bundle line carries a feed too (bundles S2 plan part 1 (E)).
+    /sent\.lines\.some\(\(l\) => l\.kind === "feed" \|\| l\.kind === "bundle"\) && !account\?\.feedReady && \(\s*<Link href="\/account\/servers" className="btn ghost">\s*Add your server →\s*<\/Link>/.test(sentBlock),
     "Add your server → link in the sent actions"
   );
 });

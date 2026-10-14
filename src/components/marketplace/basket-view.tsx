@@ -16,6 +16,7 @@ import {
 } from "@/lib/basket-store";
 import { submitBasketAction, type SubmitReach } from "@/app/marketplace/basket/actions";
 import { SUPPORT_HANDLE, SUPPORT_TELEGRAM_URL } from "@/lib/support-contact";
+import { BY_AGREEMENT, linePriceText } from "@/lib/basket-price-text";
 
 /**
  * /marketplace/basket (Iris sheets 3-5 + r2 2-4; rulings marcus m59146). A REQUEST basket, not a
@@ -44,23 +45,6 @@ export interface BasketAccount {
 }
 
 type Step = BasketStep;
-
-const BY_AGREEMENT = "Priced by agreement";
-
-/** What a line's price slot says. Only a bundle can carry a price, and only signed in: `bundlePrices` holds the
- * server's string per bundle key (portal_config, read inside `if (user)`), never a number computed here. Signed
- * out, `priceAfterSignIn` says a price exists without carrying it (Fable S2 C6). Everything else, and any bundle
- * with no price row, is priced by agreement. */
-export function linePriceText(
-  line: { kind: BasketEntry["kind"]; key: string },
-  bundlePrices: Record<string, string> | undefined,
-  priceAfterSignIn: boolean | undefined,
-): string {
-  if (line.kind !== "bundle") return BY_AGREEMENT;
-  const price = bundlePrices?.[line.key];
-  if (price) return price;
-  return priceAfterSignIn ? "Price shown after sign-in" : BY_AGREEMENT;
-}
 
 function Thumb({ entry }: { entry: BasketEntry }) {
   if (!entry.image) return <div className="bk-thumb bk-thumb-plate" aria-hidden="true" />;
