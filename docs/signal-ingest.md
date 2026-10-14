@@ -2,7 +2,8 @@
 
 Status: STARTED at S0.1 (marcus m67424, 2026-10-13), fields added at S0.2 (marcus m67429/m67435), bars and
 rulings added at S1 (fable m67474 D5, marcus m67465), meta.source enum and the repost rules at S1.1 (fable
-m67483), the full contract at S2b (marcus m67548: setup, request, answers, retry, limits). The route is
+m67483), the full contract at S2b (marcus m67548: setup, request, answers, retry, limits), the host moved
+to horizonone.horizonhft.com (coxwell 17:39Z 2026-10-14 via marcus m68727, rulings m68767). The route is
 src/app/api/signals/ingest/[source]/route.ts, the logic src/lib/signal-ingest.ts; the design is
 docs/specs/axiom-signals-dashboard-plan.md section 4. The route is NOT LIVE until the setup below is done.
 
@@ -11,7 +12,10 @@ docs/specs/axiom-signals-dashboard-plan.md section 4. The route is NOT LIVE unti
 1. **marcus applies** `db/migrations/0110_signal_calls.sql` on prod, then merges (marcus m67548: "0110
    first, then the merge"). With no token hash set, the route answers every request
    `401 {"error":"unauthorized"}`. A preview answers `404 {"error":"not found"}` whatever its env: previews
-   share the production database, so a preview must not write.
+   share the production database, so a preview must not write. Any host but horizonone.horizonhft.com,
+   portal.horizonhft.com included, answers the same 404 (marcus m68767 Q3: hard cutover, no second host).
+   The merge comes first and the domain is added after it (m68767), so the route is unreachable until
+   **FOC16 adds** horizonone.horizonhft.com to the Vercel project.
 2. **Token**, generated on Ubuntu-Axiom; the token itself never leaves that box (not on the bus, not in
    Vercel):
    ```
@@ -30,7 +34,7 @@ incident, generate a new token (step 2) and set its hash (step 3).
 ## Request
 
 ```
-curl -sS -X POST https://portal.horizonhft.com/api/signals/ingest/axiom \
+curl -sS -X POST https://horizonone.horizonhft.com/api/signals/ingest/axiom \
   -H 'content-type: application/json' \
   -H "authorization: Bearer $(cat <token file>)" \
   --data-binary @calls.json
@@ -134,7 +138,7 @@ connection is the 500 below, with its body and the server log line `signal-inges
 | 400 | `{ "error" }`, plus `index` when one call caused it, and `symbol` for an unknown symbol | The body is refused, NOTHING is written. The first bad call in index order is the one named (fable m67547 call 6). Also used for a wrong content-type and a body over the cap (call 3) |
 | 401 | `{ "error": "unauthorized" }` | Bad or missing token, OR an unknown or unconfigured source: one body for all (fable C2 m67410) |
 | 403 | `{ "error": "forbidden" }` | IP rule set and the caller is not that IP (not set for axiom) |
-| 404 | `{ "error": "not found" }` | Not production |
+| 404 | `{ "error": "not found" }` | Not production, or not the horizonone.horizonhft.com host |
 | 409 | `{ "error", "index" }` | Call `index` conflicts with the stored call (the 409 lines in the rules above, or a changed direction). The WHOLE batch is rolled back, calls before `index` too |
 | 500 | `{ "error": "internal error; nothing was written" }` | The database could not be reached, or the transaction failed and was rolled back |
 

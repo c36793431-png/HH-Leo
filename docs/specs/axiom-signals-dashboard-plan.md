@@ -198,7 +198,9 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
 - Route file src/app/api/signals/ingest/[source]/route.ts (fable P5(a) m67410; path accepted m67417), logic in
   src/lib/signal-ingest.ts (testable without Next). The source is in the PATH so the gate picks its env var
   before the body is read; at 8909f17 it came from the body, which put JSON parsing before auth.
-- proxy.ts matcher excludes /api (src/proxy.ts:172), so the route's own gate is the only gate.
+- proxy.ts matcher excludes /api (src/proxy.ts:172), so the route's own checks are the only gate. Ahead of
+  the list below, route.ts answers 404 `{"error":"not found"}` (step 1's answer) on any host but
+  horizonone.horizonhft.com (marcus m68767 Q3, hard cutover; section 5).
 - Each source has its own env var holding the sha256 hex of its token, e.g. `SIGNAL_INGEST_SHA256_AXIOM`;
   code map `{ axiom: "SIGNAL_INGEST_SHA256_AXIOM" }`. A token is bound to its source: the axiom token cannot
   write sentiment rows. The token is generated on Ubuntu-Axiom; only its sha256 goes into Vercel env.
@@ -324,7 +326,22 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
   each row and is printed in docs/signal-ingest.md and the page's method note, so nobody later compares a
   stored price with spot.
 
-## 5. Page: /admin/signals (portal host only, admin only, no nav link)
+## 5. Page: /admin/signals (horizonone.horizonhft.com only, admin only, no nav link)
+
+Moved off the portal host (coxwell 17:39Z 2026-10-14 via marcus m68727; plan kai m68750; PLAN GO with rulings
+marcus m68767). Routing in src/lib/horizonone-host.ts, with its tests; proxy.ts calls it.
+- horizonone.horizonhft.com: / and /dashboard -> 307 /admin/signals (/dashboard because /login sends a
+  signed-in user on an unknown host there, post-auth-redirect.ts getPostAuthRedirect). /login, static files and
+  /admin/signals[/...] pass, then meet the /admin checks below. Every other path 404s, other /admin pages too.
+- Every other host 404s /admin/signals[/...], after the 403 like FEED_ONLY_ADMIN_ROUTES. Local dev serves it on
+  any host: the bypass is NODE_ENV === "development" only (m68767 Q1); previews run as production and 404 it
+  (Q2). Feed host: portalAdminRedirect still sends it to the portal, which now 404s it (one wasted hop, no
+  leak: an admin gets 404, anyone else the portal's 403 or /login).
+- Sign-in on horizonone is magic-link only (m68767 P4). The bot's BotFather domain is never changed.
+- Order (m68767): this code merges FIRST, FOC16 adds the domain AFTER, so the host never serves the whole portal.
+  Until the domain is live the page is unreachable on every host.
+
+The section below is the S4 text, written for the portal host.
 
 - Route file src/app/admin/signals/page.tsx. Server component, reads only.
 - Gate, three layers, two already on main: proxy.ts:127-132 (no session -> /login, not admin -> 403);
@@ -479,6 +496,8 @@ cached), so no signal_bars table (R6 m67429). S5 is the price line through each 
 - tsc and lint per slice, separately. Lint baseline on main: I re-read it on 544f6fc before S1.
 - The page cannot be rendered from this box (`next build` refused). Render proof = Leo or a Vercel preview.
   A preview's /admin/signals reads the prod table (reads only); its ingest answers 404 by design.
+  Since the horizonone move (section 5) a preview 404s /admin/signals too, so render proof is local dev
+  (NODE_ENV development) or the live host once the domain is added.
 
 ## 8. Slices (each under 2400s, one push each)
 

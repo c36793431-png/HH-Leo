@@ -4,6 +4,7 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { REFERRAL_COOKIE, REFERRAL_COOKIE_MAX_AGE_DAYS } from "@/lib/referrals";
 import { getActivePartnerReferralCode } from "@/lib/partners";
 import { isAdminFeedRoute, portalAdminRedirect } from "@/lib/feed-host-admin";
+import { horizonOneRoute, isHorizonOneHost, isSignalsPath, signalsServedOn } from "@/lib/horizonone-host";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 const FEED_HOST = "feed.horizonhft.com";
@@ -39,6 +40,15 @@ export default auth(async (req) => {
   const host = req.headers.get("host") || "";
   const isPartnerHost = host === PARTNER_HOST || host.startsWith(`${PARTNER_HOST}:`);
   const pathname = req.nextUrl.pathname;
+
+  if (isHorizonOneHost(host)) {
+    // horizonone.horizonhft.com serves the Axiom signals page and sign-in, nothing else (marcus m68767). The routing
+    // and its reasons live in lib/horizonone-host.ts, with its tests. What passes still goes through the /admin
+    // session and admin checks below.
+    const route = horizonOneRoute(pathname);
+    if (route.kind === "redirect") return NextResponse.redirect(new URL(route.to, req.nextUrl), 307);
+    if (route.kind === "not-found") return new NextResponse("Not Found", { status: 404 });
+  }
 
   if (isPartnerHost) {
     // partner.horizonhft.com serves the partner landing/dashboard, rewritten to
@@ -142,6 +152,11 @@ export default auth(async (req) => {
     const isFeedOnlyAdminRoute =
       FEED_ONLY_ADMIN_ROUTES.includes(pathname) || pathname.startsWith("/admin/provider-applications/");
     if (!isFeedHost && !isPartnerHost && isFeedOnlyAdminRoute) {
+      return new NextResponse("Not Found", { status: 404 });
+    }
+    // The signals page is served on horizonone.horizonhft.com only (and on any host in local dev), so the portal
+    // and previews 404 it (marcus m68767 Q1, Q2). After the 403 for the same reason as the check above.
+    if (isSignalsPath(pathname) && !signalsServedOn(host, process.env.NODE_ENV)) {
       return new NextResponse("Not Found", { status: 404 });
     }
   }
