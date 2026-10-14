@@ -1,5 +1,5 @@
 import { pool } from "./db";
-import { resolveBasketLines, type BasketLine } from "./basket-catalogue";
+import { BasketLineError, resolveBasketLines, type BasketLine } from "./basket-catalogue";
 import { notifyBasketRequestSubmitted } from "./telemetry-sink";
 
 /**
@@ -95,6 +95,11 @@ export async function createBasketRequest(args: {
   wantTrial: boolean;
 }): Promise<{ id: string; lines: BasketLine[] }> {
   const lines = resolveBasketLines(args.lines);
+  // No self-serve bundle trial: a bundle's trial is decided at Activate (coxwell Q-B; marcus M2 m67867). The
+  // basket hides the box; this refuses a POST that sends it anyway, before anything is written or sent.
+  if (args.wantTrial && lines.some((l) => l.kind === "bundle")) {
+    throw new BasketLineError("A bundle can't be requested with the 30-day trial. Remove the trial or the bundle.");
+  }
   const account = await getBasketAccountState(args.userId);
   if (args.wantTrial && !account.trialEligible) throw new TrialNotEligibleError();
   const stamped = lines.map((l) =>

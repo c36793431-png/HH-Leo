@@ -3,6 +3,7 @@ import { MAIN_SITE_URL } from "./main-site";
 import { MARKETPLACE_LISTINGS, listingByKey, listingDetailHref, tierAvailability, type ListingMark } from "./marketplace-catalogue";
 import { STRATEGY_DISPLAY_META } from "./strategy-catalogue";
 import type { StrategyKey } from "./setfiles";
+import { BUNDLES, bundleByKey, isBundleFeedChoice, type BundleDefinition, type BundleFeedChoice } from "./bundle-catalogue";
 
 /**
  * What the request basket can carry, and the one validator for a submitted basket (coxwell
@@ -17,7 +18,7 @@ import type { StrategyKey } from "./setfiles";
  *   single, with no change anywhere else. Names are strategy-catalogue.ts's meta.name.
  */
 
-export type BasketLineKind = "software" | "strategy" | "feed";
+export type BasketLineKind = "software" | "strategy" | "feed" | "bundle";
 
 export const BASKET_MAX_LINES = 20;
 export const BASKET_MAX_SERVERS = 20;
@@ -105,6 +106,15 @@ export interface BasketEntry {
   detailHref?: string;
   /** A strategy's "See more" target on www. Not detailHref: that one also links the basket line. */
   aboutHref?: string;
+  /** A bundle's feed choices, titled from their listings (Fable S2 C2), so client components get the names as
+   * props and never import a catalogue (C1). `available` = the listing passes the same test a feed line does. */
+  feedChoices?: BundleFeedChoiceEntry[];
+}
+
+export interface BundleFeedChoiceEntry {
+  key: BundleFeedChoice;
+  title: string;
+  available: boolean;
 }
 
 /** A strategy's type, as its meta.name spells it after the dash ("1 LEG — Latency Arbitrage" ->
@@ -161,6 +171,28 @@ function listingEntry(kind: "software" | "feed", key: string): BasketEntry | nul
   };
 }
 
+/** A bundle's product page, a sibling of the listings' (/marketplace/<key>). */
+export function bundleDetailHref(bundle: BundleDefinition): string {
+  return `/marketplace/${bundle.key}`;
+}
+
+/** A bundle's feed choices, each titled and tested by the SAME rule as a feed line (listingEntry), so the bundle
+ * can never offer a feed the basket would refuse on its own. */
+export function bundleFeedChoiceEntries(bundle: BundleDefinition): BundleFeedChoiceEntry[] {
+  return bundle.feedChoices.map((key) => {
+    const feed = listingEntry("feed", key);
+    return { key, title: feed?.name ?? listingByKey(key)?.title ?? key, available: feed != null };
+  });
+}
+
+/** A bundle's entry, or null when none of its feeds can be requested (then there is nothing to pick). NO price
+ * field: this entry rides the catalogue prop into signed-out pages (plan 5b P1). Plain plate, no image (M4). */
+function bundleEntry(bundle: BundleDefinition): BasketEntry | null {
+  const feedChoices = bundleFeedChoiceEntries(bundle);
+  if (!feedChoices.some((c) => c.available)) return null;
+  return { kind: "bundle", key: bundle.key, name: bundle.title, chips: [], blurb: bundle.blurb, detailHref: bundleDetailHref(bundle), feedChoices };
+}
+
 /** The entry for one line, or null when the basket can't carry it (unknown key, wrong kind, not
  * available). */
 export function basketEntry(kind: BasketLineKind, key: string): BasketEntry | null {
@@ -168,16 +200,22 @@ export function basketEntry(kind: BasketLineKind, key: string): BasketEntry | nu
     const e = BASKET_STRATEGY_ENTRIES.find((s) => s.key === key);
     return e ? strategyEntry(e) : null;
   }
+  if (kind === "bundle") {
+    const b = bundleByKey(key);
+    return b ? bundleEntry(b) : null;
+  }
   return listingEntry(kind, key);
 }
 
-/** Every product the basket can carry today, in shelf order: software, feeds, strategies. */
+/** Every product the basket can carry today, in shelf order: bundles (first, Q-L m66848), software, feeds,
+ * strategies. */
 export function basketCatalogue(): BasketEntry[] {
   const listed = MARKETPLACE_LISTINGS.flatMap((l) => {
     const e = listingEntry(l.category === "feeds" ? "feed" : "software", l.key);
     return e ? [e] : [];
   });
   return [
+    ...BUNDLES.flatMap((b) => bundleEntry(b) ?? []),
     ...listed.filter((e) => e.kind === "software"),
     ...listed.filter((e) => e.kind === "feed"),
     ...BASKET_STRATEGY_ENTRIES.map(strategyEntry),
@@ -190,6 +228,9 @@ export interface BasketLine {
   key: string;
   name: string;
   servers?: number;
+  /** Bundle lines only: the feed the client picked. The name carries it too, so every renderer that prints
+   * l.name (the Telegram card, the admin list, My requests) shows it with no change. */
+  feed?: BundleFeedChoice;
   note?: string;
 }
 
@@ -205,16 +246,30 @@ export function resolveBasketLines(inputs: unknown): BasketLine[] {
   if (!Array.isArray(inputs) || inputs.length === 0) throw new BasketLineError("Your basket is empty");
   if (inputs.length > BASKET_MAX_LINES) throw new BasketLineError(`A basket holds at most ${BASKET_MAX_LINES} lines`);
   const seen = new Set<string>();
+  // One bundle per basket, of ANY key (Q-H; Fable S2 C4): the kind:key set above only stops the same key twice.
+  let bundleSeen = false;
   return inputs.map((raw): BasketLine => {
-    const input = raw as { kind?: unknown; key?: unknown; servers?: unknown } | null;
+    const input = raw as { kind?: unknown; key?: unknown; servers?: unknown; feed?: unknown } | null;
     const kind = input?.kind;
     const key = typeof input?.key === "string" ? input.key : "";
-    if (kind !== "software" && kind !== "strategy" && kind !== "feed") throw new BasketLineError("Unknown line in basket");
+    if (kind !== "software" && kind !== "strategy" && kind !== "feed" && kind !== "bundle") throw new BasketLineError("Unknown line in basket");
     const id = `${kind}:${key}`;
     if (seen.has(id)) throw new BasketLineError("The same product is in the basket twice");
     seen.add(id);
+    if (kind === "bundle") {
+      if (bundleSeen) throw new BasketLineError("A basket holds one bundle");
+      bundleSeen = true;
+    }
     const entry = basketEntry(kind, key);
     if (!entry) throw new BasketLineError(`${key || "A product"} isn't available to request`);
+    if (kind === "bundle") {
+      if (input?.servers !== undefined) throw new BasketLineError(`${entry.name}: a bundle line has no server count`);
+      const feed = typeof input?.feed === "string" && isBundleFeedChoice(input.feed) ? input.feed : null;
+      const choice = feed ? entry.feedChoices?.find((c) => c.key === feed) : undefined;
+      if (!feed || !choice) throw new BasketLineError(`${entry.name}: choose a feed`);
+      if (!choice.available) throw new BasketLineError(`${entry.name}: ${choice.title} isn't available to request`);
+      return { kind, key, name: `${entry.name} (feed: ${choice.title})`, feed };
+    }
     if (kind === "feed") {
       const servers = input?.servers ?? 1;
       if (typeof servers !== "number" || !Number.isInteger(servers) || servers < 1 || servers > BASKET_MAX_SERVERS) {

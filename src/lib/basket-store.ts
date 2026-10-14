@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { BasketLineKind } from "./basket-catalogue";
+import type { BundleFeedChoice } from "./bundle-catalogue";
 
 /**
  * Client components only (it reads window); no "use client" so its functions stay callable.
@@ -15,7 +16,13 @@ export interface StoredBasketLine {
   key: string;
   /** Feed lines only. */
   servers?: number;
+  /** Bundle lines only, and required there: the feed the client picked. */
+  feed?: BundleFeedChoice;
 }
+
+/** Literal, not BUNDLE_FEED_CHOICES: a client module never value-imports a catalogue (Fable S2 C1). The server
+ * re-checks the feed against the catalogue at submit, so this list only keeps junk out of the count. */
+const isFeedChoice = (v: unknown) => v === "ld-base" || v === "ny-base";
 
 const STORAGE_KEY = "hz-basket-v1";
 const CHANGE_EVENT = "hz-basket-change";
@@ -23,13 +30,16 @@ const EMPTY: StoredBasketLine[] = [];
 
 function isLine(v: unknown): v is StoredBasketLine {
   const l = v as StoredBasketLine | null;
+  if (!l || typeof l.key !== "string") return false;
+  if (l.kind === "bundle") return isFeedChoice(l.feed) && l.servers === undefined;
   return (
-    !!l &&
     (l.kind === "software" || l.kind === "strategy" || l.kind === "feed") &&
-    typeof l.key === "string" &&
     (l.servers === undefined || (Number.isInteger(l.servers) && l.servers > 0))
   );
 }
+
+/** Exported for the test only. */
+export const isStoredBasketLine = isLine;
 
 // useSyncExternalStore needs the same array back while nothing changed, so the parse is cached
 // against the raw string.
@@ -82,11 +92,18 @@ export function useBasket(): StoredBasketLine[] {
 
 const same = (l: StoredBasketLine, kind: BasketLineKind, key: string) => l.kind === kind && l.key === key;
 
-/** Adds a line, or replaces the existing line for the same product: one product = one line. */
+/** The lines after putting one: added, or replacing the existing line for the same product (one product = one
+ * line). A bundle replaces ANY bundle line, of any key: one bundle per basket (Q-H; Fable S2 C4). */
+export function putLine(lines: StoredBasketLine[], line: StoredBasketLine): StoredBasketLine[] {
+  const replaces = (l: StoredBasketLine) => same(l, line.kind, line.key) || (line.kind === "bundle" && l.kind === "bundle");
+  const i = lines.findIndex(replaces);
+  if (i === -1) return [...lines, line];
+  return lines.flatMap((l, j) => (j === i ? [line] : replaces(l) ? [] : [l]));
+}
+
+/** Adds a line, or replaces the existing line for the same product (putLine). */
 export function basketPut(line: StoredBasketLine) {
-  const lines = readLines();
-  const i = lines.findIndex((l) => same(l, line.kind, line.key));
-  writeLines(i === -1 ? [...lines, line] : lines.map((l, j) => (j === i ? line : l)));
+  writeLines(putLine(readLines(), line));
 }
 
 export function basketRemove(kind: BasketLineKind, key: string) {
