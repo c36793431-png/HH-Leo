@@ -373,22 +373,27 @@ test("T8 NO READ (m68882 A4): the basket page, signed in and out WITH the row pr
   const { default: Page } = await import("../app/marketplace/basket/page");
   const u = await makeUser();
   storedLines = [LD];
-  for (const who of ["in", "out"] as const) {
-    if (who === "in") signIn(u.id, u.email);
-    else signOut();
-    queries = [];
-    const tree = await Page();
-    const asked = queries;
+  try {
+    for (const who of ["in", "out"] as const) {
+      if (who === "in") signIn(u.id, u.email);
+      else signOut();
+      queries = [];
+      const tree = await Page();
+      const asked = queries;
+      queries = null;
+      assert.ok(asked.length > 0 || who === "out", `${who}: the spy sees the page's queries`);
+      for (const q of asked) assert.doesNotMatch(`${q.text} ${JSON.stringify(q.params)}`, /bundle_list_price/, `${who}: ${q.text}`);
+      const props = basketViewProps(tree);
+      assert.ok(props, `${who}: found BasketView`);
+      assert.deepEqual(Object.keys(props!).sort(), ["account", "catalogue", "signInHref"], `${who}: no price prop`);
+      assert.doesNotMatch(JSON.stringify(props), /"usd"|:100\b|\/month|after sign-in/i, `${who}: no amount in the payload`);
+    }
+  } finally {
+    // A failure here must not leak a session or basket into the next test.
     queries = null;
-    assert.ok(asked.length > 0 || who === "out", `${who}: the spy sees the page's queries`);
-    for (const q of asked) assert.doesNotMatch(`${q.text} ${JSON.stringify(q.params)}`, /bundle_list_price/, `${who}: ${q.text}`);
-    const props = basketViewProps(tree);
-    assert.ok(props, `${who}: found BasketView`);
-    assert.deepEqual(Object.keys(props!).sort(), ["account", "catalogue", "signInHref"], `${who}: no price prop`);
-    assert.doesNotMatch(JSON.stringify(props), /"usd"|:100\b|\/month|after sign-in/i, `${who}: no amount in the payload`);
+    storedLines = [];
+    signOut();
   }
-  storedLines = [];
-  signOut();
 });
 
 // ---- renders ----
