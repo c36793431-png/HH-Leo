@@ -102,11 +102,14 @@ export async function maybeCreateReferralEarning(paymentId: string): Promise<voi
     if (prior.rows.length > 0) return;
   }
 
-  // A partner-linked referrer (Legitcashmaker et al.) books software into partner_deals instead of
-  // the flat-30% referral_earnings ledger — see recordAutoPartnerPayment for the bridge shape. Feed
-  // money never does (marcus m64769 R4): the deal's 60% plus the provider's 50% would pay out more
-  // than the feed brought in, so it takes the plain 30% until coxwell rules on partner feed rates.
-  const partner = row.category === "customer" ? await getPartnerByUserId(referrerId) : null;
+  // A partner-linked referrer (Legitcashmaker et al.) books software and bundles into partner_deals
+  // at the deal's own rate instead of the flat-30% referral_earnings ledger — see
+  // recordAutoPartnerPayment for the bridge shape. Bundles follow software (coxwell's Q-J, marcus
+  // m68455/m68496). Feed money never does (marcus m64769 R4): the deal's 60% plus the provider's 50%
+  // would pay out more than the feed brought in, so it takes the plain 30% until coxwell rules on
+  // partner feed rates.
+  const partner =
+    row.category === "customer" || row.category === "bundle" ? await getPartnerByUserId(referrerId) : null;
   if (partner) {
     await recordAutoPartnerPayment({
       partnerId: partner.id,

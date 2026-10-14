@@ -237,6 +237,56 @@ test("T1 activate, new licence: licence + bundle + ONE 'bundle' payment in one t
   assert.equal(earnings[0].status, "pending");
 });
 
+test("T1b partner-linked referrer: the bundle payment books into the partner's deal at their OWN rate, not a flat $30 earning", async () => {
+  // marcus m68455/m68496: partners keep their own partner_deals rate via the same path as software.
+  const partnerUser = await makeUser();
+  const partnerId = (await db.query(`insert into partners (name, user_id, status) values ($1, $2, 'active') returning id`, [`Partner ${seq}`, partnerUser])).rows[0].id;
+
+  // A client with an active deal at a non-default 50%: the bundle money joins THAT deal at 50%.
+  const withDeal = await makeUser();
+  await db.query(`update users set referred_by_user_id = $2 where id = $1`, [withDeal, partnerUser]);
+  const dealId = (
+    await db.query(
+      `insert into partner_deals (partner_id, client_user_id, gross_usd, partner_pct, coxwell_pct, status) values ($1, $2, 200, 0.5, 0.5, 'active') returning id`,
+      [partnerId, withDeal]
+    )
+  ).rows[0].id;
+  // A client with no deal yet: a new deal at the default rate, as software gets.
+  const noDeal = await makeUser();
+  await db.query(`update users set referred_by_user_id = $2 where id = $1`, [noDeal, partnerUser]);
+
+  for (const u of [withDeal, noDeal]) await paid(u);
+  await lic.settleLicenseBackgroundTasks();
+
+  const earnings = (await db.query(`select count(*)::int as n from referral_earnings where referred_user_id = any($1::uuid[])`, [[withDeal, noDeal]])).rows[0].n;
+  assert.equal(earnings, 0, "no flat-30% earning for a partner-linked referrer");
+
+  const payOf = async (u: string) => (await db.query(`select id from payments where user_id = $1 and category = 'bundle'`, [u])).rows[0].id;
+  const dealsOf = async (u: string) =>
+    (
+      await db.query(
+        `select d.id, d.partner_id, d.gross_usd, d.partner_pct, array_agg(dp.payment_id) as payment_ids, array_agg(dp.amount_usd) as amounts
+         from partner_deals d left join deal_payments dp on dp.deal_id = d.id where d.client_user_id = $1 group by d.id`,
+        [u]
+      )
+    ).rows;
+
+  const [existing, ...extraA] = await dealsOf(withDeal);
+  assert.equal(extraA.length, 0, "no second deal for a client who already has one");
+  assert.equal(existing.id, dealId);
+  assert.equal(Number(existing.partner_pct), 0.5, "the partner's own rate is kept");
+  assert.equal(Number(existing.gross_usd), 300, "the $100 bundle joins the deal's gross");
+  assert.deepEqual(existing.payment_ids, [await payOf(withDeal)]);
+  assert.deepEqual(existing.amounts.map(Number), [100]);
+
+  const [created, ...extraB] = await dealsOf(noDeal);
+  assert.equal(extraB.length, 0);
+  assert.equal(created.partner_id, partnerId);
+  assert.equal(Number(created.partner_pct), 0.6);
+  assert.equal(Number(created.gross_usd), 100);
+  assert.deepEqual(created.payment_ids, [await payOf(noDeal)]);
+});
+
 test("T1/T3 grant: refuses with no server; LD then writes 3 stamped rows + 3 open allowlist records at the configured share", async () => {
   const u = await makeUser();
   const r = await paid(u);
