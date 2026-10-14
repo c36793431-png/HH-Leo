@@ -178,15 +178,15 @@ export async function listConsultantApplications(options: { status?: ConsultantA
   return result.rows.map(mapRow);
 }
 
-/** Applicant mail, drafted for marcus's sign-off (m69029 a: plain, short, no prices, no promises of work). The
- * decline text is generic and never carries declined_note (Fable S3, p3 D2.2). */
+/** Applicant mail (m69029 a: plain, short, no prices, no promises of work). Wording signed off by marcus m69102,
+ * approved mail amended there. The decline text is generic and never carries declined_note (Fable S3, p3 D2.2). */
 export function consultantApprovedEmail(name: string): { subject: string; text: string } {
   return {
     subject: "Your Horizon HFT consultant application",
     text:
       `Hi ${name},\n\n` +
       `Thank you for applying to consult with Horizon HFT. Your application has been approved.\n\n` +
-      `There is nothing you need to do right now.\n\n` +
+      `We will be in touch shortly about the next steps.\n\n` +
       `Horizon HFT`,
   };
 }
