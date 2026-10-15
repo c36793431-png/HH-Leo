@@ -3,7 +3,7 @@
  * scripts/activate-bundle.mts (plan m69164 section 4, BUILD GO marcus m69165): T-A the dry run writes nothing;
  * T-B execute writes 1 licence, 1 bundle, 0 or 1 payment and 1 key delivery row, by EMAIL for a client with no
  * Telegram (fails if step 2, the key send, is dropped); T-C the basket row reads handled. Plus the refusals,
- * --grant-feed (step 2) and the script itself.
+ * --grant-feed (step 2), the script itself, and a send the provider refuses (Fable S1 m69343: KEY SEND FAILED, exit 1).
  * In-memory PGlite on the REAL migration chain, the bundles.test.ts harness: a pool query while a client holds an
  * open transaction THROWS, so nothing here can escape activateBundle's tx unseen. Sends are captured, never made. */
 import { test, before, beforeEach } from "node:test";
@@ -55,6 +55,8 @@ let lic: typeof import("./licenses");
 let actorId = "";
 let poolEnded = false;
 let portalThrows = false;
+/** Resend answers 422, as in Fable's probe 2 (m69343): sendEmail returns ok:false, nothing throws. */
+let emailRefused = false;
 const sends: { kind: "portal" | "telemetry" | "email"; to: string; text: string; subject?: string }[] = [];
 
 async function sql(text: string, params: unknown[] = []) {
@@ -98,6 +100,12 @@ before(async () => {
     } else if (u.includes(`/bot${ENV.TELEMETRY_BOT_TOKEN}/sendMessage`)) {
       sends.push({ kind: "telemetry", to: String(body.chat_id), text: body.text });
     } else if (u.includes("resend.com")) {
+      if (emailRefused) {
+        return new Response(JSON.stringify({ statusCode: 422, name: "validation_error", message: "Invalid `to` field." }), {
+          status: 422,
+          headers: { "content-type": "application/json" },
+        });
+      }
       sends.push({ kind: "email", to: [body.to].flat().join(","), text: body.text, subject: body.subject });
     } else {
       throw new Error(`unexpected outbound fetch: ${u}`);
@@ -233,6 +241,8 @@ test("T-B + T-C trial, email-only client: 1 licence, 1 bundle, 0 payments, the k
   assert.deepEqual(delivered[0].details_json, { licenseId: r.licenseId, channel: "email", ok: true, resendEmailId: "email-id" });
   assert.equal(out.delivery, "email");
   assert.equal(out.sendError, null);
+  assert.equal(out.keySend?.ok, true);
+  assert.equal(out.keySend?.channel, "email");
   const notices = (await sql(`select kind, what from client_notices where user_id = $1`, [u.id])).rows;
   assert.deepEqual(notices, [{ kind: "approved", what: "London trial, 30 days" }]);
   // activateBundle's own ops ping, to the sink, unchanged.
@@ -295,7 +305,31 @@ test("a key send that THROWS: recorded, and steps 3 + 4 still run; the outcome c
   }
   await lic.settleLicenseBackgroundTasks();
   assert.match(String(out.sendError?.message), /fetch failed/);
+  assert.equal(out.keySend, null, "a throw leaves no outcome");
   assert.deepEqual((await deliveryRows(out.result.licenseId))[0].details_json, { licenseId: out.result.licenseId, channel: "telegram", ok: false, error: "threw TypeError" });
+  assert.equal((await sql(`select count(*)::int as n from admin_actions where action_type = 'bundle_activate' and target_user_id = $1`, [u.id])).rows[0].n, 1);
+  assert.equal((await sql(`select status from basket_requests where id = $1`, [basketId])).rows[0].status, "handled");
+});
+
+test("an email the provider REFUSES (Resend 422, no throw): keySend ok false with the error, the delivery row ok false, the unreachable alert; steps 3 + 4 still run", async () => {
+  const u = await makeUser();
+  const basketId = await makeBasket(u.id);
+  emailRefused = true;
+  let out: Awaited<ReturnType<typeof cli.executeActivation>>;
+  try {
+    out = await cli.executeActivation(await cli.planActivation(args(u.id, basketId)));
+  } finally {
+    emailRefused = false;
+  }
+  await lic.settleLicenseBackgroundTasks();
+  assert.equal(out.sendError, null, "nothing threw");
+  assert.equal(out.keySend?.ok, false);
+  assert.equal(out.keySend?.channel, "email");
+  assert.match(String((out.keySend as { error?: string }).error), /validation_error/);
+  const row = (await deliveryRows(out.result.licenseId))[0].details_json;
+  assert.equal(row.ok, false);
+  assert.equal(row.error, (out.keySend as { error?: string }).error, "the outcome is the row's");
+  assert.equal((await sql(`select count(*)::int as n from client_unreachable_alerts where user_id = $1`, [u.id])).rows[0].n, 1);
   assert.equal((await sql(`select count(*)::int as n from admin_actions where action_type = 'bundle_activate' and target_user_id = $1`, [u.id])).rows[0].n, 1);
   assert.equal((await sql(`select status from basket_requests where id = $1`, [basketId])).rows[0].status, "handled");
 });
@@ -429,8 +463,9 @@ test("argv: the run marcus will make parses; trial XOR amount; no defaults; --gr
   assert.throws(() => p("--grant-feed not-a-uuid"), /needs a bundle id/);
 });
 
-// Last: the script runs once per process (its module is cached) and ends the pool on the way out.
-test("the script itself, --execute on an Albin-shaped client: prints the masked key, never the full one, sets no failure code, ends the pool", async () => {
+/** Runs the script once, --execute, for a fresh Albin-shaped client. The module runs on import and is cached per
+ * specifier, so each run passes its own (a query string). Returns the stdout lines' text and the user. */
+async function runScript(specifier: string) {
   const u = await makeUser();
   const basketId = await makeBasket(u.id);
   const lines: string[] = [];
@@ -438,14 +473,20 @@ test("the script itself, --execute on an Albin-shaped client: prints the masked 
   process.argv = [argv[0], "scripts/activate-bundle.mts", "--user", u.id, "--bundle", "horizon-complete", "--feed", "ld-base", "--days", "30", "--trial", "--basket", basketId, "--execute"];
   console.log = (...a: unknown[]) => void lines.push(a.join(" "));
   console.error = () => {};
+  poolEnded = false;
   try {
-    await import("../../scripts/activate-bundle.mjs");
+    await import(specifier);
   } finally {
     process.argv = argv;
     console.log = log;
     console.error = error;
   }
-  const out = lines.join("\n");
+  return { out: lines.join("\n"), u };
+}
+
+// Last: the script ends the pool on the way out.
+test("the script itself, --execute on an Albin-shaped client: prints the masked key, never the full one, sets no failure code, ends the pool", async () => {
+  const { out, u } = await runScript("../../scripts/activate-bundle.mjs");
   assert.ok(poolEnded, "the script ended the pool");
   const row = (await sql(`select id, license_key from licenses where user_id = $1`, [u.id])).rows;
   assert.equal(row.length, 1, out);
@@ -456,4 +497,23 @@ test("the script itself, --execute on an Albin-shaped client: prints the masked 
   assert.match(out, /Basket: {4}marked handled/);
   assert.match(out, /--grant-feed [0-9a-f-]{36}/);
   assert.ok(!process.exitCode, out);
+});
+
+test("the script, Resend 422 on the only channel (Fable S1 m69343): prints KEY SEND FAILED with the channel and error, never 'Key sent', and exits 1", async () => {
+  emailRefused = true;
+  let run: Awaited<ReturnType<typeof runScript>>;
+  try {
+    run = await runScript("../../scripts/activate-bundle.mjs?send-refused");
+  } finally {
+    emailRefused = false;
+  }
+  const { out, u } = run;
+  const exitCode = process.exitCode;
+  process.exitCode = 0;
+  assert.ok(poolEnded, "the script ended the pool");
+  assert.equal((await sql(`select count(*)::int as n from licenses where user_id = $1`, [u.id])).rows[0].n, 1, out);
+  assert.match(out, /KEY SEND FAILED \(email: validation_error [^)]*\): unreachable alert raised, see admin_actions license_key_delivery/);
+  assert.doesNotMatch(out, /Key sent by/);
+  assert.match(out, /Basket: {4}marked handled/, "step 4 still ran");
+  assert.equal(exitCode, 1, out);
 });

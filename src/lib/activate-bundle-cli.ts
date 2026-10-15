@@ -3,6 +3,7 @@ import { licenseNumberSql, getActiveLicensesForUser, getGroupTarget, type FeedTy
 import { getPortalConfig } from "./portal-config";
 import { logAdminAction } from "./admin";
 import { addApprovedNotice } from "./client-reach";
+import type { NotifyOutcome } from "./notify";
 import { setBasketRequestHandled } from "./basket-requests";
 import { isReceivableUsdAmount } from "./payments";
 import { bundleByKey, bundleFeedTierKeys, bundleFeedType, isBundleFeedChoice, type BundleFeedChoice, type BundleKey } from "./bundle-catalogue";
@@ -309,8 +310,11 @@ export async function planActivation(args: ActivateArgs, env: Record<string, str
 export interface ActivationOutcome {
   result: ActivateBundleResult;
   delivery: KeyDelivery;
-  /** The key send threw (a Telegram throw propagates out of sendKeyAndRecord). Its license_key_delivery row is
-   * written either way, and steps 3 and 4 still ran. */
+  /** What the key send answered (its license_key_delivery row holds the same); ok false = the key did NOT reach
+   * the client, and the unreachable alert was raised. null when the send threw (sendError). */
+  keySend: NotifyOutcome | null;
+  /** The key send threw. Steps 3 and 4 still ran. A throw from the send itself (a Telegram throw propagates out of
+   * sendKeyAndRecord) has its license_key_delivery row; one before it (a DB read in sendBundleKey) has none. */
   sendError: Error | null;
   /** false: the basket row was no longer 'new' when step 4 ran, so nothing changed. */
   basketMarked: boolean;
@@ -318,12 +322,12 @@ export interface ActivationOutcome {
 
 /** The new licence's key to the client, as issueNewLicenseForUser sends it: the approved banner first, then the
  * DM or email and its license_key_delivery row (the unreachable alert when it reaches nobody). */
-async function sendBundleKey(plan: ActivationPlan, actorId: string, result: ActivateBundleResult, issuedAt: Date): Promise<void> {
+async function sendBundleKey(plan: ActivationPlan, actorId: string, result: ActivateBundleResult, issuedAt: Date): Promise<NotifyOutcome> {
   const userId = plan.user.id;
   const target = await getGroupTarget(userId);
   if (!target) {
     await recordKeyDelivery(actorId, userId, result.licenseId, NO_USERS_ROW);
-    return;
+    return NO_USERS_ROW;
   }
   const tier = plan.args.isTrial ? "trial" : bundleByKey(plan.args.bundleKey)!.licenceTier;
   const feedTypes: FeedType[] = [bundleFeedType(plan.args.feedChoice)];
@@ -342,7 +346,7 @@ async function sendBundleKey(plan: ActivationPlan, actorId: string, result: Acti
   });
   const what = grantWhat({ tier, feedTypes, issuedAt, expiresAt });
   await addApprovedNotice(userId, what);
-  await sendKeyAndRecord(actorId, result.licenseId, target, subject, message, what);
+  return sendKeyAndRecord(actorId, result.licenseId, target, subject, message, what);
 }
 
 /** Writes, in the m69164 order: (1) activateBundle, one tx; (2) the key send; (3) the bundle_activate
@@ -354,9 +358,10 @@ export async function executeActivation(plan: ActivationPlan): Promise<Activatio
 
   const result = await activateBundle({ ...plan.activateArgs, actorUserId: actorId });
 
+  let keySend: NotifyOutcome | null = null;
   let sendError: Error | null = null;
   try {
-    await sendBundleKey(plan, actorId, result, issuedAt);
+    keySend = await sendBundleKey(plan, actorId, result, issuedAt);
   } catch (err) {
     sendError = err instanceof Error ? err : new Error(String(err));
   }
@@ -370,7 +375,7 @@ export async function executeActivation(plan: ActivationPlan): Promise<Activatio
   );
 
   const marked = await setBasketRequestHandled(plan.args.basketId, actorId, true);
-  return { result, delivery: keyDeliveryChannel(plan.user), sendError, basketMarked: marked !== null };
+  return { result, delivery: keyDeliveryChannel(plan.user), keySend, sendError, basketMarked: marked !== null };
 }
 
 export interface GrantPlan {

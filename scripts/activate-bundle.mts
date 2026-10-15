@@ -134,13 +134,20 @@ async function runActivate(args: Extract<ReturnType<typeof parseActivateBundleAr
     process.exitCode = 1;
     return;
   }
-  const { result, delivery, sendError, basketMarked } = outcome;
+  const { result, delivery, keySend, sendError, basketMarked } = outcome;
   console.log(
     `\nACTIVATED  bundle ${result.bundleId}  licence ${result.licenseId}  HH${result.licenseNumber}  key ${maskLicenseKey(result.licenseKey)}  expires ${new Date(result.expiresAt).toISOString()}  (${result.outcome})`
   );
   console.log(`Payment:   ${result.paymentId ?? "none (trial)"}`);
   if (sendError) {
-    console.log(`KEY SEND THREW (${sendError.name}): the key may NOT have reached the client. Its license_key_delivery row records it.`);
+    console.log(
+      `KEY SEND THREW (${sendError.name}): the key may NOT have reached the client. A license_key_delivery row for HH${result.licenseNumber} means ` +
+        `the send itself threw; no row means it threw before the send (a DB read) and nothing was sent.`
+    );
+    process.exitCode = 1;
+  } else if (keySend && !keySend.ok) {
+    // An email the provider refuses does not throw (sendEmail returns ok:false): this is that path (Fable S1 m69343).
+    console.log(`KEY SEND FAILED (${keySend.channel}: ${keySend.error}): unreachable alert raised, see admin_actions license_key_delivery`);
     process.exitCode = 1;
   } else {
     console.log(`Key sent by ${delivery}.`);

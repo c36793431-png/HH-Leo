@@ -195,8 +195,8 @@ export async function recordKeyDelivery(actorUserId: string, userId: string, lic
   );
 }
 
-/** The key DM or email, then its license_key_delivery row. A throw (network, missing token) is
- * recorded as "threw <Name>" (the name only, as the agent API does), then propagates as before. */
+/** The key DM or email, then its license_key_delivery row; returns what notifyUser answered. A throw (network,
+ * missing token) is recorded as "threw <Name>" (the name only, as the agent API does), then propagates as before. */
 export async function sendKeyAndRecord(
   actorUserId: string,
   licenseId: string,
@@ -205,7 +205,7 @@ export async function sendKeyAndRecord(
   message: string,
   /** What was granted, in words; when given, a delivery that reached nobody raises the unreachable alert. */
   what?: string
-): Promise<void> {
+): Promise<NotifyOutcome> {
   let outcome: NotifyOutcome;
   try {
     outcome = await notifyUser({ userId: target.userId, telegramUserId: target.telegramUserId, email: target.email }, subject, message, {
@@ -219,4 +219,5 @@ export async function sendKeyAndRecord(
   }
   await recordKeyDelivery(actorUserId, target.userId, licenseId, outcome);
   if (!outcome.ok && what) await reportUnreachable(target.userId, what, outcome.attempts);
+  return outcome;
 }
