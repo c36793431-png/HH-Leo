@@ -40,14 +40,14 @@ export default async function AdminFeedHealthPage() {
   /** Per box: its events resolved against latestUpTickAt (Fable m70029 S2), the same call the provider page makes. */
   const ev = new Map(
     boxes.map((b) => {
-      const { events: list, ignored, truncatedBefore } = events.get(b.id) ?? { events: [], ignored: { count: 0, first: [] }, truncatedBefore: null };
+      const { events: list, ignored, truncatedBefore, clients24h } = events.get(b.id)!;
       // N5: a box clock > 60 s ahead has every event skipped, so the last POST's skips show on the header.
       const skipped = ignored.count
         ? `last events POST skipped ${ignored.count} event${ignored.count === 1 ? "" : "s"}${
             ignored.count > ignored.first.length ? ` (first ${ignored.first.length} listed)` : ""
           }: ${ignored.first.map((i) => `${i.kind} ${formatAbsoluteUtcSeconds(new Date(i.ts))} (${i.reason})`).join(", ")}`
         : null;
-      return [b.id, { resolved: resolveEvents(list, { latestUpTickAt: latestUpTickAt(b) }, now), skipped, truncatedBefore }];
+      return [b.id, { resolved: resolveEvents(list, { latestUpTickAt: latestUpTickAt(b) }, now), skipped, truncatedBefore, clients24h }];
     })
   );
 
@@ -134,6 +134,7 @@ export default async function AdminFeedHealthPage() {
             resolved={ev.get(b.id)!.resolved}
             summary={summarize24h(ev.get(b.id)!.resolved, now, ev.get(b.id)!.truncatedBefore)}
             freshness={boxFreshness(b.statusReportedAt, now)}
+            clients={ev.get(b.id)!.clients24h}
           />
         </section>
       ))}

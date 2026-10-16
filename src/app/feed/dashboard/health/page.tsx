@@ -1,13 +1,13 @@
 import { auth } from "@/lib/auth";
 import { FeedNavToggle } from "@/components/feed/feed-nav-toggle";
-import { KIND_LABEL, RECENT_EVENTS, cutText, detailLabel, summaryLine } from "@/components/feed/box-events";
+import { KIND_LABEL, NO_LISTED_EVENTS, RECENT_EVENTS, clientLine, cutText, detailLabel, summaryLine } from "@/components/feed/box-events";
 import { loadBoxEvents, providerBoxIds, resolveEvents, summarize24h } from "@/lib/feed-box-events";
 import { boxFreshness, latestUpTickAt, listFeedStatus } from "@/lib/feed-status";
 import { formatAbsoluteUtc, formatAbsoluteUtcSeconds, formatRelative } from "@/lib/format-time";
 
 /** S2 of the CME feed-health events plan (m70008; rulings m70015 Q3/Q4/Q6, BUILD GO m70609): a provider sees the boxes
- * that carry ONLY their tiers (providerBoxIds, U3 + Fable m70029 S1), each with a freshness pill, the 24 h line and the
- * newest 50 events. Every word comes from box-events.tsx, so this page and /admin/feed-health say the same thing. The
+ * that carry ONLY their tiers (providerBoxIds, U3 + Fable m70029 S1), each with a freshness pill, the 24 h line, the
+ * newest 50 non-client events and the 24 h client counts (marcus m70721). Every word comes from box-events.tsx, so this page and /admin/feed-health say the same thing. The
  * admin-only parts (per-symbol rows and metrics, collector version, skipped events, allowlist polls) are not read here,
  * and no client is identified, only the closed code (Q3). Uptime, latency and tick rate stay unmeasured. */
 export const dynamic = "force-dynamic";
@@ -31,11 +31,11 @@ export default async function FeedHealthPage() {
   const boxes = ids.size === 0 ? [] : (await listFeedStatus(now)).filter((b) => ids.has(b.id));
   const events = await loadBoxEvents(boxes.map((b) => b.id), now);
   const cards = boxes.map((b) => {
-    const { events: list, truncatedBefore } = events.get(b.id)!;
+    const { events: list, truncatedBefore, clients24h } = events.get(b.id)!;
     const resolved = resolveEvents(list, { latestUpTickAt: latestUpTickAt(b) }, now);
     const freshness = boxFreshness(b.statusReportedAt, now);
     const [line, silence] = summaryLine(summarize24h(resolved, now, truncatedBefore), freshness);
-    return { box: b, resolved, freshness, line, silence };
+    return { box: b, resolved, freshness, line, silence, clients: clientLine(clients24h) };
   });
 
   return (
@@ -81,7 +81,7 @@ export default async function FeedHealthPage() {
           </div>
         )}
 
-        {cards.map(({ box, resolved, freshness, line, silence }) => (
+        {cards.map(({ box, resolved, freshness, line, silence, clients }) => (
           <section key={box.id} className="card full" data-box={box.name}>
             <div className="chead">
               <span className="ic">◇</span>
@@ -105,7 +105,7 @@ export default async function FeedHealthPage() {
             ) : null}
             {resolved.length === 0 ? (
               <div className="empty">
-                <b>No events received</b>
+                <b>{NO_LISTED_EVENTS}</b>
               </div>
             ) : (
               <table className="tbl">
@@ -129,6 +129,10 @@ export default async function FeedHealthPage() {
                 </tbody>
               </table>
             )}
+            <div className="scope-note" data-events-clients="">
+              <span className="i">◈</span>
+              <span className="muted">{clients}</span>
+            </div>
           </section>
         ))}
 

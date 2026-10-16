@@ -308,26 +308,58 @@ test("E4: the write deletes the box's rows older than 30 d (only that box's); th
   assert.deepEqual(read.get(b.id)!.events, [], "but it is never read");
 });
 
-test("N1: the read is capped per box at READ_CAP per group; a reject flood can't push an open cut out; the newest 50 stay exact", async () => {
-  const { loadBoxEvents, resolveEvents, summarize24h, READ_CAP } = await import("./feed-box-events");
+test("N1 + m70721: client_* rows are never read, only counted for 24 h; a reject flood can't push an open cut out or mark the line partial", async () => {
+  const { loadBoxEvents, resolveEvents, summarize24h } = await import("./feed-box-events");
   const box = await newBox([T["cme-ctrader-fix"]], []);
+  const other = await newBox([T["cme-ctrader-fix"]], []);
   await sql(`insert into feed_box_events (box_id, ts, kind) values ($1, now() - interval '3 hours', 'databento_silent')`, [box.id]);
-  // 2500 rejects, one a second, all after the cut.
+  // 2500 rejects, one a second, all after the cut; 2 more 25 h ago (outside the count); 1 on another box.
   await sql(
     `insert into feed_box_events (box_id, ts, kind, detail)
      select $1, now() - interval '2 hours' + make_interval(secs => i), 'client_reject', 'ip_not_allowlisted' from generate_series(1, 2500) i`,
     [box.id]
   );
+  await sql(
+    `insert into feed_box_events (box_id, ts, kind) select $1, now() - interval '25 hours' + make_interval(secs => i), 'client_connect' from generate_series(1, 2) i`,
+    [box.id]
+  );
+  await sql(`insert into feed_box_events (box_id, ts, kind) values ($1, now() - interval '1 hour', 'client_reject')`, [other.id]);
   const now = new Date();
   const got = (await loadBoxEvents([box.id], now)).get(box.id)!;
-  assert.equal(got.events.filter((e) => e.kind === "client_reject").length, READ_CAP);
-  assert.equal(got.events.length, READ_CAP + 1, "the cut is read as well");
-  assert.equal(got.truncatedBefore, null, "only the client group hit the cap");
-  const newest = (await sql(`select ts from feed_box_events where box_id = $1 order by ts desc limit 50`, [box.id])).rows.map((r: any) => new Date(r.ts).getTime());
-  assert.deepEqual(got.events.slice(0, 50).map((e) => e.ts.getTime()), newest);
+  assert.deepEqual(got.events.map((e) => e.kind), ["databento_silent"], "only the cut is read");
+  assert.deepEqual(got.clients24h, { connect: 0, disconnect: 0, reject: 2500 }, "counted in SQL, not capped at READ_CAP; 25 h ago and another box's not counted");
+  assert.equal(got.truncatedBefore, null);
   const s = summarize24h(resolveEvents(got.events, { latestUpTickAt: null }, now), now, got.truncatedBefore);
   assert.ok(s.open, "still dark now under 2500 rejects");
   assert.deepEqual([s.cuts, s.partial], [1, false]);
+});
+
+test("m70721 flap flood: an older cut stays in the table on /admin and the provider page; no client row is listed; the counts line says how many", async () => {
+  const { default: Admin } = await import("../app/admin/feed-health/page");
+  const { default: Provider } = await import("../app/feed/dashboard/health/page");
+  const pip = await newBox([T["cme-ctrader-fix"]], [T["cme-ctrader-fix"]]);
+  await postEvents(pip.token, { box: pip.name, events: [ev("databento_silent", 90 * MIN, { duration_s: 131 }), ev("reconnect_ok", 88 * MIN, { detail: "after_silence" })] });
+  // m70717: one BJF client flapping every ~2 s for the last hour = 1800 connects + 1800 disconnects, and some rejects.
+  await sql(
+    `insert into feed_box_events (box_id, ts, kind, detail)
+     select $1, now() - make_interval(secs => i * 2), k, 'b_fix' from generate_series(1, 1800) i, (values ('client_connect'), ('client_disconnect')) as v(k)`,
+    [pip.id]
+  );
+  await sql(
+    `insert into feed_box_events (box_id, ts, kind, detail)
+     select $1, now() - make_interval(secs => i * 7 + 1), 'client_reject', 'ip_not_allowlisted' from generate_series(1, 120) i`,
+    [pip.id]
+  );
+  const counts = /Last 24 h, client connects \/ disconnects \/ rejects: 1,800 \/ 1,800 \/ 120 \(counted, not listed\)/;
+  const admin = card(renderToStaticMarkup(await Admin()), pip.name)!;
+  signInAs(PIP);
+  const provider = card(renderToStaticMarkup(await Provider()), pip.name)!;
+  for (const [label, html] of [["admin", admin], ["provider", provider]]) {
+    assert.match(html, /data-event="databento_silent" data-cut="closed"[\s\S]*?2 min 11 s/, `${label}: the cut 90 min ago is in the table`);
+    assert.match(html, /data-event="reconnect_ok"/, label);
+    assert.ok(!/data-event="client_/.test(html), `${label}: no client row`);
+    assert.match(html, counts, label);
+  }
 });
 
 test("N1: a non-client flood past READ_CAP inside 24 h marks the 24 h line a floor, on the page too", async () => {
@@ -530,7 +562,8 @@ test("/admin/feed-health: 24 h line, recent events with labels, open cut dark no
   const html = page.slice(start, page.indexOf("</section>", start));
   assert.match(html, /Last 24 h: 2 cuts started · \d+ min \d+ s dark · longest \d+ min \d+ s · 1 Databento error · dark now, since \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC/);
   assert.match(html, /box has never sent a status report: events may be missing/, "no status report yet: '0 cuts' can't read green");
-  assert.match(html, /Client rejected<\/td><td[^>]*>[^<]*<\/td><td[^>]*>IP not allowlisted/);
+  assert.ok(!/data-event="client_reject"/.test(html), "m70721: client events are counted, not listed");
+  assert.match(html, /data-events-clients="">Last 24 h, client connects \/ disconnects \/ rejects: 0 \/ 0 \/ 1 \(counted, not listed\)/);
   assert.match(html, /Databento error<\/td><td[^>]*>[^<]*<\/td><td[^>]*>licence \/ auth/);
   assert.match(html, /data-cut="closed"[\s\S]*?2 min 11 s/);
   assert.match(html, /data-cut="open"[\s\S]*?dark now · /);
@@ -603,7 +636,8 @@ test("S2 page: Pip sees his box's 24 h line, cuts, reason labels and a No report
   assert.match(html, /box has never sent a status report: events may be missing/);
   assert.match(html, /data-cut="closed"[\s\S]*?<td>2 min 11 s<\/td><td><\/td>/, "Q-A: a cut with no detail leaves the reason empty");
   assert.match(html, /data-cut="open"[\s\S]*?<td class="dark-now">dark now · [^<]+ so far<\/td>/);
-  assert.match(html, /<td>Client rejected<\/td><td><\/td><td>IP not allowlisted<\/td>/);
+  assert.ok(!/data-event="client_reject"/.test(html), "m70721: client events are counted, not listed");
+  assert.match(html, /data-events-clients=""[\s\S]*?Last 24 h, client connects \/ disconnects \/ rejects: 0 \/ 0 \/ 1 \(counted, not listed\)/);
   assert.match(html, /<td>Databento error<\/td><td><\/td><td>licence \/ auth<\/td>/);
   assert.ok(!/skipped|collector|ip_not_allowlisted|\d+\.\d+\.\d+\.\d+/.test(html), "no skipped events, collector, raw code or IP");
   assert.equal(card(page, other.name), null, "another provider's box");

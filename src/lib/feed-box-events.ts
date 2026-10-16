@@ -156,44 +156,53 @@ export interface BoxEvent {
   detail: string | null;
 }
 
-/** The read cap, per box and per group (Fable m70234 N1): a public FIX port takes scanner rejects all day, so 30 d of
- * client_* rows can be tens of thousands per box, and the page shows 50. The client kinds are capped apart from the
- * rest, so a reject flood can't push an open cut, or a cut's end, out of the read: only the non-client group feeds
- * resolveEvents and the 24 h line. Each group's newest READ_CAP make the newest 50 overall exact. */
+/** The read cap per box (Fable m70234 N1): only the non-client kinds are read, and they alone feed resolveEvents, the
+ * 24 h line and the events table. */
 export const READ_CAP = 2000;
-const CLIENT_KINDS: EventKind[] = ["client_reject", "client_connect", "client_disconnect"];
+/** Never listed, only counted (marcus m70721): one flapping client logs ~60 rows/min (m70717), so a table of the newest
+ * 50 of every kind covered ~50 s and pushed each cut off it, and READ_CAP rows of them span ~33 min, too few to count a
+ * day from. So the 24 h counts are a SQL count over the same box ids. */
+export const CLIENT_KINDS: EventKind[] = ["client_reject", "client_connect", "client_disconnect"];
 
-export interface LoadedBoxEvents {
-  events: BoxEvent[];
-  ignored: StoredIgnored;
-  /** Set when the non-client group hit READ_CAP: the ts of its oldest row read. Rows before it weren't read. */
-  truncatedBefore: Date | null;
+export interface ClientCounts {
+  connect: number;
+  disconnect: number;
+  reject: number;
 }
 
-/** Each box's events within 30 d of `now`, newest first (at most READ_CAP per group), plus its last POST's skipped
- * events. One query each. */
+export interface LoadedBoxEvents {
+  /** Non-client events only. */
+  events: BoxEvent[];
+  ignored: StoredIgnored;
+  /** Set when the read hit READ_CAP: the ts of its oldest row read. Rows before it weren't read. */
+  truncatedBefore: Date | null;
+  /** client_* events with ts in the last 24 h of `now` (the 24 h line's window). */
+  clients24h: ClientCounts;
+}
+
+/** Each box's non-client events within 30 d of `now`, newest first (at most READ_CAP), its client_* counts for 24 h,
+ * plus its last POST's skipped events. One query each. */
 export async function loadBoxEvents(boxIds: string[], now: Date = new Date()): Promise<Map<string, LoadedBoxEvents>> {
   const out = new Map<string, LoadedBoxEvents>();
   if (boxIds.length === 0) return out;
-  for (const id of boxIds) out.set(id, { events: [], ignored: { count: 0, first: [] }, truncatedBefore: null });
+  for (const id of boxIds) {
+    out.set(id, { events: [], ignored: { count: 0, first: [] }, truncatedBefore: null, clients24h: { connect: 0, disconnect: 0, reject: 0 } });
+  }
   const ev = await pool.query(
-    `select e.box_id, e.ts, e.kind, e.duration_s, e.detail, g.client
+    `select e.box_id, e.ts, e.kind, e.duration_s, e.detail
        from unnest($1::uuid[]) as b(id)
-      cross join (values (true), (false)) as g(client)
       cross join lateral (
         select x.box_id, x.ts, x.kind, x.duration_s, x.detail from feed_box_events x
-         where x.box_id = b.id and (x.kind = any($3::text[])) = g.client and x.ts >= $2::timestamptz - interval '30 days'
+         where x.box_id = b.id and not (x.kind = any($3::text[])) and x.ts >= $2::timestamptz - interval '30 days'
          order by x.ts desc, x.kind
          limit $4) e
       order by e.box_id, e.ts desc, e.kind`,
     [boxIds, now, CLIENT_KINDS, READ_CAP]
   );
-  const nonClient = new Map<string, { n: number; oldest: Date }>();
+  const read = new Map<string, { n: number; oldest: Date }>();
   for (const r of ev.rows as Record<string, unknown>[]) {
-    if (!r.client) {
-      const c = nonClient.get(r.box_id as string);
-      nonClient.set(r.box_id as string, { n: (c?.n ?? 0) + 1, oldest: new Date(r.ts as Date) });
-    }
+    const c = read.get(r.box_id as string);
+    read.set(r.box_id as string, { n: (c?.n ?? 0) + 1, oldest: new Date(r.ts as Date) });
     out.get(r.box_id as string)!.events.push({
       ts: new Date(r.ts as Date),
       kind: r.kind as EventKind,
@@ -201,12 +210,24 @@ export async function loadBoxEvents(boxIds: string[], now: Date = new Date()): P
       detail: (r.detail as string | null) ?? null,
     });
   }
+  const cl = await pool.query(
+    `select box_id, kind, count(*)::int as n from feed_box_events
+      where box_id = any($1::uuid[]) and kind = any($3::text[]) and ts >= $2::timestamptz - interval '24 hours'
+      group by box_id, kind`,
+    [boxIds, now, CLIENT_KINDS]
+  );
+  for (const r of cl.rows as { box_id: string; kind: EventKind; n: number }[]) {
+    const c = out.get(r.box_id)!.clients24h;
+    if (r.kind === "client_connect") c.connect = r.n;
+    else if (r.kind === "client_disconnect") c.disconnect = r.n;
+    else c.reject = r.n;
+  }
   const ig = await pool.query(`select id, events_ignored from feed_boxes where id = any($1::uuid[])`, [boxIds]);
   for (const r of ig.rows as Record<string, unknown>[]) {
     const raw = typeof r.events_ignored === "string" ? JSON.parse(r.events_ignored) : r.events_ignored;
     out.get(r.id as string)!.ignored = (raw as StoredIgnored | null) ?? { count: 0, first: [] };
   }
-  for (const [id, c] of nonClient) if (c.n >= READ_CAP) out.get(id)!.truncatedBefore = c.oldest;
+  for (const [id, c] of read) if (c.n >= READ_CAP) out.get(id)!.truncatedBefore = c.oldest;
   return out;
 }
 
