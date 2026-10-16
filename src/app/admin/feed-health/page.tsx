@@ -45,14 +45,14 @@ export default async function AdminFeedHealthPage() {
         .flatMap((f) => f.rows)
         .filter((r) => r.reported === "up" && r.lastTickAt)
         .reduce<Date | null>((m, r) => (!m || r.lastTickAt! > m ? r.lastTickAt : m), null);
-      const { events: list, ignored } = events.get(b.id) ?? { events: [], ignored: { count: 0, first: [] } };
+      const { events: list, ignored, truncatedBefore } = events.get(b.id) ?? { events: [], ignored: { count: 0, first: [] }, truncatedBefore: null };
       // N5: a box clock > 60 s ahead has every event skipped, so the last POST's skips show on the header.
       const skipped = ignored.count
         ? `last events POST skipped ${ignored.count} event${ignored.count === 1 ? "" : "s"}${
             ignored.count > ignored.first.length ? ` (first ${ignored.first.length} listed)` : ""
           }: ${ignored.first.map((i) => `${i.kind} ${formatAbsoluteUtcSeconds(new Date(i.ts))} (${i.reason})`).join(", ")}`
         : null;
-      return [b.id, { resolved: resolveEvents(list, { latestUpTickAt }, now), skipped }];
+      return [b.id, { resolved: resolveEvents(list, { latestUpTickAt }, now), skipped, truncatedBefore }];
     })
   );
 
@@ -70,7 +70,11 @@ export default async function AdminFeedHealthPage() {
         </p>
       </header>
 
-      {boxes.length === 0 && <p className="text-sm text-zinc-500">No box reports feed status yet. Set a box&apos;s status tiers on Feed boxes.</p>}
+      {boxes.length === 0 && (
+        <p className="text-sm text-zinc-500" data-feed-health-empty="">
+          {"No box reports feed status or events yet. A box shows here once it has status tiers (set them on Feed boxes) or its bridge sends an event."}
+        </p>
+      )}
 
       {boxes.map((b) => (
         <section key={b.id} data-box={b.name} className="rounded-xl border border-cyan-400/35 p-5">
@@ -133,7 +137,7 @@ export default async function AdminFeedHealthPage() {
           </table>
           <BoxEvents
             resolved={ev.get(b.id)!.resolved}
-            summary={summarize24h(ev.get(b.id)!.resolved, now)}
+            summary={summarize24h(ev.get(b.id)!.resolved, now, ev.get(b.id)!.truncatedBefore)}
             freshness={boxFreshness(b.statusReportedAt, now)}
           />
         </section>

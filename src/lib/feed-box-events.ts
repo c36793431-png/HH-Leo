@@ -156,21 +156,44 @@ export interface BoxEvent {
   detail: string | null;
 }
 
-/** Each box's events within 30 d of `now`, newest first, plus its last POST's skipped events. One query each. */
-export async function loadBoxEvents(
-  boxIds: string[],
-  now: Date = new Date()
-): Promise<Map<string, { events: BoxEvent[]; ignored: StoredIgnored }>> {
-  const out = new Map<string, { events: BoxEvent[]; ignored: StoredIgnored }>();
+/** The read cap, per box and per group (Fable m70234 N1): a public FIX port takes scanner rejects all day, so 30 d of
+ * client_* rows can be tens of thousands per box, and the page shows 50. The client kinds are capped apart from the
+ * rest, so a reject flood can't push an open cut, or a cut's end, out of the read: only the non-client group feeds
+ * resolveEvents and the 24 h line. Each group's newest READ_CAP make the newest 50 overall exact. */
+export const READ_CAP = 2000;
+const CLIENT_KINDS: EventKind[] = ["client_reject", "client_connect", "client_disconnect"];
+
+export interface LoadedBoxEvents {
+  events: BoxEvent[];
+  ignored: StoredIgnored;
+  /** Set when the non-client group hit READ_CAP: the ts of its oldest row read. Rows before it weren't read. */
+  truncatedBefore: Date | null;
+}
+
+/** Each box's events within 30 d of `now`, newest first (at most READ_CAP per group), plus its last POST's skipped
+ * events. One query each. */
+export async function loadBoxEvents(boxIds: string[], now: Date = new Date()): Promise<Map<string, LoadedBoxEvents>> {
+  const out = new Map<string, LoadedBoxEvents>();
   if (boxIds.length === 0) return out;
-  for (const id of boxIds) out.set(id, { events: [], ignored: { count: 0, first: [] } });
+  for (const id of boxIds) out.set(id, { events: [], ignored: { count: 0, first: [] }, truncatedBefore: null });
   const ev = await pool.query(
-    `select box_id, ts, kind, duration_s, detail from feed_box_events
-      where box_id = any($1::uuid[]) and ts >= $2::timestamptz - interval '30 days'
-      order by box_id, ts desc, kind`,
-    [boxIds, now]
+    `select e.box_id, e.ts, e.kind, e.duration_s, e.detail, g.client
+       from unnest($1::uuid[]) as b(id)
+      cross join (values (true), (false)) as g(client)
+      cross join lateral (
+        select x.box_id, x.ts, x.kind, x.duration_s, x.detail from feed_box_events x
+         where x.box_id = b.id and (x.kind = any($3::text[])) = g.client and x.ts >= $2::timestamptz - interval '30 days'
+         order by x.ts desc, x.kind
+         limit $4) e
+      order by e.box_id, e.ts desc, e.kind`,
+    [boxIds, now, CLIENT_KINDS, READ_CAP]
   );
+  const nonClient = new Map<string, { n: number; oldest: Date }>();
   for (const r of ev.rows as Record<string, unknown>[]) {
+    if (!r.client) {
+      const c = nonClient.get(r.box_id as string);
+      nonClient.set(r.box_id as string, { n: (c?.n ?? 0) + 1, oldest: new Date(r.ts as Date) });
+    }
     out.get(r.box_id as string)!.events.push({
       ts: new Date(r.ts as Date),
       kind: r.kind as EventKind,
@@ -183,17 +206,19 @@ export async function loadBoxEvents(
     const raw = typeof r.events_ignored === "string" ? JSON.parse(r.events_ignored) : r.events_ignored;
     out.get(r.id as string)!.ignored = (raw as StoredIgnored | null) ?? { count: 0, first: [] };
   }
+  for (const [id, c] of nonClient) if (c.n >= READ_CAP) out.get(id)!.truncatedBefore = c.oldest;
   return out;
 }
 
 /** An open cut (duration_s null) can lose its close for good: the sender restarts, the box is offline, the close POST
- * 5xxs. So on read (Fable m70029 S2): the first LATER reconnect_ok, bridge_start or databento_silent for the box ends
- * it, "closed, duration unknown" (a sender that restarts mid-cut opens a second cut: only the newest stays open, Fable
- * m70044; a later cut that closed also means this one can't still be dark). Failing that, a status row reported up
+ * 5xxs. So on read (Fable m70029 S2): the first LATER reconnect_ok, bridge_start, bridge_stop or databento_silent for
+ * the box ends it, "closed, duration unknown" (a sender that restarts mid-cut opens a second cut: only the newest stays
+ * open, Fable m70044; a later cut that closed also means this one can't still be dark; once the bridge has stopped,
+ * Databento silence is moot, Fable m70234 N2). Failing that, a status row reported up
  * with a tick after the cut's ts proves data flowed again: "cut not closed by the sender". Only a cut with neither
  * reads "dark now", capped at 86400 s (the 0115 CHECK). */
 export type CutState = "closed" | "open" | "ended_unknown" | "not_closed";
-const ENDS_A_CUT = new Set<EventKind>(["reconnect_ok", "bridge_start", "databento_silent"]);
+const ENDS_A_CUT = new Set<EventKind>(["reconnect_ok", "bridge_start", "bridge_stop", "databento_silent"]);
 export interface ResolvedEvent extends BoxEvent {
   cut: { state: CutState; seconds: number | null; capped: boolean; endedBy: { kind: EventKind; ts: Date } | null } | null;
 }
@@ -223,14 +248,17 @@ export interface EventsSummary {
   noDuration: number;
   errors: number;
   open: ResolvedEvent | null;
+  /** The read cap (N1) reached into the last 24 h: the counts are a floor. */
+  partial: boolean;
 }
 
-export function summarize24h(resolved: ResolvedEvent[], now: Date = new Date()): EventsSummary {
+export function summarize24h(resolved: ResolvedEvent[], now: Date = new Date(), truncatedBefore: Date | null = null): EventsSummary {
   const from = now.getTime() - DAY_MS;
   const recent = resolved.filter((e) => e.ts.getTime() >= from);
   const cuts = recent.filter((e) => e.cut);
   const timed = cuts.filter((e) => e.cut!.seconds !== null).map((e) => e.cut!.seconds!);
   return {
+    partial: truncatedBefore !== null && truncatedBefore.getTime() >= from,
     cuts: cuts.length,
     darkS: timed.reduce((s, n) => s + n, 0),
     longestS: timed.length ? Math.max(...timed) : null,

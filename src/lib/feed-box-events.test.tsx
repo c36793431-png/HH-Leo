@@ -134,6 +134,15 @@ const ev = (kind: string, msAgo: number, over: Record<string, unknown> = {}) => 
 const rows = async (boxId: string) =>
   (await sql(`select ts, kind, duration_s, detail, received_at from feed_box_events where box_id = $1 order by ts, kind`, [boxId])).rows;
 
+// First, while the chain has no box: the empty state (Fable m70234 N4).
+test("N4: /admin/feed-health with no box says status OR events; it no longer reads as status-only", async () => {
+  const { default: Page } = await import("../app/admin/feed-health/page");
+  assert.equal(Number((await sql(`select count(*) as n from feed_boxes`)).rows[0].n), 0, "precondition: no box yet");
+  const page = renderToStaticMarkup(await Page());
+  assert.match(page, /data-feed-health-empty="">No box reports feed status or events yet\. A box shows here once it has status tiers \(set them on Feed boxes\) or its bridge sends an event\.</);
+  assert.ok(!/No box reports feed status yet\./.test(page));
+});
+
 // ---------- the route: auth and body gates ----------
 
 test("route: preview 404, bad token 401, wrong content-type 415, over 16 KB 413, bad JSON 400, box name mismatch 400; nothing written", async () => {
@@ -293,6 +302,49 @@ test("E4: the write deletes the box's rows older than 30 d (only that box's); th
   assert.deepEqual(read.get(b.id)!.events, [], "but it is never read");
 });
 
+test("N1: the read is capped per box at READ_CAP per group; a reject flood can't push an open cut out; the newest 50 stay exact", async () => {
+  const { loadBoxEvents, resolveEvents, summarize24h, READ_CAP } = await import("./feed-box-events");
+  const box = await newBox([T["cme-ctrader-fix"]], []);
+  await sql(`insert into feed_box_events (box_id, ts, kind) values ($1, now() - interval '3 hours', 'databento_silent')`, [box.id]);
+  // 2500 rejects, one a second, all after the cut.
+  await sql(
+    `insert into feed_box_events (box_id, ts, kind, detail)
+     select $1, now() - interval '2 hours' + make_interval(secs => i), 'client_reject', 'ip_not_allowlisted' from generate_series(1, 2500) i`,
+    [box.id]
+  );
+  const now = new Date();
+  const got = (await loadBoxEvents([box.id], now)).get(box.id)!;
+  assert.equal(got.events.filter((e) => e.kind === "client_reject").length, READ_CAP);
+  assert.equal(got.events.length, READ_CAP + 1, "the cut is read as well");
+  assert.equal(got.truncatedBefore, null, "only the client group hit the cap");
+  const newest = (await sql(`select ts from feed_box_events where box_id = $1 order by ts desc limit 50`, [box.id])).rows.map((r: any) => new Date(r.ts).getTime());
+  assert.deepEqual(got.events.slice(0, 50).map((e) => e.ts.getTime()), newest);
+  const s = summarize24h(resolveEvents(got.events, { latestUpTickAt: null }, now), now, got.truncatedBefore);
+  assert.ok(s.open, "still dark now under 2500 rejects");
+  assert.deepEqual([s.cuts, s.partial], [1, false]);
+});
+
+test("N1: a non-client flood past READ_CAP inside 24 h marks the 24 h line a floor, on the page too", async () => {
+  const { default: Page } = await import("../app/admin/feed-health/page");
+  const { loadBoxEvents, summarize24h, resolveEvents, READ_CAP } = await import("./feed-box-events");
+  const box = await newBox([T["cme-ctrader-fix"]], []);
+  await sql(
+    `insert into feed_box_events (box_id, ts, kind, detail)
+     select $1, now() - make_interval(secs => i * 10), 'databento_error', 'gateway' from generate_series(1, ${READ_CAP + 1}) i`,
+    [box.id]
+  );
+  const now = new Date();
+  const got = (await loadBoxEvents([box.id], now)).get(box.id)!;
+  assert.equal(got.events.length, READ_CAP);
+  assert.equal(got.truncatedBefore!.getTime(), got.events[READ_CAP - 1].ts.getTime(), "the oldest row read");
+  const s = summarize24h(resolveEvents(got.events, { latestUpTickAt: null }, now), now, got.truncatedBefore);
+  assert.deepEqual([s.errors, s.partial], [READ_CAP, true]);
+  assert.equal(summarize24h([], now, new Date(now.getTime() - 25 * 60 * MIN)).partial, false, "a cap that bit before the 24 h window leaves the line whole");
+  const page = renderToStaticMarkup(await Page());
+  const start = page.indexOf(`data-box="${box.name}"`);
+  assert.match(page.slice(start, page.indexOf("</section>", start)), /2000 Databento errors · counted from the newest 2,000 events only, so at least this many/);
+});
+
 test("N5 + Fable m70044: events_ignored = the last POST's skips {count, first <= 50}, overwritten by a clean POST; a 400 leaves it", async () => {
   const { default: Page } = await import("../app/admin/feed-health/page");
   const box = await newBox([T["cme-ctrader-fix"]], [T["cme-ctrader-fix"]]);
@@ -408,6 +460,19 @@ test("S2 + Fable m70044: a second databento_silent (sender restarted mid-cut) en
   const closedLater = resolveEvents([E("databento_silent", 2, 60), E("databento_silent", 10)], { latestUpTickAt: null }, NOW);
   assert.equal(closedLater[1].cut!.state, "ended_unknown");
   assert.equal(summarize24h(closedLater, NOW).open, null);
+});
+
+test("N2: open cut + a LATER bridge_stop = 'closed, duration unknown (Bridge stopped …)', not dark now", async () => {
+  const { resolveEvents, summarize24h } = await import("./feed-box-events");
+  const { cutText } = await import("../components/feed/box-events");
+  const r = resolveEvents([E("bridge_stop", 30, null, "process_gone"), E("databento_silent", 40)], { latestUpTickAt: null }, NOW);
+  const cut = r[1].cut!;
+  assert.deepEqual([cut.state, cut.endedBy!.kind, cut.endedBy!.ts.getTime()], ["ended_unknown", "bridge_stop", at(30).getTime()]);
+  assert.match(cutText(r[1]), /^closed, duration unknown \(Bridge stopped \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\)$/);
+  const s = summarize24h(r, NOW);
+  assert.deepEqual([s.cuts, s.darkS, s.noDuration, s.open], [1, 0, 1, null]);
+  // A bridge_stop BEFORE the cut ends nothing.
+  assert.equal(resolveEvents([E("databento_silent", 40), E("bridge_stop", 50)], { latestUpTickAt: null }, NOW)[0].cut!.state, "open");
 });
 
 test("S2: open cut alone (silent box) still reads dark now, counts now - ts, capped at 86400 s", async () => {

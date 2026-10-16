@@ -1,4 +1,4 @@
-import type { EventKind, EventsSummary, ResolvedEvent } from "@/lib/feed-box-events";
+import { READ_CAP, type EventKind, type EventsSummary, type ResolvedEvent } from "@/lib/feed-box-events";
 import type { boxFreshness } from "@/lib/feed-status";
 import { formatAbsoluteUtc, formatAbsoluteUtcSeconds } from "@/lib/format-time";
 
@@ -59,6 +59,7 @@ export function summaryLine(s: EventsSummary, freshness: ReturnType<typeof boxFr
   if (s.noDuration > 0) parts.push(`${s.noDuration} ended without a duration`);
   if (s.errors > 0) parts.push(`${s.errors} Databento error${s.errors === 1 ? "" : "s"}`);
   if (s.open) parts.push(`dark now, since ${formatAbsoluteUtcSeconds(s.open.ts)}`);
+  if (s.partial) parts.push(`counted from the newest ${READ_CAP.toLocaleString("en-US")} events only, so at least this many`);
   const lines = [parts.join(" · ")];
   if (freshness.kind !== "fresh") {
     lines.push(
