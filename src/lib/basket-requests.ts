@@ -56,8 +56,9 @@ export interface BasketAccountState {
   trialEligible: boolean;
   /** An active licence with a registered server: a feed line could be switched on today. */
   feedReady: boolean;
-  /** Where we confirm: the client-facing steps confirm by email only (coxwell 13:54Z via marcus
-   * m59928). Telegram stays on the admin card, read from users at send time. */
+  /** Where we confirm: on Telegram or by email. coxwell's 10-14 rule (no prices on the site or portal,
+   * prices only in Telegram; via marcus m68871) and marcus m69658 supersede the 'email only' line from
+   * m59928. Telegram stays on the admin card, read from users at send time. */
   email: string | null;
 }
 

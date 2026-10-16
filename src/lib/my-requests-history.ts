@@ -81,8 +81,8 @@ export function basketHistoryRow(r: BasketRequestRow): HistoryRow {
     items: [...r.lines.map(basketLineLabel), ...(r.hasTrial ? [BASKET_TRIAL_LINE] : [])],
     feedItems: feedLines.length > 0 ? [...feedLines, ...(r.hasTrial ? [BASKET_TRIAL_LINE] : [])] : [],
     status: r.status === "handled" ? "Handled" : "Sent",
-    // The basket's own lines, unchanged from the basket-only page.
-    outcome: r.status === "handled" ? "We've replied. See your email for what was agreed." : "We have it. We'll confirm by email.",
+    // The basket's own lines. Sent names Telegram too, like the basket's Review small print (marcus m69703).
+    outcome: r.status === "handled" ? "We've replied. See your email for what was agreed." : "We have it. We'll confirm with you on Telegram or by email.",
     reference: r.reference,
   };
 }

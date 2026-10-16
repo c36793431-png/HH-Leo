@@ -160,6 +160,10 @@ test("basket mapper: feedItems holds only the feed lines (and the trial line), i
   assert.deepEqual(noFeed.feedItems, []);
 });
 
+test("basket mapper: a Sent request names Telegram too, word for word (marcus m69703)", () => {
+  assert.equal(basketHistoryRow(basket({ status: "new" })).outcome, "We have it. We'll confirm with you on Telegram or by email.");
+});
+
 test("feed history keeps feed sources, drops strategy, software access and licences", () => {
   const rows: HistoryRow[] = [
     ...accessHistoryRows([envelope({ batchId: "feed" }), envelope({ batchId: "soft", productKind: "software", tierKey: null, tierName: null, productId: "terminal" })], NOW),
