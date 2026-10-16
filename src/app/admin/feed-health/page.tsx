@@ -1,6 +1,6 @@
 import { BoxEvents } from "@/components/feed/box-events";
 import { loadBoxEvents, resolveEvents, summarize24h } from "@/lib/feed-box-events";
-import { boxFreshness, listAllowlistBoxPolls, listFeedStatus, type EffectiveKind, type StatusRowView } from "@/lib/feed-status";
+import { boxFreshness, latestUpTickAt, listAllowlistBoxPolls, listFeedStatus, type EffectiveKind, type StatusRowView } from "@/lib/feed-status";
 import { formatAbsoluteUtc, formatAbsoluteUtcSeconds, formatRelative } from "@/lib/format-time";
 
 /** Feed health (plan m64510-2; v1 = /admin only, marcus m64531). What each measuring box last reported, per feed and
@@ -37,14 +37,9 @@ export default async function AdminFeedHealthPage() {
   const now = new Date();
   const [boxes, polls] = await Promise.all([listFeedStatus(now), listAllowlistBoxPolls()]);
   const events = await loadBoxEvents(boxes.map((b) => b.id), now);
-  /** Per box: its events resolved against the newest tick any of its rows last reported 'up', the proof that data
-   * flowed after an open cut (Fable m70029 S2). */
+  /** Per box: its events resolved against latestUpTickAt (Fable m70029 S2), the same call the provider page makes. */
   const ev = new Map(
     boxes.map((b) => {
-      const latestUpTickAt = b.feeds
-        .flatMap((f) => f.rows)
-        .filter((r) => r.reported === "up" && r.lastTickAt)
-        .reduce<Date | null>((m, r) => (!m || r.lastTickAt! > m ? r.lastTickAt : m), null);
       const { events: list, ignored, truncatedBefore } = events.get(b.id) ?? { events: [], ignored: { count: 0, first: [] }, truncatedBefore: null };
       // N5: a box clock > 60 s ahead has every event skipped, so the last POST's skips show on the header.
       const skipped = ignored.count
@@ -52,7 +47,7 @@ export default async function AdminFeedHealthPage() {
             ignored.count > ignored.first.length ? ` (first ${ignored.first.length} listed)` : ""
           }: ${ignored.first.map((i) => `${i.kind} ${formatAbsoluteUtcSeconds(new Date(i.ts))} (${i.reason})`).join(", ")}`
         : null;
-      return [b.id, { resolved: resolveEvents(list, { latestUpTickAt }, now), skipped, truncatedBefore }];
+      return [b.id, { resolved: resolveEvents(list, { latestUpTickAt: latestUpTickAt(b) }, now), skipped, truncatedBefore }];
     })
   );
 

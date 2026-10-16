@@ -428,8 +428,9 @@ test("/admin/feed-health: per box and per feed, worst-of badge, symbol + source,
   assert.ok(!html2.includes(`data-feed="cme-ctrader-fix"`), "no feed pill for CME in v1");
 });
 
-test("v1 is /admin only: the provider card and /feed/dashboard/health do not read the new tables (marcus m64531)", async () => {
-  for (const f of ["src/components/feed/overview-cards.tsx", "src/app/feed/dashboard/health/page.tsx", "src/app/feed/dashboard/page.tsx"]) {
+// /feed/dashboard/health left this list at S2 (marcus m70609): its own scope guard is in feed-box-events.test.tsx.
+test("v1 is /admin only: the provider card and overview do not read the new tables (marcus m64531)", async () => {
+  for (const f of ["src/components/feed/overview-cards.tsx", "src/app/feed/dashboard/page.tsx"]) {
     const src = readFileSync(path.join(process.cwd(), f), "utf8");
     assert.ok(!/feed-status|feed_status_latest|feed_box_status_tiers/.test(src), f);
   }

@@ -1,10 +1,11 @@
-/* Run: npx tsx --test src/lib/feed-box-events.test.tsx
+/* Run: npx tsx --test --experimental-test-module-mocks src/lib/feed-box-events.test.tsx
  *
- * Feed-box EVENTS: POST /api/feed-box/events, migration 0115, the /admin/feed-health events block and the provider
- * box scope S2 will read. Plan m70008-10; rulings marcus m70015 (Q1-Q7) + m70036 (databento_error); Fable PASS WITH
- * STRIKES m70029 (S1 non-empty tier set, S2 bounded open cut; notes N1-N7); BUILD GO m70031.
+ * Feed-box EVENTS: POST /api/feed-box/events, migration 0115, the /admin/feed-health events block, the provider box
+ * scope and the provider page /feed/dashboard/health that reads it (S2, BUILD GO m70609). Plan m70008-10; rulings
+ * marcus m70015 (Q1-Q7) + m70036 (databento_error); Fable PASS WITH STRIKES m70029 (S1 non-empty tier set, S2 bounded
+ * open cut; notes N1-N7); BUILD GO m70031.
  * PGlite with the REAL migration chain through db.ts's global._pgPool seam (the feed-status.test.tsx harness), no prod. */
-import { test, before, beforeEach } from "node:test";
+import { test, before, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -90,7 +91,12 @@ before(async () => {
   await tier("cme-other", OTHER);
   await tier("cme-unowned", null);
   for (const r of (await sql(`select id, tier_key from feed_tiers where tier_key like 'ld-%'`)).rows) T[r.tier_key] = r.id;
+  mock.module("@/lib/auth", { namedExports: { auth: async () => session } });
 });
+
+/** The provider page reads session.user.id; the layout has already admitted only feed_provider accounts. */
+let session: { user: { id: string; role: string } } | null = null;
+const signInAs = (id: string) => (session = { user: { id, role: "feed_provider" } });
 
 beforeEach(() => {
   process.env.VERCEL_ENV = "production";
@@ -562,6 +568,89 @@ test("/admin/feed-health: a box with events but no status set is listed; a box w
   assert.ok(start > 0);
   assert.match(page.slice(start, page.indexOf("</section>", start)), /Bridge started<\/td><td[^>]*><\/td><td[^>]*>uptime reset/);
   assert.ok(!page.includes(`data-box="${quiet.name}"`));
+});
+
+// ---------- /feed/dashboard/health (S2, BUILD GO m70609) ----------
+
+const card = (page: string, name: string) => {
+  const start = page.indexOf(`data-box="${name}"`);
+  return start < 0 ? null : page.slice(start, page.indexOf("</section>", start));
+};
+
+test("S2 page: Pip sees his box's 24 h line, cuts, reason labels and a No report pill; another provider's box and a mixed box are not on it, nor admin-only parts", async () => {
+  const { default: Page } = await import("../app/feed/dashboard/health/page");
+  const pip = await newBox([T["cme-ctrader-fix"]], [T["cme-ctrader-fix"]]);
+  const other = await newBox([T["cme-other"]], [T["cme-other"]]);
+  const mixed = await newBox([T["cme-ctrader-fix"]], [T["cme-other"]]);
+  await postEvents(pip.token, {
+    box: pip.name,
+    events: [
+      ev("databento_silent", 30 * MIN, { duration_s: 131 }),
+      ev("client_reject", 20 * MIN, { detail: "ip_not_allowlisted" }),
+      ev("databento_error", 15 * MIN, { detail: "licence_auth" }),
+      ev("databento_silent", 2 * MIN),
+      { ts: new Date(Date.now() + 5 * MIN).toISOString(), kind: "bridge_stop" },
+    ],
+  });
+  for (const b of [other, mixed]) await postEvents(b.token, { box: b.name, events: [ev("client_reject", MIN, { detail: "logon_rejected" })] });
+
+  signInAs(PIP);
+  const page = renderToStaticMarkup(await Page());
+  const html = card(page, pip.name);
+  assert.ok(html, "Pip's box has a card");
+  assert.match(html, /data-freshness="no_report"[^>]*>No report</);
+  assert.match(html, /Last 24 h: 2 cuts started · \d+ min \d+ s dark · longest \d+ min \d+ s · 1 Databento error · dark now, since \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC/);
+  assert.match(html, /box has never sent a status report: events may be missing/);
+  assert.match(html, /data-cut="closed"[\s\S]*?<td>2 min 11 s<\/td><td><\/td>/, "Q-A: a cut with no detail leaves the reason empty");
+  assert.match(html, /data-cut="open"[\s\S]*?<td class="dark-now">dark now · [^<]+ so far<\/td>/);
+  assert.match(html, /<td>Client rejected<\/td><td><\/td><td>IP not allowlisted<\/td>/);
+  assert.match(html, /<td>Databento error<\/td><td><\/td><td>licence \/ auth<\/td>/);
+  assert.ok(!/skipped|collector|ip_not_allowlisted|\d+\.\d+\.\d+\.\d+/.test(html), "no skipped events, collector, raw code or IP");
+  assert.equal(card(page, other.name), null, "another provider's box");
+  assert.equal(card(page, mixed.name), null, "a mixed box (U3)");
+  assert.ok(!/Gaps · 30d|data-feed-health-empty/.test(page), "Q-B: no Gaps tile; not the empty state");
+  assert.match(page, /Uptime · 30d[\s\S]*?not measured/);
+
+  signInAs(OTHER);
+  const page2 = renderToStaticMarkup(await Page());
+  assert.ok(card(page2, other.name), "the other provider sees their own box");
+  assert.equal(card(page2, pip.name), null, "and none of Pip's");
+  assert.equal(card(page2, mixed.name), null);
+});
+
+test("S2 page: a fresh up status after the open cut reads Live and 'cut not closed by the sender' (same latestUpTickAt as /admin)", async () => {
+  const { default: Page } = await import("../app/feed/dashboard/health/page");
+  const pip = await newBox([T["cme-ctrader-fix"]], [T["cme-ctrader-fix"]]);
+  await postEvents(pip.token, { box: pip.name, events: [ev("databento_silent", 5 * MIN)] });
+  const st = await postStatus(pip.token, {
+    box: pip.name,
+    sent_at: iso(0),
+    collector: { version: "0.1.0", measuring: true },
+    feeds: [{ feed_id: "cme-ctrader-fix", symbol: "ALL", source: "bridge_status", state: "up", last_tick_utc: iso(1000) }],
+  });
+  assert.equal(st.status, 200, JSON.stringify(st.body));
+  signInAs(PIP);
+  const html = card(renderToStaticMarkup(await Page()), pip.name)!;
+  assert.match(html, /data-freshness="fresh"[^>]*>Live</);
+  assert.match(html, /cut not closed by the sender/);
+  assert.ok(!/dark now|data-events-silence|0\.1\.0|ALL via/.test(html), html);
+});
+
+test("S2 page: a provider with no box of their own gets the empty state and no card", async () => {
+  const { default: Page } = await import("../app/feed/dashboard/health/page");
+  const none = "00000000-0000-4000-8000-00000000e003";
+  await sql(`insert into users (id, email, role) values ($1, 'no-box-provider@example.invalid', 'feed_provider') on conflict do nothing`, [none]);
+  signInAs(none);
+  const page = renderToStaticMarkup(await Page());
+  assert.match(page, /data-feed-health-empty=""[\s\S]*?Nothing reported yet/);
+  assert.ok(!page.includes("data-box="));
+});
+
+test("S2 guard: the provider page reads boxes only through providerBoxIds and never names the admin-only parts", async () => {
+  const src = readFileSync(path.join(process.cwd(), "src/app/feed/dashboard/health/page.tsx"), "utf8");
+  assert.match(src, /providerBoxIds\(session!\.user!\.id!\)/);
+  assert.match(src, /\.filter\(\(b\) => ids\.has\(b\.id\)\)/);
+  assert.ok(!/events_ignored|ignored|listAllowlistBoxPolls|collectorVersion|measuring|ticksPerMin|gapP|<BoxEvents/.test(src), "admin-only names");
 });
 
 // ---------- migration ----------

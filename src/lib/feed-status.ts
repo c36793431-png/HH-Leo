@@ -300,6 +300,15 @@ export interface StatusBoxView {
   feeds: StatusFeedView[];
 }
 
+/** The newest tick any of the box's rows last reported 'up': the proof that data flowed after an open cut (Fable m70029
+ * S2). One computation for /admin and the provider page, so the two can't disagree on whether a cut closed. */
+export function latestUpTickAt(box: StatusBoxView): Date | null {
+  return box.feeds
+    .flatMap((f) => f.rows)
+    .filter((r) => r.reported === "up" && r.lastTickAt)
+    .reduce<Date | null>((m, r) => (!m || r.lastTickAt! > m ? r.lastTickAt : m), null);
+}
+
 /** Every box with a status-tier set or an event in the last 30 d (0115, plan m70009 U1), each tier with its rows (or
  * none), effective states computed at `now`. */
 export async function listFeedStatus(now: Date = new Date()): Promise<StatusBoxView[]> {
