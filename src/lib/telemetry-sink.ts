@@ -639,6 +639,29 @@ export async function notifyProviderApplicationSubmitted(opts: {
   if (!sent) await sendApprovalsTopicMessage(text);
 }
 
+/** One card per consultant application (consult S1a, marcus m69004 ruling 2): text only, the basket pattern above;
+ * Approve/Decline buttons are S1b, behind the S3 webhook-secret gate. Capped so the admin link always fits inside
+ * Telegram's 4,096 characters (Fable m69076 S4): name is at most 120 by 0112, expertise is cut to 300 here, email
+ * and telegram are at most 254 and 64 by 0112; background and profile link stay off the card. */
+export async function notifyConsultantApplicationSubmitted(opts: {
+  name: string;
+  email: string;
+  telegram: string | null;
+  expertise: string;
+  adminUrl: string;
+}): Promise<void> {
+  const expertise = opts.expertise.length > 300 ? `${opts.expertise.slice(0, 300)}…` : opts.expertise;
+  await sendApprovalsTopicMessage(
+    `🧑‍💼 new consultant application\n` +
+      `name: ${opts.name}\n` +
+      `email: ${opts.email}\n` +
+      `telegram: ${opts.telegram ?? "-"}\n` +
+      `expertise: ${expertise}\n` +
+      `review in the admin queue:\n` +
+      `${opts.adminUrl}`
+  );
+}
+
 /** Migration drift: a db/migrations/*.sql file has no schema_migrations row, meaning it
  * shipped in code but was never applied (or applied without logging itself) -- the
  * failure mode that let 0057_pending_signups.sql silently drop signup name/telegram
