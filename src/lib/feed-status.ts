@@ -49,7 +49,7 @@ export interface StatusReport {
   feeds: ReportedFeed[];
 }
 
-const isoZ = (v: unknown): Date | null => (typeof v === "string" && ISO_Z_RE.test(v) && !Number.isNaN(Date.parse(v)) ? new Date(v) : null);
+export const isoZ = (v: unknown): Date | null => (typeof v === "string" && ISO_Z_RE.test(v) && !Number.isNaN(Date.parse(v)) ? new Date(v) : null);
 
 function intOrNull(v: unknown, max: number): { ok: true; n: number | null } | { ok: false } {
   if (v === undefined || v === null) return { ok: true, n: null };

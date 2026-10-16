@@ -469,6 +469,8 @@ test("0101: CHECKs refuse what the route refuses; rollback removes exactly what 
   const colsBefore = async () =>
     (await scratch.query(`select column_name from information_schema.columns where table_name = 'feed_boxes' order by column_name`)).rows.map((r: any) => r.column_name);
   assert.ok((await colsBefore()).includes("status_reported_at"));
+  // Newest first: 0115 adds feed_boxes.events_ignored on top of 0101.
+  await scratch.exec(readFileSync(path.join(MIGRATIONS, "0115_rollback.sql"), "utf8"));
   await scratch.exec(readFileSync(path.join(MIGRATIONS, "0101_rollback.sql"), "utf8"));
   assert.deepEqual(await colsBefore(), ["created_at", "id", "last_seen_at", "name", "rotated_at", "serial", "token_sha256"]);
   const t = (await scratch.query(`select to_regclass('feed_status_latest') as a, to_regclass('feed_box_status_tiers') as b`)).rows[0] as any;
