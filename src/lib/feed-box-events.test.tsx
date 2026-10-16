@@ -105,6 +105,52 @@ async function newBox(applyTierIds: string[], statusTierIds: string[]) {
   return { id, name, token };
 }
 
+async function postEvents(token: string, body: unknown, opts: { contentType?: string; raw?: string; length?: string } = {}) {
+  const route = await import("../app/api/feed-box/events/route");
+  const headers: Record<string, string> = { authorization: `Bearer ${token}`, "content-type": opts.contentType ?? "application/json" };
+  if (opts.length) headers["content-length"] = opts.length;
+  const res = await route.POST(
+    new Request("https://portal.horizonhft.com/api/feed-box/events", { method: "POST", headers, body: opts.raw ?? JSON.stringify(body) }) as any
+  );
+  return { status: res.status, body: (await res.json()) as any };
+}
+
+const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
+const MIN = 60_000;
+const ev = (kind: string, msAgo: number, over: Record<string, unknown> = {}) => ({ ts: iso(msAgo), kind, ...over });
+const rows = async (boxId: string) =>
+  (await sql(`select ts, kind, duration_s, detail, received_at from feed_box_events where box_id = $1 order by ts, kind`, [boxId])).rows;
+
+// ---------- the route: auth and body gates ----------
+
+test("route: preview 404, bad token 401, wrong content-type 415, over 16 KB 413, bad JSON 400, box name mismatch 400; nothing written", async () => {
+  const box = await newBox([T["cme-ctrader-fix"]], [T["cme-ctrader-fix"]]);
+  const ok = { box: box.name, events: [ev("databento_silent", MIN, { duration_s: 131 })] };
+  assert.equal((await postEvents("z".repeat(43), ok)).status, 401);
+  assert.equal((await postEvents(box.token, ok, { contentType: "text/plain" })).status, 415);
+  assert.equal((await postEvents(box.token, ok, { length: "20000" })).status, 413);
+  assert.equal((await postEvents(box.token, null, { raw: JSON.stringify({ ...ok, pad: "x".repeat(17_000) }) })).status, 413, "bytes read, not only the header");
+  assert.equal((await postEvents(box.token, null, { raw: "{not json" })).status, 400);
+  const wrong = await postEvents(box.token, { ...ok, box: "tommy4" });
+  assert.equal(wrong.status, 400);
+  assert.match(wrong.body.error, /box/);
+  process.env.VERCEL_ENV = "preview";
+  assert.equal((await postEvents(box.token, ok)).status, 404, "a preview shares the prod DB: it must never take an event");
+  assert.equal((await rows(box.id)).length, 0, "nothing written");
+});
+
+test("N3: 100 compact events with a 32-char detail fit in 16 KB; 101 events are a 400", async () => {
+  const box = await newBox([T["cme-ctrader-fix"]], []);
+  const hundred = Array.from({ length: 100 }, (_, i) => ev("client_reject", (i + 1) * 1000, { detail: "a".repeat(32) }));
+  const body = { box: box.name, events: hundred };
+  assert.ok(Buffer.byteLength(JSON.stringify(body)) < 16 * 1024);
+  const r = await postEvents(box.token, body);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.stored, 100);
+  const over = await postEvents(box.token, { box: box.name, events: [...hundred, ev("client_reject", 200_000)] });
+  assert.equal(over.status, 400);
+});
+
 test("parse: strict payload; detail is a closed code (an IP, a login or a token can't ride); 8 kinds incl. databento_error", async () => {
   const { parseEventsBody } = await import("./feed-box-events");
   const now = new Date();
@@ -176,6 +222,52 @@ test("parse: ts outside [now - 30 d, now + 60 s] is skipped and listed, not a 40
     { ts: "2026-10-16T12:01:01.000Z", kind: "bridge_stop", reason: "ts more than 60 s ahead" },
     { ts: "2026-09-16T11:59:00.000Z", kind: "client_connect", reason: "ts older than 30 days" },
   ]);
+});
+
+// ---------- the write (E2 dedup + open/close, E4 retention, N5 ignored) ----------
+
+test("E2: a replay is a duplicate; an open cut closes once; a closed cut is never re-timed or reopened; the close keeps detail + received_at (N4)", async () => {
+  const box = await newBox([T["cme-ctrader-fix"]], []);
+  const ts = iso(10 * MIN);
+  const open = await postEvents(box.token, { box: box.name, events: [{ ts, kind: "databento_silent", duration_s: null, detail: "after_error" }, ev("client_reject", 9 * MIN, { detail: "ip_not_allowlisted" })] });
+  assert.equal(open.status, 200, JSON.stringify(open.body));
+  assert.deepEqual([open.body.stored, open.body.closed, open.body.duplicate], [2, 0, 0]);
+  const before = (await rows(box.id)).find((r: any) => r.kind === "databento_silent");
+  assert.equal(before.duration_s, null);
+
+  const replay = await postEvents(box.token, { box: box.name, events: [{ ts, kind: "databento_silent" }] });
+  assert.deepEqual([replay.body.stored, replay.body.closed, replay.body.duplicate], [0, 0, 1], "an open re-sent is a duplicate");
+
+  const close = await postEvents(box.token, { box: box.name, events: [{ ts, kind: "databento_silent", duration_s: 131, detail: "other" }] });
+  assert.deepEqual([close.body.stored, close.body.closed, close.body.duplicate], [0, 1, 0]);
+  const after = (await rows(box.id)).find((r: any) => r.kind === "databento_silent");
+  assert.equal(after.duration_s, 131);
+  assert.equal(after.detail, "after_error", "N4: the close's detail is not taken");
+  assert.equal(new Date(after.received_at).getTime(), new Date(before.received_at).getTime(), "N4: received_at is the open row's");
+
+  const retime = await postEvents(box.token, { box: box.name, events: [{ ts, kind: "databento_silent", duration_s: 999 }] });
+  const reopen = await postEvents(box.token, { box: box.name, events: [{ ts, kind: "databento_silent", duration_s: null }] });
+  assert.deepEqual([retime.body.duplicate, reopen.body.duplicate], [1, 1]);
+  assert.equal((await rows(box.id)).find((r: any) => r.kind === "databento_silent").duration_s, 131, "still 131");
+  assert.equal((await rows(box.id)).length, 2);
+});
+
+test("E2: open + close in ONE POST = one row with the duration, whichever order; send-once-at-end also works", async () => {
+  const box = await newBox([T["cme-ctrader-fix"]], []);
+  const ts = iso(5 * MIN);
+  const r = await postEvents(box.token, { box: box.name, events: [{ ts, kind: "databento_silent", duration_s: 120 }, { ts, kind: "databento_silent" }] });
+  // Sorted by (ts, kind) the two are equal keys: whichever goes first is stored, the other closes or duplicates.
+  assert.equal(r.body.stored, 1);
+  assert.equal((await rows(box.id))[0].duration_s, 120);
+  const once = await postEvents(box.token, { box: box.name, events: [ev("databento_silent", 3 * MIN, { duration_s: 141 })] });
+  assert.deepEqual([once.body.stored, once.body.closed], [1, 0]);
+});
+
+test("E5: events never touch the box's status clock", async () => {
+  const box = await newBox([T["cme-ctrader-fix"]], [T["cme-ctrader-fix"]]);
+  await postEvents(box.token, { box: box.name, events: [ev("reconnect_ok", MIN)] });
+  const b = (await sql(`select status_reported_at, status_sent_at, last_seen_at from feed_boxes where id = $1`, [box.id])).rows[0];
+  assert.deepEqual([b.status_reported_at, b.status_sent_at, b.last_seen_at], [null, null, null]);
 });
 
 // ---------- migration ----------
