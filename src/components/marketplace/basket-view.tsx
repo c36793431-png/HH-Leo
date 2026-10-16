@@ -34,7 +34,8 @@ const PRICE_CONFIRM_LINE ="We confirm the price with you on Telegram or by email
  * - The trial is ONE basket-level choice in the summary box (m59146/m59154), off by default, amber
  *   when ticked, shown only to an eligible signed-in account; on Review it is a read-only row.
  * - Review asks for nothing and has no 'We confirm by email' block (marcus m69562: it contradicted
- *   PRICE_CONFIRM_LINE, which names Telegram first).
+ *   PRICE_CONFIRM_LINE, which names Telegram first); its small print under Send names Telegram too
+ *   (marcus m69658 F1).
  * - Sent uses the m59928 line word for word plus the support contact, no reply time, and the count
  *   goes back to 0.
  * - Phone (r2 sheet 4, marcus m59367 d4): on the basket step the summary card keeps only the trial
@@ -353,7 +354,7 @@ export function BasketView({
               {pending ? "Sending…" : "Send request →"}
             </button>
             <p className="fp-note">
-              <b>Nothing is charged and nothing starts yet.</b> We read your request and confirm by email.
+              <b>Nothing is charged and nothing starts yet.</b> We read your request and confirm with you on Telegram or by email.
             </p>
           </aside>
         </div>

@@ -586,6 +586,13 @@ test("T8 NO PRICE on all 3 steps (m68882): signed in WITH the row present, Baske
   // m69562: the 'We confirm by email' block on Review contradicted the line, so it is gone.
   assert.doesNotMatch(visible(review), /We confirm by email/i, "review: no 'We confirm by email' heading");
   assert.doesNotMatch(review, /bk-reply/, "review: no email block");
+  // m69658 F1: the small print under Send names Telegram too, word for word.
+  assert.match(
+    visible(review),
+    /Send request → Nothing is charged and nothing starts yet\. We read your request and confirm with you on Telegram or by email\./,
+    "review: small print names Telegram",
+  );
+  assert.doesNotMatch(visible(review), /confirm by email/i, "review: no email-only confirm");
   assert.equal(visible(sent).split(PRICE_CONFIRM).length - 1, 0, "sent: not ruled there");
 });
 
