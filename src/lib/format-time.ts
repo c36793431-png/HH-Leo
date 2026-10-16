@@ -18,6 +18,11 @@ export function formatAbsoluteUtc(date: Date): string {
   return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
+/** "2026-07-28 14:22:05 UTC" — for events whose length is seconds (feed-box events). */
+export function formatAbsoluteUtcSeconds(date: Date): string {
+  return `${date.toISOString().slice(0, 19).replace("T", " ")} UTC`;
+}
+
 /** "23 minutes" / "6 hours" / "3 days" / falls back to an absolute date past a week out —
  * for copy that must stay precise close to expiry (unlike formatRelative's coarser rounding). */
 export function humanizeTimeUntil(date: Date, now: Date = new Date()): string {

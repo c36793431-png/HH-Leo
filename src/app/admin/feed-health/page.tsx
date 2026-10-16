@@ -1,10 +1,13 @@
-import { listAllowlistBoxPolls, listFeedStatus, type EffectiveKind, type StatusRowView } from "@/lib/feed-status";
-import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
+import { BoxEvents } from "@/components/feed/box-events";
+import { loadBoxEvents, resolveEvents, summarize24h } from "@/lib/feed-box-events";
+import { boxFreshness, listAllowlistBoxPolls, listFeedStatus, type EffectiveKind, type StatusRowView } from "@/lib/feed-status";
+import { formatAbsoluteUtc, formatAbsoluteUtcSeconds, formatRelative } from "@/lib/format-time";
 
 /** Feed health (plan m64510-2; v1 = /admin only, marcus m64531). What each measuring box last reported, per feed and
  * symbol, with staleness computed from the portal's receive clock (feed-status.ts). The worst symbol sets the feed's
  * badge (marcus m64552). Allowlist boxes appear only as "Box reporting · last poll": a poll proves the box is polling,
- * not that ticks flow. Uptime and latency stay unmeasured: the portal keeps no history (Q3). Admin only. */
+ * not that ticks flow. Uptime and latency stay unmeasured: no status history is kept (Q3). Under each box, its events
+ * (0115, feed-box-events.ts; plan m70009 U1): the 24 h line and the newest 50, kept 30 days. Admin only. */
 export const dynamic = "force-dynamic";
 
 const PILL: Record<EffectiveKind | "no_rows", string> = {
@@ -33,6 +36,25 @@ function metrics(r: StatusRowView) {
 export default async function AdminFeedHealthPage() {
   const now = new Date();
   const [boxes, polls] = await Promise.all([listFeedStatus(now), listAllowlistBoxPolls()]);
+  const events = await loadBoxEvents(boxes.map((b) => b.id), now);
+  /** Per box: its events resolved against the newest tick any of its rows last reported 'up', the proof that data
+   * flowed after an open cut (Fable m70029 S2). */
+  const ev = new Map(
+    boxes.map((b) => {
+      const latestUpTickAt = b.feeds
+        .flatMap((f) => f.rows)
+        .filter((r) => r.reported === "up" && r.lastTickAt)
+        .reduce<Date | null>((m, r) => (!m || r.lastTickAt! > m ? r.lastTickAt : m), null);
+      const { events: list, ignored } = events.get(b.id) ?? { events: [], ignored: { count: 0, first: [] } };
+      // N5: a box clock > 60 s ahead has every event skipped, so the last POST's skips show on the header.
+      const skipped = ignored.count
+        ? `last events POST skipped ${ignored.count} event${ignored.count === 1 ? "" : "s"}${
+            ignored.count > ignored.first.length ? ` (first ${ignored.first.length} listed)` : ""
+          }: ${ignored.first.map((i) => `${i.kind} ${formatAbsoluteUtcSeconds(new Date(i.ts))} (${i.reason})`).join(", ")}`
+        : null;
+      return [b.id, { resolved: resolveEvents(list, { latestUpTickAt }, now), skipped }];
+    })
+  );
 
   return (
     <div className="flex flex-1 flex-col gap-8">
@@ -43,7 +65,8 @@ export default async function AdminFeedHealthPage() {
         <h1 className="mt-2 text-lg font-medium text-zinc-100">Feed health</h1>
         <p className="mt-1 text-sm text-zinc-400">
           What each measuring box last reported. A report older than 2 minutes reads Unknown; older than 10 minutes, No
-          report. Gaps are the box&apos;s last 5 minutes. Uptime and latency are not measured: no history is kept.
+          report. Gaps are the box&apos;s last 5 minutes. Uptime and latency are not measured: no status history is kept.
+          Events under each box are what its bridge logged (cuts, errors, client connects), kept 30 days.
         </p>
       </header>
 
@@ -62,6 +85,11 @@ export default async function AdminFeedHealthPage() {
               {`box reported ${b.ignored.length} unknown feed id${b.ignored.length === 1 ? "" : "s"}: ${b.ignored
                 .map((i) => (i.reason === "unknown feed_id" ? i.feed_id : `${i.feed_id} (not in its status set)`))
                 .join(", ")}`}
+            </div>
+          )}
+          {ev.get(b.id)!.skipped && (
+            <div className="mt-1 text-xs text-amber-300" data-events-ignored="">
+              {ev.get(b.id)!.skipped}
             </div>
           )}
           <table className="mt-4 w-full text-left text-xs">
@@ -103,6 +131,11 @@ export default async function AdminFeedHealthPage() {
               </tbody>
             ))}
           </table>
+          <BoxEvents
+            resolved={ev.get(b.id)!.resolved}
+            summary={summarize24h(ev.get(b.id)!.resolved, now)}
+            freshness={boxFreshness(b.statusReportedAt, now)}
+          />
         </section>
       ))}
 

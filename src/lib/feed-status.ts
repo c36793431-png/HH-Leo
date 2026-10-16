@@ -241,6 +241,16 @@ export function effectiveFeedState(
   return { kind: row.state, label: REPORTED_LABEL[row.state], detail: "" };
 }
 
+/** The whole box on the same clock as effectiveFeedState: "fresh" only while its last status report is <= 2 min old.
+ * Events never feed this (E5, plan m70008): a box that only sends events reads "No report". */
+export function boxFreshness(statusReportedAt: Date | null, now: Date = new Date()): { kind: "fresh" | "unknown" | "no_report"; since: Date | null } {
+  if (!statusReportedAt) return { kind: "no_report", since: null };
+  const age = now.getTime() - statusReportedAt.getTime();
+  if (age > STATUS_NO_REPORT_AFTER_MS) return { kind: "no_report", since: statusReportedAt };
+  if (age > STATUS_UNKNOWN_AFTER_MS) return { kind: "unknown", since: statusReportedAt };
+  return { kind: "fresh", since: statusReportedAt };
+}
+
 /** marcus m64552: down > stale > not_measured > up. The derived states sit in that order too: "No report" with down,
  * "Unknown" and "Not in last report" with stale, "collector stopped" with not_measured. */
 const RANK: Record<Exclude<EffectiveKind, "closed">, number> = {
@@ -290,13 +300,16 @@ export interface StatusBoxView {
   feeds: StatusFeedView[];
 }
 
-/** Every box with a status-tier set, each tier with its rows (or none), effective states computed at `now`. */
+/** Every box with a status-tier set or an event in the last 30 d (0115, plan m70009 U1), each tier with its rows (or
+ * none), effective states computed at `now`. */
 export async function listFeedStatus(now: Date = new Date()): Promise<StatusBoxView[]> {
   const boxes = await pool.query(
     `select b.id, b.name, b.status_reported_at, b.status_measuring, b.status_collector_version, b.status_ignored
        from feed_boxes b
       where exists (select 1 from feed_box_status_tiers st where st.box_id = b.id)
-      order by b.name`
+         or exists (select 1 from feed_box_events e where e.box_id = b.id and e.ts >= $1::timestamptz - interval '30 days')
+      order by b.name`,
+    [now]
   );
   const tiers = await pool.query(
     `select st.box_id, ft.id, ft.tier_key, ft.name

@@ -25,6 +25,7 @@ const MAX_EVENTS = 100;
 const AHEAD_MS = 60 * 1000;
 export const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 export const MAX_DURATION_S = 86_400;
+const DAY_MS = 24 * 60 * 60 * 1000;
 /** A closed code, never free text: no digits, dots or colons, so an IP, a login or a token can't ride along (Q2). */
 const DETAIL_RE = /^[a-z_]{1,32}$/;
 
@@ -144,4 +145,119 @@ export async function recordBoxEvents(
   } finally {
     client.release();
   }
+}
+
+// ---------- the read side ----------
+
+export interface BoxEvent {
+  ts: Date;
+  kind: EventKind;
+  durationS: number | null;
+  detail: string | null;
+}
+
+/** Each box's events within 30 d of `now`, newest first, plus its last POST's skipped events. One query each. */
+export async function loadBoxEvents(
+  boxIds: string[],
+  now: Date = new Date()
+): Promise<Map<string, { events: BoxEvent[]; ignored: StoredIgnored }>> {
+  const out = new Map<string, { events: BoxEvent[]; ignored: StoredIgnored }>();
+  if (boxIds.length === 0) return out;
+  for (const id of boxIds) out.set(id, { events: [], ignored: { count: 0, first: [] } });
+  const ev = await pool.query(
+    `select box_id, ts, kind, duration_s, detail from feed_box_events
+      where box_id = any($1::uuid[]) and ts >= $2::timestamptz - interval '30 days'
+      order by box_id, ts desc, kind`,
+    [boxIds, now]
+  );
+  for (const r of ev.rows as Record<string, unknown>[]) {
+    out.get(r.box_id as string)!.events.push({
+      ts: new Date(r.ts as Date),
+      kind: r.kind as EventKind,
+      durationS: (r.duration_s as number | null) ?? null,
+      detail: (r.detail as string | null) ?? null,
+    });
+  }
+  const ig = await pool.query(`select id, events_ignored from feed_boxes where id = any($1::uuid[])`, [boxIds]);
+  for (const r of ig.rows as Record<string, unknown>[]) {
+    const raw = typeof r.events_ignored === "string" ? JSON.parse(r.events_ignored) : r.events_ignored;
+    out.get(r.id as string)!.ignored = (raw as StoredIgnored | null) ?? { count: 0, first: [] };
+  }
+  return out;
+}
+
+/** An open cut (duration_s null) can lose its close for good: the sender restarts, the box is offline, the close POST
+ * 5xxs. So on read (Fable m70029 S2): the first LATER reconnect_ok, bridge_start or databento_silent for the box ends
+ * it, "closed, duration unknown" (a sender that restarts mid-cut opens a second cut: only the newest stays open, Fable
+ * m70044; a later cut that closed also means this one can't still be dark). Failing that, a status row reported up
+ * with a tick after the cut's ts proves data flowed again: "cut not closed by the sender". Only a cut with neither
+ * reads "dark now", capped at 86400 s (the 0115 CHECK). */
+export type CutState = "closed" | "open" | "ended_unknown" | "not_closed";
+const ENDS_A_CUT = new Set<EventKind>(["reconnect_ok", "bridge_start", "databento_silent"]);
+export interface ResolvedEvent extends BoxEvent {
+  cut: { state: CutState; seconds: number | null; capped: boolean; endedBy: { kind: EventKind; ts: Date } | null } | null;
+}
+
+export function resolveEvents(events: BoxEvent[], ctx: { latestUpTickAt: Date | null }, now: Date = new Date()): ResolvedEvent[] {
+  return events.map((e) => {
+    if (e.kind !== "databento_silent") return { ...e, cut: null };
+    if (e.durationS !== null) return { ...e, cut: { state: "closed", seconds: e.durationS, capped: false, endedBy: null } };
+    const later = events
+      .filter((x) => ENDS_A_CUT.has(x.kind) && x.ts.getTime() > e.ts.getTime())
+      .reduce<BoxEvent | null>((first, x) => (!first || x.ts.getTime() < first.ts.getTime() ? x : first), null);
+    if (later) return { ...e, cut: { state: "ended_unknown", seconds: null, capped: false, endedBy: { kind: later.kind, ts: later.ts } } };
+    if (ctx.latestUpTickAt && ctx.latestUpTickAt.getTime() > e.ts.getTime()) {
+      return { ...e, cut: { state: "not_closed", seconds: null, capped: false, endedBy: null } };
+    }
+    const elapsed = Math.max(0, Math.floor((now.getTime() - e.ts.getTime()) / 1000));
+    return { ...e, cut: { state: "open", seconds: Math.min(elapsed, MAX_DURATION_S), capped: elapsed > MAX_DURATION_S, endedBy: null } };
+  });
+}
+
+export interface EventsSummary {
+  /** Cuts that STARTED in the last 24 h (N7: a cut that began 24 h 1 min ago drops out whole). */
+  cuts: number;
+  /** Closed cuts' seconds + an open cut's seconds so far. Cuts ended without a duration don't count. */
+  darkS: number;
+  longestS: number | null;
+  noDuration: number;
+  errors: number;
+  open: ResolvedEvent | null;
+}
+
+export function summarize24h(resolved: ResolvedEvent[], now: Date = new Date()): EventsSummary {
+  const from = now.getTime() - DAY_MS;
+  const recent = resolved.filter((e) => e.ts.getTime() >= from);
+  const cuts = recent.filter((e) => e.cut);
+  const timed = cuts.filter((e) => e.cut!.seconds !== null).map((e) => e.cut!.seconds!);
+  return {
+    cuts: cuts.length,
+    darkS: timed.reduce((s, n) => s + n, 0),
+    longestS: timed.length ? Math.max(...timed) : null,
+    noDuration: cuts.length - timed.length,
+    errors: recent.filter((e) => e.kind === "databento_error").length,
+    // Newest open cut, from all 30 d: a cut still open since yesterday is still dark now.
+    open: resolved.find((e) => e.cut?.state === "open") ?? null,
+  };
+}
+
+/** U3 + Fable m70029 S1: the boxes a provider may see = at least one tier on the box (apply ∪ status) AND every one of
+ * them is that provider's. Box-level events (a cut, a reject) belong to the whole box, so "any tier mine" would show
+ * one provider another's rejects on a mixed box; and "no tier differs" alone is vacuous for a tier-less box. */
+export async function providerBoxIds(providerUserId: string): Promise<string[]> {
+  const r = await pool.query(
+    `with t as (
+       select box_id, feed_tier_id from feed_box_tiers
+       union
+       select box_id, feed_tier_id from feed_box_status_tiers
+     )
+     select b.id from feed_boxes b
+      where exists (select 1 from t where t.box_id = b.id)
+        and not exists (
+          select 1 from t join feed_tiers ft on ft.id = t.feed_tier_id
+           where t.box_id = b.id and ft.provider_user_id is distinct from $1::uuid)
+      order by b.name`,
+    [providerUserId]
+  );
+  return (r.rows as { id: string }[]).map((x) => x.id);
 }

@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { generateKeyPairSync } from "node:crypto";
+import { renderToStaticMarkup } from "react-dom/server";
 import { PGlite } from "@electric-sql/pglite";
 
 const MIGRATIONS = path.join(process.cwd(), "db/migrations");
@@ -111,6 +112,18 @@ async function postEvents(token: string, body: unknown, opts: { contentType?: st
   if (opts.length) headers["content-length"] = opts.length;
   const res = await route.POST(
     new Request("https://portal.horizonhft.com/api/feed-box/events", { method: "POST", headers, body: opts.raw ?? JSON.stringify(body) }) as any
+  );
+  return { status: res.status, body: (await res.json()) as any };
+}
+
+async function postStatus(token: string, body: unknown) {
+  const route = await import("../app/api/feed-box/status/route");
+  const res = await route.POST(
+    new Request("https://portal.horizonhft.com/api/feed-box/status", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }) as any
   );
   return { status: res.status, body: (await res.json()) as any };
 }
@@ -263,11 +276,227 @@ test("E2: open + close in ONE POST = one row with the duration, whichever order;
   assert.deepEqual([once.body.stored, once.body.closed], [1, 0]);
 });
 
+test("E4: the write deletes the box's rows older than 30 d (only that box's); the read filters them too", async () => {
+  const { loadBoxEvents } = await import("./feed-box-events");
+  const a = await newBox([T["cme-ctrader-fix"]], []);
+  const b = await newBox([T["cme-ctrader-fix"]], []);
+  const hand = (boxId: string, interval: string, kind: string) =>
+    sql(`insert into feed_box_events (box_id, ts, kind) values ($1, now() - interval '${interval}', $2)`, [boxId, kind]);
+  await hand(a.id, "31 days", "bridge_start");
+  await hand(a.id, "29 days", "bridge_stop");
+  await hand(b.id, "31 days", "bridge_start");
+  const r = await postEvents(a.token, { box: a.name, events: [ev("reconnect_ok", MIN)] });
+  assert.equal(r.status, 200);
+  assert.deepEqual((await rows(a.id)).map((x: any) => x.kind), ["bridge_stop", "reconnect_ok"]);
+  assert.equal((await rows(b.id)).length, 1, "another box's old row waits for that box's own write");
+  const read = await loadBoxEvents([b.id]);
+  assert.deepEqual(read.get(b.id)!.events, [], "but it is never read");
+});
+
+test("N5 + Fable m70044: events_ignored = the last POST's skips {count, first <= 50}, overwritten by a clean POST; a 400 leaves it", async () => {
+  const { default: Page } = await import("../app/admin/feed-health/page");
+  const box = await newBox([T["cme-ctrader-fix"]], [T["cme-ctrader-fix"]]);
+  const stored = async () => (await sql(`select events_ignored from feed_boxes where id = $1`, [box.id])).rows[0].events_ignored;
+  const ahead = new Date(Date.now() + 5 * MIN).toISOString();
+  const r = await postEvents(box.token, { box: box.name, events: [{ ts: ahead, kind: "bridge_start" }] });
+  assert.equal(r.status, 200);
+  assert.deepEqual([r.body.stored, r.body.ignored], [0, [{ ts: ahead, kind: "bridge_start", reason: "ts more than 60 s ahead" }]]);
+  assert.deepEqual(await stored(), { count: 1, first: r.body.ignored });
+
+  // A whole bad-clock batch: every event skipped, the row keeps the count and the first 50 only.
+  const skew = Array.from({ length: 100 }, (_, i) => ({ ts: new Date(Date.now() + 5 * MIN + i * 1000).toISOString(), kind: "client_reject" }));
+  const bulk = await postEvents(box.token, { box: box.name, events: skew });
+  assert.equal(bulk.body.ignored.length, 100, "the 200 body lists them all");
+  const s = await stored();
+  assert.equal(s.count, 100);
+  assert.equal(s.first.length, 50);
+  assert.equal(s.first[0].ts, skew[0].ts);
+  const page = renderToStaticMarkup(await Page());
+  const start = page.indexOf(`data-box="${box.name}"`);
+  assert.match(page.slice(start, page.indexOf("</section>", start)), /last events POST skipped 100 events \(first 50 listed\): client_reject /);
+
+  assert.equal((await postEvents(box.token, { box: box.name, events: [{ ts: "bad", kind: "bridge_start" }] })).status, 400);
+  assert.equal((await stored()).count, 100, "a refused body changes nothing");
+  await postEvents(box.token, { box: box.name, events: [ev("bridge_start", MIN)] });
+  assert.deepEqual(await stored(), { count: 0, first: [] }, "a clean POST clears the earlier skips");
+  const after = renderToStaticMarkup(await Page());
+  const at2 = after.indexOf(`data-box="${box.name}"`);
+  assert.ok(!/data-events-ignored/.test(after.slice(at2, after.indexOf("</section>", at2))));
+});
+
 test("E5: events never touch the box's status clock", async () => {
   const box = await newBox([T["cme-ctrader-fix"]], [T["cme-ctrader-fix"]]);
   await postEvents(box.token, { box: box.name, events: [ev("reconnect_ok", MIN)] });
   const b = (await sql(`select status_reported_at, status_sent_at, last_seen_at from feed_boxes where id = $1`, [box.id])).rows[0];
   assert.deepEqual([b.status_reported_at, b.status_sent_at, b.last_seen_at], [null, null, null]);
+});
+
+// ---------- S1 (Fable m70029): provider scope = non-empty tier set AND every tier is the provider's ----------
+
+test("S1 scope: own box (cme-pip shape: one tier, apply + status, provider = Pip) is Pip's and no one else's", async () => {
+  const { providerBoxIds } = await import("./feed-box-events");
+  const box = await newBox([T["cme-ctrader-fix"]], [T["cme-ctrader-fix"]]);
+  assert.ok((await providerBoxIds(PIP)).includes(box.id));
+  assert.ok(!(await providerBoxIds(OTHER)).includes(box.id));
+});
+
+test("S1 scope: mixed box (tommy4 shape: one Pip tier + one other provider's, or + one NULL) is hidden from everyone", async () => {
+  const { providerBoxIds } = await import("./feed-box-events");
+  const twoProviders = await newBox([], [T["cme-ctrader-fix"], T["cme-other"]]);
+  const withNull = await newBox([T["cme-ctrader-fix"]], [T["cme-unowned"]]);
+  for (const who of [PIP, OTHER, SEED_PROVIDER]) {
+    const ids = await providerBoxIds(who);
+    assert.ok(!ids.includes(twoProviders.id) && !ids.includes(withNull.id), who);
+  }
+});
+
+test("S1 scope: a tier-less box (status set emptied, no apply set) is hidden from everyone (\"no tier differs\" is vacuous)", async () => {
+  const fb = await import("./feed-boxes");
+  const { providerBoxIds } = await import("./feed-box-events");
+  const box = await newBox([], [T["cme-ctrader-fix"]]);
+  await fb.setBoxStatusTiers(box.id, []);
+  assert.equal((await sql(`select (select count(*) from feed_box_tiers where box_id = $1) + (select count(*) from feed_box_status_tiers where box_id = $1) as n`, [box.id])).rows[0].n, 0);
+  await postEvents(box.token, { box: box.name, events: [ev("client_reject", MIN, { detail: "ip_not_allowlisted" })] });
+  for (const who of [PIP, OTHER, SEED_PROVIDER]) assert.ok(!(await providerBoxIds(who)).includes(box.id), who);
+});
+
+test("S1 scope: a box whose only tier has NULL provider is hidden from everyone", async () => {
+  const { providerBoxIds } = await import("./feed-box-events");
+  const box = await newBox([T["cme-unowned"]], [T["cme-unowned"]]);
+  for (const who of [PIP, OTHER, SEED_PROVIDER]) assert.ok(!(await providerBoxIds(who)).includes(box.id), who);
+});
+
+// ---------- S2 (Fable m70029): an open cut is bounded on read ----------
+
+const NOW = new Date("2026-10-16T12:00:00.000Z");
+const at = (minAgo: number) => new Date(NOW.getTime() - minAgo * MIN);
+const E = (kind: string, minAgo: number, durationS: number | null = null, detail: string | null = null) => ({ ts: at(minAgo), kind, durationS, detail }) as any;
+
+test("S2: open cut + a LATER reconnect_ok (or bridge_start) = 'closed, duration unknown', not in the seconds sum", async () => {
+  const { resolveEvents, summarize24h } = await import("./feed-box-events");
+  const evs = [E("reconnect_ok", 170), E("databento_silent", 180), E("reconnect_ok", 200)];
+  const r = resolveEvents(evs, { latestUpTickAt: null }, NOW);
+  const cut = r.find((e) => e.kind === "databento_silent")!.cut!;
+  assert.equal(cut.state, "ended_unknown");
+  assert.equal(cut.endedBy!.ts.getTime(), at(170).getTime(), "the FIRST later one; the earlier reconnect (200 min ago) doesn't count");
+  const s = summarize24h(r, NOW);
+  assert.deepEqual([s.cuts, s.darkS, s.noDuration, s.open], [1, 0, 1, null]);
+  const viaStart = resolveEvents([E("bridge_start", 100), E("databento_silent", 180)], { latestUpTickAt: null }, NOW);
+  assert.equal(viaStart[1].cut!.state, "ended_unknown");
+});
+
+test("S2: open cut + an up status row with a tick after the cut = 'cut not closed by the sender', not dark now", async () => {
+  const { resolveEvents, summarize24h } = await import("./feed-box-events");
+  const r = resolveEvents([E("databento_silent", 180)], { latestUpTickAt: at(1) }, NOW);
+  assert.equal(r[0].cut!.state, "not_closed");
+  assert.equal(summarize24h(r, NOW).darkS, 0);
+  // A tick from BEFORE the cut proves nothing.
+  assert.equal(resolveEvents([E("databento_silent", 180)], { latestUpTickAt: at(181) }, NOW)[0].cut!.state, "open");
+});
+
+test("S2 + Fable m70044: a second databento_silent (sender restarted mid-cut) ends the first; only the newest open cut is dark now", async () => {
+  const { resolveEvents, summarize24h } = await import("./feed-box-events");
+  // Newest first, as loadBoxEvents returns them.
+  const r = resolveEvents([E("databento_silent", 2), E("databento_silent", 10)], { latestUpTickAt: null }, NOW);
+  assert.equal(r[0].cut!.state, "open");
+  assert.equal(r[1].cut!.state, "ended_unknown");
+  assert.deepEqual([r[1].cut!.endedBy!.kind, r[1].cut!.endedBy!.ts.getTime()], ["databento_silent", at(2).getTime()]);
+  const s = summarize24h(r, NOW);
+  assert.deepEqual([s.cuts, s.darkS, s.noDuration], [2, 120, 1]);
+  assert.equal(s.open!.ts.getTime(), at(2).getTime());
+  // A later cut that CLOSED also ends it: data can't still be dark from the first.
+  const closedLater = resolveEvents([E("databento_silent", 2, 60), E("databento_silent", 10)], { latestUpTickAt: null }, NOW);
+  assert.equal(closedLater[1].cut!.state, "ended_unknown");
+  assert.equal(summarize24h(closedLater, NOW).open, null);
+});
+
+test("S2: open cut alone (silent box) still reads dark now, counts now - ts, capped at 86400 s", async () => {
+  const { resolveEvents, summarize24h } = await import("./feed-box-events");
+  const r = resolveEvents([E("databento_silent", 3)], { latestUpTickAt: null }, NOW);
+  assert.deepEqual([r[0].cut!.state, r[0].cut!.seconds, r[0].cut!.capped], ["open", 180, false]);
+  const s = summarize24h(r, NOW);
+  assert.deepEqual([s.cuts, s.darkS, s.longestS], [1, 180, 180]);
+  assert.equal(s.open!.ts.getTime(), at(3).getTime());
+  const old = resolveEvents([E("databento_silent", 3 * 24 * 60)], { latestUpTickAt: null }, NOW);
+  assert.deepEqual([old[0].cut!.seconds, old[0].cut!.capped], [86_400, true]);
+  const so = summarize24h(old, NOW);
+  assert.deepEqual([so.cuts, so.darkS], [0, 0], "started 3 days ago: not in the 24 h line");
+  assert.ok(so.open, "but still dark now");
+});
+
+test("24 h line: cuts STARTED in the last 24 h (N7), closed seconds summed, longest, databento_error counted apart", async () => {
+  const { resolveEvents, summarize24h } = await import("./feed-box-events");
+  const r = resolveEvents(
+    [E("databento_silent", 10, 131), E("databento_error", 20, null, "licence_auth"), E("databento_silent", 60, 120), E("databento_silent", 24 * 60 + 1, 141), E("databento_error", 24 * 60 + 1)],
+    { latestUpTickAt: null },
+    NOW
+  );
+  const s = summarize24h(r, NOW);
+  assert.deepEqual([s.cuts, s.darkS, s.longestS, s.noDuration, s.errors, s.open], [2, 251, 131, 0, 1, null]);
+  const edge = summarize24h(resolveEvents([E("databento_silent", 24 * 60, 5)], { latestUpTickAt: null }, NOW), NOW);
+  assert.equal(edge.cuts, 1, "exactly 24 h ago is in");
+});
+
+// ---------- /admin/feed-health ----------
+
+test("/admin/feed-health: 24 h line, recent events with labels, open cut dark now, silence note, skipped events on the header", async () => {
+  const { default: Page } = await import("../app/admin/feed-health/page");
+  const box = await newBox([T["cme-ctrader-fix"]], [T["cme-ctrader-fix"]]);
+  await postEvents(box.token, {
+    box: box.name,
+    events: [
+      ev("databento_silent", 30 * MIN, { duration_s: 131, detail: "after_error" }),
+      ev("reconnect_ok", 28 * MIN, { detail: "after_silence" }),
+      ev("client_reject", 20 * MIN, { detail: "ip_not_allowlisted" }),
+      ev("databento_error", 15 * MIN, { detail: "licence_auth" }),
+      ev("databento_silent", 2 * MIN),
+      { ts: new Date(Date.now() + 5 * MIN).toISOString(), kind: "bridge_stop" },
+    ],
+  });
+  const page = renderToStaticMarkup(await Page());
+  const start = page.indexOf(`data-box="${box.name}"`);
+  assert.ok(start > 0, "the box has a section");
+  const html = page.slice(start, page.indexOf("</section>", start));
+  assert.match(html, /Last 24 h: 2 cuts started · \d+ min \d+ s dark · longest \d+ min \d+ s · 1 Databento error · dark now, since \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC/);
+  assert.match(html, /box has never sent a status report: events may be missing/, "no status report yet: '0 cuts' can't read green");
+  assert.match(html, /Client rejected<\/td><td[^>]*>[^<]*<\/td><td[^>]*>IP not allowlisted/);
+  assert.match(html, /Databento error<\/td><td[^>]*>[^<]*<\/td><td[^>]*>licence \/ auth/);
+  assert.match(html, /data-cut="closed"[\s\S]*?2 min 11 s/);
+  assert.match(html, /data-cut="open"[\s\S]*?dark now · /);
+  assert.match(html, /last events POST skipped 1 event: bridge_stop .* \(ts more than 60 s ahead\)/);
+  assert.ok(!/203\.0\.113|\d+\.\d+\.\d+\.\d+/.test(html), "no IP anywhere in the box's events");
+});
+
+test("/admin/feed-health: a fresh up status after an open cut reads 'cut not closed by the sender'; no silence note while fresh", async () => {
+  const { default: Page } = await import("../app/admin/feed-health/page");
+  const box = await newBox([], [T["cme-ctrader-fix"]]);
+  await postEvents(box.token, { box: box.name, events: [ev("databento_silent", 5 * MIN)] });
+  const st = await postStatus(box.token, {
+    box: box.name,
+    sent_at: iso(0),
+    collector: { version: "0.1.0", measuring: true },
+    feeds: [{ feed_id: "cme-ctrader-fix", symbol: "ALL", source: "bridge_status", state: "up", last_tick_utc: iso(1000) }],
+  });
+  assert.equal(st.status, 200, JSON.stringify(st.body));
+  const page = renderToStaticMarkup(await Page());
+  const start = page.indexOf(`data-box="${box.name}"`);
+  const html = page.slice(start, page.indexOf("</section>", start));
+  assert.match(html, /cut not closed by the sender/);
+  assert.ok(!/dark now/.test(html), html);
+  assert.ok(!/data-events-silence/.test(html));
+  assert.match(html, /ALL via bridge_status/, "m70036: one symbol=ALL row needs no schema change");
+});
+
+test("/admin/feed-health: a box with events but no status set is listed; a box with neither shows no events block", async () => {
+  const { default: Page } = await import("../app/admin/feed-health/page");
+  const applyOnly = await newBox([T["cme-ctrader-fix"]], []);
+  const quiet = await newBox([T["cme-ctrader-fix"]], []);
+  await postEvents(applyOnly.token, { box: applyOnly.name, events: [ev("bridge_start", MIN, { detail: "uptime_reset" })] });
+  const page = renderToStaticMarkup(await Page());
+  const start = page.indexOf(`data-box="${applyOnly.name}"`);
+  assert.ok(start > 0);
+  assert.match(page.slice(start, page.indexOf("</section>", start)), /Bridge started<\/td><td[^>]*><\/td><td[^>]*>uptime reset/);
+  assert.ok(!page.includes(`data-box="${quiet.name}"`));
 });
 
 // ---------- migration ----------
