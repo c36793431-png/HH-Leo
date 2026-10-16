@@ -54,7 +54,8 @@ const KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,189}$/;
 const TIER_KEY_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const MAX_TRIAL_DAYS = 90;
+/** The longest trial the agent API grants; the admin bundle button caps a trial bundle at the same (marcus m70329). */
+export const MAX_TRIAL_DAYS = 90;
 
 export interface TrialRequest {
   action: "trial";

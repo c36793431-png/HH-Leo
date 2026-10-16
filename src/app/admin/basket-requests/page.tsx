@@ -4,6 +4,10 @@ import { listBasketRequests, BASKET_REQUEST_STATUSES, type BasketRequestStatus }
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
 import { listForwardServers, type ForwardServer } from "@/lib/basket-forward";
 import { BasketForwardForm } from "@/components/admin/basket-forward-form";
+import { BundleActivateForm } from "@/components/admin/bundle-activate-form";
+import { bundleByKey } from "@/lib/bundle-catalogue";
+import { listingByKey } from "@/lib/marketplace-catalogue";
+import type { BasketLine } from "@/lib/basket-catalogue";
 import { setBasketRequestHandledAction } from "./actions";
 import { AdminClientContact } from "@/components/admin/client-contact";
 
@@ -18,6 +22,15 @@ const STATUS_STYLES: Record<BasketRequestStatus, string> = {
   new: "border-cyan-500/40 bg-cyan-500/15 text-cyan-300",
   handled: "border-zinc-600 bg-zinc-800/60 text-zinc-300",
 };
+
+/** The bundle line "Activate bundle…" acts on: a New request only, and only a line for a known bundle and feed. */
+function activatableBundleLine(r: { status: BasketRequestStatus; lines: BasketLine[] }) {
+  if (r.status !== "new") return null;
+  const line = r.lines.find((l) => l.kind === "bundle");
+  const bundle = line ? bundleByKey(line.key) : null;
+  if (!line || !bundle || !line.feed) return null;
+  return { bundleKey: bundle.key, bundleTitle: bundle.title, feedChoice: line.feed, feedTitle: listingByKey(line.feed)?.title ?? line.feed };
+}
 
 function buildQuery(status: BasketRequestStatus | undefined): string {
   return status ? `?status=${status}` : "/admin/basket-requests";
@@ -79,9 +92,10 @@ export default async function AdminBasketRequestsPage({ searchParams }: { search
             <tbody className="divide-y divide-zinc-800">
               {requests.map((r) => {
                 const forward = r.status === "new" && r.lines.some((l) => l.kind === "feed") ? serversByUser.get(r.userId) : undefined;
+                const bundleLine = activatableBundleLine(r);
                 return (
                 <Fragment key={r.id}>
-                <tr className={`align-top ${forward ? "border-b-0" : ""}`}>
+                <tr className={`align-top ${forward || bundleLine ? "border-b-0" : ""}`}>
                   <td className="py-3 pr-4 text-zinc-400">
                     {formatAbsoluteUtc(r.submittedAt)} <span className="text-zinc-600">({formatRelative(r.submittedAt)})</span>
                     <div className="font-mono text-xs text-zinc-500">{r.reference}</div>
@@ -149,6 +163,13 @@ export default async function AdminBasketRequestsPage({ searchParams }: { search
                         feedLines={r.lines.filter((l) => l.kind === "feed").map((l) => ({ key: l.key, name: l.name }))}
                         servers={forward}
                       />
+                    </td>
+                  </tr>
+                )}
+                {bundleLine && (
+                  <tr>
+                    <td colSpan={6} className="pb-4">
+                      <BundleActivateForm requestId={r.id} userId={r.userId} {...bundleLine} />
                     </td>
                   </tr>
                 )}

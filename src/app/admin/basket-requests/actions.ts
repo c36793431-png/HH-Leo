@@ -8,8 +8,20 @@ import { isAdminUser } from "@/lib/admin-users-panel";
 import { logAdminAction, resolveAdminUserId } from "@/lib/admin";
 import { getBasketRequest, setBasketRequestHandled } from "@/lib/basket-requests";
 import { forwardBasketFeedLines, type ForwardLineResult } from "@/lib/basket-forward";
+import { runBundleActivate, type BundleActivateState } from "@/lib/admin-bundle-activate";
 
 export type ForwardBasketState = { ok: true; results: ForwardLineResult[] } | { ok: false; error: string } | null;
+
+/** "Activate bundle…" Check / Activate (Bundles S3, lib/admin-bundle-activate.ts). Admin only, re-checked here: the
+ * page gate is not trusted alone. The clicking admin is the actor. The returned state never holds the full key. */
+export async function activateBundleAction(_prev: BundleActivateState, formData: FormData): Promise<BundleActivateState> {
+  const session = await auth();
+  if (!session?.user?.id || !isAdminUser(session.user)) return { kind: "error", error: "forbidden" };
+  const adminId = await resolveAdminUserId(session.user.id);
+  const state = await runBundleActivate({ id: adminId, email: session.user.email ?? "" }, formData);
+  if (state?.kind === "done") revalidatePath("/admin/basket-requests");
+  return state;
+}
 
 /** "Forward feed lines to providers" (marcus m59987). Writes only through
  * createAccessRequestBatch (lib/basket-forward.ts); returns each line's result for the screen.
