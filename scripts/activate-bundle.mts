@@ -29,7 +29,7 @@ import {
   type ActivationPlan,
   type GrantPlan,
 } from "../src/lib/activate-bundle-cli.js";
-import { missingEnv } from "../src/lib/assign-trial.js";
+import { findAgentActor, missingEnv } from "../src/lib/assign-trial.js";
 import { maskLicenseKey, settleLicenseBackgroundTasks } from "../src/lib/licenses.js";
 import { pool } from "../src/lib/db.js";
 
@@ -113,10 +113,10 @@ async function runGrant(args: Extract<ReturnType<typeof parseActivateBundleArgs>
 }
 
 async function runActivate(args: Extract<ReturnType<typeof parseActivateBundleArgs>, { mode: "activate" }>) {
-  const plan = await planActivation(args);
+  const plan = await planActivation(args, { actor: await findAgentActor(), via: "cli" });
   console.log(args.execute ? "EXECUTE" : "DRY RUN (reads only; pass --execute to activate)");
   printActivation(plan);
-  if (printRefusals(plan.refusals, args.execute)) return;
+  if (printRefusals(plan.refusals.map((r) => r.text), args.execute)) return;
   if (!args.execute) {
     console.log("\nWould activate. Re-run with --execute.");
     return;

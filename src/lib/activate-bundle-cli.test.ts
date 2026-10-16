@@ -179,6 +179,11 @@ const args = (user: string, basketId: string, extra: Partial<import("./activate-
   ...extra,
 });
 
+/** The CLI's call: the seeded agent as the actor, via 'cli' (scripts/activate-bundle.mts). */
+async function planA(a: import("./activate-bundle-cli").ActivateArgs, env?: Record<string, string>) {
+  return cli.planActivation(a, { actor: await at.findAgentActor(), via: "cli" }, env);
+}
+
 async function deliveryRows(licenceId: string) {
   return (await sql(`select admin_user_id, details_json from admin_actions where target_license_id = $1 and action_type = 'license_key_delivery'`, [licenceId])).rows;
 }
@@ -187,7 +192,7 @@ test("T-A dry run: reads only -- no row in any table, no send; the plan shows th
   const u = await makeUser();
   const basketId = await makeBasket(u.id);
   const c0 = await counts();
-  const plan = await cli.planActivation(args(u.id, basketId, { execute: false }));
+  const plan = await planA(args(u.id, basketId, { execute: false }));
   assert.deepEqual(await counts(), c0, "nothing written, nothing sent");
   assert.deepEqual(plan.refusals, []);
   assert.equal(plan.delivery, "email");
@@ -208,7 +213,7 @@ test("T-B + T-C trial, email-only client: 1 licence, 1 bundle, 0 payments, the k
   const u = await makeUser();
   const basketId = await makeBasket(u.id);
   const before = sends.length;
-  const out = await cli.executeActivation(await cli.planActivation(args(u.id, basketId)));
+  const out = await cli.executeActivation(await planA(args(u.id, basketId)));
   await lic.settleLicenseBackgroundTasks();
   const r = out.result;
 
@@ -255,7 +260,7 @@ test("T-B + T-C trial, email-only client: 1 licence, 1 bundle, 0 payments, the k
     admin_user_id: actorId,
     target_user_id: u.id,
     target_license_id: r.licenseId,
-    details_json: { bundleId: r.bundleId, licenseId: r.licenseId, isTrial: true, amountUsd: null, basketRequestId: basketId },
+    details_json: { bundleId: r.bundleId, licenseId: r.licenseId, isTrial: true, amountUsd: null, basketRequestId: basketId, via: "cli" },
   });
 
   // Step 4 = T-C.
@@ -270,7 +275,7 @@ test("T-B paid: ONE 'bundle' payment of the amount received, the paid key text b
   const u = await makeUser();
   const basketId = await makeBasket(u.id);
   const before = sends.length;
-  const plan = await cli.planActivation(args(u.id, basketId, { isTrial: false, amountUsd: 100, receivedAt: new Date("2026-10-14T12:00:00Z") }));
+  const plan = await planA(args(u.id, basketId, { isTrial: false, amountUsd: 100, receivedAt: new Date("2026-10-14T12:00:00Z") }));
   assert.deepEqual(plan.refusals, [], "an unset share does not refuse an activation");
   assert.equal(plan.shareCents, null);
   const out = await cli.executeActivation(plan);
@@ -299,7 +304,7 @@ test("a key send that THROWS: recorded, and steps 3 + 4 still run; the outcome c
   portalThrows = true;
   let out: Awaited<ReturnType<typeof cli.executeActivation>>;
   try {
-    out = await cli.executeActivation(await cli.planActivation(args(u.id, basketId)));
+    out = await cli.executeActivation(await planA(args(u.id, basketId)));
   } finally {
     portalThrows = false;
   }
@@ -317,7 +322,7 @@ test("an email the provider REFUSES (Resend 422, no throw): keySend ok false wit
   emailRefused = true;
   let out: Awaited<ReturnType<typeof cli.executeActivation>>;
   try {
-    out = await cli.executeActivation(await cli.planActivation(args(u.id, basketId)));
+    out = await cli.executeActivation(await planA(args(u.id, basketId)));
   } finally {
     emailRefused = false;
   }
@@ -335,10 +340,12 @@ test("an email the provider REFUSES (Resend 422, no throw): keySend ok false wit
 });
 
 test("each refusal refuses before any write", async (t) => {
-  const refuses = async (label: string, a: import("./activate-bundle-cli").ActivateArgs, match: RegExp, env?: Record<string, string>) => {
+  const refuses = async (label: string, a: import("./activate-bundle-cli").ActivateArgs, match: RegExp, env?: Record<string, string>, code?: string) => {
     const c0 = await counts();
-    const plan = await cli.planActivation(a, env);
-    assert.ok(plan.refusals.some((r) => match.test(r)), `${label}: ${plan.refusals.join(" | ")}`);
+    const plan = await planA(a, env);
+    const hit = plan.refusals.find((r) => match.test(r.text));
+    assert.ok(hit, `${label}: ${plan.refusals.map((r) => r.text).join(" | ")}`);
+    if (code) assert.equal(hit.code, code, `${label}: the refusal's code (Fable C4)`);
     await assert.rejects(cli.executeActivation(plan), cli.RefusedError, label);
     assert.deepEqual(await counts(), c0, `${label}: nothing written or sent`);
   };
@@ -346,50 +353,94 @@ test("each refusal refuses before any write", async (t) => {
   await t.test("missing env, each var", async () => {
     for (const name of at.REQUIRED_ENV) {
       const u = await makeUser();
-      await refuses(name, args(u.id, await makeBasket(u.id)), new RegExp(`Missing env: .*${name}`), { ...ENV, [name]: "" });
+      await refuses(name, args(u.id, await makeBasket(u.id)), new RegExp(`Missing env: .*${name}`), { ...ENV, [name]: "" }, "env");
     }
   });
   await t.test("an active licence (this script never adopts)", async () => {
     const u = await makeUser();
     await sql(`insert into licenses (user_id, license_key, expires_at, tier) values ($1, $2, now() + interval '5 days', 'paid')`, [u.id, `CLI-ACT-${seq}`]);
-    await refuses("active", args(u.id, await makeBasket(u.id), { isTrial: false, amountUsd: 100 }), /active licence.*new licence only/);
+    await refuses("active", args(u.id, await makeBasket(u.id), { isTrial: false, amountUsd: 100 }), /active licence.*new licence only/, undefined, "live_licence");
   });
   await t.test("an active bundle", async () => {
     const u = await makeUser();
-    await cli.executeActivation(await cli.planActivation(args(u.id, await makeBasket(u.id))));
+    await cli.executeActivation(await planA(args(u.id, await makeBasket(u.id))));
     await lic.settleLicenseBackgroundTasks();
-    await refuses("bundle", args(u.id, await makeBasket(u.id), { allowRepeatTrial: true }), /already has an active bundle/);
+    await refuses("bundle", args(u.id, await makeBasket(u.id), { allowRepeatTrial: true }), /already has an active bundle/, undefined, "active_bundle");
   });
   await t.test("a past trial without --allow-repeat-trial", async () => {
     const u = await makeUser();
     await sql(`insert into licenses (user_id, license_key, expires_at, tier) values ($1, $2, now() - interval '20 days', 'trial')`, [u.id, `CLI-OLD-${seq}`]);
-    await refuses("repeat", args(u.id, await makeBasket(u.id)), /trial licence\(s\) before/);
+    await refuses("repeat", args(u.id, await makeBasket(u.id)), /trial licence\(s\) before/, undefined, "repeat_trial");
   });
   await t.test("the basket: missing, another user's, already handled, a different feed, no bundle line", async () => {
     const u = await makeUser();
-    await refuses("missing", args(u.id, "00000000-0000-4000-8000-00000000beef"), /No basket request/);
+    await refuses("missing", args(u.id, "00000000-0000-4000-8000-00000000beef"), /No basket request/, undefined, "basket_missing");
     const other = await makeUser();
-    await refuses("other", args(u.id, await makeBasket(other.id)), /belongs to another user/);
+    await refuses("other", args(u.id, await makeBasket(other.id)), /belongs to another user/, undefined, "basket_other_user");
     const handled = await makeBasket(u.id);
     await sql(`update basket_requests set status = 'handled', handled_at = now() where id = $1`, [handled]);
-    await refuses("handled", args(u.id, handled), /already 'handled'/);
-    await refuses("feed", args(u.id, await makeBasket(u.id, { kind: "bundle", key: "horizon-complete", name: "x", feed: "ny-base" })), /asked for horizon-complete \(ny-base\)/);
-    await refuses("no line", args(u.id, await makeBasket(u.id, { kind: "software", key: "horizon", name: "Horizon" })), /no bundle line/);
+    await refuses("handled", args(u.id, handled), /already 'handled'/, undefined, "basket_not_new");
+    await refuses(
+      "feed",
+      args(u.id, await makeBasket(u.id, { kind: "bundle", key: "horizon-complete", name: "x", feed: "ny-base" })),
+      /asked for horizon-complete \(ny-base\)/,
+      undefined,
+      "basket_mismatch"
+    );
+    await refuses("no line", args(u.id, await makeBasket(u.id, { kind: "software", key: "horizon", name: "Horizon" })), /no bundle line/, undefined, "basket_no_bundle_line");
   });
   await t.test("no Telegram and no email", async () => {
     const u = await makeUser({ email: null });
-    await refuses("no channel", args(u.id, await makeBasket(u.id)), /could not be delivered/);
+    await refuses("no channel", args(u.id, await makeBasket(u.id)), /could not be delivered/, undefined, "no_channel");
   });
   await t.test("an internal account without --allow-internal", async () => {
     const u = await makeUser({ email: `qa${seq + 1}@horizonhft.internal` });
-    await refuses("internal", args(u.id, await makeBasket(u.id)), /internal or test account/);
+    await refuses("internal", args(u.id, await makeBasket(u.id)), /internal or test account/, undefined, "internal");
   });
+  await t.test("no actor: the agent's seed text for cli, a plain one for admin", async () => {
+    const u = await makeUser();
+    const b = await makeBasket(u.id);
+    const cliPlan = await cli.planActivation(args(u.id, b), { actor: null, via: "cli" });
+    assert.deepEqual(cliPlan.refusals, [{ code: "actor", text: `Actor ${at.AGENT_ACTOR_EMAIL} not found: apply scripts/seed-agent-actor.sql first` }]);
+    const adminPlan = await cli.planActivation(args(u.id, b), { actor: null, via: "admin" });
+    assert.deepEqual(adminPlan.refusals, [{ code: "actor", text: "No admin user to act as" }]);
+    await assert.rejects(cli.executeActivation(adminPlan), cli.RefusedError);
+  });
+});
+
+test("the actor and via are the caller's: an admin activation names the admin on the bundle, the licence's key-delivery row and the bundle_activate row", async () => {
+  const u = await makeUser();
+  const basketId = await makeBasket(u.id);
+  const plan = await cli.planActivation(args(u.id, basketId), { actor: { id: ADMIN, email: "hfthorizon@keemail.me" }, via: "admin" });
+  assert.deepEqual(plan.refusals, []);
+  assert.equal(plan.activateArgs.actorUserId, ADMIN);
+  assert.equal(plan.adminAction.details.via, "admin");
+  const out = await cli.executeActivation(plan);
+  await lic.settleLicenseBackgroundTasks();
+  assert.equal((await sql(`select activated_by from bundle_subscriptions where id = $1`, [out.result.bundleId])).rows[0].activated_by, ADMIN);
+  assert.equal((await deliveryRows(out.result.licenseId))[0].admin_user_id, ADMIN);
+  const logged = (await sql(`select admin_user_id, details_json from admin_actions where action_type = 'bundle_activate' and target_user_id = $1`, [u.id])).rows;
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0].admin_user_id, ADMIN);
+  assert.equal(logged[0].details_json.via, "admin");
+  assert.equal((await sql(`select handled_by from basket_requests where id = $1`, [basketId])).rows[0].handled_by, ADMIN);
+});
+
+test("parseActivateFields (Fable C3): the one validator; maxTrialDays caps a trial only when the caller passes it", () => {
+  const ok = { user: "x@example.invalid", bundle: "horizon-complete", feed: "ld-base", days: "90", trial: true, basket: "d9552c8b-a536-49d6-a9ed-8e4b48feeeb8" };
+  assert.equal(cli.parseActivateFields(ok, { maxTrialDays: 90 }).days, 90);
+  assert.throws(() => cli.parseActivateFields({ ...ok, days: "91" }, { maxTrialDays: 90 }), /A trial is at most 90 days, got 91/);
+  assert.equal(cli.parseActivateFields({ ...ok, days: "91" }).days, 91, "the CLI passes no cap");
+  assert.equal(cli.parseActivateFields({ ...ok, days: "200", trial: false, amountUsd: "100" }, { maxTrialDays: 90 }).days, 200, "paid is not a trial");
+  assert.throws(() => cli.parseActivateFields({ ...ok, days: "" }), /--days is required/);
+  assert.throws(() => cli.parseActivateFields({ ...ok, amountUsd: "100" }), /--trial records no payment/);
+  assert.throws(() => cli.parseActivateFields({ ...ok, feed: "eu-base" }), /Unknown feed/);
 });
 
 test("--grant-feed: refuses with no server; a trial grants the 3 LD Base rows at 0 with allowlist records; a paid one refuses until the share is set", async () => {
   // Trial.
   const u = await makeUser();
-  const out = await cli.executeActivation(await cli.planActivation(args(u.id, await makeBasket(u.id))));
+  const out = await cli.executeActivation(await planA(args(u.id, await makeBasket(u.id))));
   await lic.settleLicenseBackgroundTasks();
   const grant = { mode: "grant-feed" as const, bundleId: out.result.bundleId, execute: true };
   const c0 = await counts();
@@ -411,7 +462,7 @@ test("--grant-feed: refuses with no server; a trial grants the 3 LD Base rows at
 
   // Paid, with a server: refused on the unset share, then priced from it.
   const p = await makeUser();
-  const paid = await cli.executeActivation(await cli.planActivation(args(p.id, await makeBasket(p.id), { isTrial: false, amountUsd: 100 })));
+  const paid = await cli.executeActivation(await planA(args(p.id, await makeBasket(p.id), { isTrial: false, amountUsd: 100 })));
   await lic.settleLicenseBackgroundTasks();
   await makeServer(paid.result.licenseId, p.id);
   const pGrant = { mode: "grant-feed" as const, bundleId: paid.result.bundleId, execute: true };

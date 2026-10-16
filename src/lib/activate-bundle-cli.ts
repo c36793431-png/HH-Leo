@@ -24,7 +24,7 @@ import {
   NO_USERS_ROW,
   type KeyDelivery,
 } from "./issue-new-license";
-import { AGENT_ACTOR_EMAIL, findAgentActor, missingEnv, resolveUser, RefusedError, UsageError } from "./assign-trial";
+import { AGENT_ACTOR_EMAIL, missingEnv, resolveUser, RefusedError, UsageError } from "./assign-trial";
 
 /** The library behind scripts/activate-bundle.mts (plan m69164 section 4, BUILD GO marcus m69165): activates a
  * Horizon Complete bundle through the shipped activateBundle writer, then does what that writer leaves out --
@@ -66,6 +66,74 @@ export type ActivateBundleCliArgs = ActivateArgs | GrantArgs;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Who started an activation; lands in the bundle_activate row's details.via (S3 plan m70272 D2, ruled m70329). */
+export type ActivationVia = "admin" | "cli" | "agent-api";
+
+/** The activation fields as typed, before any check: the CLI's flag values, the admin dialog's form fields, the
+ * agent route's body. All three go through parseActivateFields, so none can pass what another refuses (Fable C3). */
+export interface ActivateFieldValues {
+  user?: string;
+  bundle?: string;
+  feed?: string;
+  days?: string;
+  trial: boolean;
+  amountUsd?: string;
+  receivedAt?: string;
+  basket?: string;
+}
+
+export type ActivateFields = Pick<ActivateArgs, "user" | "bundleKey" | "feedChoice" | "days" | "isTrial" | "amountUsd" | "receivedAt" | "basketId">;
+
+/** The one validator. maxTrialDays: the admin button and the agent route cap a trial at MAX_TRIAL_DAYS (marcus
+ * m70329); the CLI passes none and keeps the writer's own cap (bundles.ts assertTermDays). */
+export function parseActivateFields(v: ActivateFieldValues, opts: { maxTrialDays?: number } = {}): ActivateFields {
+  const values: Record<string, string | undefined> = {
+    "--user": v.user,
+    "--bundle": v.bundle,
+    "--feed": v.feed,
+    "--days": v.days,
+    "--amount-usd": v.amountUsd,
+    "--received-at": v.receivedAt,
+    "--basket": v.basket,
+  };
+  for (const f of ["--user", "--bundle", "--feed", "--days", "--basket"]) {
+    if (!values[f]) throw new UsageError(`${f} is required${f === "--days" ? " (no default)" : ""}`);
+  }
+  const bundle = bundleByKey(values["--bundle"]!);
+  if (!bundle) throw new UsageError(`Unknown bundle: ${values["--bundle"]}`);
+  const feed = values["--feed"]!;
+  if (!isBundleFeedChoice(feed) || !bundle.feedChoices.includes(feed)) {
+    throw new UsageError(`Unknown feed for ${bundle.title}: ${feed}. Known: ${bundle.feedChoices.join(", ")}`);
+  }
+  if (!/^[1-9]\d*$/.test(values["--days"]!)) throw new UsageError(`--days must be a whole number of days, got "${values["--days"]}"`);
+  const days = Number(values["--days"]);
+  if (!UUID_RE.test(values["--basket"]!)) throw new UsageError(`--basket needs the basket request id (uuid), got "${values["--basket"]}"`);
+
+  const isTrial = v.trial;
+  let amountUsd: number | null = null;
+  let receivedAt: Date | null = null;
+  if (isTrial) {
+    if (values["--amount-usd"] !== undefined || values["--received-at"] !== undefined) {
+      throw new UsageError("--trial records no payment: drop --amount-usd / --received-at");
+    }
+    if (opts.maxTrialDays !== undefined && days > opts.maxTrialDays) {
+      throw new UsageError(`A trial is at most ${opts.maxTrialDays} days, got ${days}`);
+    }
+  } else {
+    if (values["--amount-usd"] === undefined) throw new UsageError("Pass --trial, or --amount-usd with the amount actually received (no default)");
+    if (!/^\d+(\.\d{1,2})?$/.test(values["--amount-usd"]) || !isReceivableUsdAmount(Number(values["--amount-usd"]))) {
+      throw new UsageError(`--amount-usd must be a dollar amount above 0, like 100 or 99.50, got "${values["--amount-usd"]}"`);
+    }
+    amountUsd = Number(values["--amount-usd"]);
+    if (values["--received-at"] !== undefined) {
+      receivedAt = new Date(values["--received-at"]);
+      if (Number.isNaN(receivedAt.getTime())) throw new UsageError(`--received-at must be a date, like 2026-10-14, got "${values["--received-at"]}"`);
+      if (receivedAt.getTime() > Date.now()) throw new UsageError("--received-at is in the future");
+    }
+  }
+  return { user: values["--user"]!, bundleKey: bundle.key, feedChoice: feed, days, isTrial, amountUsd, receivedAt, basketId: values["--basket"]! };
+}
+
 export function parseActivateBundleArgs(argv: string[]): ActivateBundleCliArgs {
   const values: Record<string, string> = {};
   const flags = new Set<string>();
@@ -95,46 +163,19 @@ export function parseActivateBundleArgs(argv: string[]): ActivateBundleCliArgs {
     return { mode: "grant-feed", bundleId: values["--grant-feed"], execute };
   }
 
-  for (const f of ["--user", "--bundle", "--feed", "--days", "--basket"]) {
-    if (!(f in values)) throw new UsageError(`${f} is required${f === "--days" ? " (no default)" : ""}`);
-  }
-  const bundle = bundleByKey(values["--bundle"]);
-  if (!bundle) throw new UsageError(`Unknown bundle: ${values["--bundle"]}`);
-  const feed = values["--feed"];
-  if (!isBundleFeedChoice(feed) || !bundle.feedChoices.includes(feed)) {
-    throw new UsageError(`Unknown feed for ${bundle.title}: ${feed}. Known: ${bundle.feedChoices.join(", ")}`);
-  }
-  if (!/^[1-9]\d*$/.test(values["--days"])) throw new UsageError(`--days must be a whole number of days, got "${values["--days"]}"`);
-  if (!UUID_RE.test(values["--basket"])) throw new UsageError(`--basket needs the basket request id (uuid), got "${values["--basket"]}"`);
-
-  const isTrial = flags.has("--trial");
-  let amountUsd: number | null = null;
-  let receivedAt: Date | null = null;
-  if (isTrial) {
-    if ("--amount-usd" in values || "--received-at" in values) throw new UsageError("--trial records no payment: drop --amount-usd / --received-at");
-  } else {
-    if (!("--amount-usd" in values)) throw new UsageError("Pass --trial, or --amount-usd with the amount actually received (no default)");
-    if (!/^\d+(\.\d{1,2})?$/.test(values["--amount-usd"]) || !isReceivableUsdAmount(Number(values["--amount-usd"]))) {
-      throw new UsageError(`--amount-usd must be a dollar amount above 0, like 100 or 99.50, got "${values["--amount-usd"]}"`);
-    }
-    amountUsd = Number(values["--amount-usd"]);
-    if ("--received-at" in values) {
-      receivedAt = new Date(values["--received-at"]);
-      if (Number.isNaN(receivedAt.getTime())) throw new UsageError(`--received-at must be a date, like 2026-10-14, got "${values["--received-at"]}"`);
-      if (receivedAt.getTime() > Date.now()) throw new UsageError("--received-at is in the future");
-    }
-  }
-
+  const fields = parseActivateFields({
+    user: values["--user"],
+    bundle: values["--bundle"],
+    feed: values["--feed"],
+    days: values["--days"],
+    trial: flags.has("--trial"),
+    amountUsd: values["--amount-usd"],
+    receivedAt: values["--received-at"],
+    basket: values["--basket"],
+  });
   return {
     mode: "activate",
-    user: values["--user"],
-    bundleKey: bundle.key,
-    feedChoice: feed,
-    days: Number(values["--days"]),
-    isTrial,
-    amountUsd,
-    receivedAt,
-    basketId: values["--basket"],
+    ...fields,
     allowRepeatTrial: flags.has("--allow-repeat-trial"),
     allowInternal: flags.has("--allow-internal"),
     execute,
@@ -166,10 +207,37 @@ async function configuredShareCents(choice: BundleFeedChoice): Promise<number | 
   return typeof cents === "number" && Number.isSafeInteger(cents) && cents > 0 ? cents : null;
 }
 
+/** Every reason planActivation refuses. The admin dialog keys its override tickboxes on the code, never on the
+ * text (Fable C4); the agent route rewrites the text's CLI hint (endpointRefusals). */
+export type ActivationRefusalCode =
+  | "env"
+  | "actor"
+  | "internal"
+  | "active_bundle"
+  | "live_licence"
+  | "repeat_trial"
+  | "basket_missing"
+  | "basket_other_user"
+  | "basket_not_new"
+  | "basket_no_bundle_line"
+  | "basket_mismatch"
+  | "no_channel";
+
+export interface ActivationRefusal {
+  code: ActivationRefusalCode;
+  text: string;
+}
+
+export interface ActivationActor {
+  id: string;
+  email: string;
+}
+
 export interface ActivationPlan {
   args: ActivateArgs;
+  via: ActivationVia;
   user: { id: string; email: string | null; telegramUserId: string | null; displayName: string | null; internal: boolean };
-  actor: { id: string; email: string } | null;
+  actor: ActivationActor | null;
   licences: { id: string; licenseNumber: number; tier: string; status: string; expiresAt: Date; live: boolean }[];
   activeBundle: { id: string; bundleKey: string; feedChoice: string } | null;
   basket: { id: string; userId: string; status: string; hasTrial: boolean; lines: { kind: string; key: string; name: string; feed?: string }[] } | null;
@@ -179,17 +247,22 @@ export interface ActivationPlan {
   delivery: KeyDelivery;
   subject: string;
   maskedMessage: string;
-  /** What execute passes to activateBundle; the actor id is the seeded agent's. */
+  /** What execute passes to activateBundle; the actor id is the caller's (the seeded agent, or the clicking admin). */
   activateArgs: Omit<ActivateBundleArgs, "actorUserId"> & { actorUserId: string | null };
   adminAction: { admin_user_id: string | null; action_type: string; target_user_id: string; details: Record<string, unknown> };
-  refusals: string[];
+  refusals: ActivationRefusal[];
 }
 
-/** Reads only. Everything an activation would do, and every reason it would refuse. */
-export async function planActivation(args: ActivateArgs, env: Record<string, string | undefined> = process.env): Promise<ActivationPlan> {
+/** Reads only. Everything an activation would do, and every reason it would refuse. The caller names the actor:
+ * the CLI and the agent route pass the seeded marcus-agent (findAgentActor), the admin button the clicking admin. */
+export async function planActivation(
+  args: ActivateArgs,
+  by: { actor: ActivationActor | null; via: ActivationVia },
+  env: Record<string, string | undefined> = process.env
+): Promise<ActivationPlan> {
   const bundle = bundleByKey(args.bundleKey)!;
   const user = await resolveUser(args.user);
-  const actor = await findAgentActor();
+  const actor = by.actor;
 
   const licenceRows = await pool.query(
     `select id, tier, status, expires_at, (status = 'active' and expires_at > now()) as live, ${licenseNumberSql("licenses")} as license_number
@@ -241,41 +314,46 @@ export async function planActivation(args: ActivateArgs, env: Record<string, str
     feedTypes,
   });
 
-  const refusals: string[] = [];
+  const refusals: ActivationRefusal[] = [];
+  const refuse = (code: ActivationRefusalCode, text: string) => refusals.push({ code, text });
   const missing = missingEnv(env);
-  if (missing.length) refusals.push(`Missing env: ${missing.join(", ")}`);
-  if (!actor) refusals.push(`Actor ${AGENT_ACTOR_EMAIL} not found: apply scripts/seed-agent-actor.sql first`);
-  if (user.internal && !args.allowInternal) {
-    refusals.push(`${user.email} is an internal or test account (licenses.ts notAClientSql). Pass --allow-internal to activate for it`);
+  if (missing.length) refuse("env", `Missing env: ${missing.join(", ")}`);
+  if (!actor) {
+    refuse("actor", by.via === "admin" ? "No admin user to act as" : `Actor ${AGENT_ACTOR_EMAIL} not found: apply scripts/seed-agent-actor.sql first`);
   }
-  if (activeBundle) refusals.push(`User already has an active bundle (${activeBundle.bundleKey}, ${activeBundle.feedChoice}, id ${activeBundle.id})`);
+  if (user.internal && !args.allowInternal) {
+    refuse("internal", `${user.email} is an internal or test account (licenses.ts notAClientSql). Pass --allow-internal to activate for it`);
+  }
+  if (activeBundle) refuse("active_bundle", `User already has an active bundle (${activeBundle.bundleKey}, ${activeBundle.feedChoice}, id ${activeBundle.id})`);
   const live = licences.filter((l) => l.live);
   if (live.length) {
     // activateBundle would adopt it (paid) or refuse (trial). Adoption needs the overlap confirm (fold m66997 N2,
     // ruled m67000), which is the slice-3 admin card's, so this script only issues a NEW licence.
-    refusals.push(
+    refuse(
+      "live_licence",
       `User already has an active licence (${live.map((l) => `HH${l.licenseNumber} ${l.tier}, expires ${l.expiresAt.toISOString()}`).join("; ")}). ` +
         `This script issues a new licence only; adopting one needs the overlap confirm (slice 3)`
     );
   }
   const pastTrials = licences.filter((l) => l.tier === "trial");
   if (args.isTrial && pastTrials.length && !args.allowRepeatTrial) {
-    refusals.push(`User has had ${pastTrials.length} trial licence(s) before (see history). Pass --allow-repeat-trial to issue another`);
+    refuse("repeat_trial", `User has had ${pastTrials.length} trial licence(s) before (see history). Pass --allow-repeat-trial to issue another`);
   }
-  if (!basket) refusals.push(`No basket request ${args.basketId}`);
+  if (!basket) refuse("basket_missing", `No basket request ${args.basketId}`);
   else {
-    if (basket.userId !== user.id) refusals.push(`Basket request ${basket.id} belongs to another user (${basket.userId})`);
-    if (basket.status !== "new") refusals.push(`Basket request ${basket.id} is already '${basket.status}'`);
+    if (basket.userId !== user.id) refuse("basket_other_user", `Basket request ${basket.id} belongs to another user (${basket.userId})`);
+    if (basket.status !== "new") refuse("basket_not_new", `Basket request ${basket.id} is already '${basket.status}'`);
     const line = basket.lines.find((l) => l.kind === "bundle");
-    if (!line) refusals.push(`Basket request ${basket.id} has no bundle line`);
+    if (!line) refuse("basket_no_bundle_line", `Basket request ${basket.id} has no bundle line`);
     else if (line.key !== args.bundleKey || line.feed !== args.feedChoice) {
-      refusals.push(`Basket request ${basket.id} asked for ${line.key} (${line.feed ?? "no feed"}), not ${args.bundleKey} (${args.feedChoice})`);
+      refuse("basket_mismatch", `Basket request ${basket.id} asked for ${line.key} (${line.feed ?? "no feed"}), not ${args.bundleKey} (${args.feedChoice})`);
     }
   }
-  if (delivery === "none") refusals.push("User has no Telegram id and no email: the key could not be delivered");
+  if (delivery === "none") refuse("no_channel", "User has no Telegram id and no email: the key could not be delivered");
 
   return {
     args,
+    via: by.via,
     user,
     actor,
     licences,
@@ -301,7 +379,7 @@ export async function planActivation(args: ActivateArgs, env: Record<string, str
       admin_user_id: actor?.id ?? null,
       action_type: BUNDLE_ACTIVATE_ACTION,
       target_user_id: user.id,
-      details: { bundleId: "<new>", licenseId: "<new>", isTrial: args.isTrial, amountUsd: args.amountUsd, basketRequestId: args.basketId },
+      details: { bundleId: "<new>", licenseId: "<new>", isTrial: args.isTrial, amountUsd: args.amountUsd, basketRequestId: args.basketId, via: by.via },
     },
     refusals,
   };
@@ -352,7 +430,7 @@ async function sendBundleKey(plan: ActivationPlan, actorId: string, result: Acti
 /** Writes, in the m69164 order: (1) activateBundle, one tx; (2) the key send; (3) the bundle_activate
  * admin_actions row; (4) the basket row to handled. Refuses unless the plan has no refusals. */
 export async function executeActivation(plan: ActivationPlan): Promise<ActivationOutcome> {
-  if (plan.refusals.length || !plan.actor) throw new RefusedError(`Refusing: ${plan.refusals.join("; ") || "no actor"}`);
+  if (plan.refusals.length || !plan.actor) throw new RefusedError(`Refusing: ${plan.refusals.map((r) => r.text).join("; ") || "no actor"}`);
   const actorId = plan.actor.id;
   const issuedAt = new Date();
 
@@ -370,7 +448,7 @@ export async function executeActivation(plan: ActivationPlan): Promise<Activatio
     actorId,
     BUNDLE_ACTIVATE_ACTION,
     plan.user.id,
-    { bundleId: result.bundleId, licenseId: result.licenseId, isTrial: plan.args.isTrial, amountUsd: plan.args.amountUsd, basketRequestId: plan.args.basketId },
+    { bundleId: result.bundleId, licenseId: result.licenseId, isTrial: plan.args.isTrial, amountUsd: plan.args.amountUsd, basketRequestId: plan.args.basketId, via: plan.via },
     result.licenseId
   );
 
