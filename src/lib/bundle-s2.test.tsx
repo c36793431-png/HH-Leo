@@ -583,6 +583,9 @@ test("T8 NO PRICE on all 3 steps (m68882): signed in WITH the row present, Baske
   assert.match(basket, /<div class="bk-bar"><p class="bk-price-note">We confirm the price/);
   assert.equal(visible(review).split(PRICE_CONFIRM).length - 1, 1, "review: once, in the summary");
   assert.match(review, /<aside class="card bk-summary">(?:(?!<\/aside>)[\s\S])*bk-price-note/);
+  // m69562: the 'We confirm by email' block on Review contradicted the line, so it is gone.
+  assert.doesNotMatch(visible(review), /We confirm by email/i, "review: no 'We confirm by email' heading");
+  assert.doesNotMatch(review, /bk-reply/, "review: no email block");
   assert.equal(visible(sent).split(PRICE_CONFIRM).length - 1, 0, "sent: not ruled there");
 });
 

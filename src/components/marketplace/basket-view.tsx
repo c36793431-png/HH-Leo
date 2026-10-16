@@ -33,8 +33,8 @@ const PRICE_CONFIRM_LINE ="We confirm the price with you on Telegram or by email
  *   runs at submit.
  * - The trial is ONE basket-level choice in the summary box (m59146/m59154), off by default, amber
  *   when ticked, shown only to an eligible signed-in account; on Review it is a read-only row.
- * - We confirm by email (coxwell 13:54Z via marcus m59928): Review shows the account's email
- *   read-only and asks for nothing. The exception is PRICE_CONFIRM_LINE, which names Telegram.
+ * - Review asks for nothing and has no 'We confirm by email' block (marcus m69562: it contradicted
+ *   PRICE_CONFIRM_LINE, which names Telegram first).
  * - Sent uses the m59928 line word for word plus the support contact, no reply time, and the count
  *   goes back to 0.
  * - Phone (r2 sheet 4, marcus m59367 d4): on the basket step the summary card keeps only the trial
@@ -333,11 +333,6 @@ export function BasketView({
             <button type="button" className="bk-link" onClick={() => setStep("basket")}>
               ← Edit basket
             </button>
-            <div className="bk-reply">
-              <div className="bk-label">We confirm by email</div>
-              <div className="bk-input bk-input-ro">{account?.email ?? "The email on your account"}</div>
-              <p className="fp-note">Read-only, from your account.</p>
-            </div>
           </div>
           <aside className="card bk-summary">
             <h2>Send request</h2>
