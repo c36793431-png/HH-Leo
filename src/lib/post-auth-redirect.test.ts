@@ -35,3 +35,11 @@ test("consult.horizonhft.com: after sign-in the provider dashboard, and no marke
   assert.equal(safeCallbackPath("/marketplace", "consult.horizonhft.com"), null);
   assert.equal(getPostAuthRedirect(PORTAL), "/dashboard");
 });
+
+test("/marketplace/services is a sign-in return path on the portal host, exactly (consult S4); a provider page is not", () => {
+  assert.equal(safeCallbackPath("/marketplace/services", PORTAL), "/marketplace/services");
+  for (const value of ["/marketplace/services/", "/marketplace/services/pat", "/marketplace/services?type=coding", "/marketplace/servicesx"]) {
+    assert.equal(safeCallbackPath(value, PORTAL), null, value);
+  }
+  assert.equal(safeCallbackPath("/marketplace/services", "consult.horizonhft.com"), null);
+});

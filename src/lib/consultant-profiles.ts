@@ -258,6 +258,14 @@ export async function listListedConsultantProfiles(type: ConsultServiceType | nu
   return r.rows.map(mapListed);
 }
 
+/** Server-side only (S4 requests): the listed profile's id, owner and name, through the same gate. Never rendered. */
+export async function getListedProfileRef(slug: string): Promise<{ id: string; userId: string; displayName: string; slug: string } | null> {
+  if (!isConsultSlug(slug)) return null;
+  const r = await pool.query(`select p.id, p.user_id, p.display_name, p.slug ${LISTED} and p.slug = $1`, [slug]);
+  const row = r.rows[0];
+  return row ? { id: row.id as string, userId: row.user_id as string, displayName: row.display_name as string, slug: row.slug as string } : null;
+}
+
 export async function getListedConsultantProfile(slug: string): Promise<ListedConsultantProfile | null> {
   if (!isConsultSlug(slug)) return null;
   const r = await pool.query(`select p.${COLS.replace(/,\s*/g, ", p.")} ${LISTED} and p.slug = $1`, [slug]);

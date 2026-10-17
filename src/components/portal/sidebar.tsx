@@ -84,6 +84,7 @@ const PORTAL_ADMIN_LINKS = [
   { href: "/admin/partners", label: "Partners", icon: Handshake },
   { href: "/admin/partner-applications", label: "Partner applications", icon: UserPlus },
   { href: "/admin/consult-applications", label: "Consultant applications", icon: UserCheck },
+  { href: "/admin/provider-requests", label: "Provider requests", icon: UserCheck },
   { href: "/admin/users", label: "Users", icon: UserSquare2 },
   { href: "/admin/connections", label: "Connections", icon: Radar },
   { href: "/admin/setups", label: "Setups", icon: Settings },

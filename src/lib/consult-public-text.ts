@@ -36,10 +36,14 @@ export function publicTextProblem(text: string): string | null {
 }
 
 /** Throws `make(message)` naming the first field that fails, e.g. "About: prices are not shown on Horizon; ...". */
-export function assertPublicFields(fields: [label: string, value: string | null][], make: (message: string) => Error): void {
+export function assertPublicFields(
+  fields: [label: string, value: string | null][],
+  make: (message: string) => Error,
+  hint = "Clients contact you through a request on Horizon."
+): void {
   for (const [label, value] of fields) {
     if (!value) continue;
     const problem = publicTextProblem(value);
-    if (problem) throw make(`${label}: ${problem}. Clients contact you through a request on Horizon.`);
+    if (problem) throw make(`${label}: ${problem}. ${hint}`);
   }
 }

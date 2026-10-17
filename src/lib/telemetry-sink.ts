@@ -679,6 +679,28 @@ export async function notifyConsultantProfileShown(opts: {
   );
 }
 
+/** Consult S4 (marcus m71393): a client asked a listed service provider for help. Admins relay it in v1 (no provider
+ * inbox), so the card names the client with the ONE clientLine and links the admin list; the provider sees nothing. */
+export async function notifyProviderRequest(opts: {
+  client: ClientRef;
+  providerName: string;
+  providerPath: string;
+  message: string;
+  telegramHandle: string | null;
+  adminUrl: string;
+}): Promise<void> {
+  const message = opts.message.length > 300 ? `${opts.message.slice(0, 300)}…` : opts.message;
+  await sendApprovalsTopicMessage(
+    `🤝 service request\n` +
+      `provider: ${opts.providerName} (${opts.providerPath})\n` +
+      `${clientLine(opts.client)}\n` +
+      (opts.telegramHandle ? `telegram given: ${opts.telegramHandle}\n` : "") +
+      `message: ${message}\n` +
+      `relay it from the admin list:\n` +
+      `${opts.adminUrl}`
+  );
+}
+
 /** Migration drift: a db/migrations/*.sql file has no schema_migrations row, meaning it
  * shipped in code but was never applied (or applied without logging itself) -- the
  * failure mode that let 0057_pending_signups.sql silently drop signup name/telegram
