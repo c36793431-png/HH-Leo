@@ -349,13 +349,19 @@
 .hubnav .hn-sec-consulting { --acc: #9ea9b8; }
 .hubnav .hn-sec-education { --acc: #b18cff; }
 .hubnav .hn-sec-marketplace { --acc: #f472b6; }
-/* Between the burger (1180px) and 1400px the full nav is wider than the 1180px wrap, so it pushed past the right edge
-   (12px of page scroll at 1280, Sign in clipped; live on /marketplace). In that band the wrap takes the whole width and
-   the nav tightens, so it fits; above 1400px nothing changes (marcus m71416). After the base rules, so it wins. */
-@media (min-width: 1181px) and (max-width: 1400px) {
-  .hubnav .hn-wrap { max-width: none; padding: 0 24px; gap: 16px; }
+/* Above the burger (1180px) the full nav (logo 174 + 11 links + Basket + Sign in) is wider than the wrap's 1100px
+   content box: it pushed Sign in 109.5px past it at every width above 1400 (hidden in the margin) and past the viewport
+   below that (12px of page scroll at 1280, Sign in clipped; live on /marketplace). marcus m71416, Fable S1/N1 m71475.
+   So above the burger the nav is always tight (nav 900px, wrap gap 16px: 174 + 16 + 900 = 1090 <= 1100), and up to
+   1400px the wrap also takes the whole width, since a 1180px wrap no longer fits the viewport there. Range syntax, so
+   no fractional width (zoom, DPR) falls between this and the burger. After the base rules, so they win. */
+@media (width > 1180px) {
+  .hubnav .hn-wrap { gap: 16px; }
   .hubnav .hn-nav { gap: 10px; font-size: 13.5px; }
   .hubnav .hn-nav a { gap: 5px; }
+}
+@media (1180px < width <= 1400px) {
+  .hubnav .hn-wrap { max-width: none; padding: 0 24px; }
 }
 @media (max-width: 1180px) {
   .hubnav .hn-wrap { height: 58px; }
