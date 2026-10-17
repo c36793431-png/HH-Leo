@@ -273,7 +273,7 @@ test("approve: links the one account by the stored email (mixed case both sides,
   assert.ok(row.decided_at);
   const audit = (await sql(`select admin_user_id, action_type, target_user_id from admin_actions where details_json->>'consultantApplicationId' = $1`, [id])).rows;
   assert.deepEqual(audit, [{ admin_user_id: ADMIN, action_type: "consultant_application_approved", target_user_id: user }]);
-  assert.deepEqual(emails.slice(mails), [{ to: "mixed.case@example.invalid", ...ca.consultantApprovedEmail("Mia") }]);
+  assert.deepEqual(emails.slice(mails), [{ to: "mixed.case@example.invalid", ...ca.consultantApprovedEmail("Mia", "mixed.case@example.invalid") }]);
   // A second application for the approved email is refused (Fable S1, S5).
   await assert.rejects(apply("mixed.case@example.invalid"), /already in review or approved/);
 });

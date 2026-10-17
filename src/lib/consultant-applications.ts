@@ -3,6 +3,7 @@ import { notifyConsultantApplicationSubmitted } from "./telemetry-sink";
 import { sendEmail } from "./email";
 import { resolveAdminUserId } from "./admin";
 import { PORTAL_ORIGIN } from "./feed-host-admin";
+import { CONSULT_ORIGIN } from "./consult-host";
 
 /**
  * Consult supply side S1a: consultant applications (0112; marcus m68993, rulings m69004, answers m69029; scope kai
@@ -178,15 +179,16 @@ export async function listConsultantApplications(options: { status?: ConsultantA
   return result.rows.map(mapRow);
 }
 
-/** Applicant mail (m69029 a: plain, short, no prices, no promises of work). Wording signed off by marcus m69102,
- * approved mail amended there. The decline text is generic and never carries declined_note (Fable S3, p3 D2.2). */
-export function consultantApprovedEmail(name: string): { subject: string; text: string } {
+/** Applicant mail (m69029 a: plain, short, no prices, no promises of work). Approved: marcus m71335 item 5 (S2), the
+ * consult host sign-in with the address the application was made with; S3 adds the profile sentence. Ships only after
+ * the consult host serves. The decline text (m69102) is generic and never carries declined_note (Fable S3, p3 D2.2). */
+export function consultantApprovedEmail(name: string, email: string): { subject: string; text: string } {
   return {
-    subject: "Your Horizon HFT consultant application",
+    subject: "Your Horizon HFT service provider application",
     text:
       `Hi ${name},\n\n` +
-      `Thank you for applying to consult with Horizon HFT. Your application has been approved.\n\n` +
-      `We will be in touch shortly about the next steps.\n\n` +
+      `Your application to offer your services through Horizon HFT has been approved.\n\n` +
+      `Sign in at ${CONSULT_ORIGIN} with this email address (${email}) to see your account.\n\n` +
       `Horizon HFT`,
   };
 }
@@ -336,7 +338,7 @@ export async function resolveConsultantAccount(userId: string): Promise<Consulta
 export async function approveConsultantApplication(id: string, actionedBy: string): Promise<void> {
   const row = await decide(id, actionedBy, { status: "approved" });
   // After the commit: a Resend failure can't undo or fail a committed decision (Fable S3, partner-applications.ts:149).
-  const mail = consultantApprovedEmail(row.name);
+  const mail = consultantApprovedEmail(row.name, row.email);
   await sendEmail(row.email, mail.subject, mail.text).catch(() => {});
 }
 
