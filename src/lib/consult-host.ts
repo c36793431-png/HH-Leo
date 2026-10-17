@@ -6,6 +6,8 @@ import { PORTAL_ORIGIN } from "./feed-host-admin";
  */
 export const CONSULT_HOST = "consult.horizonhft.com";
 
+export const CONSULT_ORIGIN = `https://${CONSULT_HOST}`;
+
 export const CONSULT_APPLY_PATH = "/consult/apply";
 
 /** Case-insensitive, with or without a port (isHorizonOneHost's idiom). */
@@ -14,7 +16,24 @@ export function isConsultHost(host: string | null): boolean {
   return h === CONSULT_HOST || h.startsWith(`${CONSULT_HOST}:`);
 }
 
-export type ConsultRoute = { kind: "rewrite"; to: string } | { kind: "redirect"; to: string } | { kind: "pass" };
+/** A horizonhft.com host, with or without a port, in any case: the apex or one subdomain label deep. */
+function isHorizonHftHost(host: string | null): boolean {
+  const h = (host ?? "").toLowerCase().replace(/:\d+$/, "");
+  return /^([a-z0-9-]+\.)?horizonhft\.com$/.test(h);
+}
+
+/**
+ * S1b (marcus m71322): consult.horizonhft.com is the entry point, so /consult/apply on any other horizonhft.com host
+ * 308s to the consult host root, where the same page renders. Never on the consult host itself (no loop). Never on a
+ * preview or local host, so previews keep the page. The exact path only; the page takes no query.
+ */
+export function consultApplyRedirect(host: string | null, pathname: string): string | null {
+  if (pathname !== CONSULT_APPLY_PATH) return null;
+  if (isConsultHost(host) || !isHorizonHftHost(host)) return null;
+  return `${CONSULT_ORIGIN}/`;
+}
+
+export type ConsultRoute ={ kind: "rewrite"; to: string } | { kind: "redirect"; to: string } | { kind: "pass" };
 
 /**
  * What the consult host does with a path (Fable m69076 ask 4).

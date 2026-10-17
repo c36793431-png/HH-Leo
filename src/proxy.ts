@@ -5,7 +5,7 @@ import { REFERRAL_COOKIE, REFERRAL_COOKIE_MAX_AGE_DAYS } from "@/lib/referrals";
 import { getActivePartnerReferralCode } from "@/lib/partners";
 import { isAdminFeedRoute, portalAdminRedirect } from "@/lib/feed-host-admin";
 import { horizonOneRoute, isHorizonOneHost, isSignalsPath, signalsHostOk } from "@/lib/horizonone-host";
-import { consultRoute, isConsultHost } from "@/lib/consult-host";
+import { consultApplyRedirect, consultRoute, isConsultHost } from "@/lib/consult-host";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 const FEED_HOST = "feed.horizonhft.com";
@@ -63,6 +63,11 @@ export default auth(async (req) => {
       return NextResponse.rewrite(url);
     }
   }
+
+  // The apply page lives on consult.horizonhft.com (S1b, marcus m71322): /consult/apply on another horizonhft.com host
+  // 308s there. lib/consult-host.ts holds the guard (never on the consult host, never on previews), with its tests.
+  const toConsult = consultApplyRedirect(host, pathname);
+  if (toConsult) return NextResponse.redirect(toConsult, 308);
 
   if (isPartnerHost) {
     // partner.horizonhft.com serves the partner landing/dashboard, rewritten to

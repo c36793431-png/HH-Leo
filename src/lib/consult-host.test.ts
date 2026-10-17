@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PORTAL_ORIGIN } from "./feed-host-admin";
-import { CONSULT_APPLY_PATH, CONSULT_HOST, consultRoute, isConsultHost } from "./consult-host";
+import { CONSULT_APPLY_PATH, CONSULT_HOST, CONSULT_ORIGIN, consultApplyRedirect, consultRoute, isConsultHost } from "./consult-host";
 
 test("the host matches with and without a port, in any case, and nothing else does", () => {
   assert.equal(isConsultHost(CONSULT_HOST), true);
@@ -43,5 +43,23 @@ test("the redirect target is always the portal origin (no open redirect)", () =>
     const r = consultRoute(path, "");
     assert.notEqual(r.kind, "rewrite", path);
     if (r.kind === "redirect") assert.equal(new URL(r.to).origin, PORTAL_ORIGIN, path);
+  }
+});
+
+/* S1b (marcus m71322): consult.horizonhft.com is the entry point, so the portal's /consult/apply 308s there. Only on a
+ * horizonhft.com host other than the consult host itself (never a loop); previews and local dev keep the page. */
+test("S1b: /consult/apply on a horizonhft.com host 308s to the consult host root", () => {
+  for (const host of ["portal.horizonhft.com", "portal.horizonhft.com:443", "Portal.HorizonHFT.com", "feed.horizonhft.com", "partner.horizonhft.com", "horizonone.horizonhft.com"]) {
+    assert.equal(consultApplyRedirect(host, CONSULT_APPLY_PATH), CONSULT_ORIGIN + "/", host);
+  }
+  assert.equal(CONSULT_ORIGIN, `https://${CONSULT_HOST}`);
+});
+
+test("S1b: never on the consult host (no loop), never on previews or local dev, never for another path", () => {
+  for (const host of [CONSULT_HOST, `${CONSULT_HOST}:443`, "Consult.HorizonHFT.com", "hh-leo-git-x.vercel.app", "localhost:3000", "127.0.0.1:3000", "horizonhft.com.evil.com", "evilhorizonhft.com", "", null]) {
+    assert.equal(consultApplyRedirect(host, CONSULT_APPLY_PATH), null, String(host));
+  }
+  for (const path of ["/consult", "/consult/apply/", "/consult/apply/x", "/consult/applyx", "/", "/login"]) {
+    assert.equal(consultApplyRedirect("portal.horizonhft.com", path), null, path);
   }
 });
