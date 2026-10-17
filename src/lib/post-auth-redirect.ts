@@ -35,6 +35,8 @@ const CALLBACK_ALLOWLIST: readonly string[] = [
   // The request basket's "Sign in to send →" and My requests (marcus m59146).
   "/marketplace/basket",
   "/marketplace/requests",
+  // The Consulting & Services category (consult S4): its pages send a signed-out visitor through sign-in back here.
+  "/marketplace/services",
   "/education",
   ...EDUCATION_LESSONS.map(lessonHref),
   "/community",
