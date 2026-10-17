@@ -30,6 +30,7 @@ import { BundleCardFoot } from "@/components/marketplace/bundle-add-box";
 import { basketCatalogue, bundleDetailHref, bundleFeedChoiceEntries, strategyEntryKeyForSlug } from "@/lib/basket-catalogue";
 import { BUNDLES, BUNDLE_CARD_ART } from "@/lib/bundle-catalogue";
 import { MAIN_SITE_URL } from "@/lib/main-site";
+import { hasListedConsultantProfiles } from "@/lib/consultant-profiles";
 
 /**
  * /marketplace — the catalogue of what Horizon sells (coxwell via marcus, 2026-09-14).
@@ -63,10 +64,11 @@ import { MAIN_SITE_URL } from "@/lib/main-site";
  * THE CATEGORY FILTER ROW IS DERIVED, NOT DECLARED (Iris's design via marcus, 2026-09-16). The
  * chips are built from the sections this page is about to render, so a chip cannot select an
  * empty result set and a category that loses its last listing loses its chip in the same pass.
- * Her row also carries a fourth chip, `Consulting`, which is NOT here: there is no consulting
- * listing and MarketplaceCategory is deliberately "exactly the two coxwell named". A COMING SOON
- * chip is a claim that a product is on its way, which is the same claim this catalogue already
- * declines to make about Tokyo without a ruling (marcus, m50723). It is coxwell's word to give.
+ * Consulting & Services (consult S4; Fable N1 via marcus m71465) is NOT a section here: its listings
+ * are people, on their own page, /marketplace/services. The row links it with one plain chip after the
+ * section chips, and only while at least one service provider passes the listing gate
+ * (hasListedConsultantProfiles), so it keeps this rule: a chip never leads to an empty set. Humans
+ * only; Nova stays in its own Horizon AI category. No prices there either.
  */
 export default async function MarketplacePage({ searchParams }: { searchParams: Promise<{ strategy?: string | string[] }> }) {
   const { strategy } = await searchParams;
@@ -78,6 +80,8 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
   // One call of the shipped query per declared region. A region with no rows (tokyo today)
   // returns an empty list, which is why the declared listings below do not depend on it.
   const tierLists = await Promise.all(FEED_REGIONS.map((region) => getPublicTiersForRegion(region).catch(() => [])));
+  // The Consulting & Services chip shows only while someone is listed (see the comment above). A failed read hides it.
+  const servicesListed = await hasListedConsultantProfiles().catch(() => false);
   const tierByKey = new Map(tierLists.flat().map((t) => [t.tierKey, t]));
 
   const listings = MARKETPLACE_LISTINGS.map((listing) => ({
@@ -302,7 +306,7 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
         <p>Everything Horizon sells, by category — and what you can get today.</p>
       </div>
 
-      <MarketplaceCategoryFilter sections={sections} />
+      <MarketplaceCategoryFilter sections={sections} links={servicesListed ? [{ href: "/marketplace/services", label: "Consulting & Services" }] : []} />
 
       {user ? (
         <p className="fp-footnote">

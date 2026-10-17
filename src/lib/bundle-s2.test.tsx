@@ -719,3 +719,39 @@ test("T8b no AI vendor or model name on any bundle client string (BUNDLES, every
   assert.match("Powered by Claude", VENDOR_NAMES);
   storedLines = [];
 });
+
+// ---- consult S4 follow-up (Fable N1 via marcus m71465): the shelf links the Consulting & Services category ----
+
+test("S4 N1: with a listed service provider the shelf shows a 'Consulting & Services' chip -> /marketplace/services, signed in and out; none while nobody is listed", async () => {
+  const servicesChip = /<a[^>]*href="\/marketplace\/services"[^>]*>Consulting &amp; Services<\/a>/;
+  signOut();
+  assert.doesNotMatch(await shelf(), servicesChip, "no chip while nobody is listed (a chip never leads to an empty set)");
+  // One listed provider: approved application linked to a verified account, profile published, not hidden.
+  const u = (await sql(`insert into users (email, "emailVerified") values ('svc-chip@example.invalid', now()) returning id`)).rows[0].id;
+  const a = (await sql(
+    `insert into consultant_applications (name, email, expertise, status, decided_at, service_types, user_id)
+     values ('Chip Provider', 'svc-chip@example.invalid', 'Setup.', 'approved', now(), '{setup}', $1) returning id`, [u])).rows[0].id;
+  await sql(
+    `insert into consultant_profiles (user_id, application_id, slug, display_name, headline, about, service_types, published)
+     values ($1, $2, 'chip-provider', 'Chip Provider', 'Setup', 'Setups.', '{setup}', true)`, [u, a]);
+  try {
+    for (const who of ["out", "in"] as const) {
+      if (who === "in") {
+        const c = await makeUser();
+        signIn(c.id, c.email);
+      } else signOut();
+      const out = await shelf();
+      assert.match(out, servicesChip, who);
+      const chips = [...out.matchAll(/<button[^>]*class="[^"]*mkt-filter[^"]*"[^>]*>([^<]*)</g)].map((m) => m[1].trim());
+      if (chips.length) assert.deepEqual(chips.slice(0, 2), ["All", "Bundles"], `${who}: the section chips are unchanged`);
+      assert.doesNotMatch(out, ANY_PRICE, who);
+    }
+    // Hidden by an admin = not listed = no chip again.
+    await sql(`update consultant_profiles set admin_hidden = true where user_id = $1`, [u]);
+    signOut();
+    assert.doesNotMatch(await shelf(), servicesChip, "hidden: no chip");
+  } finally {
+    await sql(`delete from consultant_profiles where user_id = $1`, [u]);
+    signOut();
+  }
+});
