@@ -6,8 +6,10 @@ import {
   type ConsultantApplicationStatus,
 } from "@/lib/consultant-applications";
 import { formatAbsoluteUtc, formatRelative } from "@/lib/format-time";
-import { approveConsultantApplicationAction, declineConsultantApplicationAction } from "./actions";
-import { ConsultApplicationRowActions } from "./row-actions";
+import { CONSULT_SERVICE_TYPE_LABELS } from "@/lib/consult-service-types";
+import { listConsultantProfilesForAdmin } from "@/lib/consultant-profiles";
+import { approveConsultantApplicationAction, declineConsultantApplicationAction, setConsultantProfileHiddenAction } from "./actions";
+import { ConsultApplicationRowActions, ConsultProfileHideButton } from "./row-actions";
 
 const STATUS_STYLES: Record<ConsultantApplicationStatus, string> = {
   pending: "border-amber-500/40 bg-amber-500/15 text-amber-300",
@@ -27,7 +29,7 @@ export default async function AdminConsultApplicationsPage({ searchParams }: { s
     ? (sp.status as ConsultantApplicationStatus)
     : undefined;
 
-  const all = await listConsultantApplications();
+  const [all, profiles] = await Promise.all([listConsultantApplications(), listConsultantProfilesForAdmin()]);
   const applications = status ? all.filter((a) => a.status === status) : all;
   const stats = Object.fromEntries(
     CONSULTANT_APPLICATION_STATUSES.map((s) => [s, all.filter((a) => a.status === s).length])
@@ -98,6 +100,11 @@ export default async function AdminConsultApplicationsPage({ searchParams }: { s
                   </td>
                   <td className="py-2 pr-4 text-zinc-400">{a.telegram ?? "—"}</td>
                   <td className="py-2 pr-4 max-w-[22rem] whitespace-pre-wrap break-words text-zinc-300">
+                    <div className="mb-1 text-xs text-cyan-300">
+                      {a.serviceTypes.length === 0
+                        ? <span className="text-zinc-600">services not stated</span>
+                        : a.serviceTypes.map((t) => (t === "other" && a.serviceOther ? `Other: ${a.serviceOther}` : CONSULT_SERVICE_TYPE_LABELS[t])).join(" · ")}
+                    </div>
                     {a.expertise}
                     {a.background && (
                       <details className="mt-1 text-xs text-zinc-500">
@@ -136,6 +143,14 @@ export default async function AdminConsultApplicationsPage({ searchParams }: { s
                         approveAction={approveConsultantApplicationAction}
                         declineAction={declineConsultantApplicationAction}
                       />
+                    ) : profiles.get(a.id) ? (
+                      <div className="text-xs text-zinc-400">
+                        <div>
+                          profile /{profiles.get(a.id)!.slug}:{" "}
+                          {profiles.get(a.id)!.adminHidden ? "hidden by admin" : profiles.get(a.id)!.published ? "shown" : "not shown"}
+                        </div>
+                        <ConsultProfileHideButton profileId={profiles.get(a.id)!.id} hidden={profiles.get(a.id)!.adminHidden} action={setConsultantProfileHiddenAction} />
+                      </div>
                     ) : (
                       <span className="text-xs text-zinc-600">—</span>
                     )}

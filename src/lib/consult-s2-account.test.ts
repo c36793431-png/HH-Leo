@@ -208,14 +208,15 @@ test("approve still links a verified account, and still refuses two accounts on 
   await assert.rejects(ca.approveConsultantApplication(b, ADMIN), /2 accounts share this email/);
 });
 
-test("approved email (marcus m71335 item 5): the consult host sign-in with the applicant's own address, no profile promise, no price", () => {
+test("approved email (marcus m71335 item 5, the profile sentence back in S3): the consult host sign-in with the applicant's own address, no price", () => {
   const mail = ca.consultantApprovedEmail("Pat", "pat@example.invalid");
   assert.equal(mail.subject, "Your Horizon HFT service provider application");
   assert.equal(
     mail.text,
     "Hi Pat,\n\nYour application to offer your services through Horizon HFT has been approved.\n\n" +
-      "Sign in at https://consult.horizonhft.com with this email address (pat@example.invalid) to see your account.\n\n" +
+      "Sign in at https://consult.horizonhft.com with this email address (pat@example.invalid) to see your account and set up the profile clients see in the marketplace.\n\n" +
       "Horizon HFT",
   );
-  assert.doesNotMatch(mail.text, /profile|marketplace|\$|price|USD|€|£/i);
+  // S3 added the profile sentence back (marcus m71335 item 5); no price, ever.
+  assert.doesNotMatch(mail.text, /\$|price|USD|€|£/i);
 });
