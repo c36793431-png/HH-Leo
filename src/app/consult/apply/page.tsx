@@ -5,6 +5,7 @@ import { getActiveLicenseDetailsForUser, computePortalTierFromLicenses } from "@
 import { PortalShell } from "@/components/portal/portal-shell";
 import { Logo } from "@/components/logo";
 import { ConsultApplyContent } from "@/components/consult/consult-apply-content";
+import { HORIZON_HUB_URL } from "@/lib/consult-host";
 
 /** The consultant application page: the consult host's /consult/apply, and the portal's until S1b 308s it there
  * (lib/consult-host.ts). No sign-in needed; a signed-in visitor gets the portal shell, as careers/page.tsx does. The
@@ -16,7 +17,7 @@ export default async function ConsultApplyPage() {
     return (
       <>
         <header className="flex items-center px-6 py-5">
-          <Logo size="nav" />
+          <Logo size="nav" href={HORIZON_HUB_URL} />
         </header>
         <main className="flex-1 px-4 pb-20 pt-6">
           <ConsultApplyContent />

@@ -7,11 +7,11 @@ export function ConsultApplyContent({ signInHref }: { signInHref?: string }) {
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-8">
-        <div className="text-xs font-semibold tracking-[0.2em] text-cyan-400">CONSULTING</div>
-        <h1 className="mt-2 text-3xl font-bold text-zinc-50">Consult with Horizon HFT</h1>
+        <div className="text-xs font-semibold tracking-[0.2em] text-cyan-400">SERVICE PROVIDERS</div>
+        <h1 className="mt-2 text-3xl font-bold text-zinc-50">Offer your services through Horizon HFT</h1>
         <p className="mt-3 text-sm text-zinc-400">
-          Apply to offer your expertise as a consultant through Horizon HFT. We review every application and reply by
-          email.
+          Consulting, coding and development, setup and installation, and more.
+          Every application is reviewed before anything is public, and we reply by email.
         </p>
         {signInHref && (
           <p className="mt-3 text-sm text-zinc-400">

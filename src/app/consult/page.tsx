@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { CONSULT_DASHBOARD_PATH } from "@/lib/consult-host";
+import { CONSULT_DASHBOARD_PATH, HORIZON_HUB_URL } from "@/lib/consult-host";
 import { Logo } from "@/components/logo";
 import { ConsultApplyContent } from "@/components/consult/consult-apply-content";
 
@@ -14,7 +14,7 @@ export default async function ConsultHomePage() {
   return (
     <>
       <header className="flex items-center px-6 py-5">
-        <Logo size="nav" />
+        <Logo size="nav" href={HORIZON_HUB_URL} />
       </header>
       <main className="flex-1 px-4 pb-20 pt-6">
         <ConsultApplyContent signInHref="/login" />

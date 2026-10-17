@@ -6,7 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PORTAL_ORIGIN } from "./feed-host-admin";
-import { CONSULT_APPLY_PATH, CONSULT_DASHBOARD_PATH, CONSULT_HOME_PATH, CONSULT_HOST, CONSULT_ORIGIN, consultApplyRedirect, consultRoute, isConsultHost } from "./consult-host";
+import { readFileSync } from "node:fs";
+import { CONSULT_APPLY_PATH, CONSULT_DASHBOARD_PATH, CONSULT_HOME_PATH, CONSULT_HOST, CONSULT_ORIGIN, HORIZON_HUB_URL, consultApplyRedirect, consultRoute, isConsultHost } from "./consult-host";
 
 test("the host matches with and without a port, in any case, and nothing else does", () => {
   assert.equal(isConsultHost(CONSULT_HOST), true);
@@ -70,4 +71,22 @@ test("S1b: never on the consult host (no loop), never on previews or local dev, 
   for (const path of ["/consult", "/consult/apply/", "/consult/apply/x", "/consult/applyx", "/", "/login"]) {
     assert.equal(consultApplyRedirect("portal.horizonhft.com", path), null, path);
   }
+});
+
+test("the consult pages link the logo to the Horizon hub, never the host's own root (marcus m71335 item 3)", () => {
+  assert.equal(HORIZON_HUB_URL, "https://horizonhft.com");
+  for (const file of ["src/app/consult/page.tsx", "src/app/consult/dashboard/page.tsx", "src/app/consult/apply/page.tsx"]) {
+    const src = readFileSync(file, "utf8");
+    const logos = src.match(/<Logo\b[^>]*\/>/g) ?? [];
+    assert.ok(logos.length > 0, file);
+    for (const tag of logos) assert.match(tag, /href=\{HORIZON_HUB_URL\}/, `${file}: ${tag}`);
+  }
+});
+
+test("the apply copy addresses every service provider, not only consultants (coxwell via marcus m71305, m71335 item 2)", () => {
+  const src = readFileSync("src/components/consult/consult-apply-content.tsx", "utf8");
+  assert.match(src, /SERVICE PROVIDERS/);
+  assert.match(src, /Offer your services through Horizon HFT/);
+  assert.match(src, /reviewed before anything is public/);
+  assert.doesNotMatch(src, /Consult with Horizon HFT|as a consultant/);
 });
