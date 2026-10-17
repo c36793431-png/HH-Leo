@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
-import { resolveConsultantAccount, type ConsultantAccountState } from "@/lib/consultant-applications";
+import { getConsultantApplication, resolveConsultantAccount, type ConsultantAccountState } from "@/lib/consultant-applications";
+import { CONSULTANT_PROFILE_LIMITS, getOwnConsultantProfile, suggestConsultSlug } from "@/lib/consultant-profiles";
+import { ConsultProfileEditor, ConsultProfilePublishToggle, type ProfileEditorValues } from "@/components/consult/consult-profile-editor";
 import { CONSULT_APPLY_PATH, HORIZON_HUB_URL } from "@/lib/consult-host";
 import { formatAbsoluteUtc } from "@/lib/format-time";
 import { Logo } from "@/components/logo";
@@ -33,9 +35,47 @@ export default async function ConsultDashboardPage() {
           <div className="mt-8 rounded-xl border border-zinc-800 bg-black/30 p-6">
             <AccountStatus account={account} />
           </div>
+          {account.state === "approved" && <ProfileSection userId={session.user.id} applicationId={account.applicationId} />}
         </div>
       </main>
     </>
+  );
+}
+
+/** S3: the approved provider's profile, its marketplace state and the editor. A new profile starts from the
+ * application (name, service types) and a suggested address. */
+async function ProfileSection({ userId, applicationId }: { userId: string; applicationId: string }) {
+  const [profile, application] = await Promise.all([getOwnConsultantProfile(userId), getConsultantApplication(applicationId)]);
+  const values: ProfileEditorValues = profile ?? {
+    slug: suggestConsultSlug(application?.name ?? ""),
+    displayName: (application?.name ?? "").slice(0, CONSULTANT_PROFILE_LIMITS.displayName),
+    headline: "",
+    about: "",
+    serviceTypes: application?.serviceTypes ?? [],
+    serviceOther: application?.serviceOther ?? null,
+    markets: "",
+    platforms: "",
+    languages: "",
+  };
+  return (
+    <div className="mt-6 rounded-xl border border-zinc-800 bg-black/30 p-6">
+      <h2 className="text-lg font-semibold text-zinc-100">Your profile</h2>
+      {profile ? (
+        <div className="mt-2 mb-5 flex flex-wrap items-center gap-3 text-sm">
+          {profile.adminHidden ? (
+            <span className="text-amber-300">Hidden by Horizon. Contact support@horizonhft.com.</span>
+          ) : profile.published ? (
+            <span className="text-emerald-300">Shown in the marketplace</span>
+          ) : (
+            <span className="text-zinc-400">Not shown in the marketplace</span>
+          )}
+          <ConsultProfilePublishToggle published={profile.published} />
+        </div>
+      ) : (
+        <p className="mt-2 mb-5 text-sm text-zinc-400">Create your profile. It stays private until you choose to show it.</p>
+      )}
+      <ConsultProfileEditor values={values} saved={profile !== null} limits={CONSULTANT_PROFILE_LIMITS} />
+    </div>
   );
 }
 
@@ -46,8 +86,8 @@ function AccountStatus({ account }: { account: ConsultantAccountState }) {
         <>
           <p className="text-sm font-medium text-emerald-300">Approved</p>
           <p className="mt-2 text-sm text-zinc-400">
-            Your application was approved{account.decidedAt ? ` on ${formatAbsoluteUtc(account.decidedAt)}` : ""}. Your
-            profile, which clients will see in the marketplace, is set up here next.
+            Your application was approved{account.decidedAt ? ` on ${formatAbsoluteUtc(account.decidedAt)}` : ""}. Set up
+            your profile below; clients see it in the marketplace once you choose to show it.
           </p>
         </>
       );

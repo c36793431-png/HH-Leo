@@ -4,6 +4,7 @@ import { sendEmail } from "./email";
 import { resolveAdminUserId } from "./admin";
 import { PORTAL_ORIGIN } from "./feed-host-admin";
 import { CONSULT_ORIGIN } from "./consult-host";
+import { parseConsultServiceTypes, ConsultServiceTypesError, type ConsultServiceType } from "./consult-service-types";
 
 /**
  * Consult supply side S1a: consultant applications (0112; marcus m68993, rulings m69004, answers m69029; scope kai
@@ -45,6 +46,9 @@ export interface ConsultantApplicationRow {
   expertise: string;
   background: string | null;
   profileUrl: string | null;
+  /** 0116; '{}' on rows from before it ("not stated"). */
+  serviceTypes: ConsultServiceType[];
+  serviceOther: string | null;
   status: ConsultantApplicationStatus;
   decidedByEmail: string | null;
   decidedAt: Date | null;
@@ -54,7 +58,7 @@ export interface ConsultantApplicationRow {
 
 const SELECT_BASE = `
   select ca.id, ca.user_id, u.email as user_email, ca.name, ca.email, ca.telegram, ca.expertise, ca.background,
-         ca.profile_url, ca.status, du.email as decided_by_email, ca.decided_at, ca.declined_note, ca.created_at
+         ca.profile_url, ca.service_types, ca.service_other, ca.status, du.email as decided_by_email, ca.decided_at, ca.declined_note, ca.created_at
   from consultant_applications ca
   left join users u on u.id = ca.user_id
   left join users du on du.id = ca.decided_by
@@ -71,6 +75,8 @@ function mapRow(row: Record<string, unknown>): ConsultantApplicationRow {
     expertise: row.expertise as string,
     background: (row.background as string | null) ?? null,
     profileUrl: (row.profile_url as string | null) ?? null,
+    serviceTypes: (row.service_types as ConsultServiceType[] | null) ?? [],
+    serviceOther: (row.service_other as string | null) ?? null,
     status: row.status as ConsultantApplicationStatus,
     decidedByEmail: (row.decided_by_email as string | null) ?? null,
     decidedAt: (row.decided_at as Date | null) ?? null,
@@ -93,6 +99,9 @@ export interface ConsultantApplicationInput {
   expertise: string;
   background: string | null;
   profileUrl: string | null;
+  /** At least one (0116, consult-service-types.ts); 'other' carries serviceOther. */
+  serviceTypes: ConsultServiceType[];
+  serviceOther: string | null;
 }
 
 function field(formData: FormData, key: string): string {
@@ -121,7 +130,14 @@ export function parseConsultantApplication(formData: FormData): ConsultantApplic
   if (profileUrl && (profileUrl.length > L.profileUrl || !isSafeProfileUrl(profileUrl))) {
     throw new ConsultantApplicationError(`Profile link must start with http:// or https://, up to ${L.profileUrl} characters`);
   }
-  return { name, email, telegram, expertise, background, profileUrl };
+  let types: { serviceTypes: ConsultServiceType[]; serviceOther: string | null };
+  try {
+    types = parseConsultServiceTypes(formData);
+  } catch (err) {
+    if (err instanceof ConsultServiceTypesError) throw new ConsultantApplicationError(err.message);
+    throw err;
+  }
+  return { name, email, telegram, expertise, background, profileUrl, ...types };
 }
 
 const PG_UNIQUE_VIOLATION = "23505";
@@ -132,9 +148,9 @@ export async function createConsultantApplication(input: ConsultantApplicationIn
   let id: string;
   try {
     const result = await pool.query(
-      `insert into consultant_applications (name, email, telegram, expertise, background, profile_url)
-       values ($1, $2, $3, $4, $5, $6) returning id`,
-      [input.name, input.email, input.telegram, input.expertise, input.background, input.profileUrl]
+      `insert into consultant_applications (name, email, telegram, expertise, background, profile_url, service_types, service_other)
+       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+      [input.name, input.email, input.telegram, input.expertise, input.background, input.profileUrl, input.serviceTypes, input.serviceOther]
     );
     id = result.rows[0].id;
   } catch (err) {
@@ -188,7 +204,7 @@ export function consultantApprovedEmail(name: string, email: string): { subject:
     text:
       `Hi ${name},\n\n` +
       `Your application to offer your services through Horizon HFT has been approved.\n\n` +
-      `Sign in at ${CONSULT_ORIGIN} with this email address (${email}) to see your account.\n\n` +
+      `Sign in at ${CONSULT_ORIGIN} with this email address (${email}) to see your account and set up the profile clients see in the marketplace.\n\n` +
       `Horizon HFT`,
   };
 }

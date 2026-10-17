@@ -3,6 +3,7 @@
 import { startTransition, useActionState } from "react";
 import { submitConsultantApplicationAction } from "@/app/consult/apply/actions";
 import type { CONSULTANT_APPLICATION_LIMITS } from "@/lib/consultant-applications";
+import { ServiceTypesField } from "@/components/consult/service-types-field";
 
 const INPUT = "mt-1 w-full rounded border border-zinc-700 bg-black/40 px-2 py-1.5 text-sm text-zinc-200";
 
@@ -74,6 +75,7 @@ export function ConsultApplyForm({ limits: L }: { limits: typeof CONSULTANT_APPL
             className={INPUT}
           />
         </div>
+        <ServiceTypesField idPrefix="consult" disabled={isPending} />
         <div className="sm:col-span-2">
           <label htmlFor="consult-expertise" className="block text-xs text-zinc-500">Expertise</label>
           <textarea id="consult-expertise" name="expertise" rows={3} required maxLength={L.expertise} disabled={isPending} className={INPUT} />

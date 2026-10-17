@@ -115,6 +115,9 @@ function insertRow(cols: Record<string, unknown>) {
 function form(fields: Record<string, string>): FormData {
   const fd = new FormData();
   for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+  // Since 0116 the form requires a service type (consult-s3-0116.test.ts pins those rules); these tests are about the
+  // other fields, so a form without one gets Consulting.
+  if (!fields.serviceTypes) fd.append("serviceTypes", "consulting");
   return fd;
 }
 const count = async (where = "true", params: unknown[] = []) =>
@@ -177,7 +180,7 @@ test("one open application per email: pending and approved both hold it, decline
 
 test("parse: trims, stores the email lowercase, empty optionals are NULL", () => {
   const input = ca.parseConsultantApplication(form({ name: "  Ana  ", email: "  Ana.Mixed@Example.INVALID ", expertise: " FIX ", telegram: " ", background: "", profileUrl: "" }));
-  assert.deepEqual(input, { name: "Ana", email: "ana.mixed@example.invalid", telegram: null, expertise: "FIX", background: null, profileUrl: null });
+  assert.deepEqual(input, { name: "Ana", email: "ana.mixed@example.invalid", telegram: null, expertise: "FIX", background: null, profileUrl: null, serviceTypes: ["consulting"], serviceOther: null });
 });
 
 test("parse: refuses what 0112 refuses, 'javascript:' included, before any write", () => {
@@ -363,6 +366,9 @@ test("0112_rollback refuses while any application exists, then drops the table a
   await db.exec("rollback");
   assert.equal((await sql(`select count(*)::int n from schema_migrations where version = '0112'`)).rows[0].n, 1);
   await sql(`delete from consultant_applications`);
+  // Rollbacks run newest first: 0116 (consultant_profiles) references this table, so it goes first (it refuses while
+  // profiles or stated service types exist; none are left after the delete above).
+  await db.exec(readFileSync(path.join(MIGRATIONS, "0116_rollback.sql"), "utf8"));
   await db.exec(rollback);
   assert.equal((await sql(`select to_regclass('consultant_applications') as r`)).rows[0].r, null);
   assert.equal((await sql(`select count(*)::int n from schema_migrations where version = '0112'`)).rows[0].n, 0);

@@ -86,3 +86,23 @@ export function ConsultApplicationRowActions({
     </div>
   );
 }
+
+/** S3: an admin takes a provider's profile off the marketplace, or puts it back. The provider's own switch stays as
+ * it was; the marketplace shows a profile only while both allow it (consultant-profiles.ts). */
+export function ConsultProfileHideButton({ profileId, hidden, action }: { profileId: string; hidden: boolean; action: Action }) {
+  const [pending, startTransition] = useTransition();
+  function toggle() {
+    const formData = new FormData();
+    formData.append("profileId", profileId);
+    formData.append("hidden", hidden ? "false" : "true");
+    startTransition(async () => {
+      const result = await action(null, formData);
+      emitToast(result.ok ? (hidden ? "Profile back on the marketplace" : "Profile hidden") : result.error, result.ok ? "success" : "error");
+    });
+  }
+  return (
+    <button type="button" onClick={toggle} disabled={pending} className="mt-1 rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-50">
+      {pending ? "…" : hidden ? "Unhide profile" : "Hide profile"}
+    </button>
+  );
+}
