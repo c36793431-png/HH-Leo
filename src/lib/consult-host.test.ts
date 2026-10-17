@@ -1,11 +1,12 @@
 /* Run: npx tsx --test src/lib/consult-host.test.ts
  *
- * consult.horizonhft.com routing (scope kai m69020, rulings marcus m69004, Fable m69076 ask 4 + S5): "/" renders
- * the apply page, the page and static files pass, every other path goes to the portal at the same path and query. */
+ * consult.horizonhft.com routing (scope kai m69020, rulings marcus m69004, Fable m69076 ask 4 + S5; S2 foc16, marcus
+ * m71309): "/" renders the consult home and /dashboard the provider dashboard; sign-in, sign-up, the consult pages and
+ * static files pass; every other path goes to the portal at the same path and query. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PORTAL_ORIGIN } from "./feed-host-admin";
-import { CONSULT_APPLY_PATH, CONSULT_HOST, CONSULT_ORIGIN, consultApplyRedirect, consultRoute, isConsultHost } from "./consult-host";
+import { CONSULT_APPLY_PATH, CONSULT_DASHBOARD_PATH, CONSULT_HOME_PATH, CONSULT_HOST, CONSULT_ORIGIN, consultApplyRedirect, consultRoute, isConsultHost } from "./consult-host";
 
 test("the host matches with and without a port, in any case, and nothing else does", () => {
   assert.equal(isConsultHost(CONSULT_HOST), true);
@@ -17,10 +18,17 @@ test("the host matches with and without a port, in any case, and nothing else do
   assert.equal(isConsultHost(null), false);
 });
 
-test("the root renders the apply page; the page itself passes", () => {
-  assert.deepEqual(consultRoute("/", ""), { kind: "rewrite", to: CONSULT_APPLY_PATH });
-  assert.deepEqual(consultRoute("/", "?a=1"), { kind: "rewrite", to: CONSULT_APPLY_PATH });
-  assert.deepEqual(consultRoute(CONSULT_APPLY_PATH, ""), { kind: "pass" });
+test("the root renders the consult home; /dashboard renders the provider dashboard (S2, marcus m71309)", () => {
+  assert.deepEqual(consultRoute("/", ""), { kind: "rewrite", to: CONSULT_HOME_PATH });
+  assert.deepEqual(consultRoute("/", "?a=1"), { kind: "rewrite", to: CONSULT_HOME_PATH });
+  assert.deepEqual(consultRoute("/dashboard", ""), { kind: "rewrite", to: CONSULT_DASHBOARD_PATH });
+  assert.deepEqual(consultRoute("/dashboard/profile", ""), { kind: "rewrite", to: `${CONSULT_DASHBOARD_PATH}/profile` });
+});
+
+test("sign-in, sign-up and the consult pages themselves pass, so they render on this host (S2)", () => {
+  for (const path of ["/login", "/signup", CONSULT_HOME_PATH, CONSULT_APPLY_PATH, CONSULT_DASHBOARD_PATH, `${CONSULT_DASHBOARD_PATH}/profile`]) {
+    assert.deepEqual(consultRoute(path, "?a=1"), { kind: "pass" }, path);
+  }
 });
 
 test("static files pass", () => {
@@ -31,11 +39,11 @@ test("static files pass", () => {
   assert.deepEqual(consultRoute("/admin/x.json", ""), { kind: "redirect", to: `${PORTAL_ORIGIN}/admin/x.json` });
 });
 
-test("every other path goes to the portal at the same path and query: /admin (ruling 1), /login, /adminx, /consult/apply/x", () => {
-  for (const path of ["/admin", "/admin/consult-applications", "/adminx", "/login", "/signup", "/dashboard", "/marketplace", "/consult", "/consult/apply/x", "/consult/applyx"]) {
+test("every other path goes to the portal at the same path and query: /admin (ruling 1), look-alikes of the passed paths", () => {
+  for (const path of ["/admin", "/admin/consult-applications", "/adminx", "/loginx", "/login/x", "/signupx", "/dashboardx", "/marketplace", "/consultx", "/consult/apply/x", "/consult/applyx", "/consult/dashboardx", "/consult/other"]) {
     assert.deepEqual(consultRoute(path, "?a=1"), { kind: "redirect", to: `${PORTAL_ORIGIN}${path}?a=1` }, path);
   }
-  assert.deepEqual(consultRoute("/login", ""), { kind: "redirect", to: `${PORTAL_ORIGIN}/login` });
+  assert.deepEqual(consultRoute("/marketplace", ""), { kind: "redirect", to: `${PORTAL_ORIGIN}/marketplace` });
 });
 
 test("the redirect target is always the portal origin (no open redirect)", () => {
