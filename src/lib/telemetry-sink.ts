@@ -662,6 +662,23 @@ export async function notifyConsultantApplicationSubmitted(opts: {
   );
 }
 
+/** Consult S3 (marcus m71369 1b): a service-provider profile went public, or a public one was edited, with no review.
+ * Name, address and the admin queue link only (no email), so an admin can Hide it fast. */
+export async function notifyConsultantProfileShown(opts: {
+  event: "shown" | "edited";
+  name: string;
+  path: string;
+  adminUrl: string;
+}): Promise<void> {
+  await sendApprovalsTopicMessage(
+    `👁 service provider ${opts.event === "shown" ? "profile now shown" : "shown profile edited"}\n` +
+      `name: ${opts.name}\n` +
+      `address: ${opts.path}\n` +
+      `check it, hide it in the admin queue if needed:\n` +
+      `${opts.adminUrl}`
+  );
+}
+
 /** Migration drift: a db/migrations/*.sql file has no schema_migrations row, meaning it
  * shipped in code but was never applied (or applied without logging itself) -- the
  * failure mode that let 0057_pending_signups.sql silently drop signup name/telegram

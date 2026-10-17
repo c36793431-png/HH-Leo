@@ -41,6 +41,9 @@ export function ConsultProfileEditor({
 
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <p className="sm:col-span-2 text-xs text-zinc-500">
+        No prices, links or contact details: clients reach you through a request on Horizon.
+      </p>
       <div>
         <label htmlFor="pf-name" className="block text-xs text-zinc-500">Name shown to clients</label>
         <input id="pf-name" name="displayName" required maxLength={L.displayName} defaultValue={values.displayName} disabled={isPending} className={INPUT} />

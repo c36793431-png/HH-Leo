@@ -3,6 +3,12 @@ import { resolveAdminUserId } from "./admin";
 import { resolveConsultantAccount } from "./consultant-applications";
 import { isConsultSlug } from "./consult-slug";
 import { parseConsultServiceTypes, ConsultServiceTypesError, type ConsultServiceType } from "./consult-service-types";
+import { assertPublicFields } from "./consult-public-text";
+import { notifyConsultantProfileShown } from "./telemetry-sink";
+import { CONSULT_APPLICATIONS_ADMIN_URL } from "./consultant-applications";
+
+/** The public profile path (marcus m71369 item 2): /marketplace/services/<slug>. */
+export const CONSULT_PROFILE_PATH = "/marketplace/services";
 
 /**
  * Consult S3: service-provider profiles (0116; marcus m71301 profiles in the marketplace, m71305 any service provider).
@@ -98,6 +104,11 @@ export function parseConsultantProfile(formData: FormData): ConsultantProfileInp
     if (err instanceof ConsultServiceTypesError) throw new ConsultantProfileError(err.message);
     throw err;
   }
+  // Public the moment it is shown, with no review: no prices, no contact details (marcus m71369 1a, consult-public-text.ts).
+  assertPublicFields(
+    [["Name", displayName], ["Headline", headline], ["About", about], ["Markets", markets], ["Platforms", platforms], ["Languages", languages], ["Other service", types.serviceOther]],
+    (message) => new ConsultantProfileError(message)
+  );
   return { slug, displayName, headline, about, ...types, markets, platforms, languages };
 }
 
@@ -144,6 +155,8 @@ export async function saveOwnConsultantProfile(userId: string, input: Consultant
     await client.query("begin");
     const app = await client.query(`select id from consultant_applications where id = $1 and user_id = $2 and status = 'approved' for update`, [account.applicationId, userId]);
     if (!app.rows[0]) throw new ConsultantProfileError("Your profile opens once your application is approved");
+    const prev = await client.query(`select published from consultant_profiles where user_id = $1 for update`, [userId]);
+    const wasShown = prev.rows[0]?.published === true;
     const values = [userId, account.applicationId, input.slug, input.displayName, input.headline, input.about, input.serviceTypes, input.serviceOther, input.markets, input.platforms, input.languages];
     const saved = await client.query(
       `insert into consultant_profiles (user_id, application_id, slug, display_name, headline, about, service_types, service_other, markets, platforms, languages)
@@ -158,7 +171,11 @@ export async function saveOwnConsultantProfile(userId: string, input: Consultant
     );
     if (!saved.rows[0]) throw new ConsultantProfileError("This profile belongs to another application; contact support@horizonhft.com");
     await client.query("commit");
-    return mapOwn(saved.rows[0]);
+    const own = mapOwn(saved.rows[0]);
+    // A shown profile changed with no review: tell the admins so it can be hidden fast (marcus m71369 1b). After the commit;
+    // a Telegram failure never fails the save.
+    if (wasShown) await notifyConsultantProfileShown({ event: "edited", name: own.displayName, path: `${CONSULT_PROFILE_PATH}/${own.slug}`, adminUrl: CONSULT_APPLICATIONS_ADMIN_URL }).catch(() => {});
+    return own;
   } catch (err) {
     await client.query("rollback");
     if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) throw new ConsultantProfileError("That profile address is taken; choose another");
@@ -168,17 +185,32 @@ export async function saveOwnConsultantProfile(userId: string, input: Consultant
   }
 }
 
-/** The provider's own switch. Turning it ON needs the application still approved; OFF always works. */
+/** The provider's own switch. Turning it ON needs the application still approved; OFF always works. Going from not shown
+ * to shown tells the admins (marcus m71369 1b), after the commit; a Telegram failure never fails the switch. */
 export async function setOwnConsultantProfilePublished(userId: string, published: boolean): Promise<void> {
-  const r = await pool.query(
-    `update consultant_profiles p set published = $2, updated_at = now()
-     where p.user_id = $1
-       and ($2 = false or exists (
-         select 1 from consultant_applications a where a.id = p.application_id and a.user_id = p.user_id and a.status = 'approved'))
-     returning p.id`,
-    [userId, published]
-  );
-  if (!r.rows[0]) throw new ConsultantProfileError(published ? "Save your profile first; it can be shown once your application is approved" : "No profile to change");
+  const client = await pool.connect();
+  let shownNow: { name: string; slug: string } | null = null;
+  try {
+    await client.query("begin");
+    const prev = await client.query(`select published from consultant_profiles where user_id = $1 for update`, [userId]);
+    const r = await client.query(
+      `update consultant_profiles p set published = $2, updated_at = now()
+       where p.user_id = $1
+         and ($2 = false or exists (
+           select 1 from consultant_applications a where a.id = p.application_id and a.user_id = p.user_id and a.status = 'approved'))
+       returning p.slug, p.display_name`,
+      [userId, published]
+    );
+    if (!r.rows[0]) throw new ConsultantProfileError(published ? "Save your profile first; it can be shown once your application is approved" : "No profile to change");
+    await client.query("commit");
+    if (published && prev.rows[0]?.published === false) shownNow = { name: r.rows[0].display_name, slug: r.rows[0].slug };
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
+  if (shownNow) await notifyConsultantProfileShown({ event: "shown", name: shownNow.name, path: `${CONSULT_PROFILE_PATH}/${shownNow.slug}`, adminUrl: CONSULT_APPLICATIONS_ADMIN_URL }).catch(() => {});
 }
 
 /** Admins take a profile down or put it back (one row, audited). The provider's own switch is untouched. */

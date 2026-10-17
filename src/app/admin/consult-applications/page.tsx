@@ -44,7 +44,8 @@ export default async function AdminConsultApplicationsPage({ searchParams }: { s
         <h1 className="mt-2 text-lg font-medium text-zinc-100">Consultant applications</h1>
         <p className="mt-1 text-sm text-zinc-400">
           Applications from consult.horizonhft.com. Approving grants no role and creates no account; it links an
-          existing account with the same email, if there is exactly one.
+          existing account with the same verified email, if there is exactly one (otherwise the provider&apos;s first verified
+          sign-in links it).
         </p>
       </header>
 
