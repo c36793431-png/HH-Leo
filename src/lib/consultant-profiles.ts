@@ -258,6 +258,12 @@ export async function listListedConsultantProfiles(type: ConsultServiceType | nu
   return r.rows.map(mapListed);
 }
 
+/** Whether anyone passes the listing gate: the /marketplace shelf shows its Consulting & Services chip only then. */
+export async function hasListedConsultantProfiles(): Promise<boolean> {
+  const r = await pool.query(`select exists (select 1 ${LISTED}) as listed`);
+  return r.rows[0]?.listed === true;
+}
+
 /** Server-side only (S4 requests): the listed profile's id, owner and name, through the same gate. Never rendered. */
 export async function getListedProfileRef(slug: string): Promise<{ id: string; userId: string; displayName: string; slug: string } | null> {
   if (!isConsultSlug(slug)) return null;

@@ -25,12 +25,19 @@ export interface MarketplaceSection {
   content: ReactNode;
 }
 
-export function MarketplaceCategoryFilter({ sections }: { sections: MarketplaceSection[] }) {
+/** A category that lives on its own page (Consulting & Services, consult S4): a plain link chip after the section chips.
+ * The page passes one only while that page has something to show, the same rule as a section chip. */
+export interface MarketplaceLinkChip {
+  href: string;
+  label: string;
+}
+
+export function MarketplaceCategoryFilter({ sections, links = [] }: { sections: MarketplaceSection[]; links?: MarketplaceLinkChip[] }) {
   const [active, setActive] = useState<string>(ALL);
 
   // A filter that can only say "All" and one other thing is furniture, not a filter: with one
   // section, `All` and that section select the identical page. Render the sections bare instead.
-  if (sections.length < 2) return <>{sections.map((s) => s.content)}</>;
+  if (sections.length < 2 && links.length === 0) return <>{sections.map((s) => s.content)}</>;
 
   // An unknown `active` cannot happen through the chips, but a section list that shrinks under a
   // selection can — fall back to showing everything rather than to a blank page.
@@ -58,6 +65,11 @@ export function MarketplaceCategoryFilter({ sections }: { sections: MarketplaceS
           >
             {section.label}
           </button>
+        ))}
+        {links.map((link) => (
+          <a key={link.href} href={link.href} className="chip">
+            {link.label}
+          </a>
         ))}
       </div>
 
