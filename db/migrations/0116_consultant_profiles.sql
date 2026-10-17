@@ -23,8 +23,10 @@
 --   published: the provider's own switch, default off. admin_hidden: admins can take a profile down, default off.
 --   No price, no email, no phone, no telegram column.
 --
+-- consult_requests (0105) gains provider_profile_id, and its service CHECK widens to allow it (see the end of this file).
+--
 -- Constraints are named so a later widening can drop them by name. APPLY BEFORE the code that writes these merges.
--- Rollback: 0116_rollback.sql (refuses while any profile or any stated service type exists).
+-- Rollback: 0116_rollback.sql (refuses while any provider request, any profile or any stated service type exists).
 alter table consultant_applications
   add column if not exists service_types text[] not null default '{}'
     constraint consultant_applications_service_types_check
@@ -72,6 +74,22 @@ create table if not exists consultant_profiles (
 create index if not exists consultant_profiles_listed_idx
   on consultant_profiles (updated_at desc)
   where published and not admin_hidden;
+
+-- A client's request to ONE provider (S4; marcus m71393, folded into 0116 so one migration means one review and one
+-- prod apply). consult_requests (0105) gains provider_profile_id: the profile the request is addressed to, set at
+-- create. NOT routed_to_user_id, which means "accepted by" (0105). ON DELETE RESTRICT: a profile with requests cannot be
+-- deleted from under them. The 0105 CHECK "a row without a package is a question" widens to also allow a row that names
+-- a provider; dropped and re-added under its own name, so 0116_rollback restores 0105's exact text. One OPEN request
+-- (pending or accepted) per client per provider; declined / answered / closed free it.
+alter table consult_requests
+  add column if not exists provider_profile_id uuid references consultant_profiles(id) on delete restrict;
+alter table consult_requests drop constraint if exists consult_requests_service_check;
+alter table consult_requests
+  add constraint consult_requests_service_check
+    check (service_id is not null or kind = 'question' or provider_profile_id is not null);
+create unique index if not exists consult_requests_one_open_provider_uidx
+  on consult_requests (user_id, provider_profile_id)
+  where provider_profile_id is not null and status in ('pending', 'accepted');
 
 insert into schema_migrations (version, name) values
   ('0116', '0116_consultant_profiles.sql')

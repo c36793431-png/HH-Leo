@@ -329,8 +329,31 @@ test("admin TG (marcus m71369 1b): one card when a profile is shown, one when a 
   for (const c of cards()) assert.doesNotMatch(c, /@example\.invalid/, "no email in the card");
 });
 
-test("0116_rollback refuses while a profile or a stated service type exists, then drops the table and the columns", async () => {
+test("0116 consult_requests.provider_profile_id (marcus m71393): a provider request needs no package; one OPEN request per client per provider", async () => {
+  const p = await provider(`req-${++seq}`);
+  const client = await user(`client${seq}@example.invalid`);
+  const ins = (kind: string, profileId: string | null, status = "pending") =>
+    sql(`insert into consult_requests (user_id, kind, body, provider_profile_id, status) values ($1, $2, 'Need a setup.', $3, $4) returning id`, [client, kind, profileId, status]);
+  // No package and not a question: refused unless it names a provider profile (the widened consult_requests_service_check).
+  await assert.rejects(ins("request", null), /consult_requests_service_check/);
+  const first = (await ins("request", p.id)).rows[0].id;
+  // One open request per (client, provider): pending and accepted both hold it; declined / answered / closed free it.
+  await assert.rejects(ins("request", p.id), /consult_requests_one_open_provider_uidx/);
+  await sql(`update consult_requests set status = 'accepted' where id = $1`, [first]);
+  await assert.rejects(ins("request", p.id), /consult_requests_one_open_provider_uidx/);
+  await sql(`update consult_requests set status = 'closed' where id = $1`, [first]);
+  await ins("request", p.id);
+  // A profile with requests cannot be deleted from under them (ON DELETE RESTRICT).
+  await assert.rejects(sql(`delete from consultant_profiles where id = $1`, [p.id]), /foreign key|violates/);
+  // A plain question still needs neither a package nor a provider (0105 unchanged for it).
+  await sql(`insert into consult_requests (user_id, kind, body) values ($1, 'question', 'Hi')`, [client]);
+});
+
+test("0116_rollback refuses while a provider request, a profile or a stated service type exists, then restores 0105 and drops the rest", async () => {
   const rollback = readFileSync(path.join(MIGRATIONS, "0116_rollback.sql"), "utf8");
+  await assert.rejects(db.exec(rollback), /consult_requests rows name a provider profile/);
+  await db.exec(`rollback`).catch(() => {});
+  await sql(`delete from consult_requests where provider_profile_id is not null`);
   await assert.rejects(db.exec(rollback), /consultant_profiles has rows/);
   await db.exec(`rollback`).catch(() => {});
   await sql(`delete from consultant_profiles`);
@@ -340,5 +363,10 @@ test("0116_rollback refuses while a profile or a stated service type exists, the
   await db.exec(rollback);
   assert.equal((await sql(`select to_regclass('consultant_profiles') as r`)).rows[0].r, null);
   assert.equal(await count("information_schema.columns", "table_name = 'consultant_applications' and column_name in ('service_types', 'service_other')"), 0);
+  assert.equal(await count("information_schema.columns", "table_name = 'consult_requests' and column_name = 'provider_profile_id'"), 0);
+  // 0105's own CHECK is back, exactly: a request without a package is a question.
+  const def = (await sql(`select pg_get_constraintdef(oid) d from pg_constraint where conname = 'consult_requests_service_check'`)).rows[0].d as string;
+  assert.match(def, /service_id IS NOT NULL\) OR \(kind = 'question'::text\)\)\)$/);
+  assert.doesNotMatch(def, /provider_profile_id/);
   assert.equal(await count("schema_migrations", "version = '0116'"), 0);
 });

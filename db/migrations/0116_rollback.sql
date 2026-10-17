@@ -1,10 +1,14 @@
 -- Rollback for 0116_consultant_profiles.sql. Not applied automatically.
--- Roll the CODE back first: the dashboard profile editor, the apply form's service types and the marketplace read
--- these. Refuses while any profile exists, or while any application states a service type: both are providers' own
--- submissions, so dropping them is a decision, not something a rollback does silently (0112_rollback pattern).
+-- Roll the CODE back first: the dashboard profile editor, the apply form's service types, the marketplace and the
+-- provider requests read these. Refuses while any request names a provider profile, while any profile exists, or while
+-- any application states a service type: all are people's own submissions, so dropping them is a decision, not
+-- something a rollback does silently (0112_rollback pattern). Restores 0105's consult_requests_service_check exactly.
 begin;
 do $$
 begin
+  if exists (select 1 from consult_requests where provider_profile_id is not null) then
+    raise exception '0116 rollback: consult_requests rows name a provider profile; remove them first';
+  end if;
   if exists (select 1 from consultant_profiles) then
     raise exception '0116 rollback: consultant_profiles has rows; remove them first';
   end if;
@@ -12,6 +16,11 @@ begin
     raise exception '0116 rollback: consultant_applications rows state service types; clear them first';
   end if;
 end $$;
+drop index if exists consult_requests_one_open_provider_uidx;
+alter table consult_requests drop constraint if exists consult_requests_service_check;
+alter table consult_requests drop column if exists provider_profile_id;
+alter table consult_requests
+  add constraint consult_requests_service_check check (service_id is not null or kind = 'question');
 drop table if exists consultant_profiles;
 alter table consultant_applications drop constraint if exists consultant_applications_service_other_iff_other;
 alter table consultant_applications drop column if exists service_other;
