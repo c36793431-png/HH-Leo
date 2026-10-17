@@ -4,7 +4,7 @@
  * only there. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { authPageHref, safeCallbackPath } from "./post-auth-redirect";
+import { authPageHref, getPostAuthRedirect, safeCallbackPath } from "./post-auth-redirect";
 
 const PORTAL = "portal.horizonhft.com";
 
@@ -27,4 +27,11 @@ test("the existing return paths are unchanged", () => {
   }
   assert.equal(safeCallbackPath("/education/advanced", PORTAL), null);
   assert.equal(safeCallbackPath("/dashboard", PORTAL), null);
+});
+
+test("consult.horizonhft.com: after sign-in the provider dashboard, and no marketplace return path (S2, marcus m71309)", () => {
+  assert.equal(getPostAuthRedirect("consult.horizonhft.com"), "/consult/dashboard");
+  assert.equal(getPostAuthRedirect("consult.horizonhft.com:443"), "/consult/dashboard");
+  assert.equal(safeCallbackPath("/marketplace", "consult.horizonhft.com"), null);
+  assert.equal(getPostAuthRedirect(PORTAL), "/dashboard");
 });

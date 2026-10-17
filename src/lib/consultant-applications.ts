@@ -221,11 +221,13 @@ async function decide(id: string, actionedBy: string, decision: Decision): Promi
 
     let userId: string | null = row.user_id ?? null;
     if (decision.status === "approved") {
-      const matches = await client.query(`select id from users where lower(email) = $1`, [row.email]);
+      const matches = await client.query(`select id, "emailVerified" as verified from users where lower(email) = $1`, [row.email]);
       if (matches.rows.length > 1) {
         throw new ConsultantApplicationError(`${matches.rows.length} accounts share this email, merge in /admin/users first`);
       }
-      userId = matches.rows[0]?.id ?? null;
+      // A VERIFIED account only (S2, marcus m71309): an admin-created or unverified email proves nothing. An unverified
+      // match stays NULL here and links at that account's first verified sign-in (resolveConsultantAccount).
+      userId = matches.rows[0]?.verified ? matches.rows[0].id : null;
       await client.query(
         `update consultant_applications
          set status = 'approved', decided_by = $2, decided_at = now(), user_id = $3
@@ -252,6 +254,77 @@ async function decide(id: string, actionedBy: string, decision: Decision): Promi
     );
     await client.query("commit");
     return { name: row.name, email: row.email, userId };
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** What a signed-in account sees on the provider dashboard (S2). Carries no admin-only field (no declined note). */
+export type ConsultantAccountState =
+  | { state: "approved" | "pending" | "declined"; applicationId: string; name: string; createdAt: Date; decidedAt: Date | null }
+  | { state: "none" }
+  | { state: "unverified" }
+  | { state: "shared-email" };
+
+function accountStateOf(row: Record<string, unknown>): ConsultantAccountState {
+  return {
+    state: row.status as ConsultantApplicationStatus,
+    applicationId: row.id as string,
+    name: row.name as string,
+    createdAt: row.created_at as Date,
+    decidedAt: (row.decided_at as Date | null) ?? null,
+  };
+}
+
+/**
+ * The application a signed-in account owns (S2; account decision marcus m71309, Fable to PASS this step):
+ * 1. A row already linked to this account (newest first) is theirs, whatever their email is now.
+ * 2. Otherwise only an exact match on the account's VERIFIED email (users."emailVerified", set by the magic-link
+ *    sign-in) counts; no email or an unverified one -> "unverified". More than one account on that email -> refused
+ *    ("shared-email"), the approve rule. A row linked to another account is never matched.
+ * 3. The open application (pending/approved; 0112's unique index allows one) wins over a declined one, newest first.
+ * 4. An approved row with no account (none, or none verified, at approve) is linked to this one here, once: the
+ *    update only touches a row still approved and unlinked, in one transaction with the account count.
+ *    A pending row is never linked here; approve links it.
+ */
+export async function resolveConsultantAccount(userId: string): Promise<ConsultantAccountState> {
+  const cols = `id, name, status, created_at, decided_at`;
+  const linked = await pool.query(
+    `select ${cols} from consultant_applications where user_id = $1
+     order by (status <> 'declined') desc, created_at desc limit 1`,
+    [userId]
+  );
+  if (linked.rows[0]) return accountStateOf(linked.rows[0]);
+
+  const account = await pool.query(`select email, "emailVerified" as verified from users where id = $1`, [userId]);
+  const email = (account.rows[0]?.email as string | null | undefined)?.trim().toLowerCase();
+  if (!email || !account.rows[0]?.verified) return { state: "unverified" };
+
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const owners = await client.query(`select count(*)::int as n from users where lower(email) = $1`, [email]);
+    if (owners.rows[0].n > 1) {
+      await client.query("rollback");
+      return { state: "shared-email" };
+    }
+    const found = await client.query(
+      `select ${cols} from consultant_applications where email = $1 and user_id is null
+       order by (status <> 'declined') desc, created_at desc limit 1 for update`,
+      [email]
+    );
+    const row = found.rows[0];
+    if (row?.status === "approved") {
+      await client.query(
+        `update consultant_applications set user_id = $2 where id = $1 and user_id is null and status = 'approved'`,
+        [row.id, userId]
+      );
+    }
+    await client.query("commit");
+    return row ? accountStateOf(row) : { state: "none" };
   } catch (err) {
     await client.query("rollback");
     throw err;

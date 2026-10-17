@@ -260,7 +260,8 @@ async function apply(email: string, name = "Applicant") {
 }
 
 test("approve: links the one account by the stored email (mixed case both sides, m65082 T3), stamps, audits, mails after commit", async () => {
-  const user = (await sql(`insert into users (email) values ('Mixed.Case@Example.invalid') returning id`)).rows[0].id;
+  // A VERIFIED account: since S2 approve links only one (consult-s2-account.test.ts pins the unverified case).
+  const user = (await sql(`insert into users (email, "emailVerified") values ('Mixed.Case@Example.invalid', now()) returning id`)).rows[0].id;
   const { id } = await apply("  MIXED.case@example.INVALID ", "Mia");
   assert.equal((await sql(`select email from consultant_applications where id = $1`, [id])).rows[0].email, "mixed.case@example.invalid");
   const mails = emails.length;

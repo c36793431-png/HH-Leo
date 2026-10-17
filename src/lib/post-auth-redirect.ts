@@ -3,6 +3,7 @@ import { EDUCATION_LESSONS, lessonHref } from "./education";
 
 const PARTNER_HOST = "partner.horizonhft.com";
 const FEED_HOST = "feed.horizonhft.com";
+const CONSULT_HOST = "consult.horizonhft.com";
 
 function isHost(host: string | null, name: string): boolean {
   return host === name || (host?.startsWith(`${name}:`) ?? false);
@@ -15,6 +16,8 @@ function isHost(host: string | null, name: string): boolean {
 export function getPostAuthRedirect(host: string | null): string {
   if (isHost(host, PARTNER_HOST)) return "/partner/dashboard";
   if (isHost(host, FEED_HOST)) return "/feed/dashboard";
+  // The service-provider dashboard (consult S2, marcus m71309); lib/consult-host.ts lets it pass on that host.
+  if (isHost(host, CONSULT_HOST)) return "/consult/dashboard";
   return "/dashboard";
 }
 
@@ -51,10 +54,10 @@ const CALLBACK_ALLOWLIST: readonly string[] = [
  * are redundant with the exact match today. They are here so that loosening the match later
  * (a prefix, a pattern) still cannot let a scheme, a protocol-relative path or a traversal in.
  *
- * Portal host only: the partner and feed hosts keep their fixed destinations.
+ * Portal host only: the partner, feed and consult hosts keep their fixed destinations.
  */
 export function safeCallbackPath(callbackUrl: string | string[] | undefined, host: string | null): string | null {
-  if (isHost(host, PARTNER_HOST) || isHost(host, FEED_HOST)) return null;
+  if (isHost(host, PARTNER_HOST) || isHost(host, FEED_HOST) || isHost(host, CONSULT_HOST)) return null;
   // A repeated param arrives as an array. Choosing one copy is a choice we don't need to make.
   if (typeof callbackUrl !== "string") return null;
   if (
