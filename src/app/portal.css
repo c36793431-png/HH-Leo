@@ -349,6 +349,14 @@
 .hubnav .hn-sec-consulting { --acc: #9ea9b8; }
 .hubnav .hn-sec-education { --acc: #b18cff; }
 .hubnav .hn-sec-marketplace { --acc: #f472b6; }
+/* Between the burger (1180px) and 1400px the full nav is wider than the 1180px wrap, so it pushed past the right edge
+   (12px of page scroll at 1280, Sign in clipped; live on /marketplace). In that band the wrap takes the whole width and
+   the nav tightens, so it fits; above 1400px nothing changes (marcus m71416). After the base rules, so it wins. */
+@media (min-width: 1181px) and (max-width: 1400px) {
+  .hubnav .hn-wrap { max-width: none; padding: 0 24px; gap: 16px; }
+  .hubnav .hn-nav { gap: 10px; font-size: 13.5px; }
+  .hubnav .hn-nav a { gap: 5px; }
+}
 @media (max-width: 1180px) {
   .hubnav .hn-wrap { height: 58px; }
   .hubnav .hn-nav { display: none; }
