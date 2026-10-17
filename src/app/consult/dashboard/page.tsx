@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin-users-panel";
 import { resolveConsultantAccount, type ConsultantAccountState } from "@/lib/consultant-applications";
-import { CONSULT_APPLY_PATH } from "@/lib/consult-host";
+import { CONSULT_APPLY_PATH, HORIZON_HUB_URL } from "@/lib/consult-host";
 import { formatAbsoluteUtc } from "@/lib/format-time";
 import { Logo } from "@/components/logo";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -22,7 +22,7 @@ export default async function ConsultDashboardPage() {
   return (
     <>
       <header className="flex items-center justify-between px-6 py-5">
-        <Logo size="nav" />
+        <Logo size="nav" href={HORIZON_HUB_URL} />
         <SignOutButton redirectTo="/" />
       </header>
       <main className="flex-1 px-4 pb-20 pt-6">

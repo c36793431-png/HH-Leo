@@ -9,6 +9,10 @@ export const CONSULT_HOST = "consult.horizonhft.com";
 
 export const CONSULT_ORIGIN = `https://${CONSULT_HOST}`;
 
+/** The Horizon hub. The consult pages link their logo here, not to the host's own root ("linked to horizon", coxwell via
+ * marcus m71335 item 3). */
+export const HORIZON_HUB_URL = "https://horizonhft.com";
+
 export const CONSULT_APPLY_PATH = "/consult/apply";
 export const CONSULT_HOME_PATH = "/consult";
 export const CONSULT_DASHBOARD_PATH = "/consult/dashboard";
