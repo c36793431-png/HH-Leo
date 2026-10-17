@@ -274,6 +274,61 @@ test("suggestConsultSlug: a valid address from a name, or 'provider'", () => {
   for (const [name, want] of cases) assert.equal(profiles.suggestConsultSlug(name), want, name);
 });
 
+test("public text (marcus m71369 1a): prices, emails, links, @handles and phone numbers are refused; ordinary text passes", async () => {
+  const pt = await import("./consult-public-text");
+  const refused: [string, RegExp][] = [
+    ["Setups from $50", /prices/], ["50$ per setup", /prices/], ["€40 a call", /prices/], ["30 EUR", /prices/], ["USD 25", /prices/],
+    ["100 dollars", /prices/], ["2k usdt", /prices/], ["£20/hr", /prices/], ["20/hr", /prices/], ["billed per hour", /prices/], ["my hourly rate is fair", /prices/],
+    ["mail me: pat@example.com", /email/], ["see https://pat.dev", /links/], ["www.pat.io", /links/], ["t.me/patsetups", /links/], ["patsetups.com", /links/],
+    ["DM @patsetups", /@handle/], ["call +44 7700 900123", /phone/], ["(555) 123-4567 89", /phone/],
+  ];
+  for (const [text, why] of refused) assert.match(pt.publicTextProblem(text) ?? "PASSED", why, text);
+  const fine = [
+    "MT5 setup and Horizon 2.0.9 tuning", "Ten years of MT5 servers, 2015-2024", "Gold, indices, FX", "MT4, MT5, Horizon", "English, Spanish",
+    "Low latency @ 2 ms", "ASP.NET and Socket.io bots", "1:500 leverage accounts", "24/7 monitoring", "Python, C#, MQL5", "Copier installs",
+  ];
+  for (const text of fine) assert.equal(pt.publicTextProblem(text), null, text);
+});
+
+test("save refuses a public field with a price or a contact, naming the field; nothing is written", async () => {
+  const u = await user(`pt${++seq}@example.invalid`);
+  await application(`pt${seq}@example.invalid`, "approved");
+  const cases: [Record<string, string | string[]>, RegExp][] = [
+    [{ about: "Setups from $50" }, /^About: prices/], [{ headline: "Email pat@example.com" }, /^Headline: contact details/],
+    [{ displayName: "Pat @patsetups" }, /^Name: contact details/], [{ markets: "see www.pat.io" }, /^Markets: links/],
+    [{ platforms: "MT5 20/hr" }, /^Platforms: prices/], [{ languages: "+44 7700 900123" }, /^Languages: contact details/],
+    [{ serviceTypes: ["other"], serviceOther: "bots from 99 USD" }, /^Other service: prices/],
+  ];
+  for (const [extra, why] of cases) {
+    assert.throws(() => profiles.parseConsultantProfile(profileForm(`pt-${seq}`, extra)), (e: any) => e instanceof profiles.ConsultantProfileError && why.test(e.message), JSON.stringify(extra));
+  }
+  assert.equal(await count("consultant_profiles", "user_id = $1", [u]), 0);
+});
+
+test("admin TG (marcus m71369 1b): one card when a profile is shown, one when a shown profile is edited; none for a draft", async () => {
+  const base = telegramSends.length;
+  const p = await provider(`tg-${++seq}`, false);
+  const cards = () => telegramSends.slice(base).map((s) => s.text);
+  assert.equal(cards().length, 0, "saving a draft sends nothing");
+  await profiles.saveOwnConsultantProfile(p.u, profiles.parseConsultantProfile(profileForm(`tg-${seq}`, { headline: "Draft edit" })));
+  assert.equal(cards().length, 0, "editing a draft sends nothing");
+  await profiles.setOwnConsultantProfilePublished(p.u, true);
+  assert.equal(cards().length, 1);
+  assert.match(cards()[0], /profile now shown/);
+  assert.match(cards()[0], new RegExp(`/marketplace/services/tg-${seq}`));
+  assert.match(cards()[0], /admin\/consult-applications/);
+  await profiles.setOwnConsultantProfilePublished(p.u, true);
+  assert.equal(cards().length, 1, "showing an already shown profile sends nothing");
+  await profiles.saveOwnConsultantProfile(p.u, profiles.parseConsultantProfile(profileForm(`tg-${seq}`, { headline: "Live edit" })));
+  assert.equal(cards().length, 2);
+  assert.match(cards()[1], /shown profile edited/);
+  assert.match(cards()[1], /Pat Provider/);
+  await profiles.setOwnConsultantProfilePublished(p.u, false);
+  await profiles.saveOwnConsultantProfile(p.u, profiles.parseConsultantProfile(profileForm(`tg-${seq}`, { headline: "Hidden edit" })));
+  assert.equal(cards().length, 2, "hiding and editing a hidden profile sends nothing");
+  for (const c of cards()) assert.doesNotMatch(c, /@example\.invalid/, "no email in the card");
+});
+
 test("0116_rollback refuses while a profile or a stated service type exists, then drops the table and the columns", async () => {
   const rollback = readFileSync(path.join(MIGRATIONS, "0116_rollback.sql"), "utf8");
   await assert.rejects(db.exec(rollback), /consultant_profiles has rows/);
