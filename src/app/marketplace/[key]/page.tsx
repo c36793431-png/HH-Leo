@@ -149,8 +149,8 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
     listing.scoreTierKey ? [...listing.tierKeys, listing.scoreTierKey] : listing.tierKeys,
   );
   // With no image, spec, figures or included list, the left column is empty and the Access box
-  // would float alone at the far right. It takes the left edge instead. No listing hits this since
-  // every one carries an image; it guards the next listing added without one.
+  // would float alone at the far right. It takes the left edge instead. Horizon One (coming soon, no image
+  // until Iris's portal art) is the listing that hits this today.
   const leftEmpty =
     !listing.image && !listing.coverage && !hasListingFigures(figures) && (included.length === 0 || includedWide);
   // Signing in returns the visitor to this product page, where the real control is.
