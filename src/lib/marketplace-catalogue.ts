@@ -93,8 +93,8 @@ export const MARKETPLACE_CATEGORY_LABELS: Record<MarketplaceCategory, string> = 
  * coxwell 2026-09-21 via marcus, "Horizon software would be above feeds also". */
 export const MARKETPLACE_CATEGORY_ORDER: MarketplaceCategory[] = ["software", "feeds"];
 
-/** "coming-soon" has no listing today and is kept on purpose: it is a state Horizon will want,
- * and its label must stay true to its name. "unavailable" is coxwell's own string, shipped as he
+/** "coming-soon" is Horizon One's state (coxwell 2026-10-18 13:05Z via marcus m72348: "marketplace can have 2nd
+ * horizon one software but coming soon"), and its label must stay true to its name. "unavailable" is coxwell's own string, shipped as he
  * typed it (2026-09-21 via marcus, m52137) — not a paraphrase. */
 export const MARKETPLACE_AVAILABILITY_LABELS: Record<MarketplaceAvailability, string> = {
   available: "Available",
@@ -441,6 +441,23 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
         ],
       },
     ],
+  },
+  {
+    // Horizon One (coxwell 2026-10-18 13:05Z via marcus m72348): a second software listing, COMING SOON. Declared, no
+    // feed_tiers row and no DB row; action null, so it cannot be requested, downloaded or put in the basket (the product
+    // page and basket-catalogue both refuse a non-available listing anyway). The blurb is marcus's card text, the same
+    // line as the main site's card; More info goes to the main site's /horizonone page. No image until Iris's art is
+    // handed over for the portal.
+    key: "horizon-one",
+    title: "Horizon One",
+    category: "software",
+    availability: "coming-soon",
+    tierKeys: [],
+    feedSlug: null,
+    blurb: "Desktop software for finding and testing strategies: full chart, CME indicators and a backtester.",
+    action: null,
+    moreInfo: { href: `${MAIN_SITE_URL}/horizonone`, label: "More about Horizon One →" },
+    // No mark: a mark sits on the image (listing-media.tsx), and this listing has none yet.
   },
 ];
 
