@@ -6,7 +6,7 @@
  * Setup, once: put this file in an empty folder and run `npm init -y && npm install @vercel/blob@2.6.1`
  * there (Node >= 20). Run:
  *   PUBLISH_API_TOKEN=... node upload-release.mjs --zip <build.zip> --mapping <Mapping.txt> \
- *     --version 2.0.9 --platform windows [--changelog-file <notes.txt>] [--portal https://portal.horizonhft.com]
+ *     --version 2.1 --platform windows [--changelog-file <notes.txt>] [--portal https://portal.horizonhft.com]
  * The token comes from the environment only and is never printed.
  *
  * Steps: hash both files (sha256 + size, from the bytes it uploads) -> phase 1 (two upload tokens)
@@ -23,7 +23,7 @@ import path from "node:path";
 import { put } from "@vercel/blob/client";
 
 const USAGE =
-  "usage: PUBLISH_API_TOKEN=... node upload-release.mjs --zip <file.zip> --mapping <Mapping.txt> --version <x.y.z> --platform windows|macos [--changelog-file <file>] [--portal <url>]";
+  "usage: PUBLISH_API_TOKEN=... node upload-release.mjs --zip <file.zip> --mapping <Mapping.txt> --version <e.g. 2.1 / 2.0.9> --platform windows|macos [--changelog-file <file>] [--portal <url>]";
 
 function parseArgs(argv) {
   const out = {};

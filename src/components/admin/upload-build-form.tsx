@@ -88,7 +88,7 @@ export function UploadBuildForm() {
         <input
           name="version"
           type="text"
-          placeholder="4.2.1"
+          placeholder="2.1 / 2.0.9"
           required
           disabled={isUploading}
           className="mt-1 rounded border border-zinc-700 bg-black/40 px-2 py-1 text-sm text-zinc-200"

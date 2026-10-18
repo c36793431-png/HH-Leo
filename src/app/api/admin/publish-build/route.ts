@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   const filename = body?.filename === undefined ? DEFAULT_BUILD_FILENAME : body.filename;
 
   if (typeof version !== "string" || !VERSION_PATTERN.test(version)) {
-    return NextResponse.json({ error: "version must look like 2.0.9 (2 to 4 numeric parts)" }, { status: 400 });
+    return NextResponse.json({ error: "version must look like 2.1 / 2.0.9 (2 to 4 numeric parts)" }, { status: 400 });
   }
   if (typeof platform !== "string" || !PLATFORMS.includes(platform as Platform)) {
     return NextResponse.json({ error: "platform must be windows or macos" }, { status: 400 });
