@@ -866,6 +866,11 @@
 /* Signed-out lesson (m62822): placeholder blocks blurred and fading out, the sign-in card centred
    over them. The placeholder is filler text, never the lesson's. */
 .portal-shell .lesson-gate { position: relative; margin-top: 14px; min-height: 300px; }
+/* Text-free gate skeleton (marcus m73402): bars in place of the old placeholder text, under the same blur. */
+.portal-shell .lgs-bar { display: block; height: 11px; margin-top: 12px; border-radius: 6px; background: rgba(138, 155, 160, 0.24); }
+.portal-shell .lgs-bar.h { height: 15px; margin-top: 0; flex: 0 0 auto; }
+.portal-shell .lesson-block ul.lgs-list { list-style: none; padding-left: 0; }
+.portal-shell .lgs-list li { margin-top: 2px; }
 .portal-shell .lesson-gate-skel {
   display: flex; flex-direction: column; gap: 14px; filter: blur(5px); opacity: 0.6;
   user-select: none; pointer-events: none;

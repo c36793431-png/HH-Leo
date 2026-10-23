@@ -169,15 +169,11 @@ export function LessonDetail({ lesson, isPaidTier }: { lesson: EducationLesson; 
   );
 }
 
-// Filler under the blur. Fixed text, never the lesson's: the hidden part is not on the page.
-const PLACEHOLDER_HEADING = "Lorem ipsum dolor sit";
-const PLACEHOLDER_BODY =
-  "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.";
-const PLACEHOLDER_ITEMS = [
-  "Lorem ipsum — dolor sit amet, consectetur adipiscing elit",
-  "Sed do eiusmod — tempor incididunt ut labore et dolore",
-  "Ut enim ad minim — veniam, quis nostrud exercitation",
-];
+// Filler under the blur: text-free grey bars (marcus m73402, as on www m72899 A), never the lesson's text: the hidden
+// part is not on the page. Widths in %: heading, three body lines, three list items, the old filler's footprint.
+const SKEL_HEADING = 42;
+const SKEL_BODY = [100, 96, 62];
+const SKEL_ITEMS = [78, 70, 64];
 
 /** A lesson for a signed-out visitor (coxwell via marcus, m62822): the first part as members see
  * it, then placeholder blocks under a blur with the sign-in card on top. Takes a SignedOutLesson,
@@ -209,12 +205,16 @@ export function LessonPreview({
             <div key={i} className="lesson-block">
               <div className="lb-head">
                 <span className="lb-tag">Lesson</span>
-                <h3>{PLACEHOLDER_HEADING}</h3>
+                <span className="lgs-bar h" style={{ width: `${SKEL_HEADING}%` }} />
               </div>
-              <p>{PLACEHOLDER_BODY}</p>
-              <ul>
-                {PLACEHOLDER_ITEMS.map((item) => (
-                  <li key={item}>{item}</li>
+              {SKEL_BODY.map((w, j) => (
+                <span key={j} className="lgs-bar" style={{ width: `${w}%` }} />
+              ))}
+              <ul className="lgs-list">
+                {SKEL_ITEMS.map((w, j) => (
+                  <li key={j}>
+                    <span className="lgs-bar" style={{ width: `${w}%` }} />
+                  </li>
                 ))}
               </ul>
             </div>
