@@ -74,6 +74,15 @@ function LessonBlock({ block }: { block: EducationBlock }) {
           ))}
         </ul>
       )}
+      {block.image && (
+        <figure className="lb-figure">
+          <a href={block.image.src} target="_blank" rel="noopener noreferrer" style={{ maxWidth: block.image.width + 2 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={block.image.src} alt={block.image.alt} width={block.image.width} height={block.image.height} loading="lazy" />
+          </a>
+          <figcaption>{block.image.caption}</figcaption>
+        </figure>
+      )}
       {block.parts?.map((part, i) => (
         <div key={i} className="lb-part">
           {part.label && <h4 className="lb-part-label">{part.label}</h4>}
