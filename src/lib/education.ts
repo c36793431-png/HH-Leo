@@ -322,7 +322,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
       {
         type: "info",
         heading: "How OBI works",
-        body: "OBI (Order Book Imbalance) is one of the five Horizon strategies, next to 1 Leg, 2 Leg Lock, Trend Impulse and Grid. It looks for moments when the fast CME market has clearly moved on one side of the book while your broker has not caught up yet, and trades that lead. This guide explains how it decides, what changed in 2.0.9, and how to start safely.",
+        body: "OBI (Order Book Imbalance) is one of the five Horizon strategies, next to 1 Leg, 2 Leg Lock, Trend Impulse and Grid. It looks for moments when the fast CME market has clearly moved on one side of the book while your broker has not caught up yet, and trades that lead. This guide explains how it decides and how to start safely.",
         image: {
           src: "/education/obi/obi-how-it-works.webp",
           alt: "How OBI works, in one picture. 1, after START: Auto Offset removes the basis between futures and CFD, then wait for \"Auto-Offset locked\". From 2.1 entries wait for this automatically; until then you wait for the log line. 2, every tick: compare the fast CME prices with your broker's, each side separately. BUY when the fast bid is ahead of the broker bid by at least Imbal Gap and the ask has not moved the other way by Max Counter or more; SELL is the mirror. Filters: Max Spread, Trade Pause, and an optional Trend Filter for gold. Then enter, one trade at a time. 3, exits: TP and SL in points from the entry, Hard SL checked by Horizon every tick, Trailing when Trail Start and Trail Dist are above 0, Min Time holds TP and SL for a set time, and Max Time still applies during Min Time. An illustration, no real prices.",
@@ -336,7 +336,7 @@ export const EDUCATION_LESSONS: EducationLesson[] = [
         heading: "What you need",
         body: "",
         items: [
-          "Horizon 2.0.9 or newer. 2.0.9 brings an important fix for OBI (see below). Please update before you run it.",
+          "Horizon 2.0.9 or newer. Please update before you run it.",
           "The Horizon CME Fast Feed. OBI only starts on the \"Horizon CME\" feed. On any other feed, START refuses it.",
           "A broker instrument that follows the CME contract, for example gold (GC → XAUUSD) or US indices (ES → US500, NQ → NAS100)."
         ]
