@@ -1305,6 +1305,45 @@
    underline only on hover, so it reads as the same title and not as a new blue element. */
 .portal-shell .mkt-name-link { color: inherit; text-decoration: none; }
 .portal-shell .mkt-name-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* Compact cards (coxwell via marcus m74104): the section headings stay, the cards shrink so a whole
+   card is in view at a glance. 5 a row on a wide screen, 4 on a laptop, 2 on a tablet, 1 on a phone;
+   grid-auto-rows 1fr gives every card in a section the same height. Thumbnail about half its old
+   height, cropped around the centre where the logo sits; the blurb is clamped to 2 lines (no copy
+   change); See more and Add to basket share one row as small buttons. Scoped to .mkt-grid, so the
+   product page's hero image and its boxes are untouched. */
+.portal-shell .mkt-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 12px; }
+@media (max-width: 1279px) { .portal-shell .mkt-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 1023px) { .portal-shell .mkt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 559px) { .portal-shell .mkt-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; } }
+.portal-shell .mkt-grid .mkt-card { padding: 12px; gap: 4px; }
+.portal-shell .mkt-grid .mkt-media-card { margin-bottom: 4px; }
+.portal-shell .mkt-grid .mkt-image { height: 72px; object-fit: cover; object-position: center; border-radius: 8px; }
+.portal-shell .mkt-grid .mkt-mark { left: 6px; bottom: 6px; width: 30px; height: 18px; }
+.portal-shell .mkt-grid .bk-strategy-plate { height: 72px; border-radius: 8px; margin-bottom: 4px; }
+.portal-shell .mkt-grid .mkt-top { margin-bottom: 0; }
+.portal-shell .mkt-grid .mkt-pill { font-size: 9px; padding: 2px 7px; white-space: nowrap; }
+.portal-shell .mkt-grid .ftd-segment-badge { font-size: 9px; }
+.portal-shell .mkt-grid .mkt-name { font-size: 14.5px; line-height: 1.25; }
+.portal-shell .mkt-grid .mkt-desc {
+  font-size: 11.5px; line-height: 1.45; min-height: calc(2 * 1.45em);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.portal-shell .mkt-grid .mkt-members { gap: 3px; margin-top: 2px; padding-top: 5px; }
+.portal-shell .mkt-grid .mkt-member-name { font-size: 11px; }
+.portal-shell .mkt-grid .mkt-member-figure { font-size: 12px; }
+.portal-shell .mkt-grid .mkt-foot { padding-top: 6px; flex-wrap: nowrap; gap: 4px; }
+.portal-shell .mkt-grid .bk-foot .btn { padding: 4px 6px; font-size: 11px; }
+.portal-shell .mkt-grid .bk-foot-note { font-size: 10.5px; line-height: 1.3; }
+/* Corner tag (CardBadge, coxwell via marcus m74113): a tab hanging from the card's top edge at the left, over the
+   thumbnail's corner, so it stays apart from the availability pill (right, under the thumbnail) and out of the text.
+   The portal's cyan accent filled, dark ink, the same weight and tracking as the pill. */
+.portal-shell .mkt-card { position: relative; }
+.portal-shell .mkt-badge {
+  position: absolute; top: -1.5px; left: 14px; z-index: 1;
+  padding: 3px 9px 4px; border-radius: 0 0 7px 7px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; line-height: 1.2;
+  background: var(--hz-cyan); color: #03191b; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45), 0 0 12px rgba(45, 226, 230, 0.35);
+}
 
 /* ---- MARKETPLACE PRODUCT PAGE (/marketplace/[key]) ----
    Layout from Iris's sheet 2 (m51796): a spec plate on the left and the request box on the

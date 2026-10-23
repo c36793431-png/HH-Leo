@@ -103,6 +103,14 @@ export const MARKETPLACE_AVAILABILITY_LABELS: Record<MarketplaceAvailability, st
   maintenance: "Maintenance",
 };
 
+/** A tag on a shelf card's top-left corner (coxwell 10-23 via marcus m74113: "Popular" on Horizon Complete). Set on
+ * the product's own entry, never matched from its title, so any listing or bundle can carry one. It is not a state:
+ * the availability pill stays as it is, and a card with no badge renders nothing extra. No price, ever. */
+export type CardBadge = "popular";
+export const CARD_BADGE_LABELS: Record<CardBadge, string> = {
+  popular: "Popular",
+};
+
 /** One "What's included" entry: a line, or a labelled group of lines (the terminal's
  * strategies). */
 export type IncludedLine = string | IncludedSection;
@@ -142,6 +150,8 @@ export interface MarketplaceListing {
    * reads (feed-comparison-scores.ts). Black only: it has no feed_tiers row to carry its score,
    * and the London cards read theirs from that same table by tier_key. Absent = no score. */
   scoreTierKey?: string;
+  /** The shelf card's corner tag (CardBadge above). Absent = none. */
+  badge?: CardBadge;
   // Iris's per-product assets (coxwell via marcus, m52443/m52632). Every slot is OPTIONAL, and
   // an empty one renders nothing: no placeholder, no frame, no "coming soon". Fill them from her
   // delivery only (public/marketplace/, md5s in her MANIFEST), never from the 09-18 mockup,

@@ -1,6 +1,6 @@
 import type { FeedType } from "./licenses";
 import type { StrategyKey } from "./setfiles";
-import { listingByKey, type IncludedLine } from "./marketplace-catalogue";
+import { listingByKey, type CardBadge, type IncludedLine } from "./marketplace-catalogue";
 import { expandTierKey } from "./feed-tier-catalogue";
 import { STRATEGY_DISPLAY_META } from "./strategy-catalogue";
 
@@ -26,6 +26,8 @@ export interface BundleDefinition {
   licenceTier: "paid";
   /** Marketplace listing keys: the buyer picks one at checkout. */
   feedChoices: BundleFeedChoice[];
+  /** The shelf card's corner tag (marketplace-catalogue.ts CardBadge). Absent = none. */
+  badge?: CardBadge;
 }
 
 export const BUNDLES: BundleDefinition[] = [
@@ -35,6 +37,7 @@ export const BUNDLES: BundleDefinition[] = [
     blurb: "The Horizon licence, the strategy pack and one Base feed of your choice, as one bundle.",
     licenceTier: "paid",
     feedChoices: ["ld-base", "ny-base"],
+    badge: "popular", // coxwell 10-23 via marcus m74113
   },
 ];
 

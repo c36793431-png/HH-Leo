@@ -15,7 +15,9 @@ import {
   MARKETPLACE_CATEGORY_ORDER,
   MARKETPLACE_CATEGORY_LABELS,
   MARKETPLACE_AVAILABILITY_LABELS,
+  CARD_BADGE_LABELS,
   LATENCY_SEGMENT_LABELS,
+  type CardBadge,
   listingDetailHref,
   listingLatencySegment,
 } from "@/lib/marketplace-catalogue";
@@ -129,6 +131,7 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
                 const segment = listingLatencySegment(listing);
                 return (
                   <div key={listing.key} className={`card mkt-card mkt-${listing.availability}`}>
+                    <CardBadgeTag badge={listing.badge} />
                     {/* Iris's card order (m52632 item 4): image with its flag or plate, then name,
                         one sentence and See more. The comparison score stays on the card. */}
                     <ListingMedia listing={listing} variant="card" />
@@ -206,6 +209,7 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
               const art = BUNDLE_CARD_ART[bundle.key];
               return (
                 <div key={bundle.key} className={`card mkt-card mkt-${availability} bk-bundle-card`}>
+                  <CardBadgeTag badge={bundle.badge} />
                   <div className="bk-strategy-plate bk-strategy-plate-img">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={art.src960} srcSet={`${art.src640} 640w, ${art.src960} 960w`} sizes="320px" alt={art.alt} width={320} height={120} />
@@ -341,4 +345,10 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
       {page}
     </PortalShell>
   );
+}
+
+/** A card's corner tag (CardBadge, m74113), first in the card so it reads before the title; absent = nothing. */
+function CardBadgeTag({ badge }: { badge?: CardBadge }) {
+  if (!badge) return null;
+  return <span className={`mkt-badge mkt-badge-${badge}`}>{CARD_BADGE_LABELS[badge]}</span>;
 }
