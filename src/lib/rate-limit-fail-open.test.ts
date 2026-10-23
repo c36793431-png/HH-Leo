@@ -15,7 +15,9 @@ import assert from "node:assert/strict";
 const CAP_ERROR = "ERR max requests limit exceeded. Limit: 500000, Usage: 500002";
 const UPSTASH_URL = "https://upstash.test.invalid";
 
-type Mode = "cap" | "ok" | "deny";
+/** mixed: the licence-key window denies and every other command gets the cap error, in the same pipeline.
+ *  http: the whole request answers 400, the path whose message appends ", command was: <request body>". */
+type Mode = "cap" | "ok" | "deny" | "mixed" | "http";
 let mode: Mode = "cap";
 /** Every Redis command the code sent, as [COMMAND, ...args], in order. */
 let commands: string[][] = [];
@@ -36,7 +38,13 @@ async function upstashFetch(input: string | URL | Request, init?: RequestInit): 
   const pipeline = url.endsWith("/pipeline") || url.endsWith("/multi-exec");
   const sent: string[][] = pipeline ? body : [body];
   commands.push(...sent.map((c) => c.map(String)));
-  if (mode === "cap") {
+  if (mode === "http") return Response.json({ error: CAP_ERROR }, { status: 400 });
+  if (mode === "mixed" && pipeline) {
+    return Response.json(
+      sent.map((c) => (c.some((a) => String(a).startsWith("rl:license-key:")) ? { result: [-1, 60] } : { error: CAP_ERROR }))
+    );
+  }
+  if (mode === "cap" || mode === "mixed") {
     return pipeline
       ? Response.json(sent.map(() => ({ error: CAP_ERROR })))
       : Response.json({ error: CAP_ERROR }, { status: 400 });
@@ -153,4 +161,29 @@ test("8: a healthy limiter lets the request through", async () => {
   const res = await route.POST(post("/api/verify-license", { license_key: "KEY-OTHER" }, { "x-forwarded-for": "198.51.100.9" }));
   assert.equal(res.status, 404);
   assert.equal(evals().length, 2, "key + ip windows both consulted");
+});
+
+test("9: one window denies while another errors in the same call -> still 429 (Fable S1)", async () => {
+  mode = "mixed";
+  const route = await import("../app/api/verify-license/route");
+  // Fresh key and IP, so the verdict comes from Redis and not from an earlier test's block cache.
+  const res = await route.POST(post("/api/verify-license", { license_key: "KEY-MIXED" }, { "x-forwarded-for": "192.0.2.44" }));
+  assert.equal(res.status, 429);
+  assert.equal(evals().length, 2, "both windows really reached Redis");
+});
+
+test("10: the failure log carries no licence key and no IP (Fable N1)", async (t) => {
+  mode = "http";
+  // Step past the once-a-minute throttle that test 2's line armed, so this test really logs.
+  const later = Date.now() + 120_000;
+  t.mock.method(Date, "now", () => later);
+  const route = await import("../app/api/verify-license/route");
+  const res = await route.POST(
+    post("/api/verify-license", { license_key: "KEY-SECRET-77" }, { "x-forwarded-for": "198.51.100.77" })
+  );
+  assert.equal(res.status, 404);
+  assert.equal(logged.length, 1);
+  assert.ok(logged[0].includes(CAP_ERROR), "the error itself is still logged");
+  assert.ok(!logged[0].includes("KEY-SECRET-77"), `licence key in log: ${logged[0]}`);
+  assert.ok(!logged[0].includes("198.51.100.77"), `IP in log: ${logged[0]}`);
 });

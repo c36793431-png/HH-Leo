@@ -80,19 +80,32 @@ let lastLimiterErrorLoggedAt = 0;
  * ~9.5h. A limiter that cannot answer now lets the request through: the same posture as
  * Upstash not being configured (init() returns null) and as the library's own 5s timeout,
  * which already resolves success. Only an actual verdict from Redis can refuse a request.
+ *
+ * allSettled, not all (Fable S1 via marcus m73413): one window that denies still refuses the
+ * request when another window in the same call errors. Promise.all let the rejection win.
  */
 async function allowed(where: string, checks: () => Promise<{ success: boolean }>[]): Promise<boolean> {
-  try {
-    const results = await Promise.all(checks());
-    return results.every((r) => r.success);
-  } catch (err) {
+  const results = await Promise.allSettled(checks());
+  if (results.some((r) => r.status === "fulfilled" && !r.value.success)) return false;
+  const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (failed) {
     const now = Date.now();
     if (now - lastLimiterErrorLoggedAt >= LOG_THROTTLE_MS) {
       lastLimiterErrorLoggedAt = now;
-      console.error(`rate-limit: limiter unavailable, failing open (${where})`, err);
+      console.error(`rate-limit: limiter unavailable, failing open (${where}): ${errorSummary(failed.reason)}`);
     }
-    return true;
   }
+  return true;
+}
+
+/**
+ * The error's message only, cut before ", command was:" (Fable N1 via marcus m73413). On an
+ * HTTP non-OK reply @upstash/redis appends the whole request body, i.e. the limiter keys, which
+ * are raw licence keys and IPs ("rl:license-key:<KEY>"). Those must never reach the Vercel logs.
+ */
+function errorSummary(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.split(", command was:")[0];
 }
 
 /** Per-license-key + per-source-IP counters for /api/verify-license. In-memory counters don't work across serverless invocations, hence Upstash. */
