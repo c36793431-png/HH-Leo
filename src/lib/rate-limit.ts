@@ -4,10 +4,6 @@ import { Redis } from "@upstash/redis";
 let redisClient: Redis | null = null;
 let keyLimiter: Ratelimit | null = null;
 let ipLimiter: Ratelimit | null = null;
-// Heartbeat is high-frequency by design (the client beats on a timer), so it gets its
-// own, looser windows keyed independently from the one-shot /v1/validate path.
-let hbKeyLimiter: Ratelimit | null = null;
-let hbIpLimiter: Ratelimit | null = null;
 // /v1/hft-alert: per-key windows per the spec (~20/min + 300/hr), separate per-IP cap
 // since one IP can host many license keys (a trading box running multiple accounts).
 let hftAlertKeyMinuteLimiter: Ratelimit | null = null;
@@ -15,24 +11,23 @@ let hftAlertKeyHourLimiter: Ratelimit | null = null;
 let hftAlertIpLimiter: Ratelimit | null = null;
 let initialized = false;
 
+// /v1/hb has NO limiter (marcus m73346, after the 2026-10-19 outage). Every limit() call is a
+// billed Upstash command whatever its threshold, so loosening the windows would have saved
+// nothing; the two hb windows were 2 of the 7 commands a beat cost. They also bounded little:
+// distinct hids under one IP still created a new hash per beat up to 3600/hr. Nothing now
+// bounds how many beats or hashes a caller writes; the route's field caps bound each hash's
+// size and heartbeat-buffer.ts's 7-day TTL its lifetime.
+
 function init(): {
   keyLimiter: Ratelimit;
   ipLimiter: Ratelimit;
-  hbKeyLimiter: Ratelimit;
-  hbIpLimiter: Ratelimit;
   hftAlertKeyMinuteLimiter: Ratelimit;
   hftAlertKeyHourLimiter: Ratelimit;
   hftAlertIpLimiter: Ratelimit;
 } | null {
   if (initialized) {
-    return keyLimiter &&
-      ipLimiter &&
-      hbKeyLimiter &&
-      hbIpLimiter &&
-      hftAlertKeyMinuteLimiter &&
-      hftAlertKeyHourLimiter &&
-      hftAlertIpLimiter
-      ? { keyLimiter, ipLimiter, hbKeyLimiter, hbIpLimiter, hftAlertKeyMinuteLimiter, hftAlertKeyHourLimiter, hftAlertIpLimiter }
+    return keyLimiter && ipLimiter && hftAlertKeyMinuteLimiter && hftAlertKeyHourLimiter && hftAlertIpLimiter
+      ? { keyLimiter, ipLimiter, hftAlertKeyMinuteLimiter, hftAlertKeyHourLimiter, hftAlertIpLimiter }
       : null;
   }
   initialized = true;
@@ -45,15 +40,6 @@ function init(): {
   redisClient = redis;
   keyLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(60, "1 h"), prefix: "rl:license-key" });
   ipLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(600, "1 h"), prefix: "rl:license-ip" });
-  // Sized off the real cadence: one open trading tab beats every 180s = 20/hr, and the
-  // client opens one timer PER TAB on the same license key. The old 120/hr ceiling was set
-  // before that was known and bites at 7 tabs — and because /v1/hb answers 204 either way,
-  // a customer would lose telemetry with nothing anywhere saying so. 600/hr = 30 tabs.
-  hbKeyLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(600, "1 h"), prefix: "rl:hb-key" });
-  // Per-IP has to clear per-key by a real multiple or it becomes the binding cap and
-  // re-creates the same silent drop for anyone behind one address — a NAT'd trading desk
-  // or a VPS host is several keys on one IP. 3600/hr = six saturated keys.
-  hbIpLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(3600, "1 h"), prefix: "rl:hb-ip" });
   hftAlertKeyMinuteLimiter = new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(20, "1 m"),
@@ -69,7 +55,7 @@ function init(): {
     limiter: Ratelimit.slidingWindow(60, "1 m"),
     prefix: "rl:hft-alert-ip",
   });
-  return { keyLimiter, ipLimiter, hbKeyLimiter, hbIpLimiter, hftAlertKeyMinuteLimiter, hftAlertKeyHourLimiter, hftAlertIpLimiter };
+  return { keyLimiter, ipLimiter, hftAlertKeyMinuteLimiter, hftAlertKeyHourLimiter, hftAlertIpLimiter };
 }
 
 /**
@@ -84,15 +70,36 @@ export function getRedis(): Redis | null {
   return redisClient;
 }
 
+// One line per minute per instance: a failing Upstash would otherwise log once per request.
+const LOG_THROTTLE_MS = 60_000;
+let lastLimiterErrorLoggedAt = 0;
+
+/**
+ * FAIL OPEN (marcus m73346). On 2026-10-19 the Upstash monthly command cap ran out, every
+ * limit() threw "ERR max requests limit exceeded", and the licence routes answered 500 for
+ * ~9.5h. A limiter that cannot answer now lets the request through: the same posture as
+ * Upstash not being configured (init() returns null) and as the library's own 5s timeout,
+ * which already resolves success. Only an actual verdict from Redis can refuse a request.
+ */
+async function allowed(where: string, checks: () => Promise<{ success: boolean }>[]): Promise<boolean> {
+  try {
+    const results = await Promise.all(checks());
+    return results.every((r) => r.success);
+  } catch (err) {
+    const now = Date.now();
+    if (now - lastLimiterErrorLoggedAt >= LOG_THROTTLE_MS) {
+      lastLimiterErrorLoggedAt = now;
+      console.error(`rate-limit: limiter unavailable, failing open (${where})`, err);
+    }
+    return true;
+  }
+}
+
 /** Per-license-key + per-source-IP counters for /api/verify-license. In-memory counters don't work across serverless invocations, hence Upstash. */
 export async function checkVerifyLicenseRateLimit(licenseKey: string, ip: string): Promise<boolean> {
   const limiters = init();
   if (!limiters) return true;
-  const [keyResult, ipResult] = await Promise.all([
-    limiters.keyLimiter.limit(licenseKey),
-    limiters.ipLimiter.limit(ip),
-  ]);
-  return keyResult.success && ipResult.success;
+  return allowed("verify-license", () => [limiters.keyLimiter.limit(licenseKey), limiters.ipLimiter.limit(ip)]);
 }
 
 /** /v1/validate — one-shot activation call, reuses the same tight windows as verify-license. */
@@ -106,21 +113,9 @@ export async function checkValidateRateLimit(licenseKey: string, ip: string): Pr
 export async function checkHftAlertRateLimit(licenseKey: string, ip: string): Promise<boolean> {
   const limiters = init();
   if (!limiters) return true;
-  const [keyMinuteResult, keyHourResult, ipResult] = await Promise.all([
+  return allowed("hft-alert", () => [
     limiters.hftAlertKeyMinuteLimiter.limit(licenseKey),
     limiters.hftAlertKeyHourLimiter.limit(licenseKey),
     limiters.hftAlertIpLimiter.limit(ip),
   ]);
-  return keyMinuteResult.success && keyHourResult.success && ipResult.success;
-}
-
-/** /v1/hb — looser windows since the client heartbeats on a timer. */
-export async function checkHeartbeatRateLimit(licenseKey: string, ip: string): Promise<boolean> {
-  const limiters = init();
-  if (!limiters) return true;
-  const [keyResult, ipResult] = await Promise.all([
-    limiters.hbKeyLimiter.limit(licenseKey),
-    limiters.hbIpLimiter.limit(ip),
-  ]);
-  return keyResult.success && ipResult.success;
 }

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkHeartbeatRateLimit } from "@/lib/rate-limit";
 import { httpsViolation, clientIp } from "@/lib/client-endpoints";
 import { bufferBeat } from "@/lib/heartbeat-buffer";
 
@@ -24,8 +23,14 @@ import { bufferBeat } from "@/lib/heartbeat-buffer";
  * NO ORACLE: an unknown, expired or revoked key gets the same 204 as a good one. The
  * response must not let an attacker probe key validity, which is exactly what the
  * withheld scaffold's 403-on-inactive did. The only non-204 answers are shape verdicts
- * (malformed JSON, missing lk/hid), the production HTTPS guard, and the rate-limit 429 —
- * none of which read the key, so none of them say anything about it.
+ * (malformed JSON, missing lk/hid) and the production HTTPS guard — neither reads the
+ * key, so neither says anything about it.
+ *
+ * NO RATE LIMITER (marcus m73346, after the 2026-10-19 outage; it replaces his 2026-09-11
+ * 429 ruling). Per m73346 heartbeats spent most of the Upstash monthly command cap; when it
+ * ran out the limiter threw and this route 500ed along with the licence routes. Each
+ * limit() call is a billed command whatever its threshold, so a looser window would have
+ * saved nothing; see rate-limit.ts.
  *
  * UNAUTHENTICATED, and deliberately so — listen-only means there is nothing to protect on
  * the way out. There is no shared secret and no response signing: response-signing.ts is
@@ -38,8 +43,7 @@ import { bufferBeat } from "@/lib/heartbeat-buffer";
  * vercel.json and does the client_heartbeats upsert (migration 0085), the licence-key
  * resolution and the connection-IP capture. Neon autosuspends, and at the real cadence (~560 beats/hr, ~3 queries each) a beat
  * that touched the DB would hold the compute awake permanently — the endpoint's whole compute
- * allowance, spent on telemetry nothing reads in real time. The 429 caps below are unchanged;
- * they now bound Redis rather than Postgres.
+ * allowance, spent on telemetry nothing reads in real time.
  *
  * Writes still land in client_heartbeats (migration 0085), upserted one row per
  * (license_key, hwid) — see that file's header for the grain and null semantics. The flush
@@ -124,15 +128,6 @@ export async function POST(req: NextRequest) {
   }
 
   const ip = clientIp(req);
-
-  // Over the cap: drop the beat and answer 429 (marcus's ruling, 2026-09-11). The client
-  // ignores the response either way, so the status can't change its behaviour — the point
-  // is that a dropped beat shows up in platform logs instead of hiding behind a 204. It
-  // doesn't reopen the oracle: the limiter counts the supplied string and the IP without
-  // ever looking the key up, so an unknown key throttles exactly like a live one.
-  if (!(await checkHeartbeatRateLimit(licenseKey, ip))) {
-    return NextResponse.json({ error: "rate limited" }, { status: 429 });
-  }
 
   // Buffer and return. resolveLicenseKey moved to the flush: it is a Postgres read, and it
   // has to run against the licences table as it stands when the row is written anyway.

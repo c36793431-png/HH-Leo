@@ -7,8 +7,8 @@ import { getRedis } from "./rate-limit";
  * on 2026-09-12T00:36Z showed `pg_postmaster_start_time` 6 minutes old — and at the real
  * cadence (14 licences x ~2 tabs x 20 beats/hr ~= 560 beats/hr, ~3 queries each) a beat that
  * touches the DB would keep the compute awake permanently. That is the whole plan's compute
- * allowance, and it is not a rate-limit question: the 600/hr per-key and 3600/hr per-IP caps
- * in rate-limit.ts still apply, but after this change they bound Redis, not Postgres.
+ * allowance, and it is not a rate-limit question. (/v1/hb has had no limiter since marcus
+ * m73346; see rate-limit.ts.)
  *
  * A beat writes one hash and one set member and returns. A cron drains the dirty set on the
  * schedule configured in vercel.json and does ONE upsert per key into client_heartbeats. DB
