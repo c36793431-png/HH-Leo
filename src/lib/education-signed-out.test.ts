@@ -44,7 +44,7 @@ const EXPECTED_SHOWN: Record<string, number> = {
   "1-leg-latency-arb": 1,
   "2-leg-lock-hedge-arb": 1,
   "trend-impulse": 1,
-  obi: 1,
+  obi: 2, // 8 blocks since the live-guide sync (marcus m73349)
   "grid-arbitrage": 1,
   "risk-and-lot-sizing": 1,
   "timing-protection": 1,
@@ -74,7 +74,7 @@ test("the cut: first quarter of the blocks, rounded up, so at least one full blo
     "1-leg-latency-arb": "1/1 hidden 1",
     "2-leg-lock-hedge-arb": "1/3 hidden 2",
     "trend-impulse": "1/2 hidden 1",
-    obi: "1/3 hidden 2",
+    obi: "2/8 hidden 6", // synced to the live OBI guide (marcus m73349): 8 blocks, first quarter = 2
     "grid-arbitrage": "1/3 hidden 2",
     "risk-and-lot-sizing": "1/2 hidden 1",
     "timing-protection": "1/2 hidden 1",
