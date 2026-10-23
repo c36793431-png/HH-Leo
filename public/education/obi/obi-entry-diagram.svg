@@ -1,0 +1,31 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 630' width='1200' height='630' role='img' aria-labelledby='obi-t obi-d' font-family='Inter, Segoe UI, Helvetica, Arial, sans-serif'>
+<title id='obi-t'>How OBI enters a BUY</title>
+<desc id='obi-d'>The fast CME bid is ahead of the broker bid by at least the Imbal Gap, while the fast ask stays within Max Counter of the broker ask. Both at once: BUY. Illustration, no real prices.</desc>
+<rect width='1200' height='630' fill='#0A1020'/>
+<text x='60' y='80' font-size='44' font-weight='700' fill='#EEF2F8'>How OBI enters a BUY</text>
+<text x='210' y='150' font-size='34' font-weight='700' fill='#00E5D4' text-anchor='middle'>Fast CME</text>
+<text x='450' y='150' font-size='34' font-weight='700' fill='#A9B4C6' text-anchor='middle'>Your broker</text>
+<text x='55' y='230' font-size='30' font-weight='700' fill='#7C8AA0' text-anchor='middle'>ASK</text>
+<text x='55' y='432' font-size='30' font-weight='700' fill='#7C8AA0' text-anchor='middle'>BID</text>
+<rect x='95' y='175' width='470' height='90' rx='12' fill='#FFC24B' fill-opacity='0.12' stroke='#FFC24B' stroke-width='3' stroke-dasharray='12 8'/>
+<line x1='120' y1='210' x2='300' y2='210' stroke='#00E5D4' stroke-width='9' stroke-linecap='round'/>
+<line x1='360' y1='230' x2='540' y2='230' stroke='#A9B4C6' stroke-width='9' stroke-linecap='round'/>
+<text x='600' y='218' font-size='38' font-weight='700' fill='#FFC24B'>Max Counter</text>
+<text x='600' y='256' font-size='28' fill='#C8D1DF'>ask stays inside</text>
+<line x1='120' y1='350' x2='300' y2='350' stroke='#00E5D4' stroke-width='9' stroke-linecap='round'/>
+<line x1='360' y1='490' x2='540' y2='490' stroke='#A9B4C6' stroke-width='9' stroke-linecap='round'/>
+<line x1='312' y1='350' x2='575' y2='350' stroke='#00E5D4' stroke-width='3' stroke-opacity='0.6' stroke-dasharray='8 8'/>
+<line x1='552' y1='490' x2='575' y2='490' stroke='#A9B4C6' stroke-width='3' stroke-opacity='0.6' stroke-dasharray='8 8'/>
+<line x1='575' y1='350' x2='575' y2='490' stroke='#34D17A' stroke-width='5'/>
+<line x1='562' y1='350' x2='588' y2='350' stroke='#34D17A' stroke-width='5'/>
+<line x1='562' y1='490' x2='588' y2='490' stroke='#34D17A' stroke-width='5'/>
+<text x='600' y='422' font-size='38' font-weight='700' fill='#34D17A'>Imbal Gap</text>
+<text x='600' y='460' font-size='28' fill='#C8D1DF'>fast bid ahead</text>
+<line x1='830' y1='345' x2='872' y2='345' stroke='#34D17A' stroke-width='8' stroke-linecap='round'/>
+<polygon points='870,327 894,345 870,363' fill='#34D17A'/>
+<rect x='900' y='280' width='240' height='130' rx='22' fill='#34D17A'/>
+<text x='1020' y='370' font-size='76' font-weight='800' fill='#04140B' text-anchor='middle'>BUY</text>
+<text x='1020' y='455' font-size='30' fill='#C8D1DF' text-anchor='middle'>both at once</text>
+<text x='1140' y='580' font-size='28' font-weight='700' letter-spacing='4' fill='#EEF2F8' text-anchor='end'>HORIZON</text>
+<text x='1140' y='610' font-size='22' fill='#8A97AD' text-anchor='end'>horizonhft.com</text>
+</svg>
