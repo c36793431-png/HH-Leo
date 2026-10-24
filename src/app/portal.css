@@ -1311,10 +1311,30 @@
    height, cropped around the centre where the logo sits; the blurb is clamped to 2 lines (no copy
    change); See more and Add to basket share one row as small buttons. Scoped to .mkt-grid, so the
    product page's hero image and its boxes are untouched. */
-.portal-shell .mkt-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 12px; }
-@media (max-width: 1279px) { .portal-shell .mkt-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (max-width: 1023px) { .portal-shell .mkt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 559px) { .portal-shell .mkt-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; } }
+/* One row per category (coxwell 10-24 via marcus m74837): a 190px label column (name, one line, count) left of the
+   category's cards, 4 cards a row beside it, wrapping; a thin full-width rule between rows. Below 1024px the label
+   stacks above its cards: 3 a row on a tablet, 2 on a large phone, 1 on a small one. */
+/* Signed out, the /marketplace column takes the top nav's width and side padding (logo to Sign in) instead of the
+   shared 1160px column: the same three steps as .hubnav .hn-wrap. Only this page (it alone has .mkt-head). */
+.public-shell .content:has(> .mkt-head) { max-width: 1180px; padding-left: 40px; padding-right: 40px; }
+@media (1180px < width <= 1400px) { .public-shell .content:has(> .mkt-head) { max-width: none; padding-left: 24px; padding-right: 24px; } }
+@media (max-width: 600px) { .public-shell .content:has(> .mkt-head) { padding-left: 20px; padding-right: 20px; } }
+.portal-shell .mkt-section { margin-top: 0; padding: 22px 0; }
+.portal-shell .mkt-section + .mkt-section { border-top: 1px solid var(--hz-line); }
+.portal-shell .mkt-row { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 24px; align-items: start; }
+.portal-shell .mkt-row-label .fp-section-title { margin: 2px 0 6px; }
+.portal-shell .mkt-row-note { font-size: 12px; line-height: 1.45; color: var(--hz-ink-3); margin: 0 0 8px; }
+.portal-shell .mkt-row-count { font-family: var(--hz-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--hz-ink-3); margin: 0; }
+.portal-shell .mkt-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 12px; }
+@media (max-width: 1023px) {
+  .portal-shell .mkt-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .portal-shell .mkt-row-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .portal-shell .mkt-row-label .fp-section-title { margin: 0; }
+  .portal-shell .mkt-row-note { margin: 0; }
+  .portal-shell .mkt-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 719px) { .portal-shell .mkt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 479px) { .portal-shell .mkt-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; } }
 .portal-shell .mkt-grid .mkt-card { padding: 12px; gap: 4px; }
 .portal-shell .mkt-grid .mkt-media-card { margin-bottom: 4px; }
 .portal-shell .mkt-grid .mkt-image { height: 72px; object-fit: cover; object-position: center; border-radius: 8px; }
@@ -1548,7 +1568,6 @@
   animation: bk-added-fade 2.4s ease forwards; pointer-events: none;
 }
 @keyframes bk-added-fade { 0%, 70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
-.portal-shell .bk-section-note { margin-left: 10px; font-family: var(--hz-sans, inherit); font-size: 12px; font-weight: 400; color: var(--hz-ink-3); }
 /* Strategy card: no product art exists, so the plate is drawn — a horizon line with ticks, no
    figure on it (Iris r2 sheet 1). */
 .portal-shell .bk-strategy-plate {

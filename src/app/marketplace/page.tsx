@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Store } from "lucide-react";
@@ -123,9 +124,7 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
         // Keyed here rather than at the call site: these nodes are rendered from an array, and
         // the key travels with the element.
         content: (
-          <div key={category} className="fp-section mkt-section">
-            <h2 className="fp-section-title">{MARKETPLACE_CATEGORY_LABELS[category]}</h2>
-            <div className="mkt-grid">
+          <CategoryRow key={category} title={MARKETPLACE_CATEGORY_LABELS[category]} note={CATEGORY_ROW_NOTES[category]} count={items.length} noun={CATEGORY_ROW_NOUNS[category]}>
               {items.map(({ listing, members }) => {
                 const detailHref = listingDetailHref(listing);
                 const segment = listingLatencySegment(listing);
@@ -180,8 +179,7 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
                   </div>
                 );
               })}
-            </div>
-          </div>
+          </CategoryRow>
         ),
       },
     ];
@@ -201,9 +199,7 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
       key: "bundles",
       label: "Bundles",
       content: (
-        <div key="bundles" id="bundles" className="fp-section mkt-section">
-          <h2 className="fp-section-title">Bundles</h2>
-          <div className="mkt-grid">
+        <CategoryRow key="bundles" id="bundles" title="Bundles" note={CATEGORY_ROW_NOTES.bundles} count={bundleItems.length} noun={CATEGORY_ROW_NOUNS.bundles}>
             {bundleItems.map(({ bundle, available }) => {
               const availability = available ? "available" : "unavailable";
               const art = BUNDLE_CARD_ART[bundle.key];
@@ -247,8 +243,7 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
                 </div>
               );
             })}
-          </div>
-        </div>
+        </CategoryRow>
       ),
     });
   }
@@ -264,11 +259,8 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
       key: "strategies",
       label: "Strategies",
       content: (
-        <div key="strategies" id="strategies" className="fp-section mkt-section">
-          <h2 className="fp-section-title">
-            Strategies <span className="bk-section-note">Included with a Horizon licence — add the ones you want and we&apos;ll set them up with you</span>
-          </h2>
-          <div className="mkt-grid">
+        <CategoryRow key="strategies" id="strategies" title="Strategies" note={CATEGORY_ROW_NOTES.strategies} count={strategyEntries.length} noun={CATEGORY_ROW_NOUNS.strategies}
+          after={preselectKey && <StrategyPreselect keyName={preselectKey} />}>
             {strategyEntries.map((e) => (
               <div key={e.key} id={`strategy-${e.key}`} className="card mkt-card mkt-available bk-strategy-card">
                 {e.cardImage ? (
@@ -291,9 +283,7 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
                 </div>
               </div>
             ))}
-          </div>
-          {preselectKey && <StrategyPreselect keyName={preselectKey} />}
-        </div>
+        </CategoryRow>
       ),
     });
   }
@@ -351,4 +341,39 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
 function CardBadgeTag({ badge }: { badge?: CardBadge }) {
   if (!badge) return null;
   return <span className={`mkt-badge mkt-badge-${badge}`}>{CARD_BADGE_LABELS[badge]}</span>;
+}
+
+// One row per category (coxwell 10-24 via marcus m74837): a narrow label column (name, one line, how many) left of
+// that category's cards, a thin rule between rows. The outer div keeps the section's class and id, so the chips and
+// the page's tests find it the same way. The label lines are mine except Strategies', which moved here from its h2
+// unchanged; flagged to marcus for wording.
+const CATEGORY_ROW_NOTES = {
+  bundles: "A licence, strategies and a feed together.",
+  software: "The Horizon desktop apps.",
+  feeds: "Price feeds, by region and tier.",
+  strategies: "Included with a Horizon licence — add the ones you want and we'll set them up with you",
+} as const;
+const CATEGORY_ROW_NOUNS: Record<keyof typeof CATEGORY_ROW_NOTES, [string, string]> = {
+  bundles: ["bundle", "bundles"],
+  software: ["product", "products"],
+  feeds: ["feed", "feeds"],
+  strategies: ["strategy", "strategies"],
+};
+
+function CategoryRow({ id, title, note, count, noun, after, children }: {
+  id?: string; title: string; note: string; count: number; noun: [string, string]; after?: ReactNode; children: ReactNode;
+}) {
+  return (
+    <div id={id} className="fp-section mkt-section">
+      <div className="mkt-row">
+        <div className="mkt-row-label">
+          <h2 className="fp-section-title">{title}</h2>
+          <p className="mkt-row-note">{note}</p>
+          <p className="mkt-row-count">{count} {count === 1 ? noun[0] : noun[1]}</p>
+        </div>
+        <div className="mkt-grid">{children}</div>
+      </div>
+      {after}
+    </div>
+  );
 }
