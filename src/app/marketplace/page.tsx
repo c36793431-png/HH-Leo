@@ -346,10 +346,10 @@ function CardBadgeTag({ badge }: { badge?: CardBadge }) {
 // One row per category (coxwell 10-24 via marcus m74837): a narrow label column (name, one line, how many) left of
 // that category's cards, a thin rule between rows. The outer div keeps the section's class and id, so the chips and
 // the page's tests find it the same way. The label lines are mine except Strategies', which moved here from its h2
-// unchanged; flagged to marcus for wording.
+// unchanged; wording ruled by marcus m74949.
 const CATEGORY_ROW_NOTES = {
   bundles: "A licence, strategies and a feed together.",
-  software: "The Horizon desktop apps.",
+  software: "The Horizon software and apps.", // marcus m74949
   feeds: "Price feeds, by region and tier.",
   strategies: "Included with a Horizon licence — add the ones you want and we'll set them up with you",
 } as const;
