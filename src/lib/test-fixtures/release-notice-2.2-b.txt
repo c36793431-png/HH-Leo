@@ -1,0 +1,5 @@
+🚀 Horizon HFT 2.2 is out
+
+This update makes closing trades more reliable after a broker reconnect, and shows a CLOSE STUCK alert if a close still fails.
+
+📖 Read what's new: https://www.horizonhft.com/blog/horizon-v2-2-release-notes

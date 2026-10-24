@@ -21,9 +21,17 @@ const PHONE = /\+?\d[\d\s().-]{5,}\d/g;
 /** Tech names that look like domains ("ASP.NET", "Socket.io"): not web addresses. */
 const NOT_DOMAINS = /\b(asp|vb|ado|dot|socket|engine|chart|pixi|three|d3)\.(net|io|js)\b/gi;
 
+/** null when the text holds no price (a currency symbol or word next to digits, or a rate); otherwise the reason.
+ * Just the three money regexes above, so a caller that may carry links (the release notice) can ask the price rule
+ * alone: publicTextProblem also refuses links, emails and handles. */
+export function priceProblem(text: string): string | null {
+  return CURRENCY_SYMBOL.test(text) || CURRENCY_WORD.test(text) || RATE.test(text) ? "prices are not shown on Horizon" : null;
+}
+
 /** null when the text is fine for a public profile; otherwise the reason, in words the provider sees. */
 export function publicTextProblem(text: string): string | null {
-  if (CURRENCY_SYMBOL.test(text) || CURRENCY_WORD.test(text) || RATE.test(text)) return "prices are not shown on Horizon";
+  const price = priceProblem(text);
+  if (price) return price;
   if (EMAIL.test(text)) return "contact details (an email address) are not shown on Horizon";
   if (URL.test(text.replace(NOT_DOMAINS, " "))) return "links and web addresses are not shown on Horizon";
   if (HANDLE.test(text)) return "contact details (an @handle) are not shown on Horizon";

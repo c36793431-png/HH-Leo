@@ -10,12 +10,16 @@ function resendClient(): Resend {
 export type EmailSendResult = { ok: true; emailId: string | null } | { ok: false; error: string };
 
 /** Best-effort transactional email — used as the notification fallback for users with no linked Telegram ID.
- * Never throws. Returns Resend's email id, or why it was not sent, so a caller can record it. */
+ * Never throws. Returns Resend's email id, or why it was not sent, so a caller can record it.
+ * options.headers = extra message headers (the release notice's RFC 8058 List-Unsubscribe); options.idempotencyKey =
+ * Resend's Idempotency-Key request header, so a retry of the same send is not delivered twice. Both are passed through
+ * as resend 6.17.2 documents them (index.d.mts EmailApiOptions.headers / IdempotentRequest; index.mjs sends the key as
+ * the Idempotency-Key header). Callers that pass neither are unchanged. */
 export async function sendEmail(
   to: string,
   subject: string,
   text: string,
-  options?: { replyTo?: string }
+  options?: { replyTo?: string; headers?: Record<string, string>; idempotencyKey?: string }
 ): Promise<EmailSendResult> {
   const from = process.env.EMAIL_FROM;
   if (!from) {
@@ -25,13 +29,17 @@ export async function sendEmail(
   try {
     // Resend returns { error } on a non-2xx or a network failure; it does not throw. The error
     // carries Resend's name and message only, never the body, so the line holds no key.
-    const { data, error } = await resendClient().emails.send({
-      from,
-      to,
-      subject,
-      text,
-      ...(options?.replyTo ? { replyTo: options.replyTo } : {}),
-    });
+    const { data, error } = await resendClient().emails.send(
+      {
+        from,
+        to,
+        subject,
+        text,
+        ...(options?.replyTo ? { replyTo: options.replyTo } : {}),
+        ...(options?.headers ? { headers: options.headers } : {}),
+      },
+      options?.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : undefined
+    );
     if (error) {
       console.error("sendEmail failed", error.name, error.message);
       return { ok: false, error: `${error.name} ${error.message}`.slice(0, 500) };

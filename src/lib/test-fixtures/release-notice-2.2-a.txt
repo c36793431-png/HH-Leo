@@ -1,0 +1,16 @@
+🚀 Horizon HFT 2.2 is out (fix release)
+
+What's fixed:
+🔁 Closing trades after a broker reconnect. Some brokers accept only one order filling type. Horizon now remembers it after a reconnect, so a close is no longer refused again and again.
+🚨 If a close still fails, Horizon waits longer between tries and shows a CLOSE STUCK alert telling you to close the trade in the terminal. With alerts set up you get it as a message too.
+⚡ Close Trade now always sends the close straight away.
+
+How to update:
+1️⃣ Download 2.2 from your portal dashboard.
+2️⃣ Unzip into a NEW folder.
+3️⃣ Copy license.dat, license.receipt and the Set folder files from your old Horizon folder into the new one.
+4️⃣ Start Horizon. The title should show v2.2.
+
+📖 Full release notes: https://www.horizonhft.com/blog/horizon-v2-2-release-notes
+
+#HorizonHFT #Release #Update #AlgoTrading #HFT
