@@ -103,7 +103,7 @@ async function allowed(where: string, checks: () => Promise<{ success: boolean }
  * HTTP non-OK reply @upstash/redis appends the whole request body, i.e. the limiter keys, which
  * are raw licence keys and IPs ("rl:license-key:<KEY>"). Those must never reach the Vercel logs.
  */
-function errorSummary(err: unknown): string {
+export function errorSummary(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
   return message.split(", command was:")[0];
 }

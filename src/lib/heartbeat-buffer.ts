@@ -1,4 +1,4 @@
-import { getRedis } from "./rate-limit";
+import { errorSummary, getRedis } from "./rate-limit";
 
 /**
  * Upstash-backed beat buffer for /v1/hb (marcus's redesign ruling, 2026-09-11).
@@ -76,7 +76,9 @@ function logRedisFailure(where: string, err: unknown): void {
   const now = Date.now();
   if (now - lastRedisErrorLoggedAt < LOG_THROTTLE_MS) return;
   lastRedisErrorLoggedAt = now;
-  console.error(`/v1/hb: redis unavailable (${where})`, err);
+  // errorSummary, not the whole err: on an HTTP non-OK reply @upstash/redis appends ", command was:
+  // [...]", and this command's arguments are the licence key, hwid, IP and the raw beat body.
+  console.error(`/v1/hb: redis unavailable (${where}): ${errorSummary(err)}`);
 }
 
 /**
@@ -203,10 +205,14 @@ function readInt(value: unknown): number {
 /**
  * SPOP up to `limit` dirty members and read each one's hash. Members whose hash has expired
  * or carries no identity are skipped and NOT re-queued — there is nothing left to write.
+ *
+ * Throws when Upstash is not configured, like it does when Upstash refuses a command. An empty
+ * result has to mean "nothing was buffered"; returning [] for "cannot look" made the 10-19 outage
+ * look like a quiet client for 12 days.
  */
 export async function drainDirty(limit: number): Promise<DrainedBeat[]> {
   const redis = getRedis();
-  if (!redis) return [];
+  if (!redis) throw new Error("Upstash is not configured (UPSTASH_REDIS_REST_* unset)");
 
   const members: string[] = [];
   while (members.length < limit) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { captureConnectionIp } from "@/lib/server-registration";
 import { resolveLicenseKey, upsertBufferedHeartbeat } from "@/lib/client-heartbeats";
 import { clearBeatCount, drainDirty, requeue, type DrainedBeat } from "@/lib/heartbeat-buffer";
+import { errorSummary } from "@/lib/rate-limit";
 
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -104,8 +105,11 @@ export async function GET(req: NextRequest) {
   try {
     drained = await drainDirty(MAX_KEYS_PER_RUN);
   } catch (err) {
-    console.error("flush-heartbeats: could not drain the buffer", err);
-    return NextResponse.json({ error: "drain failed" }, { status: 500 });
+    // Loud on purpose: a flush that cannot read the buffer must not look like an empty day. The
+    // non-2xx makes the cron run show as failed, and errorSummary keeps the licence keys that
+    // @upstash/redis appends after ", command was:" out of the logs.
+    console.error(`flush-heartbeats: buffer unreachable: ${errorSummary(err)}`);
+    return NextResponse.json({ error: "buffer unreachable" }, { status: 503 });
   }
 
   summary.keysFlushed = drained.length;
