@@ -174,6 +174,10 @@ export interface MarketplaceListing {
    * dataset code, and no vendor name or code goes on a public page (marcus m56642 (b)). The row
    * stays unedited because the provider's dashboard renders it. Absent = no plate. */
   coverage?: string;
+  /** A short "What it is" card on the product page, one paragraph per entry. For a listing with no feed row, spec or
+   * included list to describe it (the coming-soon software listings, marcus m79877). Plain claims only, no price, no
+   * date, no performance word. Absent = no card. */
+  about?: string[];
   /** A secondary link in the product page's Access box, under the request control, for a
    * listing whose full description lives on the main site. Same tab. Absent = none. */
   moreInfo?: { href: string; label: string };
@@ -467,7 +471,45 @@ export const MARKETPLACE_LISTINGS: MarketplaceListing[] = [
     blurb: "Desktop software for finding and testing strategies: full chart, CME indicators and a backtester.",
     action: null,
     moreInfo: { href: `${MAIN_SITE_URL}/horizonone`, label: "More about Horizon One →" },
-    // No mark: a mark sits on the image (listing-media.tsx), and this listing has none yet.
+    // The same Horizon One picture as the main site's marketplace card (www public/marketplace-art/horizon-one-card.webp,
+    // 1280x800, Iris r5): the gold banner, resized to the card crop and cut to the hero crop (marcus m79877 A). No mark:
+    // a mark sits on the image (listing-media.tsx) and software has no venue to show.
+    image: {
+      card: "/marketplace/horizon-one-card.jpg",
+      hero: "/marketplace/horizon-one-hero.jpg",
+      alt: "Horizon One: desktop software for CME futures",
+    },
+    // From the main site's /horizonone intro (marcus's copy, m72348), first paragraph only: no price, no date. The
+    // sentence about registering strategies on horizonone.horizonhft.com stays on the main site until that address serves.
+    about: [
+      "Horizon One is separate desktop software for finding and testing trading strategies. It brings a full chart, CME indicators, signal inputs and a backtester together, so you can build a strategy, test it and keep the ones that hold up.",
+    ],
+  },
+  {
+    // Horizon Lab (coxwell 2026-10-30 ~20:3xZ via marcus m79877 B): a software listing, COMING SOON, same shape as Horizon
+    // One: declared, no feed_tiers row, action null, so it cannot be requested, downloaded or put in the basket. Card text
+    // is marcus's line. No price, no date ("release date not set"), no performance claim. The picture is Iris's
+    // horizon-lab-card-1280x800.png (md5 c10caf0a, drop of 2026-10-30, marcus m79887), resized to the 1024x640 card crop and
+    // cut to the 1024x440 hero crop. No More-info link yet: the blog post that would sit behind it is a draft, so a link
+    // would go to a 404.
+    key: "horizon-lab",
+    title: "Horizon Lab",
+    category: "software",
+    availability: "coming-soon",
+    tierKeys: [],
+    feedSlug: null,
+    blurb: "Collect tick data, backtest and optimise Horizon strategies on recorded data.",
+    action: null,
+    image: {
+      card: "/marketplace/horizon-lab-card.jpg",
+      hero: "/marketplace/horizon-lab-hero.jpg",
+      alt: "Horizon Lab: tick data, backtesting and optimisation",
+    },
+    about: [
+      "Horizon Lab is a separate Horizon app. It collects ticks from your broker and feed sessions, then replays them to backtest Horizon strategies on recorded data.",
+      "Its optimiser judges settings on data it has not seen, so a setting is not chosen just because it fits the past.",
+      "In development, for Horizon's own use first. No release date is set.",
+    ],
   },
 ];
 

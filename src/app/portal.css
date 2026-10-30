@@ -1381,6 +1381,8 @@
 .portal-shell .mkd-spec dt { color: var(--hz-ink-3); }
 .portal-shell .mkd-spec dd { color: var(--hz-ink); line-height: 1.5; }
 .portal-shell .mkd-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.portal-shell .mkd-about { margin: 0 0 10px; font-size: 13px; line-height: 1.6; color: var(--hz-ink); }
+.portal-shell .mkd-about:last-child { margin-bottom: 0; }
 .portal-shell .mkt-media-hero .mkt-image { border-radius: 12px; }
 /* The shelf card's figures block, on its own plate: the card draws the frame, so the block's
    divider line and top spacing come off. */

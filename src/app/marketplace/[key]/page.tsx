@@ -152,7 +152,7 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
   // would float alone at the far right. It takes the left edge instead. Horizon One (coming soon, no image
   // until Iris's portal art) is the listing that hits this today.
   const leftEmpty =
-    !listing.image && !listing.coverage && !hasListingFigures(figures) && (included.length === 0 || includedWide);
+    !listing.image && !listing.about && !listing.coverage && !hasListingFigures(figures) && (included.length === 0 || includedWide);
   // Signing in returns the visitor to this product page, where the real control is.
   const signInHref = authPageHref("/login", listingDetailHref(listing));
 
@@ -175,6 +175,17 @@ export default async function MarketplaceProductPage({ params }: { params: Promi
         {!leftEmpty && (
           <div className="mkd-col">
             <ListingMedia listing={listing} variant="hero" />
+
+            {listing.about && (
+              <div className="card">
+                <div className="mkd-plate-title">What it is</div>
+                {listing.about.map((para) => (
+                  <p key={para} className="mkd-about">
+                    {para}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {listing.coverage ? (
               <div className="card">
