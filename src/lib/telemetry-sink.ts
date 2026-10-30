@@ -830,6 +830,12 @@ function fmt(v: unknown): string {
   return String(v);
 }
 
+/** The daily old-client-version note (client-version-alert.ts): coxwell's DM, the same sink as the signup and
+ * activation notes (marcus m80072 item 2). The text is built there and carries no licence key, hwid or IP. */
+export async function notifyOldClientVersions(text: string): Promise<boolean> {
+  return sendSinkMessage(text);
+}
+
 /** A grant or handled request that reached nobody (marcus m61849 part 2): Telegram failed or absent, email failed
  * or absent. To the approvals topic, naming the client by clientLine. Returns whether it was sent (client-reach
  * stores it as alert_sent_at; the row itself is written before this). */

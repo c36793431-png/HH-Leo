@@ -21,6 +21,10 @@
       "schedule": "30 3 * * *"
     },
     {
+      "path": "/api/cron/client-version-alert",
+      "schedule": "0 5 * * *"
+    },
+    {
       "path": "/api/cron/stale-basket-requests",
       "schedule": "0 8 * * *"
     }
